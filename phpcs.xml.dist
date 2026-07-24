@@ -4,6 +4,7 @@
 
 	<file>cortext.php</file>
 	<file>includes/</file>
+	<file>scripts/dev-autologin.php</file>
 
 	<exclude-pattern>*/node_modules/*</exclude-pattern>
 	<exclude-pattern>*/vendor/*</exclude-pattern>

@@ -64,4 +64,4 @@ Quick start:
 ./scripts/archive.sh # stop the detached wp-env environment
 ```
 
-Runs on Docker via wp-env. Parallel worktrees get deterministic per-path ports so branches and agents do not collide. Demo data is opt-in: `./scripts/run.sh` and `pnpm run env:start:seed` seed it; plain `wp-env start` does not. Full workflow, contribution notes, and command reference in [Getting started](docs/getting-started.md).
+Runs on Docker via wp-env. Parallel worktrees use an orchestrator-assigned port when `CONDUCTOR_PORT` is available, with a deterministic per-path fallback elsewhere. The Run process owns that public port and proxies WordPress from the next port, so embedded previews can discover it. Demo data is opt-in: `./scripts/run.sh` and `pnpm run env:start:seed` seed it; plain `wp-env start` does not. Full workflow, contribution notes, and command reference in [Getting started](docs/getting-started.md).

@@ -40,8 +40,8 @@ jobs:
                     changed_files="$(git diff --name-only "$base" "$head")"
                   fi
 
-                  php_paths='^(\.github/workflows/unit-tests\.yml|composer\.(json|lock)|phpunit\.xml\.dist|cortext\.php|includes/|templates/|tests/php/)'
-                  js_paths='^(\.github/workflows/unit-tests\.yml|package\.json|pnpm-lock\.yaml|jest\.config\.js|scripts/(bump-release-version|release-notes)\.mjs|src/|tests/js/|tests/node/)'
+                  php_paths='^(\.github/workflows/unit-tests\.yml|composer\.(json|lock)|phpunit\.xml\.dist|cortext\.php|includes/|templates/|scripts/dev-autologin\.php|tests/php/)'
+                  js_paths='^(\.github/workflows/unit-tests\.yml|package\.json|pnpm-lock\.yaml|jest\.config\.js|scripts/(setup|run)\.sh|scripts/(bump-release-version|dev-server|release-notes|resolve-dev-port)\.mjs|src/|tests/js/|tests/node/)'
 
                   if [ -n "$changed_files" ] && grep -Eq "$php_paths" <<< "$changed_files"; then
                     echo "php_changed=true" >> "$GITHUB_OUTPUT"

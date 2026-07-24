@@ -19,7 +19,7 @@ cd cortext
 ./scripts/setup.sh
 ```
 
-`setup.sh` installs PHP and JS dependencies, assigns a deterministic port for the current worktree, writes a git-ignored `.wp-env.override.json`, and drops two helper plugins under `.wp-env-plugins/`: one labels the admin bar with the branch name, the other auto-logs you in as admin on localhost so agents and parallel worktrees don't have to juggle credentials.
+`setup.sh` installs PHP and JS dependencies, uses `CONDUCTOR_PORT` when an orchestrator provides it, and otherwise assigns a deterministic port from the worktree path. The assigned port is public; WordPress uses the following port from the same range. Setup writes the WordPress port to a git-ignored `.wp-env.override.json` and drops two helper plugins under `.wp-env-plugins/`: one labels the admin bar with the branch name, while the other supports localhost preview and login without making agents or parallel worktrees juggle credentials.
 
 ## Running Cortext
 
@@ -27,7 +27,7 @@ cd cortext
 ./scripts/run.sh
 ```
 
-`run.sh` boots wp-env detached, re-derives the site-title label from the current branch, seeds the Cortext demo workspace, and starts the JS watcher. When the admin URL is ready, sign in and click "Cortext" in the admin menu.
+`run.sh` immediately exposes a self-refreshing startup page on the public port, boots wp-env detached, re-derives the site-title label from the current branch, seeds the Cortext demo workspace, and starts the JS watcher. The proxy belongs to the Run process so Conductor can discover it while Docker serves WordPress on the next port. Run prints the direct Cortext admin URL only after WordPress, the seed, and the first JS build are ready; the localhost helper trusts that private proxy and signs you in automatically. In Conductor, start the Run task and leave it running before choosing Open.
 
 Plain `wp-env start`, `pnpm run env:start`, and `pnpm start` skip the seed. To opt in, use `./scripts/run.sh`, `pnpm run start:seed`, `pnpm run env:start:seed`, or `pnpm run env:seed`. Reruns are safe: existing collections, fields, entries, and non-empty pages are left alone, and only missing demo records get added. The default seed creates a compact page tree and a few representative rows per collection; use `pnpm run env:seed:full` when you need the larger catalog.
 
@@ -81,7 +81,7 @@ These run the same seed command as the dev environment, just pointed at `.wp-env
 
 ## Parallel worktrees
 
-Ports are derived from the worktree's absolute path, so multiple worktrees (one per branch, say) shouldn't collide. The site-title label re-derives from `git branch --show-current` on every `run.sh`, so it survives branch renames and checkouts within the same worktree.
+Conductor workspaces expose their assigned `CONDUCTOR_PORT` and run WordPress on the following port, so both remain inside their separate ten-port ranges. Outside Conductor, the public port is derived from the worktree's absolute path and WordPress again uses the next one. The site-title label re-derives from `git branch --show-current` on every `run.sh`, so it survives branch renames and checkouts within the same worktree.
 
 If you use an agent orchestrator (Conductor, Cursor, Cline, or similar), wire:
 
