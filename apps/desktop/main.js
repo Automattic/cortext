@@ -1,9 +1,12 @@
 const { app, BrowserWindow, Menu } = require( 'electron' );
 const { spawnSync } = require( 'child_process' );
+const crypto = require( 'crypto' );
 const path = require( 'path' );
 const fs = require( 'fs' );
+const { pathToFileURL } = require( 'url' );
 const {
 	DEFAULT_PORT: PORT,
+	RUNTIME_AUTH_HEADER,
 	startRuntime,
 	stopRuntime,
 } = require( './lib/runtime' );
@@ -26,9 +29,124 @@ const settings = require( './lib/settings' );
 const RESOURCES_DIR = app.isPackaged ? process.resourcesPath : __dirname;
 const SNAPSHOT_ZIP = path.join( RESOURCES_DIR, 'snapshot.zip' );
 const APP_ICON = path.join( __dirname, 'assets/icon.png' );
+const LOADING_PAGE = path.resolve( __dirname, 'loading.html' );
+const LOADING_URL = pathToFileURL( LOADING_PAGE ).href;
+const RUNTIME_ORIGIN = `http://127.0.0.1:${ PORT }`;
 
 let runtimeHandle = null;
 let quitting = false;
+
+function configureE2EUserData() {
+	if ( process.env.CORTEXT_E2E !== '1' ) {
+		return;
+	}
+
+	const configuredPath = process.env.CORTEXT_E2E_USER_DATA_DIR;
+	if ( ! configuredPath ) {
+		throw new Error(
+			'CORTEXT_E2E_USER_DATA_DIR is required when CORTEXT_E2E=1.'
+		);
+	}
+
+	const userDataPath = path.resolve( configuredPath );
+	fs.mkdirSync( userDataPath, { recursive: true } );
+	if ( ! fs.statSync( userDataPath ).isDirectory() ) {
+		throw new Error(
+			`CORTEXT_E2E_USER_DATA_DIR is not a directory: ${ userDataPath }`
+		);
+	}
+	app.setPath( 'userData', userDataPath );
+}
+
+function hasOrigin( requestUrl, origin ) {
+	try {
+		return new URL( requestUrl ).origin === origin;
+	} catch {
+		return false;
+	}
+}
+
+function getRequestHeader( requestHeaders, name ) {
+	const headerName = Object.keys( requestHeaders ).find(
+		( header ) => header.toLowerCase() === name.toLowerCase()
+	);
+	return headerName ? requestHeaders[ headerName ] : undefined;
+}
+
+function hasTrustedRuntimeInitiator( details, webContents ) {
+	if (
+		details.webContentsId !== webContents.id ||
+		webContents.isDestroyed()
+	) {
+		return false;
+	}
+
+	const currentUrl = webContents.getURL();
+	const isSameOriginRequest =
+		getRequestHeader(
+			details.requestHeaders,
+			'Sec-Fetch-Site'
+		)?.toLowerCase() === 'same-origin';
+	if (
+		details.resourceType === 'mainFrame' ||
+		details.resourceType === 'subFrame'
+	) {
+		if (
+			details.resourceType === 'mainFrame' &&
+			currentUrl === LOADING_URL
+		) {
+			return true;
+		}
+		if (
+			details.resourceType === 'mainFrame' &&
+			! hasOrigin( currentUrl, RUNTIME_ORIGIN )
+		) {
+			return false;
+		}
+		return isSameOriginRequest;
+	}
+
+	return (
+		isSameOriginRequest &&
+		( hasOrigin( details.frame?.url, RUNTIME_ORIGIN ) ||
+			hasOrigin( details.referrer, RUNTIME_ORIGIN ) )
+	);
+}
+
+function installRuntimeAuthHeader( webContents, authToken ) {
+	// Observe every destination so a redirect cannot carry the private header
+	// away from the runtime. Only Cortext content in this window may receive it.
+	webContents.session.webRequest.onBeforeSendHeaders(
+		{ urls: [ '<all_urls>' ] },
+		( details, callback ) => {
+			const existingHeaders = Object.keys(
+				details.requestHeaders
+			).filter(
+				( header ) =>
+					header.toLowerCase() === RUNTIME_AUTH_HEADER.toLowerCase()
+			);
+			const shouldAuthenticate =
+				hasOrigin( details.url, RUNTIME_ORIGIN ) &&
+				hasTrustedRuntimeInitiator( details, webContents );
+
+			if ( existingHeaders.length === 0 && ! shouldAuthenticate ) {
+				callback( {} );
+				return;
+			}
+
+			const requestHeaders = { ...details.requestHeaders };
+			for ( const header of existingHeaders ) {
+				delete requestHeaders[ header ];
+			}
+			if ( shouldAuthenticate ) {
+				requestHeaders[ RUNTIME_AUTH_HEADER ] = authToken;
+			}
+			callback( { requestHeaders } );
+		}
+	);
+}
+
+configureE2EUserData();
 
 function getSiteRoot() {
 	return path.join( app.getPath( 'userData' ), 'site' );
@@ -123,6 +241,8 @@ async function loadSite( win ) {
 app.whenReady().then( async () => {
 	let win = null;
 	try {
+		const authToken = crypto.randomBytes( 32 ).toString( 'hex' );
+
 		if (
 			process.platform === 'darwin' &&
 			app.dock &&
@@ -133,9 +253,10 @@ app.whenReady().then( async () => {
 
 		refreshMenu();
 		win = createWindow();
+		installRuntimeAuthHeader( win.webContents, authToken );
 		// Load the loading screen before any site refresh so users never stare at
 		// a blank window.
-		await win.loadFile( path.resolve( __dirname, 'loading.html' ) );
+		await win.loadFile( LOADING_PAGE );
 
 		const siteRoot = getSiteRoot();
 		recoverInterruptedSwap( siteRoot );
@@ -151,6 +272,7 @@ app.whenReady().then( async () => {
 
 		runtimeHandle = startRuntime( {
 			appDir: RESOURCES_DIR,
+			authToken,
 			wordpressDir,
 			runtimeStateDir: path.join(
 				app.getPath( 'temp' ),

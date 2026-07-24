@@ -6,6 +6,9 @@
 }
 
 http://127.0.0.1:{$CORTEXT_PORT} {
+	@unauthorized `{env.CORTEXT_DESKTOP_AUTH_TOKEN} == "" || {http.request.header.X-Cortext-Desktop-Token} != {env.CORTEXT_DESKTOP_AUTH_TOKEN}`
+	respond @unauthorized "Forbidden" 403
+
 	root * "{$CORTEXT_WORDPRESS_ROOT}"
 	encode zstd gzip
 	php_server {
