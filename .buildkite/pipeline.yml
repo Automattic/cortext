@@ -1,15 +1,15 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/buildkite/pipeline-schema/main/schema.json
 ---
 
-agents:
-  queue: mac
-
+# IMAGE_ID selects the macOS agent image. It is inert on the Windows queue.
 env:
   IMAGE_ID: $IMAGE_ID
 
 steps:
   - label: ":apple: Build, sign, notarize desktop DMG"
     key: release-desktop
+    agents:
+      queue: mac
     command: .buildkite/commands/release-desktop.sh
     plugins: [$CI_TOOLKIT_PLUGIN, $NVM_PLUGIN]
     artifact_paths:
@@ -18,3 +18,16 @@ steps:
     notify:
       - github_commit_status:
           context: Build, Sign & Notarize Desktop
+
+  # Cortext ships no Windows build yet. This keeps the signing credentials under
+  # continuous check so the future NSIS build starts from a known-good queue.
+  # The NVM plugin is absent because it is bash-only and cannot run here.
+  - label: ":windows: Verify Azure Artifact Signing setup"
+    key: verify-windows-signing
+    agents:
+      queue: windows
+    command: powershell -NoProfile -ExecutionPolicy Bypass -File .buildkite/commands/verify-windows-signing.ps1
+    plugins: [$CI_TOOLKIT_PLUGIN]
+    notify:
+      - github_commit_status:
+          context: Verify Azure Artifact Signing setup
