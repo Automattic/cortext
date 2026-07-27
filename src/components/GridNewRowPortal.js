@@ -1,4 +1,4 @@
-import { createPortal, useLayoutEffect, useState } from '@wordpress/element';
+import { createPortal, useEffect, useState } from '@wordpress/element';
 
 import DataViewNewRowButton from './DataViewNewRowButton';
 
@@ -22,7 +22,7 @@ export default function GridNewRowPortal( {
 } ) {
 	const [ portalTarget, setPortalTarget ] = useState( null );
 
-	useLayoutEffect( () => {
+	useEffect( () => {
 		const root = wrapperRef.current;
 		if ( ! root ) {
 			return undefined;
@@ -54,7 +54,7 @@ export default function GridNewRowPortal( {
 		} );
 
 		return () => observer.disconnect();
-	}, [ wrapperRef ] );
+	}, [ hasRows, wrapperRef ] );
 
 	const newRowCard = (
 		<DataViewNewRowButton
