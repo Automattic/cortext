@@ -576,11 +576,12 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			const startX = event.clientX;
 			const startWidth = getColumnStyleWidth( headerEl );
 			const handle = event.currentTarget;
+			const activePointerId = event.pointerId;
 			const ownerDocument = handle.ownerDocument;
 			const minWidth = getMinWidth( fieldType, fieldId );
 			// Capture the pointer and listen on the owner document so resizing
 			// continues after it leaves the narrow handle or crosses the editor iframe.
-			handle.setPointerCapture?.( event.pointerId );
+			handle.setPointerCapture?.( activePointerId );
 			headerEl.classList.add( 'cortext-column-resizing' );
 			ownerDocument.body.classList.add( 'cortext-column-resizing' );
 
@@ -612,6 +613,9 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			};
 
 			const onPointerMove = ( moveEvent ) => {
+				if ( moveEvent.pointerId !== activePointerId ) {
+					return;
+				}
 				// Direct DOM mutation during the drag: the library's render
 				// pass writes inline width from `view.layout.styles`, but
 				// it isn't running while the pointer is held. Writing
@@ -625,6 +629,9 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 			};
 
 			const onPointerUp = ( upEvent ) => {
+				if ( upEvent.pointerId !== activePointerId ) {
+					return;
+				}
 				cleanupRef.current?.();
 				cleanupRef.current = null;
 				const nextWidth = computeWidth( upEvent.clientX );
@@ -649,8 +656,8 @@ function ColumnResizer( { fieldId, fieldType, headerEl, view, onChangeView } ) {
 					'pointercancel',
 					onPointerUp
 				);
-				if ( handle.hasPointerCapture?.( event.pointerId ) ) {
-					handle.releasePointerCapture?.( event.pointerId );
+				if ( handle.hasPointerCapture?.( activePointerId ) ) {
+					handle.releasePointerCapture?.( activePointerId );
 				}
 				headerEl.classList.remove( 'cortext-column-resizing' );
 				ownerDocument.body.classList.remove(
