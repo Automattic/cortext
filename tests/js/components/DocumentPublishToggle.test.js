@@ -146,10 +146,12 @@ beforeEach( () => {
 describe( 'DocumentPublishToggle', () => {
 	it( 'publishes referenced collections before publishing the document', async () => {
 		blocks = [
+			null,
 			{
 				name: 'core/group',
 				attributes: {},
 				innerBlocks: [
+					undefined,
 					{
 						name: 'cortext/data-view',
 						attributes: { collectionId: 44 },

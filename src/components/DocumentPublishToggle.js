@@ -27,7 +27,7 @@ function referencedCollectionIds( blocks ) {
 			) {
 				ids.add( block.attributes.collectionId );
 			}
-			if ( block.innerBlocks?.length ) {
+			if ( block?.innerBlocks?.length ) {
 				walk( block.innerBlocks );
 			}
 		}
