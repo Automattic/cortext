@@ -2625,15 +2625,16 @@ test.describe( 'Collection view block', () => {
 
 			// The new collection is a full document nested under the current
 			// page, so it shows in the sidebar tree beneath its parent.
-			await expect(
-				page
-					.locator( '.cortext-sidebar' )
-					.getByRole( 'button', {
-						name: 'Inline Books',
-						exact: true,
-					} )
-					.first()
-			).toBeVisible();
+			const inlineCollectionTreeButton = page
+				.locator(
+					'.cortext-sidebar [data-sidebar-section="pages"] .cortext-sidebar__list'
+				)
+				.getByRole( 'button', {
+					name: 'Inline Books',
+					exact: true,
+				} );
+			await expect( inlineCollectionTreeButton ).toHaveCount( 1 );
+			await expect( inlineCollectionTreeButton ).toBeVisible();
 
 			await page.evaluate( async () => {
 				await window.wp.data.dispatch( 'core/editor' ).savePost();
