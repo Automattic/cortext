@@ -1327,6 +1327,65 @@ describe( 'DataViewRowReorder', () => {
 		} );
 	} );
 
+	it( 'disables activators and handles a stale drag start', async () => {
+		const originalAnimate = window.Element.prototype.animate;
+		const request = deferred();
+		window.Element.prototype.animate = jest.fn( () => ( {
+			finished: Promise.resolve(),
+			cancel: jest.fn(),
+		} ) );
+		mockApiFetch.mockReturnValueOnce( request.promise );
+
+		try {
+			const { mutateRows } = await renderReorder();
+
+			dragEnd( 1, gapDrop( 3, null, 3 ) );
+
+			expect( mutateRows ).not.toHaveBeenCalled();
+			expect(
+				useDraggable.mock.calls
+					.slice( -rows.length )
+					.every( ( [ options ] ) => options.disabled === true )
+			).toBe( true );
+
+			const secondRow = draggableDataFor( 2 );
+			// dnd-kit should stop at the disabled activator. Invoke the callback
+			// directly to cover a drag-start event already queued before React
+			// applied that disabled state.
+			act( () => {
+				mockDndProps.onDragStart( {
+					active: { data: { current: secondRow } },
+				} );
+			} );
+
+			expect( mutateRows ).toHaveBeenCalledTimes( 1 );
+			expect(
+				within( screen.getByTestId( 'drag-overlay' ) ).getByText(
+					'Two'
+				)
+			).toBeInTheDocument();
+			expect( window.Element.prototype.animate ).not.toHaveBeenCalled();
+
+			await act( async () => {
+				request.resolve( { reseeded: false } );
+				await request.promise;
+			} );
+			await waitFor( () =>
+				expect(
+					useDraggable.mock.calls
+						.slice( -rows.length )
+						.every( ( [ options ] ) => options.disabled === false )
+				).toBe( true )
+			);
+		} finally {
+			if ( originalAnimate ) {
+				window.Element.prototype.animate = originalAnimate;
+			} else {
+				delete window.Element.prototype.animate;
+			}
+		}
+	} );
+
 	it( 'settles the overlay into the open gap before committing the reorder', async () => {
 		const originalAnimate = window.Element.prototype.animate;
 		const animationSteps = [];

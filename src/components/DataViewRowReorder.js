@@ -1613,6 +1613,7 @@ export default function DataViewRowReorder( {
 	const [ visualDrop, setVisualDrop ] = useState( null );
 	const [ pendingRequest, setPendingRequest ] = useState( null );
 	const [ isPosting, setIsPosting ] = useState( false );
+	const [ isDropAnimating, setIsDropAnimating ] = useState( false );
 	const isPostingRef = useRef( false );
 	const { createErrorNotice } = useDispatch( noticesStore );
 	useRowDisplacement( renderedRows, visualRow, visualDrop, view );
@@ -1795,10 +1796,10 @@ export default function DataViewRowReorder( {
 
 	const onDragStart = useCallback(
 		( event ) => {
-			pendingDropAnimationRef.current?.forceFinish();
 			if ( isPostingRef.current ) {
 				return;
 			}
+			pendingDropAnimationRef.current?.forceFinish();
 			const row = event.active?.data?.current ?? null;
 			setActiveRow( row );
 			setVisualRow( row );
@@ -1939,6 +1940,7 @@ export default function DataViewRowReorder( {
 				resolveVisual();
 				if ( pendingDropAnimationRef.current === pending ) {
 					pendingDropAnimationRef.current = null;
+					setIsDropAnimating( false );
 				}
 			};
 			pending.forceFinish = () => {
@@ -1952,6 +1954,7 @@ export default function DataViewRowReorder( {
 			};
 
 			pendingDropAnimationRef.current = pending;
+			setIsDropAnimating( true );
 			// dnd-kit starts this animation from a layout effect. If it never fires,
 			// the timeout still commits the reorder.
 			pending.fallbackTimer = ownerWindow.setTimeout( () => {
@@ -2191,7 +2194,7 @@ export default function DataViewRowReorder( {
 					keyboardFocusable={ view?.type !== 'list' }
 					activateFromRow={ usesGridItems( view ) }
 					renderHandle={ ! usesGridItems( view ) }
-					disabled={ isPosting }
+					disabled={ isPosting || isDropAnimating }
 				/>
 			) ) }
 			{ rowGaps.map( ( gap ) => (
