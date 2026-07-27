@@ -539,7 +539,7 @@ export function mapField( field ) {
 		case 'email':
 			return { ...base, type: 'email' };
 		case 'url':
-			return { ...base, type: 'url' };
+			return { ...base, type: 'url', Edit: 'text' };
 		case 'select':
 			return { ...base, type: 'text', elements };
 		case 'multiselect':

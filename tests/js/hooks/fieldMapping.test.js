@@ -1,5 +1,5 @@
-import { render } from '@testing-library/react';
-import { filterSortAndPaginate } from '@wordpress/dataviews/wp';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { DataForm, filterSortAndPaginate } from '@wordpress/dataviews/wp';
 
 import {
 	elementsFromOptions,
@@ -488,8 +488,25 @@ describe( 'mapField', () => {
 		);
 	} );
 
-	it( "maps url to DataViews 'url'", () => {
-		expect( mapField( baseField( { type: 'url' } ) ).type ).toBe( 'url' );
+	it( 'uses a text control for partial URL filter values', () => {
+		const mapped = mapField( baseField( { type: 'url' } ) );
+
+		expect( mapped.type ).toBe( 'url' );
+		expect( mapped.Edit ).toBe( 'text' );
+
+		render(
+			<DataForm
+				data={ { 'field-5': '' } }
+				fields={ [ mapped ] }
+				form={ { fields: [ 'field-5' ] } }
+				onChange={ jest.fn() }
+			/>
+		);
+		const input = screen.getByRole( 'textbox', { name: 'Status' } );
+		fireEvent.change( input, { target: { value: 'example' } } );
+
+		expect( input.type ).toBe( 'text' );
+		expect( input ).toBeValid();
 	} );
 
 	it( 'maps date and datetime to matching DataViews date types', () => {
