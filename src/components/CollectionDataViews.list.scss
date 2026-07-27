@@ -86,14 +86,16 @@ $list-row-open-background: #f3f3f3;
 			background: $list-row-hover-background;
 		}
 
-		&:has(.cortext-title-cell--is-open),
-		&:has(.cortext-title-cell--is-opening) {
+		&:has(.cortext-title-cell.cortext-title-cell--is-open),
+		&:has(.cortext-title-cell.cortext-title-cell--is-opening) {
 			background: $list-row-open-background;
 		}
 	}
 
 	.dataviews-view-list
-	[role="row"]:not(.is-selected):is(
+	[role="row"]:not(.is-selected):not(
+		:has(.cortext-title-cell--is-open)
+	):not(:has(.cortext-title-cell--is-opening)):is(
 		:hover,
 		.is-hovered,
 		:has(:focus-visible)

@@ -1427,6 +1427,88 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'keeps an open list row highlighted while hovered', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Open list row highlight',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						type: 'list',
+						fields: [ 'title' ],
+						fieldsByType: { list: [] },
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page
+				.getByRole( 'region', { name: 'Content' } )
+				.frameLocator( 'iframe[name="editor-canvas"]' );
+			const row = canvas
+				.locator( '.dataviews-view-list [role="row"]' )
+				.filter( { hasText: 'The Left Hand of Darkness' } )
+				.first();
+			await expect( row ).toBeVisible();
+			await row.hover();
+			await row.dispatchEvent( 'click' );
+			await expect(
+				row.locator( '.cortext-title-cell--is-open' )
+			).toBeVisible();
+			await expect( canvas.locator( 'body' ) ).not.toHaveClass(
+				/cortext-row-reorder-suppress-hover/
+			);
+
+			await row.hover();
+			await expect( row ).toHaveCSS(
+				'background-color',
+				'rgb(243, 243, 243)'
+			);
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'keeps list media after the drag handle without duplicating the title icon', async ( {
 		admin,
 		page,
