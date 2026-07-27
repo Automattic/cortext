@@ -6,12 +6,22 @@ Running log for desktop-specific runtime and packaging decisions. Keep the detai
 
 **Decision.** Each Electron launch generates a new random 256-bit token, keeps
 it in memory, and passes it to the local runtime through its environment.
-Electron adds the token as an internal header only for requests to
-`http://127.0.0.1:9402/`. The PHP, FrankenPHP, and PHP-FPM runtime paths reject
-requests without the matching token before serving WordPress or static files.
-The benchmark follows the same contract with its own ephemeral token and never
-includes it in the recorded results. The loopback address and fixed port 9402
-remain unchanged.
+Every app window uses a dedicated Electron session. Its browser storage remains
+persistent so theme, layout, and integration preferences survive restarts, but
+the token is never stored there. HTTP caching is disabled, and cookies, service
+workers, and Cache API data for the runtime are cleared at launch. The session
+adds the token as an internal header to requests for
+`http://127.0.0.1:9402/`, without trying to infer trust from `Sec-Fetch-Site` or
+the current window URL. External top-level links leave the app through the
+system browser; external frames and document redirects are blocked; internal
+popups use the same protected session. A request chain that leaves the runtime
+cannot regain the token by redirecting back.
+
+The PHP, FrankenPHP, and PHP-FPM runtime paths reject requests without the
+matching token before serving WordPress or static files. Caddy then removes the
+header before proxying to PHP and filters it from error logs. The benchmark
+follows the same contract with its own ephemeral token and never includes it in
+the recorded results. The loopback address and fixed port 9402 remain unchanged.
 
 **Why.** The desktop-only autologin makes every accepted WordPress request an
 administrator request. Requiring a per-launch secret prevents web pages and
@@ -21,6 +31,15 @@ the port. The secret is not persisted, logged, or placed in a URL.
 **Limit.** This is a boundary against browser-originated and accidental local
 requests, not against hostile native software running as the same macOS user.
 Such a process can already read the user's Cortext application data.
+
+**Product boundary.** Desktop hides publishing and copy-link affordances, and
+published localhost routes remain behind the same token. They are not shareable
+in Safari or another client. Public publishing remains a feature of Cortext on
+a WordPress web site.
+
+**Migration note.** Moving from Electron's default session to the dedicated
+partition resets existing browser-only desktop preferences once. The WordPress
+database, documents, uploads, and application settings are unaffected.
 
 ## 2026-06-19 — In-place auto-updates over GitHub Releases
 
