@@ -923,9 +923,33 @@ test.describe( 'Collection view block', () => {
 			const dataViewToolbar = canvas.locator(
 				'.dataviews__view-actions'
 			);
-			await dataViewToolbar
-				.getByRole( 'button', { name: 'View options' } )
-				.click();
+			const viewOptionsButton = dataViewToolbar.getByRole( 'button', {
+				name: 'View options',
+			} );
+			await viewOptionsButton.hover();
+			expect(
+				await viewOptionsButton.evaluate(
+					( button ) =>
+						button.ownerDocument.defaultView.getComputedStyle(
+							button
+						).boxShadow
+				)
+			).toBe( 'none' );
+			await viewOptionsButton.focus();
+			await page.keyboard.press( 'Tab' );
+			await page.keyboard.press( 'Shift+Tab' );
+			await expect( viewOptionsButton ).toBeFocused();
+			await expect
+				.poll( () =>
+					viewOptionsButton.evaluate(
+						( button ) =>
+							button.ownerDocument.defaultView.getComputedStyle(
+								button
+							).boxShadow
+					)
+				)
+				.not.toBe( 'none' );
+			await viewOptionsButton.click();
 			const viewOptionsPopover = page.locator(
 				'.dataviews-config__popover:visible'
 			);
