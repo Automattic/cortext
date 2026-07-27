@@ -111,11 +111,7 @@ function useRestoreDefaultInspectorAfterSmallMount( {
 		) {
 			shouldOpenWhenNotSmall.current = false;
 			enableComplementaryArea( INSPECTOR_SCOPE, identifier );
-		} else if (
-			shouldOpenWhenNotSmall.current &&
-			activeArea &&
-			activeArea !== identifier
-		) {
+		} else if ( shouldOpenWhenNotSmall.current && activeArea ) {
 			shouldOpenWhenNotSmall.current = false;
 		}
 	}, [

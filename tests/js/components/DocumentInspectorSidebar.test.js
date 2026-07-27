@@ -181,4 +181,20 @@ describe( 'InspectorComplementaryArea', () => {
 			DOCUMENT_INSPECTOR
 		);
 	} );
+
+	it( 'does not reopen after the user opened and closed it', () => {
+		mockIsSmall = true;
+		const { rerender } = render(
+			<InspectorComplementaryArea { ...defaultProps } />
+		);
+
+		mockActiveArea = DOCUMENT_INSPECTOR;
+		rerender( <InspectorComplementaryArea { ...defaultProps } /> );
+		mockActiveArea = null;
+		rerender( <InspectorComplementaryArea { ...defaultProps } /> );
+		mockIsSmall = false;
+		rerender( <InspectorComplementaryArea { ...defaultProps } /> );
+
+		expect( mockEnableComplementaryArea ).not.toHaveBeenCalled();
+	} );
 } );
