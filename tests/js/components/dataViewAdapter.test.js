@@ -76,6 +76,68 @@ describe( 'dataViewAdapter', () => {
 		expect( savedWidthView.layout.styles.title ).toEqual( { width: 280 } );
 	} );
 
+	it( 'keeps injected editor title widths out of saved views', () => {
+		const canonicalUnsizedView = {
+			...canonicalView,
+			layout: { density: 'compact' },
+			layoutByType: {
+				...canonicalView.layoutByType,
+				table: { density: 'compact' },
+			},
+		};
+		const renderedView = adaptViewForDataViews( canonicalUnsizedView );
+
+		expect( renderedView.layout.styles.title ).toEqual( {
+			minWidth: 160,
+			width: 320,
+		} );
+
+		const savedView = mergeDataViewsChange( canonicalUnsizedView, {
+			...renderedView,
+			page: 3,
+		} );
+		const publicView = adaptViewForDataViews( savedView, {
+			applyDefaultTableTitleWidth: false,
+		} );
+
+		expect( savedView.layout ).toEqual( { density: 'compact' } );
+		expect( savedView.layoutByType.table ).toEqual( {
+			density: 'compact',
+		} );
+		expect( publicView.layout ).toEqual( { density: 'compact' } );
+	} );
+
+	it( 'preserves an explicitly saved default-sized title width', () => {
+		const explicitlySizedView = {
+			...canonicalView,
+			layout: {
+				density: 'compact',
+				styles: { title: { width: 320, maxWidth: 1200 } },
+			},
+			layoutByType: {
+				...canonicalView.layoutByType,
+				table: {
+					density: 'compact',
+					styles: { title: { width: 320, maxWidth: 1200 } },
+				},
+			},
+		};
+		const renderedView = adaptViewForDataViews( explicitlySizedView );
+		const savedView = mergeDataViewsChange(
+			explicitlySizedView,
+			renderedView
+		);
+
+		expect( savedView.layout.styles.title ).toEqual( {
+			width: 320,
+			maxWidth: 1200,
+		} );
+		expect( savedView.layoutByType.table.styles.title ).toEqual( {
+			width: 320,
+			maxWidth: 1200,
+		} );
+	} );
+
 	it( 'uses titleField for grid without inheriting table fields', () => {
 		const view = adaptViewForDataViews( {
 			...canonicalView,

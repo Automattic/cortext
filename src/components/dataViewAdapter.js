@@ -73,6 +73,50 @@ function layoutForTableDataViews(
 	};
 }
 
+function withoutInjectedTableTitleDefaults( previousLayout, nextLayout ) {
+	const next = cloneLayout( nextLayout );
+	const previousStyles = isObject( previousLayout?.styles )
+		? previousLayout.styles
+		: {};
+	const nextStyles = isObject( next.styles ) ? { ...next.styles } : null;
+	const previousTitleStyle = isObject( previousStyles[ TITLE_FIELD_ID ] )
+		? previousStyles[ TITLE_FIELD_ID ]
+		: {};
+	const nextTitleStyle = isObject( nextStyles?.[ TITLE_FIELD_ID ] )
+		? { ...nextStyles[ TITLE_FIELD_ID ] }
+		: null;
+
+	if ( ! nextStyles || ! nextTitleStyle ) {
+		return next;
+	}
+
+	if (
+		previousTitleStyle.width === undefined &&
+		nextTitleStyle.width === DEFAULT_TABLE_TITLE_WIDTH
+	) {
+		delete nextTitleStyle.width;
+	}
+	if (
+		previousTitleStyle.minWidth === undefined &&
+		nextTitleStyle.minWidth === MIN_WIDTHS.title
+	) {
+		delete nextTitleStyle.minWidth;
+	}
+
+	if ( Object.keys( nextTitleStyle ).length > 0 ) {
+		nextStyles[ TITLE_FIELD_ID ] = nextTitleStyle;
+	} else {
+		delete nextStyles[ TITLE_FIELD_ID ];
+	}
+	if ( Object.keys( nextStyles ).length > 0 ) {
+		next.styles = nextStyles;
+	} else {
+		delete next.styles;
+	}
+
+	return next;
+}
+
 function layoutForGridDataViews( layout ) {
 	const sourceLayout = cloneLayout( layout );
 	const nextLayout = {};
@@ -232,7 +276,14 @@ export function mergeDataViewsChange( previousView = {}, nextView = {} ) {
 		);
 	}
 	if ( previousType === nextType && isObject( nextView?.layout ) ) {
-		layoutByType[ nextType ] = layoutForType( nextType, nextView.layout );
+		const nextLayout =
+			nextType === 'table'
+				? withoutInjectedTableTitleDefaults(
+						layoutByType[ nextType ],
+						nextView.layout
+				  )
+				: nextView.layout;
+		layoutByType[ nextType ] = layoutForType( nextType, nextLayout );
 	}
 
 	const canonicalFields = tableFields(
