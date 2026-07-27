@@ -326,9 +326,10 @@ describe( 'normalizeView', () => {
 		expect( next.layout.styles[ 'field-2' ].width ).toBe( '20ch' );
 	} );
 
-	it( 'migrates numeric maxWidth values that lock the column to its current width', () => {
+	it( 'does not rewrite legacy numeric maxWidth values during normalization', () => {
 		const view = {
 			...baseView(),
+			fields: [ TITLE_FIELD_ID, 'field-1' ],
 			layout: {
 				density: 'compact',
 				styles: {
@@ -344,11 +345,7 @@ describe( 'normalizeView', () => {
 			view,
 			new Set( [ TITLE_FIELD_ID, 'field-1' ] )
 		);
-		expect( next.layout.styles[ 'field-1' ] ).toEqual( {
-			width: 180,
-			minWidth: 52,
-			maxWidth: MAX_COLUMN_WIDTH,
-		} );
+		expect( next ).toBe( view );
 	} );
 
 	it( 'preserves layout.density and other layout keys', () => {

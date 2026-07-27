@@ -263,6 +263,38 @@ describe( 'CollectionDataViews with DataViews 17', () => {
 		useCollectionFieldsContext.mockReturnValue( groupedFieldState );
 	} );
 
+	it( 'does not rewrite legacy fixed max widths on mount', () => {
+		useCollectionRows.mockReturnValue( collectionRowsState() );
+		const onChangeView = jest.fn();
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ {
+					...tableView,
+					layout: {
+						density: 'compact',
+						styles: {
+							'field-11': {
+								width: 180,
+								minWidth: 52,
+								maxWidth: 180,
+							},
+						},
+					},
+				} }
+				onChangeView={ onChangeView }
+			/>
+		);
+
+		expect( onChangeView ).not.toHaveBeenCalled();
+		expect(
+			mockDataViews.mock.calls.at( -1 )[ 0 ].view.layout.styles[
+				'field-11'
+			].maxWidth
+		).toBe( 180 );
+	} );
+
 	it( 'migrates legacy grouping without enabling row reordering', () => {
 		useCollectionRows.mockReturnValue(
 			collectionRowsState( {
