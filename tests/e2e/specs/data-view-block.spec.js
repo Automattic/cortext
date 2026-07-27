@@ -1793,55 +1793,51 @@ test.describe( 'Collection view block', () => {
 					.poll( () => renderedManualTitles( canvas ) )
 					.toEqual( expectedOrder );
 
+				await page.evaluate( async () => {
+					await window.wp.data.dispatch( 'core/editor' ).savePost();
+				} );
+				await page.waitForFunction(
+					() =>
+						! window.wp.data.select( 'core/editor' ).isSavingPost()
+				);
+
+				await page.reload();
+				await expect
+					.poll( () => renderedManualTitles( canvas ) )
+					.toEqual( expectedOrder );
+
+				const expectedOrderWithDelta = [
+					...expectedOrder,
+					expect.stringContaining( 'Delta Manual' ),
+				];
+				fixture.rows.push(
+					await requestUtils.rest( {
+						method: 'POST',
+						path: '/wp/v2/crtxt_documents',
+						data: {
+							title: 'Delta Manual',
+							status: 'private',
+							cortext_trait: fixture.collection.id,
+						},
+					} )
+				);
+
+				await page.reload();
+				await expect(
+					canvas.getByText( 'Delta Manual' )
+				).toBeVisible();
+				await expect
+					.poll( () =>
+						renderedManualTitles( canvas, [
+							'Alpha Manual',
+							'Beta Manual',
+							'Gamma Manual',
+							'Delta Manual',
+						] )
+					)
+					.toEqual( expectedOrderWithDelta );
+
 				if ( layout === 'table' ) {
-					const expectedOrderWithDelta = [
-						...expectedOrder,
-						expect.stringContaining( 'Delta Manual' ),
-					];
-					await page.evaluate( async () => {
-						await window.wp.data
-							.dispatch( 'core/editor' )
-							.savePost();
-					} );
-					await page.waitForFunction(
-						() =>
-							! window.wp.data
-								.select( 'core/editor' )
-								.isSavingPost()
-					);
-
-					await page.reload();
-					await expect
-						.poll( () => renderedManualTitles( canvas ) )
-						.toEqual( expectedOrder );
-
-					fixture.rows.push(
-						await requestUtils.rest( {
-							method: 'POST',
-							path: '/wp/v2/crtxt_documents',
-							data: {
-								title: 'Delta Manual',
-								status: 'private',
-								cortext_trait: fixture.collection.id,
-							},
-						} )
-					);
-
-					await page.reload();
-					await expect(
-						canvas.getByText( 'Delta Manual' )
-					).toBeVisible();
-					await expect
-						.poll( () =>
-							renderedManualTitles( canvas, [
-								'Alpha Manual',
-								'Beta Manual',
-								'Gamma Manual',
-								'Delta Manual',
-							] )
-						)
-						.toEqual( expectedOrderWithDelta );
-
 					await page.evaluate( () => {
 						const block = window.wp.data
 							.select( 'core/block-editor' )
