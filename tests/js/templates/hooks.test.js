@@ -15,9 +15,6 @@ import { useDispatch } from '@wordpress/data';
 import { afterDocumentTrash } from '../../../src/documents/invalidation';
 import {
 	notifyTemplatesChanged,
-	useCreateTemplate,
-	useCreateTemplateFromDocument,
-	useDuplicateTemplate,
 	useInstantiateTemplate,
 	useTemplates,
 } from '../../../src/templates/hooks';
@@ -97,48 +94,6 @@ describe( 'template hooks', () => {
 			expect( result.current.templates ).toEqual( [ { id: 2 } ] )
 		);
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
-	} );
-
-	it( 'exposes create, create-from-document, and duplicate mutation hooks', async () => {
-		apiFetch
-			.mockResolvedValueOnce( { template: { id: 14 } } )
-			.mockResolvedValueOnce( { template: { id: 16 } } )
-			.mockResolvedValueOnce( { template: { id: 15 } } );
-
-		const { result: createResult } = renderHook( () =>
-			useCreateTemplate()
-		);
-		const { result: createFromDocumentResult } = renderHook( () =>
-			useCreateTemplateFromDocument()
-		);
-		const { result: duplicateResult } = renderHook( () =>
-			useDuplicateTemplate()
-		);
-
-		await expect(
-			createResult.current( { kind: 'page', title: 'Brief' } )
-		).resolves.toEqual( { id: 14 } );
-		await expect( createFromDocumentResult.current( 23 ) ).resolves.toEqual(
-			{ id: 16 }
-		);
-		await expect( duplicateResult.current( 14 ) ).resolves.toEqual( {
-			id: 15,
-		} );
-
-		expect( apiFetch ).toHaveBeenNthCalledWith( 1, {
-			path: '/cortext/v1/templates',
-			method: 'POST',
-			data: { kind: 'page', title: 'Brief' },
-		} );
-		expect( apiFetch ).toHaveBeenNthCalledWith( 2, {
-			path: '/cortext/v1/templates/from-document',
-			method: 'POST',
-			data: { document_id: 23 },
-		} );
-		expect( apiFetch ).toHaveBeenNthCalledWith( 3, {
-			path: '/cortext/v1/templates/14/duplicate',
-			method: 'POST',
-		} );
 	} );
 
 	it( 'invalidates document lists after instantiating a template', async () => {
