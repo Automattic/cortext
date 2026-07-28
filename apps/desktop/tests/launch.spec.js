@@ -368,18 +368,24 @@ async function expectSecondInstanceToExit( app, userDataPath ) {
 			globalThis.__cortextE2ESecondInstanceSeen = true;
 		} );
 	} );
-	const secondInstance = spawn(
-		app.process().spawnfile,
-		[ APP_PATH, `--user-data-dir=${ userDataPath }` ],
-		{
-			env: {
-				...process.env,
-				CORTEXT_DEVTOOLS: '0',
-				CORTEXT_E2E: '1',
-			},
-			stdio: 'ignore',
-		}
-	);
+	const secondInstanceArgs = [
+		APP_PATH,
+		`--user-data-dir=${ userDataPath }`,
+	];
+	// Playwright disables Chromium's sandbox for its Electron process on
+	// Linux. Match that test-only launch mode so the second process reaches
+	// Electron's single-instance lock instead of exiting during bootstrap.
+	if ( process.platform === 'linux' ) {
+		secondInstanceArgs.unshift( '--no-sandbox' );
+	}
+	const secondInstance = spawn( app.process().spawnfile, secondInstanceArgs, {
+		env: {
+			...process.env,
+			CORTEXT_DEVTOOLS: '0',
+			CORTEXT_E2E: '1',
+		},
+		stdio: 'ignore',
+	} );
 	let timeoutId;
 	const timeout = new Promise( ( _resolve, reject ) => {
 		timeoutId = setTimeout( () => {
