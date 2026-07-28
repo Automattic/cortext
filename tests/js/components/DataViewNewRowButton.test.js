@@ -117,64 +117,27 @@ function renderButton( props = {} ) {
 }
 
 describe( 'DataViewNewRowButton templates', () => {
-	it( 'uses the view default template and sends eligible filter prefills as overrides', async () => {
-		const onCreated = jest.fn();
-		const template = { id: 10, title: 'Task starter' };
-		// Prevent the single-template fallback from masking the default lookup.
-		useTemplates.mockReturnValue( {
-			templates: [ template, { id: 11, title: 'Other starter' } ],
-		} );
-		instantiateTemplate.mockResolvedValueOnce( { id: 99 } );
-
-		renderButton( {
-			onCreated,
-			view: {
-				defaultRowTemplateId: 10,
-				filters: [
-					{ field: 'field-1', operator: 'is', value: 'Active' },
-					{ field: 'field-2', operator: 'is', value: 'Ignored' },
-					{ field: 'field-3', operator: 'is', value: 'Rollup' },
-					{ field: 'field-1', operator: 'isAny', value: 'Skipped' },
-				],
-			},
-		} );
-
-		fireEvent.click( screen.getByRole( 'button', { name: 'New' } ) );
-
-		await waitFor( () =>
-			expect( instantiateTemplate ).toHaveBeenCalledWith( 10, {
-				field_values: { 'field-1': 'Active' },
-			} )
-		);
-		expect( onCreated ).toHaveBeenCalledWith( { id: 99 } );
-		expect( apiFetch ).not.toHaveBeenCalled();
-	} );
-
-	it( 'does not create a blank row while row templates are still loading', () => {
+	it( 'creates a blank row while row templates are still loading', async () => {
 		useTemplates.mockReturnValue( {
 			templates: [],
 			isResolving: true,
 		} );
+		apiFetch.mockResolvedValueOnce( { id: 99 } );
 
-		renderButton( {
-			view: {
-				defaultRowTemplateId: 10,
-				filters: [],
-			},
-		} );
+		renderButton();
 
 		const primaryButton = screen.getByRole( 'button', { name: 'New' } );
 		const optionsButton = screen.getByRole( 'button', {
 			name: 'Choose how to create a row',
 		} );
 
-		expect( primaryButton ).toBeDisabled();
+		expect( primaryButton ).toBeEnabled();
 		expect( optionsButton ).toBeDisabled();
 
 		fireEvent.click( primaryButton );
 
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 		expect( instantiateTemplate ).not.toHaveBeenCalled();
-		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 
 	it( 'creates a blank row without template controls when the experiment is disabled', async () => {
@@ -266,25 +229,17 @@ describe( 'DataViewNewRowButton templates', () => {
 		expect( onCreated ).toHaveBeenCalledWith( { id: 101 } );
 	} );
 
-	it( 'uses the only available template without opening a picker', async () => {
+	it( 'creates a blank row when only one template is available', async () => {
 		const template = { id: 22, title: 'Only template' };
 		useTemplates.mockReturnValue( { templates: [ template ] } );
-		instantiateTemplate.mockResolvedValueOnce( { id: 102 } );
+		apiFetch.mockResolvedValueOnce( { id: 102 } );
 
 		renderButton();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'New' } ) );
 
-		expect(
-			screen.queryByRole( 'menuitem', {
-				name: 'Create from Only template',
-			} )
-		).toBeNull();
-		await waitFor( () =>
-			expect( instantiateTemplate ).toHaveBeenCalledWith( 22, {
-				field_values: {},
-			} )
-		);
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		expect( instantiateTemplate ).not.toHaveBeenCalled();
 	} );
 
 	it( 'creates a template and opens it in the template editor', async () => {

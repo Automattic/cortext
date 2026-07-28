@@ -92,17 +92,6 @@ export default function DataViewNewRowButton( {
 		[ fields ]
 	);
 
-	const defaultTemplate = useMemo(
-		() =>
-			templates.find(
-				( template ) => template.id === view?.defaultRowTemplateId
-			) ?? null,
-		[ templates, view?.defaultRowTemplateId ]
-	);
-	const implicitTemplate = templatesEnabled
-		? defaultTemplate ?? ( templates.length === 1 ? templates[ 0 ] : null )
-		: null;
-
 	const createRow = useCallback(
 		async ( template = null ) => {
 			setIsCreating( true );
@@ -182,14 +171,9 @@ export default function DataViewNewRowButton( {
 			className={ primaryClassName }
 			variant="tertiary"
 			icon={ plus }
-			onClick={ () => createRow( implicitTemplate ) }
+			onClick={ () => createRow() }
 			isBusy={ isCreating }
-			disabled={
-				disabled ||
-				isCreating ||
-				( templatesEnabled && areTemplatesResolving ) ||
-				! collectionId
-			}
+			disabled={ disabled || isCreating || ! collectionId }
 		>
 			{ __( 'New', 'cortext' ) }
 		</Button>
