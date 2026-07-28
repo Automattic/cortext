@@ -7,9 +7,6 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 
 import {
 	createTemplate,
-	createTemplateFromDocument,
-	deleteTemplate,
-	duplicateTemplate,
 	fetchTemplates,
 	instantiateTemplate,
 	updateTemplate,
@@ -36,12 +33,10 @@ describe( 'template REST actions', () => {
 		} );
 	} );
 
-	it( 'creates, updates, duplicates, deletes, and instantiates templates through the shared endpoint', async () => {
+	it( 'creates, updates, and instantiates templates', async () => {
 		apiFetch
 			.mockResolvedValueOnce( { template: { id: 2 } } )
 			.mockResolvedValueOnce( { template: { id: 2, title: 'Renamed' } } )
-			.mockResolvedValueOnce( { template: { id: 3 } } )
-			.mockResolvedValueOnce( { deleted: true } )
 			.mockResolvedValueOnce( { document: { id: 4 } } );
 
 		await expect(
@@ -50,12 +45,8 @@ describe( 'template REST actions', () => {
 		await expect(
 			updateTemplate( 2, { title: 'Renamed' } )
 		).resolves.toEqual( { id: 2, title: 'Renamed' } );
-		await expect( duplicateTemplate( 2 ) ).resolves.toEqual( { id: 3 } );
-		await expect( deleteTemplate( 2 ) ).resolves.toEqual( {
-			deleted: true,
-		} );
 		await expect(
-			instantiateTemplate( 3, { parent: 9 } )
+			instantiateTemplate( 2, { parent: 9 } )
 		).resolves.toEqual( { id: 4 } );
 
 		expect( apiFetch ).toHaveBeenNthCalledWith( 1, {
@@ -69,32 +60,9 @@ describe( 'template REST actions', () => {
 			data: { title: 'Renamed' },
 		} );
 		expect( apiFetch ).toHaveBeenNthCalledWith( 3, {
-			path: '/cortext/v1/templates/2/duplicate',
-			method: 'POST',
-		} );
-		expect( apiFetch ).toHaveBeenNthCalledWith( 4, {
-			path: '/cortext/v1/templates/2',
-			method: 'DELETE',
-		} );
-		expect( apiFetch ).toHaveBeenNthCalledWith( 5, {
-			path: '/cortext/v1/templates/3/instantiate',
+			path: '/cortext/v1/templates/2/instantiate',
 			method: 'POST',
 			data: { parent: 9 },
 		} );
 	} );
-
-	it( 'creates a template from an existing document', async () => {
-		apiFetch.mockResolvedValueOnce( { template: { id: 12 } } );
-
-		await expect( createTemplateFromDocument( 42 ) ).resolves.toEqual( {
-			id: 12,
-		} );
-
-		expect( apiFetch ).toHaveBeenCalledWith( {
-			path: '/cortext/v1/templates/from-document',
-			method: 'POST',
-			data: { document_id: 42 },
-		} );
-	} );
-
 } );

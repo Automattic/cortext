@@ -23,23 +23,14 @@ test.describe( 'Templates', () => {
 		const suffix = Date.now().toString( 36 ).slice( -4 );
 
 		try {
-			const sourcePage = await requestUtils.rest( {
-				method: 'POST',
-				path: '/wp/v2/crtxt_documents',
-				data: {
-					title: `E2E Page Template Source ${ suffix }`,
-					status: 'private',
-					content:
-						'<!-- wp:paragraph --><p>Original page body</p><!-- /wp:paragraph -->',
-				},
-			} );
-			fixture.sourcePageId = sourcePage.id;
-
 			const pageTemplateResponse = await requestUtils.rest( {
 				method: 'POST',
-				path: '/cortext/v1/templates/from-document',
+				path: '/cortext/v1/templates',
 				data: {
-					document_id: fixture.sourcePageId,
+					kind: 'page',
+					title: `E2E Page Template Source ${ suffix }`,
+					content:
+						'<!-- wp:paragraph --><p>Original page body</p><!-- /wp:paragraph -->',
 				},
 			} );
 			fixture.pageTemplateId = pageTemplateResponse.template.id;
@@ -95,27 +86,18 @@ test.describe( 'Templates', () => {
 				},
 			} );
 
-			const sourceRow = await requestUtils.rest( {
-				method: 'POST',
-				path: '/wp/v2/crtxt_documents',
-				data: {
-					title: `E2E Row Template Source ${ suffix }`,
-					status: 'private',
-					cortext_trait: fixture.collectionId,
-					content:
-						'<!-- wp:paragraph --><p>Original row body</p><!-- /wp:paragraph -->',
-					meta: {
-						[ `field-${ fixture.fieldId }` ]: 'template default',
-					},
-				},
-			} );
-			fixture.sourceRowId = sourceRow.id;
-
 			const rowTemplateResponse = await requestUtils.rest( {
 				method: 'POST',
-				path: '/cortext/v1/templates/from-document',
+				path: '/cortext/v1/templates',
 				data: {
-					document_id: fixture.sourceRowId,
+					kind: 'row',
+					collection_id: fixture.collectionId,
+					title: `E2E Row Template Source ${ suffix }`,
+					content:
+						'<!-- wp:paragraph --><p>Original row body</p><!-- /wp:paragraph -->',
+					field_values: {
+						[ `field-${ fixture.fieldId }` ]: 'template default',
+					},
 				},
 			} );
 			fixture.rowTemplateId = rowTemplateResponse.template.id;
@@ -163,23 +145,13 @@ test.describe( 'Templates', () => {
 			);
 			await deleteIfCreated(
 				requestUtils,
-				fixture.sourceRowId &&
-					`/wp/v2/crtxt_documents/${ fixture.sourceRowId }`
-			);
-			await deleteIfCreated(
-				requestUtils,
-				fixture.sourcePageId &&
-					`/wp/v2/crtxt_documents/${ fixture.sourcePageId }`
-			);
-			await deleteIfCreated(
-				requestUtils,
 				fixture.rowTemplateId &&
-					`/cortext/v1/templates/${ fixture.rowTemplateId }`
+					`/wp/v2/crtxt_templates/${ fixture.rowTemplateId }`
 			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.pageTemplateId &&
-					`/cortext/v1/templates/${ fixture.pageTemplateId }`
+					`/wp/v2/crtxt_templates/${ fixture.pageTemplateId }`
 			);
 			await deleteIfCreated(
 				requestUtils,

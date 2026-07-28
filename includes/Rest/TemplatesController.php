@@ -58,25 +58,6 @@ final class TemplatesController {
 			)
 		);
 
-		register_rest_route(
-			self::NAMESPACE,
-			'/templates/from-document',
-			array(
-				array(
-					'methods'             => 'POST',
-					'callback'            => array( $this, 'create_from_document' ),
-					'permission_callback' => array( $this, 'can_read' ),
-					'args'                => array(
-						'document_id' => array(
-							'type'     => 'integer',
-							'required' => true,
-							'minimum'  => 1,
-						),
-					),
-				),
-			)
-		);
-
 		$id_arg = array(
 			'id' => array(
 				'type'     => 'integer',
@@ -89,33 +70,8 @@ final class TemplatesController {
 			'/templates/(?P<id>\d+)',
 			array(
 				array(
-					'methods'             => 'GET',
-					'callback'            => array( $this, 'get_template' ),
-					'permission_callback' => array( $this, 'can_edit_template' ),
-					'args'                => $id_arg,
-				),
-				array(
 					'methods'             => 'POST',
 					'callback'            => array( $this, 'update_template' ),
-					'permission_callback' => array( $this, 'can_edit_template' ),
-					'args'                => $id_arg,
-				),
-				array(
-					'methods'             => 'DELETE',
-					'callback'            => array( $this, 'delete_template' ),
-					'permission_callback' => array( $this, 'can_edit_template' ),
-					'args'                => $id_arg,
-				),
-			)
-		);
-
-		register_rest_route(
-			self::NAMESPACE,
-			'/templates/(?P<id>\d+)/duplicate',
-			array(
-				array(
-					'methods'             => 'POST',
-					'callback'            => array( $this, 'duplicate_template' ),
 					'permission_callback' => array( $this, 'can_edit_template' ),
 					'args'                => $id_arg,
 				),
@@ -177,29 +133,6 @@ final class TemplatesController {
 		return new WP_REST_Response( array( 'template' => $template ), 201 );
 	}
 
-	public function create_from_document( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$template = $this->templates->create_from_document(
-			(int) $request->get_param( 'document_id' )
-		);
-		if ( $template instanceof WP_Error ) {
-			return $template;
-		}
-		return new WP_REST_Response( array( 'template' => $template ), 201 );
-	}
-
-	public function get_template( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$id       = (int) $request->get_param( 'id' );
-		$template = get_post( $id );
-		if ( ! $template instanceof WP_Post || TemplatePostType::POST_TYPE !== $template->post_type ) {
-			return new WP_Error(
-				'cortext_template_not_found',
-				__( "Couldn't find that template.", 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-		return new WP_REST_Response( array( 'template' => $this->templates->format_template( $template ) ), 200 );
-	}
-
 	public function update_template( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$template = $this->templates->update(
 			(int) $request->get_param( 'id' ),
@@ -209,30 +142,6 @@ final class TemplatesController {
 			return $template;
 		}
 		return new WP_REST_Response( array( 'template' => $template ), 200 );
-	}
-
-	public function delete_template( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$id       = (int) $request->get_param( 'id' );
-		$previous = get_post( $id );
-		$deleted  = $this->templates->delete( $id );
-		if ( $deleted instanceof WP_Error ) {
-			return $deleted;
-		}
-		return new WP_REST_Response(
-			array(
-				'deleted'  => $deleted,
-				'previous' => $previous instanceof WP_Post ? $this->templates->format_template( $previous ) : null,
-			),
-			200
-		);
-	}
-
-	public function duplicate_template( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$template = $this->templates->duplicate( (int) $request->get_param( 'id' ) );
-		if ( $template instanceof WP_Error ) {
-			return $template;
-		}
-		return new WP_REST_Response( array( 'template' => $template ), 201 );
 	}
 
 	public function instantiate_template( WP_REST_Request $request ): WP_REST_Response|WP_Error {
