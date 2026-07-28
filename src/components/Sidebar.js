@@ -432,11 +432,11 @@ export default function Sidebar( {
 			if ( ! template?.id ) {
 				return createAndOpen( input );
 			}
-			return openAfterCreate(
-				await instantiateTemplate( template.id, input )
-			);
+			const created = await instantiateTemplate( template.id, input );
+			refreshBranch( created?.parent ?? input?.parent ?? ROOT_PARENT_ID );
+			return openAfterCreate( created );
 		},
-		[ createAndOpen, instantiateTemplate, openAfterCreate ]
+		[ createAndOpen, instantiateTemplate, openAfterCreate, refreshBranch ]
 	);
 	const createCollectionAndOpen = useCallback(
 		async ( input ) => {
