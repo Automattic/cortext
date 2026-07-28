@@ -266,14 +266,19 @@ final class RowsController {
 		$query_params = $request->get_query_params();
 		if ( array_key_exists( 'include', $query_params ) && count( (array) $request->get_param( 'include' ) ) === 0 ) {
 			if ( 'ids' === $shape ) {
-				return new WP_REST_Response(
-					array(
-						'ids'        => array(),
-						'total'      => 0,
-						'totalPages' => 0,
-					),
-					200
+				$response = array(
+					'ids'        => array(),
+					'total'      => 0,
+					'totalPages' => 0,
 				);
+				if ( count( $calculation_requests ) > 0 ) {
+					$response['calculations'] = $this->calculate_rows(
+						array(),
+						$calculation_requests,
+						$field_schema
+					);
+				}
+				return new WP_REST_Response( $response, 200 );
 			}
 
 			$response = array(
@@ -361,14 +366,28 @@ final class RowsController {
 				$total_pages = (int) $query->max_num_pages;
 			}
 
-			return new WP_REST_Response(
-				array(
-					'ids'        => $ids,
-					'total'      => $total,
-					'totalPages' => $total_pages,
-				),
-				200
+			$response = array(
+				'ids'        => $ids,
+				'total'      => $total,
+				'totalPages' => $total_pages,
 			);
+
+			// Calculations cover the whole filter and search scope, not the
+			// current page, so both response shapes compute the same values.
+			if ( count( $calculation_requests ) > 0 ) {
+				$response['calculations'] = $this->calculations_for_scope(
+					$request,
+					$calculation_requests,
+					$collection_id,
+					$row_statuses,
+					$row_query,
+					$field_schema,
+					$where_sql,
+					$filter_sql['join']
+				);
+			}
+
+			return new WP_REST_Response( $response, 200 );
 		}
 
 		// Keep row-formatting metadata local to this rows response. Passing the
@@ -440,19 +459,15 @@ final class RowsController {
 		);
 
 		if ( count( $calculation_requests ) > 0 ) {
-			$calculation_posts        = $this->query_posts_for_calculations(
+			$response['calculations'] = $this->calculations_for_scope(
 				$request,
+				$calculation_requests,
 				$collection_id,
 				$row_statuses,
 				$row_query,
 				$field_schema,
 				$where_sql,
 				$filter_sql['join']
-			);
-			$response['calculations'] = $this->calculate_rows(
-				$calculation_posts,
-				$calculation_requests,
-				$field_schema
 			);
 		}
 
@@ -663,6 +678,45 @@ final class RowsController {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Calculates footer totals over the current filter and search scope.
+	 *
+	 * Both response shapes share this path, so a paged request reports the same
+	 * totals whether it asked for rows or for IDs.
+	 *
+	 * @param WP_REST_Request $request              Full request object.
+	 * @param array           $calculation_requests Validated `field-id => operation` map.
+	 * @param int             $collection_id        Collection (trait) post ID.
+	 * @param string[]        $row_statuses         Post statuses visible to this request.
+	 * @param RowsFilterQuery $row_query            Row filter/search compiler.
+	 * @param array           $field_schema         Field schema from RowsFilterQuery.
+	 * @param string          $where_sql            Compiled filter/search WHERE SQL.
+	 * @param string          $join_sql             Compiled filter JOIN SQL.
+	 * @return array
+	 */
+	private function calculations_for_scope(
+		WP_REST_Request $request,
+		array $calculation_requests,
+		int $collection_id,
+		array $row_statuses,
+		RowsFilterQuery $row_query,
+		array $field_schema,
+		string $where_sql,
+		string $join_sql
+	): array {
+		$posts = $this->query_posts_for_calculations(
+			$request,
+			$collection_id,
+			$row_statuses,
+			$row_query,
+			$field_schema,
+			$where_sql,
+			$join_sql
+		);
+
+		return $this->calculate_rows( $posts, $calculation_requests, $field_schema );
 	}
 
 	/**
