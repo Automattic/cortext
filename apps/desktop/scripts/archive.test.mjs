@@ -76,6 +76,25 @@ test( 'ZIP extraction rejects unsafe entries before creating any directories', a
 	assert.equal( fs.existsSync( escapedDirectory ), false );
 } );
 
+test( 'zipDirectory reports a file it cannot read and removes the archive', async () => {
+	const root = tmpDir();
+	const source = path.join( root, 'source' );
+	const archive = path.join( root, 'partial.zip' );
+	for ( const name of [ 'a', 'b', 'c', 'd' ] ) {
+		writeFile(
+			path.join( source, `${ name }.txt` ),
+			name.repeat( 200000 )
+		);
+	}
+
+	const pending = zipDirectory( source, archive, 'wordpress' );
+	// yazl opens each file lazily, after zipDirectory has walked the tree.
+	fs.rmSync( path.join( source, 'c.txt' ) );
+
+	await assert.rejects( pending, /ENOENT|not a file/ );
+	assert.equal( fs.existsSync( archive ), false );
+} );
+
 test( 'ZIP extraction rejects symbolic links', () => {
 	assert.throws(
 		() =>

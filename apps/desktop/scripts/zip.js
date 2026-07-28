@@ -54,10 +54,30 @@ function zipDirectory(
 	fs.mkdirSync( path.dirname( archivePath ), { recursive: true } );
 	return new Promise( ( resolve, reject ) => {
 		const output = fs.createWriteStream( archivePath );
-		const fail = ( error ) => reject( error );
+		let failure = null;
+		// yazl reports a file it cannot stat or read on the ZipFile itself, not
+		// on its output stream.
+		const fail = ( error ) => {
+			if ( failure ) {
+				return;
+			}
+			failure = error;
+			output.destroy();
+		};
+		const finish = () => {
+			if ( ! failure ) {
+				resolve();
+				return;
+			}
+			// Never leave a half-written archive where a caller can mistake it
+			// for a finished one.
+			fs.rmSync( archivePath, { force: true } );
+			reject( failure );
+		};
+		archive.once( 'error', fail );
 		archive.outputStream.once( 'error', fail );
 		output.once( 'error', fail );
-		output.once( 'close', resolve );
+		output.once( 'close', finish );
 		archive.outputStream.pipe( output );
 		archive.end();
 	} );
