@@ -246,7 +246,9 @@ export default function DataViewNewRowButton( {
 	) : null;
 	const controlsClassName =
 		'cortext-data-view__new-row-controls' +
-		` cortext-data-view__new-row-controls--${ presentation }`;
+		( presentation === 'footer'
+			? ' cortext-data-view__new-row-controls--footer'
+			: '' );
 	const controls = templatesEnabled ? (
 		<div className={ controlsClassName }>
 			{ primaryButton }
