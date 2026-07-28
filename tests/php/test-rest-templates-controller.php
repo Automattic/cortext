@@ -304,6 +304,35 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->assertSame( 'cortext_template_field_invalid', $response->get_data()['code'] );
 	}
 
+	public function test_update_drops_defaults_for_fields_removed_from_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'Tasks' );
+		$status_id     = $this->attach_field( $collection_id, 'Status', 'text' );
+		$template_id   = $this->create_template(
+			array(
+				'kind'          => Templates::KIND_ROW,
+				'collection_id' => $collection_id,
+				'title'         => 'Task starter',
+				'field_values'  => array(
+					'field-' . $status_id => 'todo',
+				),
+			)
+		);
+
+		delete_post_meta( $collection_id, 'cortext_fields', (string) $status_id );
+
+		$response = $this->request(
+			'POST',
+			'/cortext/v1/templates/' . $template_id,
+			array( 'title' => 'Renamed starter' )
+		);
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$template = $response->get_data()['template'];
+		$this->assertSame( 'Renamed starter', $template['title'] );
+		$this->assertArrayNotHasKey( 'field-' . $status_id, $template['field_values'] );
+	}
+
 	private function request( string $method, string $path, array $params = array() ) {
 		$request = new WP_REST_Request( $method, $path );
 		foreach ( $params as $key => $value ) {
