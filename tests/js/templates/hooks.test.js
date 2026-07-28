@@ -17,7 +17,6 @@ import {
 	notifyTemplatesChanged,
 	useCreateTemplate,
 	useCreateTemplateFromDocument,
-	useDefaultPageTemplate,
 	useDuplicateTemplate,
 	useInstantiateTemplate,
 	useTemplates,
@@ -98,32 +97,6 @@ describe( 'template hooks', () => {
 			expect( result.current.templates ).toEqual( [ { id: 2 } ] )
 		);
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
-	} );
-
-	it( 'loads and updates the workspace page default template', async () => {
-		apiFetch
-			.mockResolvedValueOnce( { template: { id: 4 } } )
-			.mockResolvedValueOnce( { template: { id: 8 } } );
-
-		const { result } = renderHook( () => useDefaultPageTemplate() );
-
-		await waitFor( () =>
-			expect( result.current.isResolving ).toBe( false )
-		);
-		expect( result.current.template ).toEqual( { id: 4 } );
-
-		let next;
-		await act( async () => {
-			next = await result.current.setDefault( 8 );
-		} );
-
-		expect( next ).toEqual( { id: 8 } );
-		expect( result.current.template ).toEqual( { id: 8 } );
-		expect( apiFetch ).toHaveBeenNthCalledWith( 2, {
-			path: '/cortext/v1/templates/default',
-			method: 'PUT',
-			data: { id: 8 },
-		} );
 	} );
 
 	it( 'exposes create, create-from-document, and duplicate mutation hooks', async () => {

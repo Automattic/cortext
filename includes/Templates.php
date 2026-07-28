@@ -24,8 +24,6 @@ final class Templates {
 	public const KIND_PAGE     = 'page';
 	public const KIND_ROW      = 'row';
 
-	public const PAGE_DEFAULT_OPTION = 'cortext_default_page_template_id';
-
 	private const TEMPLATE_HEADER_BLOCKS = array(
 		'core/post-title',
 		'cortext/document-cover',
@@ -277,57 +275,6 @@ final class Templates {
 		}
 
 		return $this->instantiate_page( $template, $args );
-	}
-
-	public function get_page_default(): ?array {
-		$id = (int) get_option( self::PAGE_DEFAULT_OPTION, 0 );
-		if ( $id < 1 ) {
-			return null;
-		}
-		$template = $this->get_template_post( $id );
-		if ( $template instanceof WP_Error ) {
-			delete_option( self::PAGE_DEFAULT_OPTION );
-			return null;
-		}
-		$meta = $this->template_meta( $template );
-		if ( self::KIND_PAGE !== $meta['kind'] ) {
-			delete_option( self::PAGE_DEFAULT_OPTION );
-			return null;
-		}
-		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return null;
-		}
-		return $this->format_template( $template );
-	}
-
-	public function set_page_default( ?int $id ): array|WP_Error|null {
-		if ( null === $id || $id < 1 ) {
-			delete_option( self::PAGE_DEFAULT_OPTION );
-			return null;
-		}
-
-		$template = $this->get_template_post( $id );
-		if ( $template instanceof WP_Error ) {
-			return $template;
-		}
-		$meta = $this->template_meta( $template );
-		if ( self::KIND_PAGE !== $meta['kind'] ) {
-			return new WP_Error(
-				'cortext_template_default_invalid_kind',
-				__( 'Choose a document template as the default.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error(
-				'cortext_template_default_forbidden',
-				__( "You can't use this template as the default.", 'cortext' ),
-				array( 'status' => 403 )
-			);
-		}
-
-		update_option( self::PAGE_DEFAULT_OPTION, $id, false );
-		return $this->format_template( $template );
 	}
 
 	public function format_template( WP_Post $template ): array {
