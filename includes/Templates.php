@@ -145,53 +145,6 @@ final class Templates {
 		return $post instanceof WP_Post ? $this->format_template( $post ) : $this->insert_failed_error();
 	}
 
-	public function create_from_document( int $document_id ) {
-		$post = get_post( $document_id );
-		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
-			return new WP_Error(
-				'cortext_template_source_not_found',
-				__( "Couldn't find that document.", 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-		if ( ! current_user_can( 'edit_post', $document_id ) ) {
-			return new WP_Error(
-				'cortext_template_source_forbidden',
-				__( "You can't create a template from this document.", 'cortext' ),
-				array( 'status' => 403 )
-			);
-		}
-
-		$trait = ( new Documents() )->find_trait_for_document( $post );
-		if ( $trait instanceof WP_Post ) {
-			return $this->create(
-				array(
-					'kind'          => self::KIND_ROW,
-					'collection_id' => (int) $trait->ID,
-					'title'         => $post->post_title,
-					'content'       => $post->post_content,
-					'field_values'  => $this->field_values_from_row( $document_id, (int) $trait->ID ),
-				)
-			);
-		}
-
-		if ( Document::is_collection( $document_id ) ) {
-			return new WP_Error(
-				'cortext_template_source_collection',
-				__( "Collections can't be saved as templates yet.", 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		return $this->create(
-			array(
-				'kind'    => self::KIND_PAGE,
-				'title'   => $post->post_title,
-				'content' => $post->post_content,
-			)
-		);
-	}
-
 	public function update( int $id, array $payload ) {
 		$template = $this->get_template_post( $id );
 		if ( $template instanceof WP_Error ) {
@@ -233,34 +186,6 @@ final class Templates {
 
 		$post = get_post( $id );
 		return $post instanceof WP_Post ? $this->format_template( $post ) : $this->template_not_found_error();
-	}
-
-	public function duplicate( int $id ) {
-		$template = $this->get_template_post( $id );
-		if ( $template instanceof WP_Error ) {
-			return $template;
-		}
-		$meta = $this->template_meta( $template );
-
-		return $this->create(
-			array(
-				/* translators: %s: source template title */
-				'title'         => sprintf( __( 'Copy of %s', 'cortext' ), $template->post_title ? $template->post_title : __( 'Untitled template', 'cortext' ) ),
-				'content'       => $template->post_content,
-				'kind'          => $meta['kind'],
-				'collection_id' => $meta['collection_id'],
-				'field_values'  => $meta['field_values'],
-			)
-		);
-	}
-
-	public function delete( int $id ): bool|WP_Error {
-		$template = $this->get_template_post( $id );
-		if ( $template instanceof WP_Error ) {
-			return $template;
-		}
-
-		return (bool) wp_delete_post( $id, true );
 	}
 
 	public function instantiate( int $id, array $args = array() ) {
@@ -455,30 +380,6 @@ final class Templates {
 			return is_array( $value ) ? array_values( $value ) : array( $value );
 		}
 		return $value;
-	}
-
-	private function field_values_from_row( int $row_id, int $collection_id ): array {
-		$values = array();
-		foreach ( Document::collection_field_ids( $collection_id ) as $field_id ) {
-			$type = (string) get_post_meta( $field_id, 'type', true );
-			if ( '' === $type || 'rollup' === $type ) {
-				continue;
-			}
-			$meta_values = get_post_meta( $row_id, Relations::meta_key( $field_id ), false );
-			$meta_values = array_values(
-				array_filter(
-					$meta_values,
-					static fn( $value ): bool => '' !== $value && null !== $value
-				)
-			);
-			if ( 0 === count( $meta_values ) ) {
-				continue;
-			}
-			$values[ 'field-' . $field_id ] = count( $meta_values ) === 1
-				? $meta_values[0]
-				: $meta_values;
-		}
-		return $values;
 	}
 
 	private function write_row_field_values( int $row_id, int $collection_id, array $field_values ): bool|WP_Error {

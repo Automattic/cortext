@@ -29,15 +29,6 @@ export async function createTemplate( data = {} ) {
 	return response?.template ?? null;
 }
 
-export async function createTemplateFromDocument( documentId ) {
-	const response = await apiFetch( {
-		path: '/cortext/v1/templates/from-document',
-		method: 'POST',
-		data: { document_id: documentId },
-	} );
-	return response?.template ?? null;
-}
-
 export async function updateTemplate( id, data = {} ) {
 	const response = await apiFetch( {
 		path: `/cortext/v1/templates/${ id }`,
@@ -45,21 +36,6 @@ export async function updateTemplate( id, data = {} ) {
 		data,
 	} );
 	return response?.template ?? null;
-}
-
-export async function duplicateTemplate( id ) {
-	const response = await apiFetch( {
-		path: `/cortext/v1/templates/${ id }/duplicate`,
-		method: 'POST',
-	} );
-	return response?.template ?? null;
-}
-
-export async function deleteTemplate( id ) {
-	return apiFetch( {
-		path: `/cortext/v1/templates/${ id }`,
-		method: 'DELETE',
-	} );
 }
 
 export async function instantiateTemplate( id, data = {} ) {

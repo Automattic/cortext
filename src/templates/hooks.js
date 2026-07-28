@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 
-import {
-	createTemplate,
-	createTemplateFromDocument,
-	duplicateTemplate,
-	fetchTemplates,
-	instantiateTemplate,
-} from './actions';
+import { fetchTemplates, instantiateTemplate } from './actions';
 import {
 	afterDocumentTrash,
 	applyInvalidationPack,
@@ -115,21 +109,6 @@ export function useTemplates( { kind, collectionId, enabled = true } = {} ) {
 		() => ( { templates, isResolving, error, refresh } ),
 		[ templates, isResolving, error, refresh ]
 	);
-}
-
-export function useCreateTemplate() {
-	return useCallback( async ( data = {} ) => createTemplate( data ), [] );
-}
-
-export function useCreateTemplateFromDocument() {
-	return useCallback(
-		async ( documentId ) => createTemplateFromDocument( documentId ),
-		[]
-	);
-}
-
-export function useDuplicateTemplate() {
-	return useCallback( async ( id ) => duplicateTemplate( id ), [] );
 }
 
 export function useInstantiateTemplate() {
