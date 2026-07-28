@@ -70,19 +70,3 @@ export async function instantiateTemplate( id, data = {} ) {
 	} );
 	return response?.document ?? null;
 }
-
-export async function fetchDefaultPageTemplate() {
-	const response = await apiFetch( {
-		path: '/cortext/v1/templates/default',
-	} );
-	return response?.template ?? null;
-}
-
-export async function setDefaultPageTemplate( id ) {
-	const response = await apiFetch( {
-		path: '/cortext/v1/templates/default',
-		method: 'PUT',
-		data: { id: id ?? null },
-	} );
-	return response?.template ?? null;
-}

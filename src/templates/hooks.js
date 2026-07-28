@@ -5,10 +5,8 @@ import {
 	createTemplate,
 	createTemplateFromDocument,
 	duplicateTemplate,
-	fetchDefaultPageTemplate,
 	fetchTemplates,
 	instantiateTemplate,
-	setDefaultPageTemplate,
 } from './actions';
 import {
 	afterDocumentTrash,
@@ -116,43 +114,6 @@ export function useTemplates( { kind, collectionId, enabled = true } = {} ) {
 	return useMemo(
 		() => ( { templates, isResolving, error, refresh } ),
 		[ templates, isResolving, error, refresh ]
-	);
-}
-
-export function useDefaultPageTemplate() {
-	const [ template, setTemplate ] = useState( null );
-	const [ isResolving, setIsResolving ] = useState( true );
-	const [ error, setError ] = useState( null );
-
-	const refresh = useCallback( async () => {
-		setIsResolving( true );
-		setError( null );
-		try {
-			const next = await fetchDefaultPageTemplate();
-			setTemplate( next );
-			return next;
-		} catch ( nextError ) {
-			setTemplate( null );
-			setError( nextError );
-			return null;
-		} finally {
-			setIsResolving( false );
-		}
-	}, [] );
-
-	useEffect( () => {
-		refresh();
-	}, [ refresh ] );
-
-	const setDefault = useCallback( async ( id ) => {
-		const next = await setDefaultPageTemplate( id );
-		setTemplate( next );
-		return next;
-	}, [] );
-
-	return useMemo(
-		() => ( { template, isResolving, error, refresh, setDefault } ),
-		[ template, isResolving, error, refresh, setDefault ]
 	);
 }
 

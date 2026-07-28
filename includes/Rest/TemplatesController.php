@@ -60,29 +60,6 @@ final class TemplatesController {
 
 		register_rest_route(
 			self::NAMESPACE,
-			'/templates/default',
-			array(
-				array(
-					'methods'             => 'GET',
-					'callback'            => array( $this, 'get_default' ),
-					'permission_callback' => array( $this, 'can_read' ),
-				),
-				array(
-					'methods'             => 'PUT',
-					'callback'            => array( $this, 'set_default' ),
-					'permission_callback' => array( $this, 'can_read' ),
-					'args'                => array(
-						'id' => array(
-							'type'     => array( 'integer', 'null' ),
-							'required' => false,
-						),
-					),
-				),
-			)
-		);
-
-		register_rest_route(
-			self::NAMESPACE,
 			'/templates/from-document',
 			array(
 				array(
@@ -267,24 +244,6 @@ final class TemplatesController {
 			return $document;
 		}
 		return new WP_REST_Response( array( 'document' => $document ), 201 );
-	}
-
-	public function get_default(): WP_REST_Response {
-		return new WP_REST_Response(
-			array(
-				'template' => $this->templates->get_page_default(),
-			),
-			200
-		);
-	}
-
-	public function set_default( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$id       = $request->get_param( 'id' );
-		$template = $this->templates->set_page_default( null === $id ? null : (int) $id );
-		if ( $template instanceof WP_Error ) {
-			return $template;
-		}
-		return new WP_REST_Response( array( 'template' => $template ), 200 );
 	}
 
 	private function body_params( WP_REST_Request $request ): array {

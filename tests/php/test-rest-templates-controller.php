@@ -42,7 +42,6 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->template_post_type = new TemplatePostType();
 		$this->template_post_type->register_post_type();
 		$this->template_post_type->register_meta();
-		add_action( 'before_delete_post', array( $this->template_post_type, 'clear_deleted_default' ), 10, 2 );
 
 		$this->install_in_memory_posts_query();
 		$this->install_in_memory_term_store();
@@ -53,8 +52,6 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 	}
 
 	public function tear_down(): void {
-		remove_action( 'before_delete_post', array( $this->template_post_type, 'clear_deleted_default' ), 10 );
-		delete_option( Templates::PAGE_DEFAULT_OPTION );
 		$this->uninstall_in_memory_posts_query();
 		$this->uninstall_in_memory_term_store();
 		wp_set_current_user( 0 );
@@ -66,7 +63,6 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$routes = rest_get_server()->get_routes();
 
 		$this->assertArrayHasKey( '/cortext/v1/templates', $routes );
-		$this->assertArrayHasKey( '/cortext/v1/templates/default', $routes );
 		$this->assertArrayHasKey( '/cortext/v1/templates/from-document', $routes );
 	}
 
@@ -137,79 +133,6 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->assertSame( 200, $delete->get_status() );
 		$this->assertTrue( $delete->get_data()['deleted'] );
 		$this->assertNull( get_post( (int) $template['id'] ) );
-	}
-
-	public function test_page_default_is_saved_returned_and_cleared_when_deleted(): void {
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$template_id = $this->create_template(
-			array(
-				'kind'  => Templates::KIND_PAGE,
-				'title' => 'Default page',
-			)
-		);
-
-		$set = $this->request(
-			'PUT',
-			'/cortext/v1/templates/default',
-			array( 'id' => $template_id )
-		);
-		$this->assertSame( 200, $set->get_status() );
-		$this->assertSame( $template_id, $set->get_data()['template']['id'] );
-
-		$get = $this->request( 'GET', '/cortext/v1/templates/default' );
-		$this->assertSame( $template_id, $get->get_data()['template']['id'] );
-
-		$delete = $this->request( 'DELETE', '/cortext/v1/templates/' . $template_id );
-		$this->assertSame( 200, $delete->get_status() );
-		$this->assertSame( 0, (int) get_option( Templates::PAGE_DEFAULT_OPTION, 0 ) );
-
-		$get_after_delete = $this->request( 'GET', '/cortext/v1/templates/default' );
-		$this->assertNull( $get_after_delete->get_data()['template'] );
-	}
-
-	public function test_page_default_read_without_template_access_does_not_clear_default(): void {
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$template_id = $this->create_template(
-			array(
-				'kind'  => Templates::KIND_PAGE,
-				'title' => 'Private default page',
-			)
-		);
-
-		$set = $this->request(
-			'PUT',
-			'/cortext/v1/templates/default',
-			array( 'id' => $template_id )
-		);
-		$this->assertSame( 200, $set->get_status() );
-
-		wp_set_current_user( $this->create_user( 'author' ) );
-
-		$get = $this->request( 'GET', '/cortext/v1/templates/default' );
-		$this->assertSame( 200, $get->get_status() );
-		$this->assertNull( $get->get_data()['template'] );
-		$this->assertSame( $template_id, (int) get_option( Templates::PAGE_DEFAULT_OPTION, 0 ) );
-	}
-
-	public function test_row_template_cannot_be_workspace_page_default(): void {
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$collection_id = $this->create_collection( 'Tasks' );
-		$template_id   = $this->create_template(
-			array(
-				'kind'          => Templates::KIND_ROW,
-				'collection_id' => $collection_id,
-				'title'         => 'Task row',
-			)
-		);
-
-		$response = $this->request(
-			'PUT',
-			'/cortext/v1/templates/default',
-			array( 'id' => $template_id )
-		);
-
-		$this->assertSame( 400, $response->get_status() );
-		$this->assertSame( 'cortext_template_default_invalid_kind', $response->get_data()['code'] );
 	}
 
 	public function test_instantiate_page_template_copies_title_blocks_and_parent(): void {
