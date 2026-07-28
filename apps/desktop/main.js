@@ -1,4 +1,11 @@
-const { app, BrowserWindow, Menu, session, shell } = require( 'electron' );
+const {
+	app,
+	BrowserWindow,
+	dialog,
+	Menu,
+	session,
+	shell,
+} = require( 'electron' );
 const crypto = require( 'crypto' );
 const path = require( 'path' );
 const fs = require( 'fs' );
@@ -46,9 +53,63 @@ let runtimeHandle = null;
 let removeRuntimeAuthHeader = null;
 let quitting = false;
 const childWindows = new Set();
+let allowQuit = false;
+let updaterQuitRequested = false;
+let runtimeStopPromise = null;
+let appQuitPromise = null;
 
 function getSiteRoot() {
 	return path.join( app.getPath( 'userData' ), 'site' );
+}
+
+function stopRuntimeBeforeQuit() {
+	quitting = true;
+	if ( ! runtimeStopPromise ) {
+		runtimeStopPromise = Promise.resolve()
+			.then( () => stopRuntime( runtimeHandle ) )
+			.then( () => {
+				runtimeHandle = null;
+				if ( removeRuntimeAuthHeader ) {
+					removeRuntimeAuthHeader();
+					removeRuntimeAuthHeader = null;
+				}
+			} )
+			.catch( ( error ) => {
+				runtimeStopPromise = null;
+				quitting = false;
+				throw error;
+			} );
+	}
+	return runtimeStopPromise;
+}
+
+function quitAfterRuntimeStops() {
+	if ( appQuitPromise ) {
+		return appQuitPromise;
+	}
+	appQuitPromise = stopRuntimeBeforeQuit()
+		.then( () => {
+			allowQuit = true;
+			app.quit();
+			return true;
+		} )
+		.catch( ( err ) => {
+			console.error(
+				'[cortext-desktop] failed to stop PHP before quitting:',
+				err
+			);
+			runtimeStopPromise = null;
+			appQuitPromise = null;
+			quitting = false;
+			dialog.showErrorBox(
+				"Cortext couldn't quit",
+				`The local PHP process is still running. Try quitting Cortext again.\n\n${ String(
+					err?.message || err
+				) }`
+			);
+			return false;
+		} );
+	return appQuitPromise;
 }
 
 function refreshMenu() {
@@ -232,6 +293,15 @@ function createWindow( runtimeSession ) {
 		backgroundColor: '#1d1d1d',
 		webPreferences: secureWebPreferences( {}, runtimeSession ),
 	} );
+	win.on( 'close', ( event ) => {
+		// electron-updater closes all windows before it emits before-quit. Allow
+		// the windows to close; before-quit will wait for PHP.
+		if ( allowQuit || updaterQuitRequested ) {
+			return;
+		}
+		event.preventDefault();
+		void quitAfterRuntimeStops();
+	} );
 
 	configureTrustedWindow( win, runtimeSession );
 	return win;
@@ -250,6 +320,7 @@ async function loadSite( win ) {
 			window: win,
 			onState: refreshMenu,
 			prepareQuit: () => {
+				updaterQuitRequested = true;
 				quitting = true;
 			},
 			autoDownload: settings.get( 'autoInstallUpdates' ),
@@ -301,6 +372,9 @@ app.whenReady().then( async () => {
 			siteRoot,
 			version: app.getVersion(),
 		} );
+		if ( quitting ) {
+			return;
+		}
 		// Update bundled WordPress/Cortext files before PHP starts. User data
 		// stays in place.
 		await refreshSiteIfOutdated( {
@@ -308,6 +382,9 @@ app.whenReady().then( async () => {
 			siteRoot,
 			version: app.getVersion(),
 		} );
+		if ( quitting ) {
+			return;
+		}
 		const wordpressDir = path.join( siteRoot, 'wordpress' );
 
 		runtimeHandle = startRuntime( {
@@ -336,22 +413,15 @@ app.whenReady().then( async () => {
 	}
 } );
 
-function stopDesktopRuntime() {
-	stopRuntime( runtimeHandle );
-	runtimeHandle = null;
-	if ( removeRuntimeAuthHeader ) {
-		removeRuntimeAuthHeader();
-		removeRuntimeAuthHeader = null;
-	}
-}
-
 app.on( 'window-all-closed', () => {
-	quitting = true;
-	stopDesktopRuntime();
 	app.quit();
 } );
 
-app.on( 'before-quit', () => {
+app.on( 'before-quit', ( event ) => {
 	quitting = true;
-	stopDesktopRuntime();
+	if ( allowQuit ) {
+		return;
+	}
+	event.preventDefault();
+	void quitAfterRuntimeStops();
 } );

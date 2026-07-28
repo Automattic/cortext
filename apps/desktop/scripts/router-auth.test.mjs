@@ -198,8 +198,8 @@ test( 'startRuntime replaces an unprotected legacy router before listening', asy
 		runtimeStateDir: path.join( wordpressDir, 'runtime-state' ),
 		wordpressDir,
 	} );
-	context.after( () => {
-		stopRuntime( handle );
+	context.after( async () => {
+		await stopRuntime( handle );
 		fs.rmSync( wordpressDir, { recursive: true, force: true } );
 	} );
 
