@@ -626,7 +626,7 @@ export default function Sidebar( {
 								) : null }
 								{ templatesEnabled && templateNotice ? (
 									<Notice
-										status="info"
+										status="error"
 										onRemove={ () =>
 											setTemplateNotice( null )
 										}
