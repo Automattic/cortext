@@ -24,7 +24,6 @@ final class Template {
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'init', array( $this, 'register_meta' ), 11 );
-		add_action( 'before_delete_post', array( $this, 'clear_deleted_default' ), 10, 2 );
 	}
 
 	public function register_post_type(): void {
@@ -108,14 +107,5 @@ final class Template {
 				'sanitize_callback' => array( Templates::class, 'sanitize_field_values' ),
 			)
 		);
-	}
-
-	public function clear_deleted_default( int $post_id, \WP_Post $post ): void {
-		if ( self::POST_TYPE !== $post->post_type ) {
-			return;
-		}
-		if ( (int) get_option( Templates::PAGE_DEFAULT_OPTION, 0 ) === $post_id ) {
-			delete_option( Templates::PAGE_DEFAULT_OPTION );
-		}
 	}
 }

@@ -10,10 +10,8 @@ import {
 	createTemplateFromDocument,
 	deleteTemplate,
 	duplicateTemplate,
-	fetchDefaultPageTemplate,
 	fetchTemplates,
 	instantiateTemplate,
-	setDefaultPageTemplate,
 	updateTemplate,
 } from '../../../src/templates/actions';
 
@@ -99,23 +97,4 @@ describe( 'template REST actions', () => {
 		} );
 	} );
 
-	it( 'gets and sets the workspace page default template', async () => {
-		apiFetch
-			.mockResolvedValueOnce( { template: { id: 5 } } )
-			.mockResolvedValueOnce( { template: null } );
-
-		await expect( fetchDefaultPageTemplate() ).resolves.toEqual( {
-			id: 5,
-		} );
-		await expect( setDefaultPageTemplate( null ) ).resolves.toBeNull();
-
-		expect( apiFetch ).toHaveBeenNthCalledWith( 1, {
-			path: '/cortext/v1/templates/default',
-		} );
-		expect( apiFetch ).toHaveBeenNthCalledWith( 2, {
-			path: '/cortext/v1/templates/default',
-			method: 'PUT',
-			data: { id: null },
-		} );
-	} );
 } );
