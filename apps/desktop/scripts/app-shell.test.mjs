@@ -42,6 +42,8 @@ function loadMain(
 		startRuntime = () => {},
 	} = {}
 ) {
+	// Every test here runs as the instance that holds the lock.
+	app.requestSingleInstanceLock ??= () => true;
 	requireWithMocks( '../main.js', {
 		electron: {
 			app,
@@ -99,6 +101,37 @@ function quitEvent() {
 		},
 	};
 }
+
+test( 'a second instance leaves without touching the site', () => {
+	let exitCalls = 0;
+	let ensureCalls = 0;
+
+	const app = new EventEmitter();
+	Object.assign( app, {
+		isPackaged: false,
+		name: 'Cortext',
+		exit: () => {
+			exitCalls += 1;
+		},
+		quit: () => {},
+		requestSingleInstanceLock: () => false,
+		whenReady: () => new Promise( () => {} ),
+	} );
+
+	loadMain(
+		app,
+		() => Promise.resolve(),
+		() => {},
+		{
+			ensureSiteFromSnapshot: async () => {
+				ensureCalls += 1;
+			},
+		}
+	);
+
+	assert.equal( exitCalls, 1 );
+	assert.equal( ensureCalls, 0 );
+} );
 
 test( 'repeated before-quit events stop the runtime only once', async () => {
 	let quitCalls = 0;

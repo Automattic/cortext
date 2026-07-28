@@ -49,6 +49,13 @@ const RUNTIME_SESSION_PARTITION = 'persist:cortext';
 // The local shell pages Cortext loads itself, before and instead of the runtime.
 const TRUSTED_DOCUMENT_URLS = [ LOADING_URL, ERROR_URL ];
 
+// One instance owns the extracted site and the runtime port. A second launch
+// would extract on top of the first one's half-written files, so hand focus
+// back to the window already running and leave.
+if ( ! app.requestSingleInstanceLock() ) {
+	app.exit( 0 );
+}
+
 let runtimeHandle = null;
 let removeRuntimeAuthHeader = null;
 let quitting = false;
@@ -411,6 +418,17 @@ app.whenReady().then( async () => {
 			app.quit();
 		}
 	}
+} );
+
+app.on( 'second-instance', () => {
+	const [ existing ] = BrowserWindow.getAllWindows();
+	if ( ! existing ) {
+		return;
+	}
+	if ( existing.isMinimized() ) {
+		existing.restore();
+	}
+	existing.focus();
 } );
 
 app.on( 'window-all-closed', () => {
