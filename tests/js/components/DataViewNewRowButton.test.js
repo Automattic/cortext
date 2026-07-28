@@ -21,10 +21,18 @@ jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
 	return {
 		__esModule: true,
-		Button: ( { children, label, onClick, disabled, isBusy } ) => (
+		Button: ( {
+			children,
+			className,
+			label,
+			onClick,
+			disabled,
+			isBusy,
+		} ) => (
 			<button
 				type="button"
 				aria-label={ label }
+				className={ className }
 				onClick={ onClick }
 				disabled={ disabled || isBusy }
 			>
@@ -144,7 +152,7 @@ describe( 'DataViewNewRowButton templates', () => {
 		window.cortextSettings.experiments.templates = false;
 		apiFetch.mockResolvedValueOnce( { id: 103 } );
 
-		renderButton();
+		const { container } = renderButton();
 
 		expect( useTemplates ).toHaveBeenCalledWith( {
 			kind: 'row',
@@ -155,6 +163,9 @@ describe( 'DataViewNewRowButton templates', () => {
 			screen.queryByRole( 'button', {
 				name: 'Choose how to create a row',
 			} )
+		).toBeNull();
+		expect(
+			container.querySelector( '.cortext-data-view__new-row-controls' )
 		).toBeNull();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'New' } ) );

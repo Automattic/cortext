@@ -247,11 +247,13 @@ export default function DataViewNewRowButton( {
 	const controlsClassName =
 		'cortext-data-view__new-row-controls' +
 		` cortext-data-view__new-row-controls--${ presentation }`;
-	const controls = (
+	const controls = templatesEnabled ? (
 		<div className={ controlsClassName }>
 			{ primaryButton }
 			{ optionsMenu }
 		</div>
+	) : (
+		primaryButton
 	);
 	const notice = error ? (
 		<Notice
