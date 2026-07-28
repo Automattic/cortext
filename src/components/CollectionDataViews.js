@@ -1719,7 +1719,7 @@ export default function CollectionDataViews( {
 										<GridNewRowPortal
 											wrapperRef={ tableWrapperRef }
 											collectionId={ collectionId }
-											view={ view }
+											view={ dataViewsView }
 											fields={ fields }
 											onCreated={ onCreated }
 											hasRows={ dataFiltered.length > 0 }
