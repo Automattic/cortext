@@ -10,9 +10,18 @@
  * snapshot` first.
  */
 const { test, expect, _electron: electron } = require( '@playwright/test' );
+const { spawn } = require( 'node:child_process' );
+const { once } = require( 'node:events' );
 const http = require( 'node:http' );
 const path = require( 'node:path' );
-const { existsSync, mkdtempSync, realpathSync, rmSync } = require( 'node:fs' );
+const {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} = require( 'node:fs' );
 const os = require( 'node:os' );
 
 const APP_PATH = path.resolve( __dirname, '..' );
@@ -21,6 +30,7 @@ let e2eTempRoot;
 let untrustedServer;
 let untrustedOrigin;
 let untrustedRequests;
+let runtimeOrigin;
 
 test.beforeAll( async () => {
 	if ( ! existsSync( SNAPSHOT_PATH ) ) {
@@ -40,7 +50,7 @@ test.beforeAll( async () => {
 		if ( request.url === '/redirect-runtime' ) {
 			response.writeHead( 302, {
 				'Cache-Control': 'no-store',
-				Location: 'http://127.0.0.1:9402/wp-includes/images/blank.gif',
+				Location: `${ runtimeOrigin }/wp-includes/images/blank.gif`,
 			} );
 			response.end();
 			return;
@@ -54,14 +64,14 @@ test.beforeAll( async () => {
 			`<!doctype html>
 			<body data-runtime-image="pending">
 				<img
-					src="http://127.0.0.1:9402/wp-includes/images/blank.gif"
+					src="${ runtimeOrigin }/wp-includes/images/blank.gif"
 					onload="document.body.dataset.runtimeImage='loaded'"
 					onerror="document.body.dataset.runtimeImage='blocked'"
 				>
 				<a
 					id="runtime-link"
 					target="_top"
-					href="http://127.0.0.1:9402/wp-json/"
+					href="${ runtimeOrigin }/wp-json/"
 					style="position:fixed;inset:0;display:block"
 				>Open runtime</a>
 			</body>`
@@ -100,8 +110,16 @@ test.afterAll( async () => {
 } );
 
 async function launchDesktopApp(
-	userDataPath = mkdtempSync( path.join( e2eTempRoot, 'user-data-' ) )
+	userDataPath = mkdtempSync( path.join( e2eTempRoot, 'user-data-' ) ),
+	preferredRuntimePort = null
 ) {
+	if ( preferredRuntimePort !== null ) {
+		mkdirSync( userDataPath, { recursive: true } );
+		writeFileSync(
+			path.join( userDataPath, 'settings.json' ),
+			JSON.stringify( { runtimePort: preferredRuntimePort } )
+		);
+	}
 	const app = await electron.launch( {
 		args: [ APP_PATH, `--user-data-dir=${ userDataPath }` ],
 		env: {
@@ -176,6 +194,7 @@ function reloadFirstRuntimeNavigationFromMenu( app ) {
 		return new Promise( ( resolve, reject ) => {
 			const win = BrowserWindow.getAllWindows()[ 0 ];
 			const webContents = win.webContents;
+			let origin = null;
 			const findMenuItem = ( items, role ) => {
 				for ( const item of items ) {
 					if ( item.role === role ) {
@@ -217,7 +236,8 @@ function reloadFirstRuntimeNavigationFromMenu( app ) {
 			const onStart = ( event ) => {
 				if (
 					event.isMainFrame &&
-					event.url.startsWith( 'http://127.0.0.1:9402/' )
+					origin &&
+					event.url.startsWith( `${ origin }/` )
 				) {
 					reloadStarted = true;
 				}
@@ -230,13 +250,15 @@ function reloadFirstRuntimeNavigationFromMenu( app ) {
 				resolve( webContents.getURL() );
 			};
 			const onNavigate = ( _event, url ) => {
+				const navigatedUrl = new URL( url );
 				if (
-					! url.startsWith(
-						'http://127.0.0.1:9402/wp-admin/admin.php?page=cortext'
-					)
+					navigatedUrl.hostname !== '127.0.0.1' ||
+					navigatedUrl.pathname !== '/wp-admin/admin.php' ||
+					navigatedUrl.searchParams.get( 'page' ) !== 'cortext'
 				) {
 					return;
 				}
+				origin = navigatedUrl.origin;
 				webContents.off( 'did-navigate', onNavigate );
 				webContents.on( 'did-start-navigation', onStart );
 				webContents.on( 'did-finish-load', onFinish );
@@ -286,7 +308,7 @@ function openExternalFromRuntime(
 						const url = candidate.webContents.getURL();
 						return options.windowUrlSuffix
 							? url.endsWith( options.windowUrlSuffix )
-							: url.startsWith( 'http://127.0.0.1:9402/' );
+							: url.startsWith( `${ options.runtimeOrigin }/` );
 					}
 				);
 				if ( ! targetWindow ) {
@@ -310,7 +332,7 @@ function openExternalFromRuntime(
 					.catch( ( error ) => finish( reject, error ) );
 			} );
 		},
-		{ externalUrl, target, windowUrlSuffix }
+		{ externalUrl, target, windowUrlSuffix, runtimeOrigin }
 	);
 }
 
@@ -339,13 +361,61 @@ function waitForProcessExit( app, timeoutMs = 10000 ) {
 	} );
 }
 
+async function expectSecondInstanceToExit( app, userDataPath ) {
+	const secondInstance = spawn(
+		app.process().spawnfile,
+		[ APP_PATH, `--user-data-dir=${ userDataPath }` ],
+		{
+			env: {
+				...process.env,
+				CORTEXT_DEVTOOLS: '0',
+				CORTEXT_E2E: '1',
+			},
+			stdio: 'ignore',
+		}
+	);
+	let timeoutId;
+	const timeout = new Promise( ( _resolve, reject ) => {
+		timeoutId = setTimeout( () => {
+			secondInstance.kill( 'SIGKILL' );
+			reject( new Error( 'Second Cortext instance stayed open.' ) );
+		}, 10 * 1000 );
+		timeoutId.unref?.();
+	} );
+	const [ exitCode ] = await Promise.race( [
+		once( secondInstance, 'exit' ),
+		timeout,
+	] );
+	clearTimeout( timeoutId );
+	expect( exitCode ).toBe( 0 );
+}
+
 test( 'opens Cortext and rejects untrusted runtime requests', async () => {
-	const { app, userDataPath } = await launchDesktopApp();
+	const occupiedPortServer = http.createServer( ( _request, response ) => {
+		response.writeHead( 200 );
+		response.end( 'occupied' );
+	} );
+	await new Promise( ( resolve, reject ) => {
+		occupiedPortServer.once( 'error', reject );
+		occupiedPortServer.listen( 0, '127.0.0.1', resolve );
+	} );
+	const occupiedAddress = occupiedPortServer.address();
+	if ( ! occupiedAddress || typeof occupiedAddress === 'string' ) {
+		throw new Error( 'Failed to reserve the preferred E2E runtime port.' );
+	}
+	const { app, userDataPath } = await launchDesktopApp(
+		undefined,
+		occupiedAddress.port
+	);
 	untrustedRequests.length = 0;
 
 	try {
 		await expectTemporaryUserData( app, userDataPath );
 		const window = await waitForCortextShell( app );
+		runtimeOrigin = new URL( window.url() ).origin;
+		expect( new URL( runtimeOrigin ).port ).not.toBe(
+			String( occupiedAddress.port )
+		);
 		await expect.poll( () => window.title() ).toBe( 'Cortext' );
 		const staticAssetUrl = new URL(
 			'/wp-includes/css/dashicons.min.css',
@@ -385,6 +455,15 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 		await expect(
 			requestWithoutRuntimeAuth( staticAssetUrl )
 		).resolves.toBe( 403 );
+		const wordpressOrigins = await window.evaluate( async () => {
+			const response = await fetch( '/?rest_route=/' );
+			const body = await response.json();
+			return { home: body.home, url: body.url };
+		} );
+		expect( wordpressOrigins ).toEqual( {
+			home: runtimeOrigin,
+			url: runtimeOrigin,
+		} );
 
 		const redirectedImageStatus = await window.evaluate( ( origin ) => {
 			return new Promise( ( resolve ) => {
@@ -445,7 +524,7 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 			);
 		} );
 		const popup = await popupPromise;
-		await popup.waitForURL( 'http://127.0.0.1:9402/wp-json/' );
+		await popup.waitForURL( `${ runtimeOrigin }/wp-json/` );
 		await expect( popup.locator( 'body' ) ).not.toHaveText( 'Forbidden' );
 		const popupSecurity = await app.evaluate(
 			( { session, webContents } ) => {
@@ -485,7 +564,7 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 		).resolves.toBe( externalUrl );
 		await expect
 			.poll( () => popup.url() )
-			.toBe( 'http://127.0.0.1:9402/wp-json/' );
+			.toBe( `${ runtimeOrigin }/wp-json/` );
 		await popup.close();
 
 		const untrustedWindowPromise = app.waitForEvent( 'window' );
@@ -509,7 +588,7 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 			)
 			.toBe( 'blocked' );
 		await untrustedWindow.locator( '#runtime-link' ).click();
-		await untrustedWindow.waitForURL( 'http://127.0.0.1:9402/wp-json/' );
+		await untrustedWindow.waitForURL( `${ runtimeOrigin }/wp-json/` );
 		await expect( untrustedWindow.locator( 'body' ) ).toHaveText(
 			'Forbidden'
 		);
@@ -551,6 +630,15 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 		).toBe( true );
 	} finally {
 		await app.close();
+		await new Promise( ( resolve, reject ) => {
+			occupiedPortServer.close( ( error ) => {
+				if ( error ) {
+					reject( error );
+					return;
+				}
+				resolve();
+			} );
+		} );
 	}
 } );
 
@@ -564,9 +652,11 @@ test( 'reloads, preserves preferences, and exits with its window', async () => {
 		const menuReload = reloadFirstRuntimeNavigationFromMenu( app );
 		await expectTemporaryUserData( app, userDataPath );
 		const window = await waitForCortextShell( app );
-		await expect( menuReload ).resolves.toMatch(
-			/^http:\/\/127\.0\.0\.1:9402\//
-		);
+		runtimeOrigin = new URL( window.url() ).origin;
+		await expectSecondInstanceToExit( app, userDataPath );
+		await expect( window.locator( '#cortext-root' ) ).toBeVisible();
+		const reloadedUrl = await menuReload;
+		expect( new URL( reloadedUrl ).origin ).toBe( runtimeOrigin );
 		await expect( window.locator( 'body' ) ).not.toHaveText( 'Forbidden' );
 		await expect(
 			window.locator(
@@ -587,6 +677,9 @@ test( 'reloads, preserves preferences, and exits with its window', async () => {
 		( { app: relaunchedApp } = await launchDesktopApp( userDataPath ) );
 		await expectTemporaryUserData( relaunchedApp, userDataPath );
 		const relaunchedWindow = await waitForCortextShell( relaunchedApp );
+		expect( new URL( relaunchedWindow.url() ).origin ).toBe(
+			runtimeOrigin
+		);
 		await expect
 			.poll( () =>
 				relaunchedWindow.evaluate( () =>

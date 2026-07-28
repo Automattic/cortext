@@ -10,7 +10,6 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire( import.meta.url );
 const {
-	DEFAULT_PORT,
 	normalizeRuntime,
 	RUNTIME_AUTH_HEADER,
 	startRuntime,
@@ -104,14 +103,15 @@ function parseServerTiming( header ) {
 	return match ? Number.parseFloat( match[ 1 ] ) : null;
 }
 
-function redirectedPath( location ) {
-	const url = new URL( location, `http://127.0.0.1:${ DEFAULT_PORT }` );
+function redirectedPath( location, runtimeOrigin ) {
+	const url = new URL( location, runtimeOrigin );
 	return `${ url.pathname }${ url.search }`;
 }
 
 function requestPath(
 	endpoint,
 	authToken,
+	runtimeEndpoint,
 	redirects = 0,
 	startedAt = performance.now()
 ) {
@@ -122,7 +122,7 @@ function requestPath(
 				headers: {
 					[ RUNTIME_AUTH_HEADER ]: authToken,
 				},
-				port: DEFAULT_PORT,
+				port: runtimeEndpoint.port,
 				path: endpoint.path,
 				timeout: 30000,
 			},
@@ -142,9 +142,13 @@ function requestPath(
 						requestPath(
 							{
 								...endpoint,
-								path: redirectedPath( location ),
+								path: redirectedPath(
+									location,
+									runtimeEndpoint.origin
+								),
 							},
 							authToken,
+							runtimeEndpoint,
 							redirects + 1,
 							startedAt
 						).then( resolveRequest, rejectRequest );
@@ -204,14 +208,22 @@ function summarize( samples ) {
 	};
 }
 
-async function runEndpoint( endpoint, warmup, iterations, authToken ) {
+async function runEndpoint(
+	endpoint,
+	warmup,
+	iterations,
+	authToken,
+	runtimeEndpoint
+) {
 	for ( let index = 0; index < warmup; index++ ) {
-		await requestPath( endpoint, authToken );
+		await requestPath( endpoint, authToken, runtimeEndpoint );
 	}
 
 	const samples = [];
 	for ( let index = 0; index < iterations; index++ ) {
-		samples.push( await requestPath( endpoint, authToken ) );
+		samples.push(
+			await requestPath( endpoint, authToken, runtimeEndpoint )
+		);
 	}
 
 	return summarize( samples );
@@ -322,13 +334,18 @@ async function main() {
 		if ( unexpectedExit ) {
 			throw unexpectedExit;
 		}
+		const runtimeEndpoint = {
+			origin: handle.origin,
+			port: handle.port,
+		};
 		const scenarios = {};
 		for ( const endpoint of ENDPOINTS ) {
 			scenarios[ endpoint.name ] = await runEndpoint(
 				endpoint,
 				options.warmup,
 				options.iterations,
-				authToken
+				authToken,
+				runtimeEndpoint
 			);
 		}
 
@@ -337,7 +354,7 @@ async function main() {
 			runtime: options.runtime,
 			iterations: options.iterations,
 			warmup: options.warmup,
-			port: DEFAULT_PORT,
+			port: runtimeEndpoint.port,
 			generated_at: new Date().toISOString(),
 			environment: environmentInfo( options.runtime ),
 			scenarios,

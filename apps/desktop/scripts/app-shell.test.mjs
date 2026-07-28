@@ -25,6 +25,14 @@ function requireWithMocks( modulePath, mocks ) {
 	}
 }
 
+function runtimeHandle() {
+	return {
+		origin: 'http://127.0.0.1:9403',
+		port: 9403,
+		ready: Promise.resolve(),
+	};
+}
+
 function loadMain(
 	app,
 	stopRuntime,
@@ -39,7 +47,7 @@ function loadMain(
 			clearStorageData: async () => {},
 		},
 		scheduleUpdateCheck = () => {},
-		startRuntime = () => {},
+		startRuntime = runtimeHandle,
 	} = {}
 ) {
 	// Every test here runs as the instance that holds the lock.
@@ -58,8 +66,10 @@ function loadMain(
 			},
 		},
 		'./lib/runtime': {
-			DEFAULT_PORT: 9402,
+			LEGACY_PORT: 9402,
 			RUNTIME_AUTH_HEADER: 'X-Cortext-Desktop-Token',
+			isValidPort: ( port ) =>
+				Number.isInteger( port ) && port >= 1 && port <= 65535,
 			startRuntime,
 			stopRuntime,
 		},
@@ -87,7 +97,7 @@ function loadMain(
 		},
 		'./lib/menu': { buildAppMenu: () => [] },
 		'./lib/settings': {
-			get: () => true,
+			get: ( key ) => ( key === 'autoInstallUpdates' ? true : undefined ),
 			set: () => {},
 		},
 	} );
@@ -102,7 +112,7 @@ function quitEvent() {
 	};
 }
 
-test( 'a second instance leaves without touching the site', () => {
+test( 'a second instance leaves without touching the site', async () => {
 	let exitCalls = 0;
 	let ensureCalls = 0;
 
@@ -115,7 +125,7 @@ test( 'a second instance leaves without touching the site', () => {
 		},
 		quit: () => {},
 		requestSingleInstanceLock: () => false,
-		whenReady: () => new Promise( () => {} ),
+		whenReady: () => Promise.resolve(),
 	} );
 
 	loadMain(
@@ -128,6 +138,7 @@ test( 'a second instance leaves without touching the site', () => {
 			},
 		}
 	);
+	await new Promise( ( resolve ) => setImmediate( resolve ) );
 
 	assert.equal( exitCalls, 1 );
 	assert.equal( ensureCalls, 0 );
@@ -274,7 +285,7 @@ test( 'updater closes the window, then waits for the runtime before quitting', a
 			scheduleUpdateCheck: ( options ) => {
 				updaterOptions = options;
 			},
-			startRuntime: () => ( { ready: Promise.resolve() } ),
+			startRuntime: runtimeHandle,
 		}
 	);
 
@@ -364,7 +375,7 @@ test( 'closing during site preparation never starts the runtime', async () => {
 			},
 			startRuntime: () => {
 				startCalls += 1;
-				return { ready: Promise.resolve() };
+				return runtimeHandle();
 			},
 		}
 	);

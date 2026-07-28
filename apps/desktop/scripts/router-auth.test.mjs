@@ -26,6 +26,10 @@ function makeFixture() {
 		new URL( '../runtime/router.php', import.meta.url ),
 		path.join( wordpressDir, 'router.php' )
 	);
+	fs.copyFileSync(
+		new URL( '../runtime/bootstrap.php', import.meta.url ),
+		path.join( wordpressDir, 'cortext-runtime-bootstrap.php' )
+	);
 	fs.writeFileSync(
 		path.join( wordpressDir, 'index.php' ),
 		"<?php header( 'Content-Type: text/plain' ); echo 'dynamic';"
@@ -43,6 +47,14 @@ function makeUnprotectedFixture() {
 		"<?php header( 'Content-Type: text/plain' ); echo 'legacy';"
 	);
 	fs.writeFileSync( path.join( wordpressDir, 'index.php' ), 'legacy' );
+	fs.writeFileSync(
+		path.join( wordpressDir, 'wp-config.php' ),
+		"<?php if ( ! defined( 'WP_HOME' ) ) { define( 'WP_HOME', 'http://127.0.0.1:9402' ); } if ( ! defined( 'WP_SITEURL' ) ) { define( 'WP_SITEURL', 'http://127.0.0.1:9402' ); }"
+	);
+	fs.writeFileSync(
+		path.join( wordpressDir, 'origin.php' ),
+		"<?php require __DIR__ . '/wp-config.php'; header( 'Content-Type: text/plain' ); echo WP_HOME . \"\\n\" . WP_SITEURL;"
+	);
 	return wordpressDir;
 }
 
@@ -60,11 +72,17 @@ async function findAvailablePort() {
 	return port;
 }
 
-function request( port, requestPath, authToken ) {
+function request( port, requestPath, authToken, requestOptions = {} ) {
 	return new Promise( ( resolve, reject ) => {
 		const headers = {};
 		if ( authToken !== undefined ) {
 			headers[ RUNTIME_AUTH_HEADER ] = authToken;
+		}
+		if ( requestOptions.host !== undefined ) {
+			headers.Host = requestOptions.host;
+		}
+		if ( requestOptions.origin !== undefined ) {
+			headers.Origin = requestOptions.origin;
 		}
 
 		const req = http.get(
@@ -116,13 +134,24 @@ async function waitForServer( child, port, stderr ) {
 	throw new Error( `PHP server did not become ready: ${ stderr() }` );
 }
 
-async function startServer( wordpressDir, authToken ) {
+async function startServer(
+	wordpressDir,
+	authToken,
+	{ configureEndpoint = true } = {}
+) {
 	const port = await findAvailablePort();
 	const env = { ...process.env };
 	if ( authToken === undefined ) {
 		delete env.CORTEXT_DESKTOP_AUTH_TOKEN;
 	} else {
 		env.CORTEXT_DESKTOP_AUTH_TOKEN = authToken;
+	}
+	if ( configureEndpoint ) {
+		env.CORTEXT_DESKTOP_RUNTIME_HOST = `127.0.0.1:${ port }`;
+		env.CORTEXT_DESKTOP_RUNTIME_ORIGIN = `http://127.0.0.1:${ port }`;
+	} else {
+		delete env.CORTEXT_DESKTOP_RUNTIME_HOST;
+		delete env.CORTEXT_DESKTOP_RUNTIME_ORIGIN;
 	}
 
 	const child = spawn(
@@ -208,11 +237,95 @@ test( 'startRuntime replaces an unprotected legacy router before listening', asy
 		/hash_equals/
 	);
 	await handle.ready;
+	assert.equal( handle.port, port );
+	assert.equal( handle.host, `127.0.0.1:${ port }` );
+	assert.equal( handle.origin, `http://127.0.0.1:${ port }` );
 	const unauthenticated = await request( port, '/', undefined );
 	assert.equal( unauthenticated.statusCode, 403 );
 	const authenticated = await request( port, '/', AUTH_TOKEN );
 	assert.equal( authenticated.statusCode, 200 );
 	assert.equal( authenticated.body, 'legacy' );
+	const migratedOrigin = await request( port, '/origin.php', AUTH_TOKEN, {
+		origin: handle.origin,
+	} );
+	assert.equal( migratedOrigin.statusCode, 200 );
+	assert.equal(
+		migratedOrigin.body,
+		`${ handle.origin }\n${ handle.origin }`
+	);
+} );
+
+test( 'startRuntime chooses a dynamic port when its preference is occupied', async ( context ) => {
+	const wordpressDir = makeUnprotectedFixture();
+	const blocker = net.createServer();
+	blocker.listen( 0, '127.0.0.1' );
+	await once( blocker, 'listening' );
+	const address = blocker.address();
+	assert.notEqual( address, null );
+	assert.equal( typeof address, 'object' );
+
+	const handle = startRuntime( {
+		appDir: DESKTOP_DIR,
+		authToken: AUTH_TOKEN,
+		port: address.port,
+		runtime: 'php',
+		runtimeStateDir: path.join( wordpressDir, 'runtime-state' ),
+		wordpressDir,
+	} );
+	context.after( async () => {
+		stopRuntime( handle );
+		await new Promise( ( resolve ) => blocker.close( resolve ) );
+		fs.rmSync( wordpressDir, { recursive: true, force: true } );
+	} );
+
+	await handle.ready;
+	assert.notEqual( handle.port, address.port );
+	assert.equal( handle.origin, `http://127.0.0.1:${ handle.port }` );
+	const authenticated = await request( handle.port, '/', AUTH_TOKEN, {
+		origin: handle.origin,
+	} );
+	assert.equal( authenticated.statusCode, 200 );
+} );
+
+test( 'startRuntime retries when its selected port is claimed before spawn', async ( context ) => {
+	const wordpressDir = makeUnprotectedFixture();
+	const blocker = net.createServer( ( socket ) => socket.destroy() );
+	blocker.listen( 0, '127.0.0.1' );
+	await once( blocker, 'listening' );
+	const blockedAddress = blocker.address();
+	assert.notEqual( blockedAddress, null );
+	assert.equal( typeof blockedAddress, 'object' );
+	const retryPort = await findAvailablePort();
+	const preferredPort = await findAvailablePort();
+	const allocatorCalls = [];
+
+	const handle = startRuntime( {
+		appDir: DESKTOP_DIR,
+		authToken: AUTH_TOKEN,
+		port: preferredPort,
+		portAllocator: async ( requestedPort ) => {
+			allocatorCalls.push( requestedPort );
+			return allocatorCalls.length === 1
+				? blockedAddress.port
+				: retryPort;
+		},
+		runtime: 'php',
+		runtimeStateDir: path.join( wordpressDir, 'runtime-state' ),
+		wordpressDir,
+	} );
+	context.after( async () => {
+		stopRuntime( handle );
+		await new Promise( ( resolve ) => blocker.close( resolve ) );
+		fs.rmSync( wordpressDir, { recursive: true, force: true } );
+	} );
+
+	await handle.ready;
+	assert.deepEqual( allocatorCalls, [ preferredPort, undefined ] );
+	assert.equal( handle.port, retryPort );
+	const authenticated = await request( handle.port, '/', AUTH_TOKEN, {
+		origin: handle.origin,
+	} );
+	assert.equal( authenticated.statusCode, 200 );
 } );
 
 test( 'startRuntime fails before listening without its authenticated router', async () => {
@@ -260,6 +373,29 @@ test( 'router authenticates static and dynamic requests', async ( context ) => {
 			authenticated.body,
 			requestPath === '/static.txt' ? 'static' : 'dynamic'
 		);
+
+		const authenticatedWithOrigin = await request(
+			port,
+			requestPath,
+			AUTH_TOKEN,
+			{ origin: `http://127.0.0.1:${ port }` }
+		);
+		assert.equal( authenticatedWithOrigin.statusCode, 200 );
+
+		for ( const requestOptions of [
+			{ host: `localhost:${ port }` },
+			{ host: `127.0.0.1:${ port + 1 }` },
+			{ origin: 'null' },
+			{ origin: 'https://example.com' },
+		] ) {
+			const rejected = await request(
+				port,
+				requestPath,
+				AUTH_TOKEN,
+				requestOptions
+			);
+			assert.equal( rejected.statusCode, 403 );
+		}
 	}
 } );
 
@@ -275,4 +411,15 @@ test( 'router fails closed when its auth token is not configured', async ( conte
 		const supplied = await request( port, requestPath, AUTH_TOKEN );
 		assert.equal( supplied.statusCode, 403 );
 	}
+} );
+
+test( 'router fails closed without its expected runtime endpoint', async ( context ) => {
+	const wordpressDir = makeFixture();
+	const { child, port } = await startServer( wordpressDir, AUTH_TOKEN, {
+		configureEndpoint: false,
+	} );
+	registerCleanup( context, child, wordpressDir );
+
+	const response = await request( port, '/', AUTH_TOKEN );
+	assert.equal( response.statusCode, 403 );
 } );

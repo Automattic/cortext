@@ -62,10 +62,15 @@ fresh machine. The binary is ignored by git.
 
 ## What it does
 
-Electron spawns `php -S 127.0.0.1:9402` against the unzipped site and
-uses `router.php` for the rewrite behavior WordPress normally gets from
-nginx or Apache. Once PHP reports that it is accepting connections, the
-window loads `http://127.0.0.1:9402/wp-admin/admin.php?page=cortext`.
+Electron asks the operating system for an available loopback port, spawns PHP
+against the unzipped site, and uses `router.php` for the rewrite behavior
+WordPress normally gets from nginx or Apache. The selected port is saved per
+desktop profile so origin-scoped preferences remain available after a restart.
+If that port is occupied, Cortext chooses and saves another one. Profiles
+created by an older build try their previous port once for the same migration
+reason. A collision-forced change creates a new browser origin, so browser-only
+preferences and the local Notion key must be entered again; WordPress documents
+and settings are unaffected.
 
 Each launch creates a new 256-bit authentication token in memory. Every Cortext
 window uses one dedicated Electron session, which adds the token to requests
@@ -82,12 +87,18 @@ top-level links open in the system browser, an embedded frame cannot steer the
 app window, and internal popups stay in the protected session.
 
 The runtime rejects requests without the matching token before serving
-WordPress or static files. The token is passed through the runtime environment
-and is never written to disk, included in a URL, logged, forwarded to PHP by
-Caddy, or added to benchmark results. This protects the local admin session
-from web pages and accidental localhost clients. It does not protect against
-native processes running as the same macOS user, which can already read that
-user's Cortext data. The loopback address and port remain `127.0.0.1:9402`.
+WordPress or static files. It also requires the request `Host` and any supplied
+`Origin` to match the selected runtime origin, and every server binds only to
+`127.0.0.1`. The token is passed through the runtime environment and is never
+written to disk, included in a URL, logged, forwarded to PHP by Caddy, or added
+to benchmark results. This protects the local admin session from web pages and
+accidental localhost clients. It does not protect against native processes
+running as the same macOS user, which can already read that user's Cortext
+data.
+
+Only one Cortext process may use a desktop profile at a time. Opening the app
+again focuses the existing window instead of starting another PHP process
+against the same SQLite database.
 
 Desktop hides the publishing and copy-link controls. Published localhost URLs
 are also protected by the token, so they are intentionally not shareable in
@@ -189,10 +200,11 @@ npm --prefix apps/desktop run bench:runtime -- --runtime=php --iterations=50 --w
 ```
 
 The benchmark extracts the snapshot into `apps/desktop/.runtime-bench/`,
-starts the selected runtime on port 9402, measures representative admin
-and REST endpoints, and writes `artifacts/desktop-runtime-<runtime-or-label>.json`.
-Pass `--label=<name>` when comparing multiple binaries behind the same
-runtime, such as `--label=php-system` and `--label=php-bundled`.
+starts the selected runtime on an available loopback port, measures
+representative admin and REST endpoints, and writes
+`artifacts/desktop-runtime-<runtime-or-label>.json`. Pass `--label=<name>`
+when comparing multiple binaries behind the same runtime, such as
+`--label=php-system` and `--label=php-bundled`.
 The desktop snapshot adds a `Server-Timing: cortext_wp` header, so the JSON
 has both total HTTP latency and WordPress request time.
 
@@ -218,6 +230,8 @@ profile.
 - `router.php`: gives PHP's built-in server the `.htaccess` behavior
   WordPress expects. Existing files are served from disk; everything else
   goes through `index.php`.
+- `bootstrap.php`: defines the selected runtime origin before WordPress or
+  an existing desktop `wp-config.php` loads.
 - `worker.php`: experimental FrankenPHP worker entrypoint used only when
   `CORTEXT_RUNTIME=franken`.
 - `mu-plugins/cortext-autologin.php`: bypasses `auth_redirect()` and

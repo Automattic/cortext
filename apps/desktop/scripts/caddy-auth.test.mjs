@@ -33,6 +33,22 @@ for ( const config of CONFIGS ) {
 		assert.ok( removeHeaderAt < upstreamAt );
 	} );
 
+	test( `${ config.name } binds to loopback and validates Host and Origin`, () => {
+		const caddyfile = fs.readFileSync( config.path, 'utf8' );
+
+		assert.match( caddyfile, /http:\/\/:\{\$CORTEXT_PORT\} \{/ );
+		assert.match( caddyfile, /\bbind 127\.0\.0\.1\b/ );
+		assert.match(
+			caddyfile,
+			/http\.request\.hostport\} != \{env\.CORTEXT_DESKTOP_RUNTIME_HOST\}/
+		);
+		assert.match(
+			caddyfile,
+			/http\.request\.header\.Origin\} != \{env\.CORTEXT_DESKTOP_RUNTIME_ORIGIN\}/
+		);
+		assert.doesNotMatch( caddyfile, /127\.0\.0\.1:9402/ );
+	} );
+
 	test( `${ config.name } filters the private header from error logs`, () => {
 		const caddyfile = fs.readFileSync( config.path, 'utf8' );
 
@@ -42,3 +58,15 @@ for ( const config of CONFIGS ) {
 		);
 	} );
 }
+
+test( 'FrankenPHP prepends the dynamic WordPress origin bootstrap', () => {
+	const caddyfile = fs.readFileSync(
+		new URL( '../runtime/Caddyfile.frankenphp', import.meta.url ),
+		'utf8'
+	);
+
+	assert.match(
+		caddyfile,
+		/php_ini \{[\s\S]*auto_prepend_file "\{\$CORTEXT_DESKTOP_RUNTIME_BOOTSTRAP\}"/
+	);
+} );

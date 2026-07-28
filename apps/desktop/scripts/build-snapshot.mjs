@@ -185,11 +185,15 @@ console.log( '[snapshot] Installing Cortext plugin' );
 cpSync( STAGED_PLUGIN, resolve( pluginsDir, 'cortext' ), { recursive: true } );
 
 console.log(
-	'[snapshot] Adding runtime files (router + worker + preload + mu-plugins)'
+	'[snapshot] Adding runtime files (router + bootstrap + worker + preload + mu-plugins)'
 );
 cpSync(
 	resolve( RUNTIME_DIR, 'router.php' ),
 	resolve( SITE_DIR, 'router.php' )
+);
+cpSync(
+	resolve( RUNTIME_DIR, 'bootstrap.php' ),
+	resolve( SITE_DIR, 'cortext-runtime-bootstrap.php' )
 );
 cpSync(
 	resolve( RUNTIME_DIR, 'worker.php' ),
@@ -232,14 +236,19 @@ await ensureCachedDownload( WP_CLI_PHAR_URL, wpCliPhar );
 const PHP_BIN = resolvePhpBin();
 
 function wpCli( args ) {
-	run( PHP_BIN, [ wpCliPhar, `--path=${ SITE_DIR }`, ...args ] );
+	run( PHP_BIN, [ wpCliPhar, `--path=${ SITE_DIR }`, ...args ], {
+		env: {
+			...process.env,
+			CORTEXT_DESKTOP_RUNTIME_ORIGIN: 'http://127.0.0.1:1',
+		},
+	} );
 }
 
 console.log( '[snapshot] Installing WordPress' );
 wpCli( [
 	'core',
 	'install',
-	'--url=http://127.0.0.1:9402',
+	'--url=http://127.0.0.1:1',
 	'--title=Cortext',
 	'--admin_user=admin',
 	`--admin_password=${ randomSalt()
