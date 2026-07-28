@@ -188,6 +188,36 @@ test( 'stopRuntime reuses its promise and cleans up after exit', async () => {
 	assert.equal( fs.existsSync( cleanupPath ), false );
 } );
 
+test( 'a stop that times out still cleans up and stays marked as stopping', async () => {
+	const cleanupPath = fs.mkdtempSync(
+		path.join( os.tmpdir(), 'cortext-runtime-wedged-' )
+	);
+	const wedged = new FakeChild( 4321 );
+	const crashes = [];
+	const handle = {
+		processes: [ { child: wedged, killProcessGroup: false } ],
+		cleanupPaths: [ cleanupPath ],
+		stopping: false,
+		onUnexpectedExit: ( name ) => crashes.push( name ),
+	};
+	wedged.on( 'exit', () => {
+		if ( ! handle.stopping ) {
+			handle.onUnexpectedExit( 'php' );
+		}
+	} );
+
+	await assert.rejects(
+		stopRuntime( handle, { gracePeriodMs: 5, forcePeriodMs: 5 } ),
+		/is still running after forced termination/
+	);
+	assert.equal( fs.existsSync( cleanupPath ), false );
+	assert.equal( handle.stopping, true );
+
+	// The kill was still on its way, so the exit that follows is not a crash.
+	wedged.exit();
+	assert.deepEqual( crashes, [] );
+} );
+
 test( 'waitForProcessExit sends SIGKILL, then rejects if the process stays alive', async () => {
 	const child = new FakeChild( 5678 );
 	const signals = [];

@@ -688,7 +688,8 @@ function startRuntime( {
 
 	handle.ready = waitForHttpReady( handle, port, authToken ).catch(
 		async ( error ) => {
-			await stopRuntime( handle );
+			// Report why startup failed, not why the cleanup afterwards did.
+			await stopRuntime( handle ).catch( () => {} );
 			throw error;
 		}
 	);
@@ -865,7 +866,7 @@ function waitForProcessExit(
 	} );
 }
 
-function stopRuntime( handle ) {
+function stopRuntime( handle, options = {} ) {
 	if ( ! handle ) {
 		return Promise.resolve();
 	}
@@ -876,19 +877,25 @@ function stopRuntime( handle ) {
 
 	const stopPromise = ( async () => {
 		const processes = [ ...( handle.processes || [] ) ].reverse();
-		await Promise.all(
-			processes.map( ( { child, killProcessGroup } ) =>
-				waitForProcessExit( child, { killProcessGroup } )
-			)
-		);
-
-		for ( const cleanupPath of handle.cleanupPaths || [] ) {
-			fs.rmSync( cleanupPath, { recursive: true, force: true } );
+		try {
+			await Promise.all(
+				processes.map( ( { child, killProcessGroup } ) =>
+					waitForProcessExit( child, {
+						killProcessGroup,
+						...options,
+					} )
+				)
+			);
+		} finally {
+			for ( const cleanupPath of handle.cleanupPaths || [] ) {
+				fs.rmSync( cleanupPath, { recursive: true, force: true } );
+			}
 		}
 	} )();
+	// A failed stop timed out; it did not call the shutdown off. The signals are
+	// still on their way, so leave `stopping` set and let the caller retry.
 	handle.stopPromise = stopPromise.catch( ( error ) => {
 		handle.stopPromise = null;
-		handle.stopping = false;
 		throw error;
 	} );
 
