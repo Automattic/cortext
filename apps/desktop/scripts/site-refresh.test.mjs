@@ -442,6 +442,63 @@ test( 'recoverInterruptedSwap removes leftover temporary directories without cha
 	assert.equal( read( path.join( wordpressDir, 'index.php' ) ), 'LIVE' );
 } );
 
+test( 'recovery restores the complete backup, not an older first-run one', () => {
+	const siteRoot = tmpDir();
+	writeSite( path.join( siteRoot, `${ BAK_PREFIX }2000-1` ), {
+		code: 'COMPLETE',
+		db: 'CURRENT DATABASE',
+	} );
+	// Older, and incomplete by construction, but its name sorts last.
+	writeFile(
+		path.join(
+			siteRoot,
+			`${ BAK_PREFIX }first-run-1000-2/wp-content/database/.ht.sqlite`
+		),
+		'OLD DATABASE'
+	);
+
+	recoverInterruptedSwap( siteRoot );
+
+	const wordpressDir = path.join( siteRoot, 'wordpress' );
+	assert.equal( read( path.join( wordpressDir, 'index.php' ) ), 'COMPLETE' );
+	assert.equal(
+		read( path.join( wordpressDir, 'wp-content/database/.ht.sqlite' ) ),
+		'CURRENT DATABASE'
+	);
+	assert.deepEqual(
+		fs
+			.readdirSync( siteRoot )
+			.filter( ( name ) => name.startsWith( BAK_PREFIX ) ),
+		[]
+	);
+} );
+
+test( 'recovery never copies a stale first-run backup over newer user data', () => {
+	const siteRoot = tmpDir();
+	const wordpressDir = path.join( siteRoot, 'wordpress' );
+	writeSite( wordpressDir, { code: 'LIVE', db: 'NEW USER DATABASE' } );
+	writeFile(
+		path.join(
+			siteRoot,
+			`${ BAK_PREFIX }first-run-1000-2/wp-content/database/.ht.sqlite`
+		),
+		'OLD DATABASE'
+	);
+
+	recoverInterruptedSwap( siteRoot );
+
+	assert.equal(
+		read( path.join( wordpressDir, 'wp-content/database/.ht.sqlite' ) ),
+		'NEW USER DATABASE'
+	);
+	assert.deepEqual(
+		fs
+			.readdirSync( siteRoot )
+			.filter( ( name ) => name.startsWith( BAK_PREFIX ) ),
+		[]
+	);
+} );
+
 test( 'recovery leaves the live database unchanged when a normal refresh backup remains', () => {
 	const siteRoot = tmpDir();
 	const wordpressDir = path.join( siteRoot, 'wordpress' );

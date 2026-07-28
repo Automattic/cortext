@@ -62,26 +62,48 @@ function carryOver( fromWordpress, toWordpress ) {
 function backupDirectories( siteRoot, prefix = BAK_PREFIX ) {
 	return fs
 		.readdirSync( siteRoot )
-		.filter( ( name ) => name.startsWith( prefix ) )
-		.sort();
+		.filter( ( name ) => name.startsWith( prefix ) );
 }
 
-// A previous process may have installed a complete tree and exited before
-// deleting its first-run backup. Copy the user data from each backup into the
-// live tree before deleting it. This also preserves the original data when two
-// app processes start at the same time.
-function reconcileBackupsIntoLiveSite( siteRoot ) {
-	const wordpressDir = path.join( siteRoot, 'wordpress' );
-	if ( ! fs.existsSync( path.join( wordpressDir, 'index.php' ) ) ) {
+// Scratch and backup directory names end in `<milliseconds>-<pid>`.
+function backupTime( name ) {
+	const match = name.match( /(\d+)-\d+$/ );
+	return match ? Number( match[ 1 ] ) : 0;
+}
+
+// Prefer a backup holding a complete tree, then the most recent one. First-run
+// backups are incomplete by construction, so they are the last resort. Name
+// order will not do: `first-run-` sorts after every digit.
+function newestRestorableBackup( siteRoot ) {
+	const ranked = backupDirectories( siteRoot )
+		.map( ( name ) => ( {
+			name,
+			complete: fs.existsSync( path.join( siteRoot, name, 'index.php' ) ),
+			time: backupTime( name ),
+		} ) )
+		.sort(
+			( a, b ) =>
+				Number( a.complete ) - Number( b.complete ) || a.time - b.time
+		);
+	return ranked.length ? ranked[ ranked.length - 1 ].name : null;
+}
+
+// A launch may have installed a tree and exited before deleting its first-run
+// backup. Whoever made that backup copied the user data into the tree it
+// installed first, so the backup is scrap. Copying it back would overwrite
+// newer data with older data.
+function removeFirstRunBackups( siteRoot ) {
+	if ( ! fs.existsSync( path.join( siteRoot, 'wordpress/index.php' ) ) ) {
 		return;
 	}
 	for ( const name of backupDirectories(
 		siteRoot,
 		`${ BAK_PREFIX }first-run-`
 	) ) {
-		const backupDir = path.join( siteRoot, name );
-		carryOver( backupDir, wordpressDir );
-		fs.rmSync( backupDir, { recursive: true, force: true } );
+		fs.rmSync( path.join( siteRoot, name ), {
+			recursive: true,
+			force: true,
+		} );
 	}
 }
 
@@ -101,17 +123,13 @@ function recoverInterruptedSwap( siteRoot ) {
 		}
 	}
 	const wordpressDir = path.join( siteRoot, 'wordpress' );
-	if ( fs.existsSync( wordpressDir ) ) {
-		reconcileBackupsIntoLiveSite( siteRoot );
-		return;
+	if ( ! fs.existsSync( wordpressDir ) ) {
+		const backup = newestRestorableBackup( siteRoot );
+		if ( backup ) {
+			fs.renameSync( path.join( siteRoot, backup ), wordpressDir );
+		}
 	}
-	const baks = backupDirectories( siteRoot );
-	if ( baks.length ) {
-		fs.renameSync(
-			path.join( siteRoot, baks[ baks.length - 1 ] ),
-			wordpressDir
-		);
-	}
+	removeFirstRunBackups( siteRoot );
 }
 
 // Extract a new site into a temporary directory. If Electron exits before
@@ -166,9 +184,12 @@ async function ensureSiteFromSnapshot( { snapshotZip, siteRoot, version } ) {
 					! promoted &&
 					fs.existsSync( path.join( wordpressDir, 'index.php' ) )
 				) {
-					// Another process installed its tree first. Copy the user data
-					// from the first-run backup into that tree.
-					reconcileBackupsIntoLiveSite( siteRoot );
+					// Another launch installed its tree first. It extracted
+					// from the snapshot, so it holds seed data, not the user's.
+					if ( liveTreeExists && fs.existsSync( bakDir ) ) {
+						carryOver( bakDir, wordpressDir );
+					}
+					removeFirstRunBackups( siteRoot );
 					return wordpressDir;
 				}
 				if ( promoted ) {
@@ -182,7 +203,7 @@ async function ensureSiteFromSnapshot( { snapshotZip, siteRoot, version } ) {
 				}
 				throw swapError;
 			}
-			reconcileBackupsIntoLiveSite( siteRoot );
+			removeFirstRunBackups( siteRoot );
 		}
 		return wordpressDir;
 	} finally {
