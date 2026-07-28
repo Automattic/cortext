@@ -7,6 +7,11 @@ const { installRuntimeAuthHeader } = runtimeSessionModule;
 const AUTH_HEADER = 'X-Cortext-Desktop-Token';
 const AUTH_TOKEN = 'private-runtime-token';
 const RUNTIME_ORIGIN = 'http://127.0.0.1:9402';
+const LOADING_URL = 'file:///Applications/Cortext.app/loading.html';
+const RUNTIME_FRAME = {
+	url: `${ RUNTIME_ORIGIN }/wp-admin/admin.php?page=cortext`,
+	origin: RUNTIME_ORIGIN,
+};
 
 function makeSession() {
 	const listeners = {};
@@ -34,10 +39,20 @@ function sendHeaders( listener, details ) {
 			{
 				id: 1,
 				requestHeaders: {},
+				frame: RUNTIME_FRAME,
 				...details,
 			},
 			resolve
 		);
+	} );
+}
+
+function install( session ) {
+	return installRuntimeAuthHeader( session, {
+		authHeader: AUTH_HEADER,
+		authToken: AUTH_TOKEN,
+		runtimeOrigin: RUNTIME_ORIGIN,
+		trustedDocumentUrls: [ LOADING_URL ],
 	} );
 }
 
@@ -66,11 +81,7 @@ test( 'requires a non-empty token and header name', () => {
 
 test( 'authenticates runtime requests and replaces spoofed headers', async () => {
 	const { listeners, session } = makeSession();
-	installRuntimeAuthHeader( session, {
-		authHeader: AUTH_HEADER,
-		authToken: AUTH_TOKEN,
-		runtimeOrigin: RUNTIME_ORIGIN,
-	} );
+	install( session );
 
 	const result = await sendHeaders( listeners.onBeforeSendHeaders, {
 		url: `${ RUNTIME_ORIGIN }/wp-admin/`,
@@ -89,11 +100,7 @@ test( 'authenticates runtime requests and replaces spoofed headers', async () =>
 
 test( 'never sends the runtime token to another origin', async () => {
 	const { listeners, session } = makeSession();
-	installRuntimeAuthHeader( session, {
-		authHeader: AUTH_HEADER,
-		authToken: AUTH_TOKEN,
-		runtimeOrigin: RUNTIME_ORIGIN,
-	} );
+	install( session );
 
 	const result = await sendHeaders( listeners.onBeforeSendHeaders, {
 		url: 'https://example.com/image.png',
@@ -108,11 +115,7 @@ test( 'never sends the runtime token to another origin', async () => {
 
 test( 'does not authenticate a redirect chain that leaves the runtime', async () => {
 	const { listeners, session } = makeSession();
-	installRuntimeAuthHeader( session, {
-		authHeader: AUTH_HEADER,
-		authToken: AUTH_TOKEN,
-		runtimeOrigin: RUNTIME_ORIGIN,
-	} );
+	install( session );
 
 	listeners.onBeforeRedirect( {
 		id: 42,
@@ -151,13 +154,76 @@ test( 'does not authenticate a redirect chain that leaves the runtime', async ()
 	);
 } );
 
+test( 'authenticates the shell page navigating to the runtime', async () => {
+	const { listeners, session } = makeSession();
+	install( session );
+
+	const result = await sendHeaders( listeners.onBeforeSendHeaders, {
+		url: `${ RUNTIME_ORIGIN }/wp-admin/admin.php?page=cortext`,
+		frame: { url: LOADING_URL, origin: 'file://' },
+	} );
+
+	assert.equal( result.requestHeaders[ AUTH_HEADER ], AUTH_TOKEN );
+} );
+
+test( 'never authenticates a request from embedded third-party content', async () => {
+	const { listeners, session } = makeSession();
+	install( session );
+
+	const embeddedFrames = [
+		{
+			url: 'https://www.youtube.com/embed/x',
+			origin: 'https://www.youtube.com',
+		},
+		// A frame nested inside the embed inherits the provider's origin.
+		{ url: 'about:blank', origin: 'https://www.youtube.com' },
+		// A popup an embed opened starts empty but keeps the opener's origin.
+		{ url: '', origin: 'https://www.youtube.com' },
+	];
+
+	for ( const frame of embeddedFrames ) {
+		const result = await sendHeaders( listeners.onBeforeSendHeaders, {
+			url: `${ RUNTIME_ORIGIN }/wp-admin/`,
+			frame,
+		} );
+		assert.equal( result.requestHeaders[ AUTH_HEADER ], undefined );
+	}
+} );
+
+test( 'never authenticates a request that arrives without a frame', async () => {
+	const { listeners, session } = makeSession();
+	install( session );
+
+	// Service workers and main-process fetches both land here, and embedded
+	// content can register a worker.
+	for ( const frame of [ undefined, null ] ) {
+		const result = await sendHeaders( listeners.onBeforeSendHeaders, {
+			url: `${ RUNTIME_ORIGIN }/wp-admin/`,
+			frame,
+		} );
+		assert.equal( result.requestHeaders[ AUTH_HEADER ], undefined );
+	}
+} );
+
+test( 'never authenticates a request whose frame was disposed', async () => {
+	const { listeners, session } = makeSession();
+	install( session );
+
+	const result = await sendHeaders( listeners.onBeforeSendHeaders, {
+		url: `${ RUNTIME_ORIGIN }/wp-admin/`,
+		frame: {
+			get origin() {
+				throw new Error( 'Render frame was disposed' );
+			},
+		},
+	} );
+
+	assert.equal( result.requestHeaders[ AUTH_HEADER ], undefined );
+} );
+
 test( 'cleans up all dedicated-session listeners idempotently', () => {
 	const { listeners, session } = makeSession();
-	const remove = installRuntimeAuthHeader( session, {
-		authHeader: AUTH_HEADER,
-		authToken: AUTH_TOKEN,
-		runtimeOrigin: RUNTIME_ORIGIN,
-	} );
+	const remove = install( session );
 
 	remove();
 	remove();

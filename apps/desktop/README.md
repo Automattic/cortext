@@ -74,9 +74,12 @@ preferences such as theme and sidebar layout survive restarts; the token itself
 is never stored in that session. Its HTTP cache is disabled, and cookies,
 service workers, and Cache API data for the runtime are cleared at launch.
 Requests that leave the runtime origin are stripped of the header and cannot
-regain it by redirecting back. External top-level links open in the system
-browser, external frames and document redirects are blocked, and internal
-popups stay in the protected session.
+regain it by redirecting back. Only requests coming from a Cortext frame carry
+the token, so embedded third-party content such as an Embed block renders while
+staying outside the boundary: neither the frame, nor a frame nested inside it,
+nor a service worker or popup it opens can reach the runtime. External
+top-level links open in the system browser, an embedded frame cannot steer the
+app window, and internal popups stay in the protected session.
 
 The runtime rejects requests without the matching token before serving
 WordPress or static files. The token is passed through the runtime environment
@@ -203,9 +206,9 @@ npm --prefix apps/desktop run test:e2e
 ```
 
 The test passes a temporary `--user-data-dir` to Electron, starts the app, and
-checks the protected session, external navigation boundary, internal popups,
-real menu Reload behavior, direct unauthenticated requests, and the rendered
-Cortext canvas. It does not read or remove the developer's normal desktop
+checks the protected session, external navigation boundary, embedded
+third-party frames, internal popups, real menu Reload behavior, direct
+unauthenticated requests, and the rendered Cortext canvas. It does not read or remove the developer's normal desktop
 profile.
 
 ## Runtime files

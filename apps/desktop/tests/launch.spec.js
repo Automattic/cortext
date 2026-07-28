@@ -356,8 +356,11 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 				const mainWindow = BrowserWindow.getAllWindows()[ 0 ];
 				const runtimeSession =
 					session.fromPartition( 'persist:cortext' );
-				const trustedResponse = await runtimeSession.fetch( assetUrl );
-				await trustedResponse.arrayBuffer();
+				// The token rides on Cortext frames, not on the session handle,
+				// so a fetch with no frame behind it is rejected even here.
+				const framelessResponse =
+					await runtimeSession.fetch( assetUrl );
+				await framelessResponse.arrayBuffer();
 				const untrustedResponse =
 					await session.defaultSession.fetch( assetUrl );
 				await untrustedResponse.arrayBuffer();
@@ -366,7 +369,7 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 						mainWindow.webContents.session === runtimeSession,
 					cacheSize: await runtimeSession.getCacheSize(),
 					isPersistent: runtimeSession.isPersistent(),
-					trustedStatus: trustedResponse.status,
+					framelessStatus: framelessResponse.status,
 					untrustedStatus: untrustedResponse.status,
 				};
 			},
@@ -376,7 +379,7 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 			mainUsesRuntimeSession: true,
 			cacheSize: 0,
 			isPersistent: true,
-			trustedStatus: 200,
+			framelessStatus: 403,
 			untrustedStatus: 403,
 		} );
 		await expect(
@@ -399,40 +402,11 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 			)?.runtimeToken
 		).toBeUndefined();
 
-		const blockedFrameAttempt = app.evaluate(
-			( { BrowserWindow }, targetUrl ) => {
-				return new Promise( ( resolve, reject ) => {
-					const webContents =
-						BrowserWindow.getAllWindows()[ 0 ].webContents;
-					const timer = setTimeout( () => {
-						webContents.off(
-							'will-frame-navigate',
-							onFrameNavigate
-						);
-						reject(
-							new Error(
-								'External iframe navigation was not observed.'
-							)
-						);
-					}, 10 * 1000 );
-					const onFrameNavigate = ( event ) => {
-						if ( event.url !== targetUrl ) {
-							return;
-						}
-						clearTimeout( timer );
-						webContents.off(
-							'will-frame-navigate',
-							onFrameNavigate
-						);
-						resolve( {
-							defaultPrevented: event.defaultPrevented,
-							isMainFrame: event.isMainFrame,
-						} );
-					};
-					webContents.on( 'will-frame-navigate', onFrameNavigate );
-				} );
-			},
-			untrustedOrigin
+		// Third-party frames render, because blocks such as Embed put a
+		// provider's iframe on the page. They still sit outside the boundary.
+		const untrustedFrameNavigation = window.waitForEvent(
+			'framenavigated',
+			( frame ) => frame.url() === untrustedOrigin
 		);
 		await window.evaluate( ( url ) => {
 			const frame = document.createElement( 'iframe' );
@@ -440,13 +414,15 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 			frame.src = url;
 			document.body.append( frame );
 		}, untrustedOrigin );
-		await expect( blockedFrameAttempt ).resolves.toEqual( {
-			defaultPrevented: true,
-			isMainFrame: false,
-		} );
-		expect(
-			window.frames().some( ( frame ) => frame.url() === untrustedOrigin )
-		).toBe( false );
+		const untrustedFrame = await untrustedFrameNavigation;
+		await expect
+			.poll( () =>
+				untrustedFrame
+					.locator( 'body' )
+					.getAttribute( 'data-runtime-image' )
+			)
+			.toBe( 'blocked' );
+
 		await window
 			.locator( '#untrusted-frame' )
 			.evaluate( ( frame ) => frame.remove() );
@@ -541,6 +517,31 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 		await app.evaluate( () => {
 			globalThis.__cortextE2EUntrustedWindow = null;
 		} );
+
+		// Last, because a cancelled top-level navigation leaves the page with a
+		// pending navigation that Playwright's auto-waiting never resolves.
+		// An embedded frame must not steer the app window, runtime URL or not.
+		const frameNavigation = window.waitForEvent(
+			'framenavigated',
+			( frame ) => frame.url() === untrustedOrigin
+		);
+		await window.evaluate( ( url ) => {
+			const frame = document.createElement( 'iframe' );
+			frame.src = url;
+			document.body.append( frame );
+		}, untrustedOrigin );
+		const steeringFrame = await frameNavigation;
+		const appUrlBeforeSteering = window.url();
+		await steeringFrame.evaluate( () =>
+			document.getElementById( 'runtime-link' ).click()
+		);
+		await expect
+			.poll( () =>
+				app.evaluate( ( { BrowserWindow } ) =>
+					BrowserWindow.getAllWindows()[ 0 ].webContents.getURL()
+				)
+			)
+			.toBe( appUrlBeforeSteering );
 
 		expect( untrustedRequests.length ).toBeGreaterThan( 0 );
 		expect(

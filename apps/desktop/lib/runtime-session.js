@@ -6,9 +6,29 @@ function hasOrigin( requestUrl, origin ) {
 	}
 }
 
+// Chromium resolves `frame.origin` through `about:blank` and `about:srcdoc`
+// inheritance, so embedded third-party content cannot borrow the runtime origin
+// by nesting a frame or opening a popup.
+function isTrustedRuntimeFrame( frame, runtimeOrigin, trustedDocumentUrls ) {
+	if ( ! frame ) {
+		// Service workers and main-process requests arrive without a frame, and
+		// embedded content can register a worker, so no frame is never Cortext.
+		return false;
+	}
+	try {
+		return (
+			frame.origin === runtimeOrigin ||
+			trustedDocumentUrls.includes( frame.url )
+		);
+	} catch {
+		// Reading a frame that was disposed mid-request throws.
+		return false;
+	}
+}
+
 function installRuntimeAuthHeader(
 	runtimeSession,
-	{ authHeader, authToken, runtimeOrigin }
+	{ authHeader, authToken, runtimeOrigin, trustedDocumentUrls = [] }
 ) {
 	if ( typeof authToken !== 'string' || ! authToken.trim() ) {
 		throw new Error(
@@ -44,7 +64,12 @@ function installRuntimeAuthHeader(
 
 		if (
 			hasOrigin( details.url, normalizedOrigin ) &&
-			! redirectedOutsideRuntime.has( details.id )
+			! redirectedOutsideRuntime.has( details.id ) &&
+			isTrustedRuntimeFrame(
+				details.frame,
+				normalizedOrigin,
+				trustedDocumentUrls
+			)
 		) {
 			requestHeaders[ authHeader ] = authToken;
 		} else if ( ! hasOrigin( details.url, normalizedOrigin ) ) {
@@ -81,4 +106,8 @@ function installRuntimeAuthHeader(
 	};
 }
 
-module.exports = { hasOrigin, installRuntimeAuthHeader };
+module.exports = {
+	hasOrigin,
+	installRuntimeAuthHeader,
+	isTrustedRuntimeFrame,
+};

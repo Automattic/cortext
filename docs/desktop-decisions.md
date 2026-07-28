@@ -10,12 +10,17 @@ Every app window uses a dedicated Electron session. Its browser storage remains
 persistent so theme, layout, and integration preferences survive restarts, but
 the token is never stored there. HTTP caching is disabled, and cookies, service
 workers, and Cache API data for the runtime are cleared at launch. The session
-adds the token as an internal header to requests for
-`http://127.0.0.1:9402/`, without trying to infer trust from `Sec-Fetch-Site` or
-the current window URL. External top-level links leave the app through the
-system browser; external frames and document redirects are blocked; internal
-popups use the same protected session. A request chain that leaves the runtime
-cannot regain the token by redirecting back.
+adds the token as an internal header to requests for `http://127.0.0.1:9402/`
+that come from a Cortext frame, reading the frame origin Chromium already
+resolved instead of inferring trust from `Sec-Fetch-Site` or the current window
+URL. Embedded third-party frames render, so the Embed block keeps working, but
+they stay outside the boundary: origin inheritance covers frames nested inside
+them and popups they open, and a request with no frame behind it, such as one
+from a service worker, is never authenticated. External top-level links leave
+the app through the system browser; an embedded frame cannot steer the app
+window; document redirects to another origin are blocked; internal popups use
+the same protected session. A request chain that leaves the runtime cannot
+regain the token by redirecting back.
 
 The PHP, FrankenPHP, and PHP-FPM runtime paths reject requests without the
 matching token before serving WordPress or static files. Caddy then removes the

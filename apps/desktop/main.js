@@ -13,6 +13,7 @@ const {
 const {
 	hasOrigin,
 	installRuntimeAuthHeader,
+	isTrustedRuntimeFrame,
 } = require( './lib/runtime-session' );
 const {
 	scheduleUpdateCheck,
@@ -39,6 +40,8 @@ const ERROR_PAGE = path.resolve( __dirname, 'error.html' );
 const ERROR_URL = pathToFileURL( ERROR_PAGE ).href;
 const RUNTIME_ORIGIN = `http://127.0.0.1:${ PORT }`;
 const RUNTIME_SESSION_PARTITION = 'persist:cortext';
+// The local shell pages Cortext loads itself, before and instead of the runtime.
+const TRUSTED_DOCUMENT_URLS = [ LOADING_URL, ERROR_URL ];
 
 let runtimeHandle = null;
 let removeRuntimeAuthHeader = null;
@@ -92,14 +95,33 @@ function refreshMenu() {
 	);
 }
 
-function isAllowedDocumentUrl( url, isMainFrame ) {
+function isAllowedTopLevelUrl( url ) {
+	return (
+		hasOrigin( url, RUNTIME_ORIGIN ) ||
+		TRUSTED_DOCUMENT_URLS.includes( url )
+	);
+}
+
+// Third-party frames may render so blocks such as Embed keep working. They
+// cannot reach the runtime: the token only rides on requests whose frame origin
+// is Cortext's own, and that origin is inherited, not claimed.
+function isAllowedFrameUrl( url ) {
+	if ( url === 'about:blank' || url === 'about:srcdoc' ) {
+		return true;
+	}
+	// The editor canvas is a blob: frame, which carries the runtime origin.
 	if ( hasOrigin( url, RUNTIME_ORIGIN ) ) {
 		return true;
 	}
-	if ( ! isMainFrame ) {
-		return url === 'about:blank' || url === 'about:srcdoc';
+	try {
+		return [ 'http:', 'https:' ].includes( new URL( url ).protocol );
+	} catch {
+		return false;
 	}
-	return url === LOADING_URL || url === ERROR_URL;
+}
+
+function isAllowedDocumentUrl( url, isMainFrame ) {
+	return isMainFrame ? isAllowedTopLevelUrl( url ) : isAllowedFrameUrl( url );
 }
 
 function openExternalUrl( url ) {
@@ -150,11 +172,22 @@ function configureTrustedWindow( win, runtimeSession ) {
 
 	const { webContents } = win;
 	webContents.on( 'will-navigate', ( event ) => {
-		if ( isAllowedDocumentUrl( event.url, true ) ) {
+		if ( ! isAllowedTopLevelUrl( event.url ) ) {
+			event.preventDefault();
+			openExternalUrl( event.url );
 			return;
 		}
-		event.preventDefault();
-		openExternalUrl( event.url );
+		// An embedded frame must not be able to steer the app window, even to a
+		// runtime address.
+		if (
+			! isTrustedRuntimeFrame(
+				event.initiator,
+				RUNTIME_ORIGIN,
+				TRUSTED_DOCUMENT_URLS
+			)
+		) {
+			event.preventDefault();
+		}
 	} );
 	webContents.on( 'will-frame-navigate', ( event ) => {
 		if ( event.isMainFrame || isAllowedDocumentUrl( event.url, false ) ) {
@@ -271,6 +304,7 @@ app.whenReady().then( async () => {
 			authHeader: RUNTIME_AUTH_HEADER,
 			authToken,
 			runtimeOrigin: RUNTIME_ORIGIN,
+			trustedDocumentUrls: TRUSTED_DOCUMENT_URLS,
 		} );
 
 		if (
