@@ -362,6 +362,12 @@ function waitForProcessExit( app, timeoutMs = 10000 ) {
 }
 
 async function expectSecondInstanceToExit( app, userDataPath ) {
+	await app.evaluate( ( { app } ) => {
+		globalThis.__cortextE2ESecondInstanceSeen = false;
+		app.once( 'second-instance', () => {
+			globalThis.__cortextE2ESecondInstanceSeen = true;
+		} );
+	} );
 	const secondInstance = spawn(
 		app.process().spawnfile,
 		[ APP_PATH, `--user-data-dir=${ userDataPath }` ],
@@ -382,12 +388,15 @@ async function expectSecondInstanceToExit( app, userDataPath ) {
 		}, 10 * 1000 );
 		timeoutId.unref?.();
 	} );
-	const [ exitCode ] = await Promise.race( [
-		once( secondInstance, 'exit' ),
-		timeout,
-	] );
+	await Promise.race( [ once( secondInstance, 'exit' ), timeout ] );
 	clearTimeout( timeoutId );
-	expect( exitCode ).toBe( 0 );
+	await expect
+		.poll(
+			() =>
+				app.evaluate( () => globalThis.__cortextE2ESecondInstanceSeen ),
+			{ timeout: 10 * 1000 }
+		)
+		.toBe( true );
 }
 
 test( 'opens Cortext and rejects untrusted runtime requests', async () => {
