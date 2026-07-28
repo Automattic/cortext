@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import {
 	existsSync,
@@ -16,6 +17,7 @@ const require = createRequire( import.meta.url );
 const {
 	DEFAULT_PORT,
 	normalizeRuntime,
+	RUNTIME_AUTH_HEADER,
 	startRuntime,
 	stopRuntime,
 } = require( '../lib/runtime' );
@@ -112,11 +114,19 @@ function redirectedPath( location ) {
 	return `${ url.pathname }${ url.search }`;
 }
 
-function requestPath( endpoint, redirects = 0, startedAt = performance.now() ) {
+function requestPath(
+	endpoint,
+	authToken,
+	redirects = 0,
+	startedAt = performance.now()
+) {
 	return new Promise( ( resolveRequest, rejectRequest ) => {
 		const req = http.get(
 			{
 				host: '127.0.0.1',
+				headers: {
+					[ RUNTIME_AUTH_HEADER ]: authToken,
+				},
 				port: DEFAULT_PORT,
 				path: endpoint.path,
 				timeout: 30000,
@@ -137,6 +147,7 @@ function requestPath( endpoint, redirects = 0, startedAt = performance.now() ) {
 								...endpoint,
 								path: redirectedPath( location ),
 							},
+							authToken,
 							redirects + 1,
 							startedAt
 						).then( resolveRequest, rejectRequest );
@@ -194,14 +205,14 @@ function summarize( samples ) {
 	};
 }
 
-async function runEndpoint( endpoint, warmup, iterations ) {
+async function runEndpoint( endpoint, warmup, iterations, authToken ) {
 	for ( let index = 0; index < warmup; index++ ) {
-		await requestPath( endpoint );
+		await requestPath( endpoint, authToken );
 	}
 
 	const samples = [];
 	for ( let index = 0; index < iterations; index++ ) {
-		samples.push( await requestPath( endpoint ) );
+		samples.push( await requestPath( endpoint, authToken ) );
 	}
 
 	return summarize( samples );
@@ -302,10 +313,12 @@ async function main() {
 
 	const workDir = resolve( DESKTOP_DIR, '.runtime-bench', options.runtime );
 	const wordpressDir = unzipSnapshot( workDir );
+	const authToken = randomBytes( 32 ).toString( 'hex' );
 	process.env.CORTEXT_RUNTIME_QUIET = process.env.CORTEXT_RUNTIME_QUIET || '1';
 	let unexpectedExit = null;
 	const handle = startRuntime( {
 		appDir: DESKTOP_DIR,
+		authToken,
 		wordpressDir,
 		runtime: options.runtime,
 		runtimeStateDir: resolve( workDir, 'state' ),
@@ -326,7 +339,8 @@ async function main() {
 			scenarios[ endpoint.name ] = await runEndpoint(
 				endpoint,
 				options.warmup,
-				options.iterations
+				options.iterations,
+				authToken
 			);
 		}
 

@@ -6,6 +6,8 @@ const path = require( 'path' );
 
 const DEFAULT_PORT = 9402;
 const DEFAULT_READY_PATH = '/wp-includes/images/blank.gif';
+const RUNTIME_AUTH_HEADER = 'X-Cortext-Desktop-Token';
+const RUNTIME_AUTH_ENV = 'CORTEXT_DESKTOP_AUTH_TOKEN';
 const EXPLORATION_OBJECT_CACHE_MARKER =
 	'Cortext Desktop APCu object-cache exploration drop-in';
 
@@ -131,6 +133,17 @@ function configureDesktopUpdateLock( wordpressDir, appDir ) {
 	);
 }
 
+function configureRuntimeRouter( wordpressDir, appDir ) {
+	const sourcePath = path.join( appDir, 'runtime/router.php' );
+	if ( ! fs.existsSync( sourcePath ) ) {
+		throw new Error(
+			`Authenticated desktop router not found at ${ sourcePath }.`
+		);
+	}
+
+	fs.copyFileSync( sourcePath, path.join( wordpressDir, 'router.php' ) );
+}
+
 function configurePreloadFiles( wordpressDir, appDir ) {
 	const files = [
 		[ 'preload.php', 'cortext-preload.php' ],
@@ -230,11 +243,12 @@ function addProcess( handle, name, command, args, options = {} ) {
 	return child;
 }
 
-function waitForHttpReady( handle, port, timeoutMs = 30000 ) {
+function waitForHttpReady( handle, port, authToken, timeoutMs = 30000 ) {
 	return new Promise( ( resolve, reject ) => {
 		let settled = false;
 		let lastFailure = null;
 		let probeTimer = null;
+		const activeRequests = new Set();
 		const timeout = setTimeout( () => {
 			fail(
 				new Error(
@@ -253,6 +267,10 @@ function waitForHttpReady( handle, port, timeoutMs = 30000 ) {
 			if ( probeTimer ) {
 				clearTimeout( probeTimer );
 			}
+			for ( const request of activeRequests ) {
+				request.destroy();
+			}
+			activeRequests.clear();
 			for ( const fn of cleanupFns ) {
 				fn();
 			}
@@ -291,40 +309,106 @@ function waitForHttpReady( handle, port, timeoutMs = 30000 ) {
 			} );
 		}
 
-		const probe = () => {
-			const req = http.get(
-				{
-					host: '127.0.0.1',
-					port,
-					path: DEFAULT_READY_PATH,
-					timeout: 1000,
-				},
-				( res ) => {
-					res.resume();
-					if ( res.statusCode && res.statusCode < 500 ) {
-						pass();
-						return;
+		const requestStatus = ( headers = {} ) =>
+			new Promise( ( resolveStatus, rejectRequest ) => {
+				const request = http.get(
+					{
+						host: '127.0.0.1',
+						port,
+						path: DEFAULT_READY_PATH,
+						timeout: 1000,
+						headers,
+					},
+					( response ) => {
+						response.resume();
+						response.once( 'end', () => {
+							resolveStatus( response.statusCode );
+						} );
 					}
-					lastFailure = `HTTP ${ res.statusCode }`;
-					probeTimer = setTimeout( probe, 250 );
-				}
-			);
-			req.on( 'timeout', () => {
-				req.destroy( new Error( 'HTTP probe timed out' ) );
+				);
+				activeRequests.add( request );
+				request.once( 'close', () => {
+					activeRequests.delete( request );
+				} );
+				request.once( 'timeout', () => {
+					request.destroy( new Error( 'HTTP probe timed out' ) );
+				} );
+				request.once( 'error', rejectRequest );
 			} );
-			req.on( 'error', ( err ) => {
-				lastFailure = err.message;
+
+		const probe = async () => {
+			if ( settled ) {
+				return;
+			}
+
+			try {
+				const unauthenticatedStatus = await requestStatus();
+				if ( settled ) {
+					return;
+				}
+				if ( unauthenticatedStatus !== 403 ) {
+					fail(
+						new Error(
+							`Runtime security check failed: unauthenticated request returned HTTP ${ unauthenticatedStatus }.`
+						)
+					);
+					return;
+				}
+
+				const invalidTokenStatus = await requestStatus( {
+					[ RUNTIME_AUTH_HEADER ]: `${ authToken }-invalid`,
+				} );
+				if ( settled ) {
+					return;
+				}
+				if ( invalidTokenStatus !== 403 ) {
+					fail(
+						new Error(
+							`Runtime security check failed: invalid token request returned HTTP ${ invalidTokenStatus }.`
+						)
+					);
+					return;
+				}
+
+				const authenticatedStatus = await requestStatus( {
+					[ RUNTIME_AUTH_HEADER ]: authToken,
+				} );
+				if ( settled ) {
+					return;
+				}
+				if (
+					authenticatedStatus &&
+					authenticatedStatus >= 200 &&
+					authenticatedStatus < 400
+				) {
+					pass();
+					return;
+				}
+				fail(
+					new Error(
+						`Runtime security check failed: authenticated request returned HTTP ${ authenticatedStatus }.`
+					)
+				);
+			} catch ( error ) {
+				lastFailure = error.message;
 				if ( ! settled ) {
 					probeTimer = setTimeout( probe, 250 );
 				}
-			} );
+			}
 		};
 
 		probe();
 	} );
 }
 
-function startPhpCli( handle, wordpressDir, port, appDir, runtimeStateDir ) {
+function startPhpCli(
+	handle,
+	wordpressDir,
+	port,
+	appDir,
+	runtimeStateDir,
+	authToken
+) {
 	const phpBin = resolveExecutable(
 		'CORTEXT_PHP_BIN',
 		path.join( appDir, 'runtime/bin/php' ),
@@ -351,7 +435,10 @@ function startPhpCli( handle, wordpressDir, port, appDir, runtimeStateDir ) {
 		wordpressDir,
 		routerPath,
 	];
-	const phpEnv = { ...process.env };
+	const phpEnv = {
+		...process.env,
+		[ RUNTIME_AUTH_ENV ]: authToken,
+	};
 	if ( workers ) {
 		phpEnv.PHP_CLI_SERVER_WORKERS = workers;
 	}
@@ -362,7 +449,7 @@ function startPhpCli( handle, wordpressDir, port, appDir, runtimeStateDir ) {
 	} );
 }
 
-function startFrankenPhp( handle, wordpressDir, port, appDir ) {
+function startFrankenPhp( handle, wordpressDir, port, appDir, authToken ) {
 	const frankenBin = resolveExecutable(
 		'CORTEXT_FRANKENPHP_BIN',
 		path.join( appDir, 'runtime/bin/frankenphp' ),
@@ -390,6 +477,7 @@ function startFrankenPhp( handle, wordpressDir, port, appDir ) {
 			cwd: wordpressDir,
 			env: {
 				...process.env,
+				[ RUNTIME_AUTH_ENV ]: authToken,
 				CORTEXT_PORT: String( port ),
 				CORTEXT_WORDPRESS_ROOT: wordpressDir,
 				CORTEXT_CADDY_STORAGE: path.join( handle.stateDir, 'caddy' ),
@@ -446,7 +534,8 @@ function startPhpFpmCaddy(
 	wordpressDir,
 	port,
 	appDir,
-	runtimeStateDir
+	runtimeStateDir,
+	authToken
 ) {
 	const phpFpmBin = resolveExecutable(
 		'CORTEXT_PHP_FPM_BIN',
@@ -475,7 +564,13 @@ function startPhpFpmCaddy(
 		'php-fpm',
 		phpFpmBin,
 		[ '-F', '-O', '-y', fpm.configPath ],
-		{ cwd: wordpressDir, env: process.env }
+		{
+			cwd: wordpressDir,
+			env: {
+				...process.env,
+				[ RUNTIME_AUTH_ENV ]: authToken,
+			},
+		}
 	);
 	addProcess(
 		handle,
@@ -486,6 +581,7 @@ function startPhpFpmCaddy(
 			cwd: wordpressDir,
 			env: {
 				...process.env,
+				[ RUNTIME_AUTH_ENV ]: authToken,
 				CORTEXT_PORT: String( port ),
 				CORTEXT_WORDPRESS_ROOT: wordpressDir,
 				CORTEXT_PHP_FPM_SOCKET: fpm.socketPath,
@@ -502,7 +598,12 @@ function startRuntime( {
 	runtime = process.env.CORTEXT_RUNTIME,
 	runtimeStateDir,
 	onUnexpectedExit,
+	authToken,
 } ) {
+	if ( typeof authToken !== 'string' || authToken.trim().length === 0 ) {
+		throw new TypeError( 'startRuntime requires a non-empty authToken.' );
+	}
+
 	const normalized = normalizeRuntime( runtime );
 	const handle = {
 		runtime: normalized,
@@ -517,17 +618,30 @@ function startRuntime( {
 	handle.stateDir = stateDir;
 
 	configureObjectCacheDropIn( wordpressDir, appDir );
+	configureRuntimeRouter( wordpressDir, appDir );
 	configureDesktopUpdateLock( wordpressDir, appDir );
 
 	if ( normalized === 'php' ) {
-		startPhpCli( handle, wordpressDir, port, appDir, stateDir );
+		startPhpCli( handle, wordpressDir, port, appDir, stateDir, authToken );
 	} else if ( normalized === 'franken' ) {
-		startFrankenPhp( handle, wordpressDir, port, appDir );
+		startFrankenPhp( handle, wordpressDir, port, appDir, authToken );
 	} else if ( normalized === 'php-fpm' ) {
-		startPhpFpmCaddy( handle, wordpressDir, port, appDir, stateDir );
+		startPhpFpmCaddy(
+			handle,
+			wordpressDir,
+			port,
+			appDir,
+			stateDir,
+			authToken
+		);
 	}
 
-	handle.ready = waitForHttpReady( handle, port );
+	handle.ready = waitForHttpReady( handle, port, authToken ).catch(
+		( error ) => {
+			stopRuntime( handle );
+			throw error;
+		}
+	);
 	return handle;
 }
 
@@ -568,6 +682,7 @@ function stopRuntime( handle ) {
 
 module.exports = {
 	DEFAULT_PORT,
+	RUNTIME_AUTH_HEADER,
 	normalizeRuntime,
 	startRuntime,
 	stopRuntime,

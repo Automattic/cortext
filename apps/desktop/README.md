@@ -67,6 +67,33 @@ uses `router.php` for the rewrite behavior WordPress normally gets from
 nginx or Apache. Once PHP reports that it is accepting connections, the
 window loads `http://127.0.0.1:9402/wp-admin/admin.php?page=cortext`.
 
+Each launch creates a new 256-bit authentication token in memory. Every Cortext
+window uses one dedicated Electron session, which adds the token to requests
+for the local runtime. The session remains persistent so browser-backed product
+preferences such as theme and sidebar layout survive restarts; the token itself
+is never stored in that session. Its HTTP cache is disabled, and cookies,
+service workers, and Cache API data for the runtime are cleared at launch.
+Requests that leave the runtime origin are stripped of the header and cannot
+regain it by redirecting back. Only requests coming from a Cortext frame carry
+the token, so embedded third-party content such as an Embed block renders while
+staying outside the boundary: neither the frame, nor a frame nested inside it,
+nor a service worker or popup it opens can reach the runtime. External
+top-level links open in the system browser, an embedded frame cannot steer the
+app window, and internal popups stay in the protected session.
+
+The runtime rejects requests without the matching token before serving
+WordPress or static files. The token is passed through the runtime environment
+and is never written to disk, included in a URL, logged, forwarded to PHP by
+Caddy, or added to benchmark results. This protects the local admin session
+from web pages and accidental localhost clients. It does not protect against
+native processes running as the same macOS user, which can already read that
+user's Cortext data. The loopback address and port remain `127.0.0.1:9402`.
+
+Desktop hides the publishing and copy-link controls. Published localhost URLs
+are also protected by the token, so they are intentionally not shareable in
+Safari or another client; publishing remains available when Cortext runs as a
+WordPress plugin on a web site.
+
 In a dev run, DevTools open by default; set `CORTEXT_DEVTOOLS=0` to turn them
 off. The packaged build never opens them. Closing the window kills the PHP
 process.
@@ -178,10 +205,11 @@ npm --prefix apps/desktop run snapshot
 npm --prefix apps/desktop run test:e2e
 ```
 
-The test removes `~/Library/Application Support/cortext-desktop/`, starts
-Electron, waits for the window to reach the Cortext admin page, and checks
-that `#cortext-root` is visible. It takes about 7 seconds locally once the
-snapshot exists.
+The test passes a temporary `--user-data-dir` to Electron, starts the app, and
+checks the protected session, external navigation boundary, embedded
+third-party frames, internal popups, real menu Reload behavior, direct
+unauthenticated requests, and the rendered Cortext canvas. It does not read or remove the developer's normal desktop
+profile.
 
 ## Runtime files
 
