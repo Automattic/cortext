@@ -1,5 +1,4 @@
 const { app, BrowserWindow, Menu, session, shell } = require( 'electron' );
-const { spawnSync } = require( 'child_process' );
 const crypto = require( 'crypto' );
 const path = require( 'path' );
 const fs = require( 'fs' );
@@ -22,9 +21,9 @@ const {
 	setAutoDownload,
 } = require( './lib/auto-update' );
 const {
+	ensureSiteFromSnapshot,
 	refreshSiteIfOutdated,
 	recoverInterruptedSwap,
-	writeMarker,
 } = require( './lib/site-refresh' );
 const { buildAppMenu } = require( './lib/menu' );
 const settings = require( './lib/settings' );
@@ -50,33 +49,6 @@ const childWindows = new Set();
 
 function getSiteRoot() {
 	return path.join( app.getPath( 'userData' ), 'site' );
-}
-
-function ensureSiteFromSnapshot() {
-	const siteRoot = getSiteRoot();
-	const wordpressDir = path.join( siteRoot, 'wordpress' );
-	if ( fs.existsSync( wordpressDir ) ) {
-		return wordpressDir;
-	}
-	if ( ! fs.existsSync( SNAPSHOT_ZIP ) ) {
-		throw new Error(
-			`Snapshot not found at ${ SNAPSHOT_ZIP }. Run 'npm run snapshot' from apps/desktop/.`
-		);
-	}
-	console.log( `[cortext-desktop] extracting snapshot to ${ siteRoot }` );
-	fs.mkdirSync( siteRoot, { recursive: true } );
-	// macOS `unzip` can exit 1 for warnings such as "stripped absolute path".
-	// Treat extraction as successful only if the WordPress files appear below.
-	spawnSync( 'unzip', [ '-q', '-o', SNAPSHOT_ZIP, '-d', siteRoot ], {
-		stdio: [ 'ignore', 'ignore', 'ignore' ],
-	} );
-	if ( ! fs.existsSync( path.join( wordpressDir, 'index.php' ) ) ) {
-		throw new Error(
-			`Snapshot extraction failed: ${ wordpressDir } is empty.`
-		);
-	}
-	writeMarker( siteRoot, app.getVersion() );
-	return wordpressDir;
 }
 
 function refreshMenu() {
@@ -323,10 +295,15 @@ app.whenReady().then( async () => {
 
 		const siteRoot = getSiteRoot();
 		recoverInterruptedSwap( siteRoot );
-		ensureSiteFromSnapshot();
+		console.log( `[cortext-desktop] preparing site at ${ siteRoot }` );
+		await ensureSiteFromSnapshot( {
+			snapshotZip: SNAPSHOT_ZIP,
+			siteRoot,
+			version: app.getVersion(),
+		} );
 		// Update bundled WordPress/Cortext files before PHP starts. User data
 		// stays in place.
-		refreshSiteIfOutdated( {
+		await refreshSiteIfOutdated( {
 			snapshotZip: SNAPSHOT_ZIP,
 			siteRoot,
 			version: app.getVersion(),
