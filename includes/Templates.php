@@ -309,7 +309,7 @@ final class Templates {
 			if ( $collection instanceof WP_Error ) {
 				return $collection;
 			}
-			$normalized_values = $this->normalize_field_values_for_collection( $collection_id, $field_values, true );
+			$normalized_values = $this->normalize_field_values_for_collection( $collection_id, $field_values, $creating );
 			if ( $normalized_values instanceof WP_Error ) {
 				return $normalized_values;
 			}
@@ -369,10 +369,7 @@ final class Templates {
 		$override_values = self::sanitize_field_values( $args['field_values'] ?? array() );
 		$template_values = $this->normalize_field_values_for_collection( $collection_id, $meta['field_values'], false );
 		$override_values = $this->normalize_field_values_for_collection( $collection_id, $override_values, false );
-		$field_values    = array_merge(
-			$template_values instanceof WP_Error ? array() : $template_values,
-			$override_values instanceof WP_Error ? array() : $override_values
-		);
+		$field_values    = array_merge( $template_values, $override_values );
 
 		$post_id = wp_insert_post(
 			array(
