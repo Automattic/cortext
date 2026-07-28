@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -27,6 +28,20 @@ test( 'desktop wp-config loads the runtime origin without a fixed port', () => {
 	);
 	assert.doesNotMatch( config, /127\.0\.0\.1:9402/ );
 	assert.doesNotMatch( config, /define\( 'WP_(?:HOME|SITEURL)'/ );
+} );
+
+test( 'desktop package includes the runtime origin bootstrap', () => {
+	const packageConfig = JSON.parse(
+		readFileSync( new URL( '../package.json', import.meta.url ), 'utf8' )
+	);
+
+	assert.ok(
+		packageConfig.build.extraResources.some(
+			( resource ) =>
+				resource.from === 'runtime/bootstrap.php' &&
+				resource.to === 'runtime/bootstrap.php'
+		)
+	);
 } );
 
 test( 'runtime bootstrap defines the current origin before legacy config', () => {
