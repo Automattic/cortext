@@ -11,7 +11,14 @@ import { fileURLToPath } from 'node:url';
 
 import runtime from '../lib/runtime.js';
 
-const { RUNTIME_AUTH_HEADER, startRuntime, stopRuntime } = runtime;
+const {
+	RUNTIME_AUTH_HEADER,
+	RUNTIME_PORT_FIRST,
+	RUNTIME_PORT_LAST,
+	findAvailablePort,
+	startRuntime,
+	stopRuntime,
+} = runtime;
 const AUTH_TOKEN = 'test-runtime-auth-token';
 const DESKTOP_DIR = path.resolve(
 	path.dirname( fileURLToPath( import.meta.url ) ),
@@ -58,7 +65,9 @@ function makeUnprotectedFixture() {
 	return wordpressDir;
 }
 
-async function findAvailablePort() {
+// A throwaway port for fixture servers. Unlike the runtime allocator this is
+// free to use the ephemeral range, since nothing here outlives the test.
+async function reserveEphemeralPort() {
 	const server = net.createServer();
 	server.unref();
 	server.listen( 0, '127.0.0.1' );
@@ -139,7 +148,7 @@ async function startServer(
 	authToken,
 	{ configureEndpoint = true } = {}
 ) {
-	const port = await findAvailablePort();
+	const port = await reserveEphemeralPort();
 	const env = { ...process.env };
 	if ( authToken === undefined ) {
 		delete env.CORTEXT_DESKTOP_AUTH_TOKEN;
@@ -218,7 +227,7 @@ test( 'startRuntime requires a non-empty auth token', () => {
 
 test( 'startRuntime replaces an unprotected legacy router before listening', async ( context ) => {
 	const wordpressDir = makeUnprotectedFixture();
-	const port = await findAvailablePort();
+	const port = await reserveEphemeralPort();
 	const handle = startRuntime( {
 		appDir: DESKTOP_DIR,
 		authToken: AUTH_TOKEN,
@@ -255,6 +264,45 @@ test( 'startRuntime replaces an unprotected legacy router before listening', asy
 	);
 } );
 
+test( 'findAvailablePort picks from the fixed band, not the ephemeral range', async () => {
+	const selected = await findAvailablePort();
+
+	assert.ok(
+		selected >= RUNTIME_PORT_FIRST && selected <= RUNTIME_PORT_LAST,
+		`expected a band port, got ${ selected }`
+	);
+} );
+
+test( 'findAvailablePort scans past an occupied band port', async ( context ) => {
+	const first = await findAvailablePort();
+	const blocker = net.createServer();
+	blocker.listen( first, '127.0.0.1' );
+	await once( blocker, 'listening' );
+	context.after(
+		() => new Promise( ( resolve ) => blocker.close( resolve ) )
+	);
+
+	const second = await findAvailablePort();
+
+	assert.ok(
+		second > first && second <= RUNTIME_PORT_LAST,
+		`expected a later band port than ${ first }, got ${ second }`
+	);
+} );
+
+test( 'findAvailablePort keeps an available preference over the band', async () => {
+	const outsideBand = await new Promise( ( resolve, reject ) => {
+		const probe = net.createServer();
+		probe.once( 'error', reject );
+		probe.listen( 0, '127.0.0.1', () => {
+			const { port } = probe.address();
+			probe.close( () => resolve( port ) );
+		} );
+	} );
+
+	assert.equal( await findAvailablePort( outsideBand ), outsideBand );
+} );
+
 test( 'startRuntime chooses a dynamic port when its preference is occupied', async ( context ) => {
 	const wordpressDir = makeUnprotectedFixture();
 	const blocker = net.createServer();
@@ -273,13 +321,17 @@ test( 'startRuntime chooses a dynamic port when its preference is occupied', asy
 		wordpressDir,
 	} );
 	context.after( async () => {
-		stopRuntime( handle );
+		await stopRuntime( handle );
 		await new Promise( ( resolve ) => blocker.close( resolve ) );
 		fs.rmSync( wordpressDir, { recursive: true, force: true } );
 	} );
 
 	await handle.ready;
 	assert.notEqual( handle.port, address.port );
+	assert.ok(
+		handle.port >= RUNTIME_PORT_FIRST && handle.port <= RUNTIME_PORT_LAST,
+		`expected a band port, got ${ handle.port }`
+	);
 	assert.equal( handle.origin, `http://127.0.0.1:${ handle.port }` );
 	const authenticated = await request( handle.port, '/', AUTH_TOKEN, {
 		origin: handle.origin,
@@ -295,8 +347,8 @@ test( 'startRuntime retries when its selected port is claimed before spawn', asy
 	const blockedAddress = blocker.address();
 	assert.notEqual( blockedAddress, null );
 	assert.equal( typeof blockedAddress, 'object' );
-	const retryPort = await findAvailablePort();
-	const preferredPort = await findAvailablePort();
+	const retryPort = await reserveEphemeralPort();
+	const preferredPort = await reserveEphemeralPort();
 	const allocatorCalls = [];
 
 	const handle = startRuntime( {
@@ -314,7 +366,7 @@ test( 'startRuntime retries when its selected port is claimed before spawn', asy
 		wordpressDir,
 	} );
 	context.after( async () => {
-		stopRuntime( handle );
+		await stopRuntime( handle );
 		await new Promise( ( resolve ) => blocker.close( resolve ) );
 		fs.rmSync( wordpressDir, { recursive: true, force: true } );
 	} );
@@ -330,7 +382,7 @@ test( 'startRuntime retries when its selected port is claimed before spawn', asy
 
 test( 'startRuntime fails before listening without its authenticated router', async () => {
 	const wordpressDir = makeUnprotectedFixture();
-	const port = await findAvailablePort();
+	const port = await reserveEphemeralPort();
 	const appDir = fs.mkdtempSync(
 		path.join( os.tmpdir(), 'cortext-router-missing-app-' )
 	);

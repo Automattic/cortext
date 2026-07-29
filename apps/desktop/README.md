@@ -62,15 +62,19 @@ fresh machine. The binary is ignored by git.
 
 ## What it does
 
-Electron asks the operating system for an available loopback port, spawns PHP
+Electron takes the first free loopback port in the 9403-9498 band, spawns PHP
 against the unzipped site, and uses `router.php` for the rewrite behavior
 WordPress normally gets from nginx or Apache. The selected port is saved per
 desktop profile so origin-scoped preferences remain available after a restart.
-If that port is occupied, Cortext chooses and saves another one. Profiles
+The band sits below the ephemeral range the kernel hands out for outbound
+sockets, so a saved port is unlikely to be taken while Cortext is closed. If it
+is taken anyway, Cortext scans the band again and saves the new choice. Profiles
 created by an older build try their previous port once for the same migration
-reason. A collision-forced change creates a new browser origin, so browser-only
-preferences and the local Notion key must be entered again; WordPress documents
-and settings are unaffected.
+reason. A forced change creates a new browser origin, so browser-only
+preferences and the local Notion key must be entered again. WordPress settings
+and uploads survive; blocks that embed uploaded media keep the previous origin
+in their markup and need re-inserting, because content still stores absolute
+URLs.
 
 Each launch creates a new 256-bit authentication token in memory. Every Cortext
 window uses one dedicated Electron session, which adds the token to requests

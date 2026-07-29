@@ -9,6 +9,13 @@ const { findExecutable } = require( './executable' );
 // Existing profiles used this origin before runtime ports became per-profile.
 // Keeping it as their first preference preserves origin-scoped browser state.
 const LEGACY_PORT = 9402;
+// Ports offered to a profile that has no preference yet. The band starts just
+// past the legacy port so an upgrading profile keeps its claim on that one, and
+// sits below the ephemeral range the kernel hands out for outbound sockets
+// (49152+ on macOS, 32768+ on Linux). A port saved from that range would be
+// competing with the short-lived loopback traffic churning through it.
+const RUNTIME_PORT_FIRST = 9403;
+const RUNTIME_PORT_LAST = 9498;
 const DEFAULT_READY_PATH = '/wp-includes/images/blank.gif';
 const RUNTIME_AUTH_HEADER = 'X-Cortext-Desktop-Token';
 const RUNTIME_AUTH_ENV = 'CORTEXT_DESKTOP_AUTH_TOKEN';
@@ -754,6 +761,17 @@ function inspectAvailablePort( port ) {
 	} );
 }
 
+async function claimPort( port ) {
+	try {
+		return { port: await inspectAvailablePort( port ) };
+	} catch ( error ) {
+		if ( error.code !== 'EADDRINUSE' ) {
+			throw error;
+		}
+		return null;
+	}
+}
+
 async function findAvailablePort( preferredPort ) {
 	if ( preferredPort !== undefined && preferredPort !== null ) {
 		if ( ! isValidPort( preferredPort ) ) {
@@ -761,15 +779,21 @@ async function findAvailablePort( preferredPort ) {
 				'startRuntime port must be an integer between 1 and 65535.'
 			);
 		}
-		try {
-			return await inspectAvailablePort( preferredPort );
-		} catch ( error ) {
-			if ( error.code !== 'EADDRINUSE' ) {
-				throw error;
-			}
+		const preferred = await claimPort( preferredPort );
+		if ( preferred ) {
+			return preferred.port;
 		}
 	}
 
+	for ( let port = RUNTIME_PORT_FIRST; port <= RUNTIME_PORT_LAST; port++ ) {
+		const claimed = await claimPort( port );
+		if ( claimed ) {
+			return claimed.port;
+		}
+	}
+
+	// Every band port is taken. Start anyway on whatever the kernel offers; the
+	// profile loses origin stability, not the ability to run.
 	return inspectAvailablePort( 0 );
 }
 
@@ -1208,6 +1232,8 @@ function stopRuntime( handle, options = {} ) {
 module.exports = {
 	LEGACY_PORT,
 	RUNTIME_AUTH_HEADER,
+	RUNTIME_PORT_FIRST,
+	RUNTIME_PORT_LAST,
 	WINDOWS_DIRECT_EXECUTABLE_EXTENSIONS,
 	bundledRuntimeExecutable,
 	childProcessOptions,

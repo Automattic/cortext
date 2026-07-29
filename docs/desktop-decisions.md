@@ -4,12 +4,12 @@ Running log for desktop-specific runtime and packaging decisions. Keep the detai
 
 ## 2026-07-28 — Give each desktop profile its own runtime origin
 
-**Decision.** New desktop profiles ask the operating system for an available
-loopback port and save the selected port in that profile's settings. Later
-launches reuse it so browser-backed preferences and the local Notion key remain
-under a stable Chromium origin. If the preferred port is occupied, Cortext
-chooses and saves another one. Profiles upgraded from the fixed-port build try
-their legacy port first to preserve the same origin-scoped data.
+**Decision.** New desktop profiles take the first free loopback port in the
+9403-9498 band and save it in that profile's settings. Later launches reuse it
+so browser-backed preferences and the local Notion key remain under a stable
+Chromium origin. If the saved port is occupied, Cortext scans the band again and
+saves the new choice. Profiles upgraded from the fixed-port build try their
+legacy port first to preserve the same origin-scoped data.
 
 The PHP and experimental Caddy runtimes receive the selected origin through
 their environment. A bootstrap defines `WP_HOME` and `WP_SITEURL` before the
@@ -30,12 +30,24 @@ Notion key under old origins. The per-launch authentication token remains the
 security credential; the port is collision avoidance and origin scoping, not a
 secret.
 
+**Why a fixed band instead of asking the kernel.** Binding port 0 returns a port
+from the ephemeral range (49152+ on macOS, 32768+ on Linux), which is the range
+the kernel hands out for outbound sockets. That is the right answer for a port
+that lives seconds and the wrong one for a port saved across launches: loopback
+traffic from local servers, proxies and other apps churns through it constantly.
+The 9403-9498 band is never handed out spontaneously, so only software that
+explicitly binds there can take a saved port. When the whole band is occupied
+Cortext still falls back to port 0, trading origin stability for starting at all.
+
 **Collision trade-off.** If another process takes the saved port, moving the
 profile to a new origin strands browser-only preferences under the old origin.
 The user may need to re-enter those preferences and the local Notion key.
-WordPress documents, uploads, and settings are unaffected. Avoiding even this
-rare reset would require moving browser-only state to origin-independent
-storage.
+WordPress settings and uploads are unaffected, but documents are only partly so:
+blocks that embed uploaded media keep the previous origin in their markup, so
+those images need re-inserting. That is not specific to a port change. Content
+stores absolute URLs today, which also blocks syncing documents between a
+desktop profile and a remote site, and the fix belongs with that work: store the
+attachment identity and resolve the URL at render, the way mentions already do.
 
 ## 2026-07-24 — Authenticate every local runtime request
 
