@@ -447,6 +447,9 @@ async function startDesktop() {
 			origin: runtimeOrigin,
 			storages: [ 'cookies', 'serviceworkers', 'cachestorage' ],
 		} );
+		if ( quitting ) {
+			return;
+		}
 		removeRuntimeAuthHeader = installRuntimeAuthHeader( runtimeSession, {
 			authHeader: RUNTIME_AUTH_HEADER,
 			authToken,
@@ -456,6 +459,9 @@ async function startDesktop() {
 		configureTrustedWindow( win, runtimeSession, runtimeOrigin );
 		await loadSite( win, runtimeOrigin );
 	} catch ( err ) {
+		if ( quitting ) {
+			return;
+		}
 		console.error( '[cortext-desktop]', err );
 		if ( win ) {
 			win.loadFile( ERROR_PAGE );
