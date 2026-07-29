@@ -1,5 +1,11 @@
-const { app, BrowserWindow, Menu, session, shell } = require( 'electron' );
-const { spawnSync } = require( 'child_process' );
+const {
+	app,
+	BrowserWindow,
+	dialog,
+	Menu,
+	session,
+	shell,
+} = require( 'electron' );
 const crypto = require( 'crypto' );
 const path = require( 'path' );
 const fs = require( 'fs' );
@@ -22,9 +28,9 @@ const {
 	setAutoDownload,
 } = require( './lib/auto-update' );
 const {
+	ensureSiteFromSnapshot,
 	refreshSiteIfOutdated,
 	recoverInterruptedSwap,
-	writeMarker,
 } = require( './lib/site-refresh' );
 const { buildAppMenu } = require( './lib/menu' );
 const settings = require( './lib/settings' );
@@ -43,40 +49,74 @@ const RUNTIME_SESSION_PARTITION = 'persist:cortext';
 // The local shell pages Cortext loads itself, before and instead of the runtime.
 const TRUSTED_DOCUMENT_URLS = [ LOADING_URL, ERROR_URL ];
 
+// One instance owns the extracted site and the runtime port. A second launch
+// would extract on top of the first one's half-written files, so hand focus
+// back to the window already running and leave.
+if ( ! app.requestSingleInstanceLock() ) {
+	app.exit( 0 );
+}
+
 let runtimeHandle = null;
 let removeRuntimeAuthHeader = null;
 let quitting = false;
 const childWindows = new Set();
+let allowQuit = false;
+let updaterQuitRequested = false;
+let runtimeStopPromise = null;
+let appQuitPromise = null;
 
 function getSiteRoot() {
 	return path.join( app.getPath( 'userData' ), 'site' );
 }
 
-function ensureSiteFromSnapshot() {
-	const siteRoot = getSiteRoot();
-	const wordpressDir = path.join( siteRoot, 'wordpress' );
-	if ( fs.existsSync( wordpressDir ) ) {
-		return wordpressDir;
+function stopRuntimeBeforeQuit() {
+	quitting = true;
+	if ( ! runtimeStopPromise ) {
+		runtimeStopPromise = Promise.resolve()
+			.then( () => stopRuntime( runtimeHandle ) )
+			.then( () => {
+				runtimeHandle = null;
+				if ( removeRuntimeAuthHeader ) {
+					removeRuntimeAuthHeader();
+					removeRuntimeAuthHeader = null;
+				}
+			} )
+			.catch( ( error ) => {
+				runtimeStopPromise = null;
+				quitting = false;
+				throw error;
+			} );
 	}
-	if ( ! fs.existsSync( SNAPSHOT_ZIP ) ) {
-		throw new Error(
-			`Snapshot not found at ${ SNAPSHOT_ZIP }. Run 'npm run snapshot' from apps/desktop/.`
-		);
+	return runtimeStopPromise;
+}
+
+function quitAfterRuntimeStops() {
+	if ( appQuitPromise ) {
+		return appQuitPromise;
 	}
-	console.log( `[cortext-desktop] extracting snapshot to ${ siteRoot }` );
-	fs.mkdirSync( siteRoot, { recursive: true } );
-	// macOS `unzip` can exit 1 for warnings such as "stripped absolute path".
-	// Treat extraction as successful only if the WordPress files appear below.
-	spawnSync( 'unzip', [ '-q', '-o', SNAPSHOT_ZIP, '-d', siteRoot ], {
-		stdio: [ 'ignore', 'ignore', 'ignore' ],
-	} );
-	if ( ! fs.existsSync( path.join( wordpressDir, 'index.php' ) ) ) {
-		throw new Error(
-			`Snapshot extraction failed: ${ wordpressDir } is empty.`
-		);
-	}
-	writeMarker( siteRoot, app.getVersion() );
-	return wordpressDir;
+	appQuitPromise = stopRuntimeBeforeQuit()
+		.then( () => {
+			allowQuit = true;
+			app.quit();
+			return true;
+		} )
+		.catch( ( err ) => {
+			console.error(
+				'[cortext-desktop] failed to stop PHP before quitting:',
+				err
+			);
+			runtimeStopPromise = null;
+			appQuitPromise = null;
+			quitting = false;
+			dialog.showErrorBox(
+				"Cortext couldn't quit",
+				`The local PHP process is still running. Try quitting Cortext again.\n\n${ String(
+					err?.message || err
+				) }`
+			);
+			return false;
+		} );
+	return appQuitPromise;
 }
 
 function refreshMenu() {
@@ -260,6 +300,15 @@ function createWindow( runtimeSession ) {
 		backgroundColor: '#1d1d1d',
 		webPreferences: secureWebPreferences( {}, runtimeSession ),
 	} );
+	win.on( 'close', ( event ) => {
+		// electron-updater closes all windows before it emits before-quit. Allow
+		// the windows to close; before-quit will wait for PHP.
+		if ( allowQuit || updaterQuitRequested ) {
+			return;
+		}
+		event.preventDefault();
+		void quitAfterRuntimeStops();
+	} );
 
 	configureTrustedWindow( win, runtimeSession );
 	return win;
@@ -278,6 +327,7 @@ async function loadSite( win ) {
 			window: win,
 			onState: refreshMenu,
 			prepareQuit: () => {
+				updaterQuitRequested = true;
 				quitting = true;
 			},
 			autoDownload: settings.get( 'autoInstallUpdates' ),
@@ -323,14 +373,25 @@ app.whenReady().then( async () => {
 
 		const siteRoot = getSiteRoot();
 		recoverInterruptedSwap( siteRoot );
-		ensureSiteFromSnapshot();
-		// Update bundled WordPress/Cortext files before PHP starts. User data
-		// stays in place.
-		refreshSiteIfOutdated( {
+		console.log( `[cortext-desktop] preparing site at ${ siteRoot }` );
+		await ensureSiteFromSnapshot( {
 			snapshotZip: SNAPSHOT_ZIP,
 			siteRoot,
 			version: app.getVersion(),
 		} );
+		if ( quitting ) {
+			return;
+		}
+		// Update bundled WordPress/Cortext files before PHP starts. User data
+		// stays in place.
+		await refreshSiteIfOutdated( {
+			snapshotZip: SNAPSHOT_ZIP,
+			siteRoot,
+			version: app.getVersion(),
+		} );
+		if ( quitting ) {
+			return;
+		}
 		const wordpressDir = path.join( siteRoot, 'wordpress' );
 
 		runtimeHandle = startRuntime( {
@@ -359,22 +420,26 @@ app.whenReady().then( async () => {
 	}
 } );
 
-function stopDesktopRuntime() {
-	stopRuntime( runtimeHandle );
-	runtimeHandle = null;
-	if ( removeRuntimeAuthHeader ) {
-		removeRuntimeAuthHeader();
-		removeRuntimeAuthHeader = null;
+app.on( 'second-instance', () => {
+	const [ existing ] = BrowserWindow.getAllWindows();
+	if ( ! existing ) {
+		return;
 	}
-}
+	if ( existing.isMinimized() ) {
+		existing.restore();
+	}
+	existing.focus();
+} );
 
 app.on( 'window-all-closed', () => {
-	quitting = true;
-	stopDesktopRuntime();
 	app.quit();
 } );
 
-app.on( 'before-quit', () => {
+app.on( 'before-quit', ( event ) => {
 	quitting = true;
-	stopDesktopRuntime();
+	if ( allowQuit ) {
+		return;
+	}
+	event.preventDefault();
+	void quitAfterRuntimeStops();
 } );

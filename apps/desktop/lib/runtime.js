@@ -1,13 +1,15 @@
-const { spawn, spawnSync } = require( 'child_process' );
+const { spawn } = require( 'child_process' );
 const fs = require( 'fs' );
 const http = require( 'http' );
 const os = require( 'os' );
 const path = require( 'path' );
+const { findExecutable } = require( './executable' );
 
 const DEFAULT_PORT = 9402;
 const DEFAULT_READY_PATH = '/wp-includes/images/blank.gif';
 const RUNTIME_AUTH_HEADER = 'X-Cortext-Desktop-Token';
 const RUNTIME_AUTH_ENV = 'CORTEXT_DESKTOP_AUTH_TOKEN';
+const WINDOWS_DIRECT_EXECUTABLE_EXTENSIONS = [ '.COM', '.EXE' ];
 const EXPLORATION_OBJECT_CACHE_MARKER =
 	'Cortext Desktop APCu object-cache exploration drop-in';
 
@@ -27,36 +29,49 @@ function normalizeRuntime( runtime ) {
 	);
 }
 
-function commandExists( command ) {
-	if ( command.includes( path.sep ) ) {
-		return fs.existsSync( command );
-	}
-	const result = spawnSync( 'which', [ command ], {
-		stdio: [ 'ignore', 'pipe', 'ignore' ],
-		encoding: 'utf8',
+function findRuntimeExecutable( command, options = {} ) {
+	const platform = options.platform ?? process.platform;
+	return findExecutable( command, {
+		...options,
+		platform,
+		allowedWindowsExtensions:
+			platform === 'win32' ? WINDOWS_DIRECT_EXECUTABLE_EXTENSIONS : null,
 	} );
-	return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function bundledRuntimeExecutable(
+	appDir,
+	commandName,
+	platform = process.platform
+) {
+	const pathApi = platform === 'win32' ? path.win32 : path;
+	const executable =
+		platform === 'win32' && ! commandName.toLowerCase().endsWith( '.exe' )
+			? `${ commandName }.exe`
+			: commandName;
+	return pathApi.join( appDir, 'runtime/bin', executable );
 }
 
 function resolveExecutable( envName, bundledPath, commandName, installHint ) {
 	const configured = process.env[ envName ];
 	if ( configured ) {
-		if ( fs.existsSync( configured ) || commandExists( configured ) ) {
-			return configured;
+		const resolved = findRuntimeExecutable( configured );
+		if ( resolved ) {
+			return resolved;
 		}
 		throw new Error(
-			`${ envName } points to a missing executable: ${ configured }`
+			`${ envName } does not point to an executable: ${ configured }`
 		);
 	}
 	if ( bundledPath && fs.existsSync( bundledPath ) ) {
 		return bundledPath;
 	}
-	const fromPath = commandExists( commandName );
+	const fromPath = findRuntimeExecutable( commandName );
 	if ( fromPath ) {
 		return fromPath;
 	}
 	throw new Error(
-		`Missing ${ commandName }. ${ installHint } Set ${ envName } to an executable path to override.`
+		`${ commandName } was not found. ${ installHint } To use a different executable, set ${ envName } to its path.`
 	);
 }
 
@@ -216,11 +231,16 @@ function phpCliIniArgs( wordpressDir, appDir, runtimeStateDir ) {
 	return args;
 }
 
-function addProcess( handle, name, command, args, options = {} ) {
-	const child = spawn( command, args, {
+function childProcessOptions( options = {} ) {
+	return {
 		stdio: [ 'ignore', 'pipe', 'pipe' ],
 		...options,
-	} );
+		windowsHide: true,
+	};
+}
+
+function addProcess( handle, name, command, args, options = {} ) {
+	const child = spawn( command, args, childProcessOptions( options ) );
 	handle.processes.push( {
 		name,
 		child,
@@ -241,6 +261,27 @@ function addProcess( handle, name, command, args, options = {} ) {
 	} );
 
 	return child;
+}
+
+function phpCliWorkerConfig( env = process.env, platform = process.platform ) {
+	const configured =
+		env.CORTEXT_PHP_CLI_SERVER_WORKERS ||
+		env.PHP_CLI_SERVER_WORKERS ||
+		null;
+
+	if ( platform === 'win32' ) {
+		return {
+			workers: null,
+			detached: false,
+			ignoredWorkers: configured,
+		};
+	}
+
+	return {
+		workers: configured,
+		detached: Number.parseInt( configured || '1', 10 ) > 1,
+		ignoredWorkers: null,
+	};
 }
 
 function waitForHttpReady( handle, port, authToken, timeoutMs = 30000 ) {
@@ -411,9 +452,12 @@ function startPhpCli(
 ) {
 	const phpBin = resolveExecutable(
 		'CORTEXT_PHP_BIN',
-		path.join( appDir, 'runtime/bin/php' ),
+		bundledRuntimeExecutable( appDir, 'php' ),
 		'php',
-		'Install PHP 8.1+ or bundle apps/desktop/runtime/bin/php.'
+		`Install PHP 8.1+ or include ${ bundledRuntimeExecutable(
+			'apps/desktop',
+			'php'
+		) } in the app bundle.`
 	);
 	const routerPath = path.join( wordpressDir, 'router.php' );
 	if ( ! fs.existsSync( routerPath ) ) {
@@ -424,9 +468,7 @@ function startPhpCli(
 	console.log(
 		`[cortext-desktop] starting php -S (127.0.0.1:${ port }) against ${ wordpressDir }`
 	);
-	const workers =
-		process.env.CORTEXT_PHP_CLI_SERVER_WORKERS ||
-		process.env.PHP_CLI_SERVER_WORKERS;
+	const workerConfig = phpCliWorkerConfig();
 	const phpArgs = [
 		...phpCliIniArgs( wordpressDir, appDir, runtimeStateDir ),
 		'-S',
@@ -439,22 +481,30 @@ function startPhpCli(
 		...process.env,
 		[ RUNTIME_AUTH_ENV ]: authToken,
 	};
-	if ( workers ) {
-		phpEnv.PHP_CLI_SERVER_WORKERS = workers;
+	if ( process.platform === 'win32' ) {
+		delete phpEnv.CORTEXT_PHP_CLI_SERVER_WORKERS;
+		delete phpEnv.PHP_CLI_SERVER_WORKERS;
+		if ( workerConfig.ignoredWorkers ) {
+			console.warn(
+				'[cortext-desktop] Windows does not support multiple PHP CLI server workers; using one worker.'
+			);
+		}
+	} else if ( workerConfig.workers ) {
+		phpEnv.PHP_CLI_SERVER_WORKERS = workerConfig.workers;
 	}
 	addProcess( handle, 'php', phpBin, phpArgs, {
 		cwd: wordpressDir,
 		env: phpEnv,
-		detached: Number.parseInt( workers || '1', 10 ) > 1,
+		detached: workerConfig.detached,
 	} );
 }
 
 function startFrankenPhp( handle, wordpressDir, port, appDir, authToken ) {
 	const frankenBin = resolveExecutable(
 		'CORTEXT_FRANKENPHP_BIN',
-		path.join( appDir, 'runtime/bin/frankenphp' ),
+		bundledRuntimeExecutable( appDir, 'frankenphp' ),
 		'frankenphp',
-		'Download the FrankenPHP macOS binary into apps/desktop/runtime/bin/frankenphp.'
+		'Place the FrankenPHP binary in apps/desktop/runtime/bin.'
 	);
 	const configPath = path.join( appDir, 'runtime/Caddyfile.frankenphp' );
 	if ( ! fs.existsSync( configPath ) ) {
@@ -539,15 +589,15 @@ function startPhpFpmCaddy(
 ) {
 	const phpFpmBin = resolveExecutable(
 		'CORTEXT_PHP_FPM_BIN',
-		path.join( appDir, 'runtime/bin/php-fpm' ),
+		bundledRuntimeExecutable( appDir, 'php-fpm' ),
 		'php-fpm',
-		'Install php-fpm or bundle apps/desktop/runtime/bin/php-fpm.'
+		'Install php-fpm or include apps/desktop/runtime/bin/php-fpm in the app bundle.'
 	);
 	const caddyBin = resolveExecutable(
 		'CORTEXT_CADDY_BIN',
-		path.join( appDir, 'runtime/bin/caddy' ),
+		bundledRuntimeExecutable( appDir, 'caddy' ),
 		'caddy',
-		'Download Caddy into apps/desktop/runtime/bin/caddy.'
+		'Place the Caddy binary in apps/desktop/runtime/bin.'
 	);
 	const configPath = path.join( appDir, 'runtime/Caddyfile.php-fpm' );
 	if ( ! fs.existsSync( configPath ) ) {
@@ -637,53 +687,232 @@ function startRuntime( {
 	}
 
 	handle.ready = waitForHttpReady( handle, port, authToken ).catch(
-		( error ) => {
-			stopRuntime( handle );
+		async ( error ) => {
+			// Report why startup failed, not why the cleanup afterwards did.
+			await stopRuntime( handle ).catch( () => {} );
 			throw error;
 		}
 	);
 	return handle;
 }
 
-function stopRuntime( handle ) {
-	if ( ! handle ) {
+function isProcessRunning( child ) {
+	return child && child.exitCode === null && child.signalCode === null;
+}
+
+function signalProcess(
+	child,
+	killProcessGroup,
+	signal,
+	platform = process.platform
+) {
+	if ( platform === 'win32' ) {
+		child.kill();
 		return;
 	}
-	handle.stopping = true;
-	for ( const { child, killProcessGroup } of [
-		...handle.processes,
-	].reverse() ) {
-		if ( child && child.exitCode === null && child.signalCode === null ) {
-			try {
-				if ( killProcessGroup && child.pid ) {
-					process.kill( -child.pid, 'SIGTERM' );
-				} else {
-					child.kill( 'SIGTERM' );
-				}
-			} catch {}
-			const timer = setTimeout( () => {
-				if ( child.exitCode === null && child.signalCode === null ) {
-					try {
-						if ( killProcessGroup && child.pid ) {
-							process.kill( -child.pid, 'SIGKILL' );
-						} else {
-							child.kill( 'SIGKILL' );
-						}
-					} catch {}
-				}
-			}, 5000 );
-			timer.unref?.();
+	if ( killProcessGroup && child.pid ) {
+		process.kill( -child.pid, signal );
+		return;
+	}
+	child.kill( signal );
+}
+
+function runWindowsTaskkill( pid, spawnProcess = spawn, timeoutMs = 5000 ) {
+	return new Promise( ( resolve ) => {
+		let killer;
+		let settled = false;
+		let timeout = null;
+		const finish = ( succeeded ) => {
+			if ( settled ) {
+				return;
+			}
+			settled = true;
+			if ( timeout ) {
+				clearTimeout( timeout );
+			}
+			resolve( succeeded );
+		};
+
+		try {
+			killer = spawnProcess(
+				'taskkill',
+				[ '/PID', String( pid ), '/T', '/F' ],
+				childProcessOptions( {
+					stdio: [ 'ignore', 'ignore', 'ignore' ],
+				} )
+			);
+		} catch {
+			finish( false );
+			return;
 		}
+
+		killer.once( 'error', () => finish( false ) );
+		killer.once( 'exit', ( code ) => finish( code === 0 ) );
+		timeout = setTimeout( () => {
+			try {
+				killer.kill();
+			} catch {}
+			finish( false );
+		}, timeoutMs );
+	} );
+}
+
+function waitForProcessExit(
+	child,
+	{
+		killProcessGroup = false,
+		gracePeriodMs = 5000,
+		forcePeriodMs = 1000,
+		platform = process.platform,
+		runTaskkill = runWindowsTaskkill,
+		sendSignal = signalProcess,
+	} = {}
+) {
+	if ( ! isProcessRunning( child ) ) {
+		return Promise.resolve();
 	}
-	for ( const cleanupPath of handle.cleanupPaths || [] ) {
-		fs.rmSync( cleanupPath, { recursive: true, force: true } );
+
+	return new Promise( ( resolve, reject ) => {
+		let settled = false;
+		let forceTimer = null;
+		let finalTimer = null;
+		const cleanup = () => {
+			if ( forceTimer ) {
+				clearTimeout( forceTimer );
+			}
+			if ( finalTimer ) {
+				clearTimeout( finalTimer );
+			}
+			child.off( 'exit', finish );
+			child.off( 'close', finish );
+			child.off( 'error', onError );
+		};
+		const finish = () => {
+			if ( settled ) {
+				return;
+			}
+			settled = true;
+			cleanup();
+			resolve();
+		};
+		const fail = ( error ) => {
+			if ( settled ) {
+				return;
+			}
+			settled = true;
+			cleanup();
+			reject( error );
+		};
+		const onError = () => {
+			if ( ! child.pid || ! isProcessRunning( child ) ) {
+				finish();
+			}
+		};
+
+		child.once( 'exit', finish );
+		child.once( 'close', finish );
+		child.once( 'error', onError );
+
+		if ( ! isProcessRunning( child ) ) {
+			finish();
+			return;
+		}
+
+		try {
+			sendSignal( child, killProcessGroup, 'SIGTERM', platform );
+		} catch {
+			if ( ! isProcessRunning( child ) ) {
+				finish();
+				return;
+			}
+		}
+
+		if ( settled ) {
+			return;
+		}
+		forceTimer = setTimeout( async () => {
+			if ( ! isProcessRunning( child ) ) {
+				finish();
+				return;
+			}
+			try {
+				if ( platform === 'win32' && child.pid ) {
+					await runTaskkill( child.pid );
+				} else {
+					sendSignal( child, killProcessGroup, 'SIGKILL', platform );
+				}
+			} catch {
+				if ( ! isProcessRunning( child ) ) {
+					finish();
+				}
+			}
+			if ( settled ) {
+				return;
+			}
+			finalTimer = setTimeout( () => {
+				if ( ! isProcessRunning( child ) ) {
+					finish();
+					return;
+				}
+				fail(
+					new Error(
+						`Runtime process ${
+							child.pid || '<unknown>'
+						} is still running after forced termination.`
+					)
+				);
+			}, forcePeriodMs );
+		}, gracePeriodMs );
+	} );
+}
+
+function stopRuntime( handle, options = {} ) {
+	if ( ! handle ) {
+		return Promise.resolve();
 	}
+	if ( handle.stopPromise ) {
+		return handle.stopPromise;
+	}
+	handle.stopping = true;
+
+	const stopPromise = ( async () => {
+		const processes = [ ...( handle.processes || [] ) ].reverse();
+		try {
+			await Promise.all(
+				processes.map( ( { child, killProcessGroup } ) =>
+					waitForProcessExit( child, {
+						killProcessGroup,
+						...options,
+					} )
+				)
+			);
+		} finally {
+			for ( const cleanupPath of handle.cleanupPaths || [] ) {
+				fs.rmSync( cleanupPath, { recursive: true, force: true } );
+			}
+		}
+	} )();
+	// A failed stop timed out; it did not call the shutdown off. The signals are
+	// still on their way, so leave `stopping` set and let the caller retry.
+	handle.stopPromise = stopPromise.catch( ( error ) => {
+		handle.stopPromise = null;
+		throw error;
+	} );
+
+	return handle.stopPromise;
 }
 
 module.exports = {
 	DEFAULT_PORT,
 	RUNTIME_AUTH_HEADER,
+	WINDOWS_DIRECT_EXECUTABLE_EXTENSIONS,
+	bundledRuntimeExecutable,
+	childProcessOptions,
+	findRuntimeExecutable,
 	normalizeRuntime,
+	phpCliWorkerConfig,
+	runWindowsTaskkill,
 	startRuntime,
 	stopRuntime,
+	waitForProcessExit,
 };

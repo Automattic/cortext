@@ -20,7 +20,8 @@
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
 		"electron": "^42.3.3",
-		"electron-builder": "^26.15.3"
+		"electron-builder": "^26.15.3",
+		"yazl": "^3.3.1"
 	},
 	"build": {
 		"appId": "com.automattic.cortext",
@@ -82,6 +83,8 @@
 		]
 	},
 	"dependencies": {
-		"electron-updater": "^6.8.9"
+		"electron-updater": "^6.8.9",
+		"extract-zip": "^2.0.1",
+		"yauzl": "^2.10.0"
 	}
 }
