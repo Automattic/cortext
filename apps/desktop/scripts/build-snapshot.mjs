@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import {
 	cpSync,
 	createWriteStream,
@@ -13,6 +13,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import archiveHelpers from '../lib/archive.js';
 import executableHelpers from '../lib/executable.js';
+import { snapshotSeedCommands } from './seed-commands.mjs';
 import { buildWpConfig, randomSalt } from './wp-config.mjs';
 import zipHelpers from './zip.js';
 
@@ -49,12 +50,25 @@ const PLUGIN_INCLUDES = [
 	'vendor',
 ];
 
-function run( cmd, opts = {} ) {
-	execSync( cmd, { stdio: 'inherit', ...opts } );
-}
-
-function shellQuote( value ) {
-	return `'${ String( value ).replace( /'/g, "'\\''" ) }'`;
+// Pass arguments directly so paths with spaces behave consistently on macOS
+// and Windows.
+function run( command, args, options = {} ) {
+	const result = spawnSync( command, args, {
+		stdio: 'inherit',
+		...options,
+	} );
+	if ( result.error ) {
+		throw result.error;
+	}
+	if ( result.status !== 0 ) {
+		throw new Error(
+			`${ command } ${ args.join( ' ' ) } failed with ${
+				result.signal
+					? `signal ${ result.signal }`
+					: `exit code ${ result.status }`
+			}.`
+		);
+	}
 }
 
 function resolvePhpBin() {
@@ -123,7 +137,9 @@ async function ensureCachedDownload( url, cachePath ) {
 }
 
 console.log( '[snapshot] Building plugin assets' );
-run( 'npm run build', { cwd: REPO_ROOT } );
+// npm is a shell script on POSIX and npm.cmd on Windows, so this command still
+// needs a shell.
+run( 'npm', [ 'run', 'build' ], { cwd: REPO_ROOT, shell: true } );
 
 console.log( '[snapshot] Staging plugin files' );
 rmSync( WORK_DIR, { recursive: true, force: true } );
@@ -216,56 +232,31 @@ await ensureCachedDownload( WP_CLI_PHAR_URL, wpCliPhar );
 const PHP_BIN = resolvePhpBin();
 
 function wpCli( args ) {
-	run(
-		`${ shellQuote( PHP_BIN ) } ${ shellQuote(
-			wpCliPhar
-		) } --path=${ shellQuote( SITE_DIR ) } ${ args }`
-	);
-}
-
-function snapshotSeedCommands() {
-	const override = process.env.CORTEXT_DESKTOP_SEED_COMMANDS;
-	if ( override?.trim() ) {
-		return override
-			.split( /\r?\n/ )
-			.map( ( command ) => command.trim() )
-			.filter( Boolean );
-	}
-
-	const seedArgs = process.env.CORTEXT_DESKTOP_SEED_ARGS?.trim();
-	const commands = [ `cortext seed${ seedArgs ? ` ${ seedArgs }` : '' }` ];
-	const extra = process.env.CORTEXT_DESKTOP_EXTRA_SEED_COMMANDS;
-	if ( extra?.trim() ) {
-		commands.push(
-			...extra
-				.split( /\r?\n/ )
-				.map( ( command ) => command.trim() )
-				.filter( Boolean )
-		);
-	}
-
-	return commands;
+	run( PHP_BIN, [ wpCliPhar, `--path=${ SITE_DIR }`, ...args ] );
 }
 
 console.log( '[snapshot] Installing WordPress' );
-wpCli(
-	'core install ' +
-		'--url=http://127.0.0.1:9402 ' +
-		'--title=Cortext ' +
-		'--admin_user=admin ' +
-		`--admin_password=${ randomSalt()
-			.replace( /[^A-Za-z0-9]/g, '' )
-			.slice( 0, 24 ) } ` +
-		'--admin_email=admin@example.com ' +
-		'--skip-email'
-);
+wpCli( [
+	'core',
+	'install',
+	'--url=http://127.0.0.1:9402',
+	'--title=Cortext',
+	'--admin_user=admin',
+	`--admin_password=${ randomSalt()
+		.replace( /[^A-Za-z0-9]/g, '' )
+		.slice( 0, 24 ) }`,
+	'--admin_email=admin@example.com',
+	'--skip-email',
+] );
 
 console.log( '[snapshot] Activating Cortext' );
-wpCli( 'plugin activate cortext' );
+wpCli( [ 'plugin', 'activate', 'cortext' ] );
 
 console.log( '[snapshot] Seeding sample content' );
 for ( const seedCommand of snapshotSeedCommands() ) {
-	console.log( `[snapshot] Running seed command: wp ${ seedCommand }` );
+	console.log(
+		`[snapshot] Running seed command: wp ${ seedCommand.join( ' ' ) }`
+	);
 	wpCli( seedCommand );
 }
 
