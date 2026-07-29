@@ -207,7 +207,13 @@ test( 'a stop that times out still cleans up and stays marked as stopping', asyn
 	} );
 
 	await assert.rejects(
-		stopRuntime( handle, { gracePeriodMs: 5, forcePeriodMs: 5 } ),
+		// Pin the platform so this never reaches a real taskkill on Windows.
+		stopRuntime( handle, {
+			gracePeriodMs: 5,
+			forcePeriodMs: 5,
+			platform: 'linux',
+			sendSignal: () => {},
+		} ),
 		/is still running after forced termination/
 	);
 	assert.equal( fs.existsSync( cleanupPath ), false );
