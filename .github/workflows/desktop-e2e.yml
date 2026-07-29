@@ -124,3 +124,48 @@ jobs:
                       apps/desktop/test-results/
                       apps/desktop/playwright-report/
                   retention-days: 7
+
+    # Unit tests cover the Windows-specific branches with a mocked platform.
+    # This job runs those tests on Windows and builds the snapshot there too.
+    # It cannot launch the app until we bundle the Windows PHP runtime.
+    windows:
+        name: Desktop tests and snapshot (Windows)
+        runs-on: windows-latest
+        needs: changes
+        if: needs.changes.outputs.desktop_changed == 'true'
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v7.0.0
+
+            - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+              with:
+                  php-version: '8.3'
+                  extensions: pdo_sqlite, sqlite3, mbstring, json, curl, openssl
+                  tools: composer:v2
+                  coverage: none
+
+            - run: composer install --no-interaction --prefer-dist --no-dev
+
+            - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+              with:
+                  version: 11.0.8
+                  standalone: true
+
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: '24.15'
+                  cache: 'pnpm'
+
+            - run: pnpm install --frozen-lockfile
+
+            - name: Install desktop dependencies
+              working-directory: apps/desktop
+              run: npm ci
+
+            - name: Run desktop unit tests
+              working-directory: apps/desktop
+              run: npm run test:unit
+
+            - name: Build snapshot
+              working-directory: apps/desktop
+              run: npm run snapshot
