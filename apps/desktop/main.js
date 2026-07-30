@@ -22,6 +22,7 @@ const {
 	installRuntimeAuthHeader,
 	isTrustedRuntimeFrame,
 } = require( './lib/runtime-session' );
+const { installSessionPermissions } = require( './lib/session-permissions' );
 const {
 	scheduleUpdateCheck,
 	checkForUpdatesInteractive,
@@ -443,6 +444,7 @@ async function startDesktop() {
 		if ( settings.get( 'runtimePort' ) !== runtimeHandle.port ) {
 			settings.set( 'runtimePort', runtimeHandle.port );
 		}
+		installSessionPermissions( runtimeSession, runtimeOrigin );
 		await runtimeSession.clearStorageData( {
 			origin: runtimeOrigin,
 			storages: [ 'cookies', 'serviceworkers', 'cachestorage' ],

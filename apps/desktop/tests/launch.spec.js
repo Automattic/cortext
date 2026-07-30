@@ -68,12 +68,67 @@ test.beforeAll( async () => {
 					onload="document.body.dataset.runtimeImage='loaded'"
 					onerror="document.body.dataset.runtimeImage='blocked'"
 				>
+				<button id="request-camera">Camera</button>
+				<button id="request-microphone">Microphone</button>
+				<button id="request-geolocation">Location</button>
+				<button id="request-notifications">Notifications</button>
+				<button id="request-clipboard-read">Clipboard</button>
+				<button id="request-fullscreen">Fullscreen</button>
 				<a
 					id="runtime-link"
 					target="_top"
 					href="${ runtimeOrigin }/wp-json/"
-					style="position:fixed;inset:0;display:block"
 				>Open runtime</a>
+				<script>
+					const recordMediaPermission = async ( name, constraints ) => {
+						try {
+							const stream = await navigator.mediaDevices.getUserMedia(
+								constraints
+							);
+							stream.getTracks().forEach( ( track ) => track.stop() );
+							document.body.dataset[ name ] = 'granted';
+						} catch {
+							document.body.dataset[ name ] = 'denied';
+						}
+					};
+					document.querySelector( '#request-camera' ).onclick = () =>
+						recordMediaPermission( 'camera', { video: true } );
+					document.querySelector( '#request-microphone' ).onclick = () =>
+						recordMediaPermission( 'microphone', { audio: true } );
+					document.querySelector( '#request-geolocation' ).onclick = () => {
+						navigator.geolocation.getCurrentPosition(
+							() => {
+								document.body.dataset.geolocation = 'granted';
+							},
+							() => {
+								document.body.dataset.geolocation = 'denied';
+							}
+						);
+					};
+					document.querySelector( '#request-notifications' ).onclick =
+						async () => {
+							document.body.dataset.notifications =
+								await Notification.requestPermission();
+						};
+					document.querySelector( '#request-clipboard-read' ).onclick =
+						async () => {
+							try {
+								await navigator.clipboard.readText();
+								document.body.dataset.clipboardRead = 'granted';
+							} catch {
+								document.body.dataset.clipboardRead = 'denied';
+							}
+						};
+					document.querySelector( '#request-fullscreen' ).onclick =
+						async () => {
+							try {
+								await document.documentElement.requestFullscreen();
+								document.body.dataset.fullscreen = 'entered';
+							} catch {
+								document.body.dataset.fullscreen = 'denied';
+							}
+						};
+				</script>
 			</body>`
 		);
 	} );
@@ -479,6 +534,12 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 			home: runtimeOrigin,
 			url: runtimeOrigin,
 		} );
+		const betaNoticeButton = window.getByRole( 'button', {
+			name: 'Got it',
+		} );
+		if ( await betaNoticeButton.isVisible() ) {
+			await betaNoticeButton.click();
+		}
 
 		const redirectedImageStatus = await window.evaluate( ( origin ) => {
 			return new Promise( ( resolve ) => {
@@ -505,6 +566,10 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 		await window.evaluate( ( url ) => {
 			const frame = document.createElement( 'iframe' );
 			frame.id = 'untrusted-frame';
+			frame.allow =
+				'camera; microphone; geolocation; clipboard-read; fullscreen';
+			frame.style.cssText =
+				'position:fixed;inset:0;width:640px;height:480px;z-index:2147483647;background:white';
 			frame.src = url;
 			document.body.append( frame );
 		}, untrustedOrigin );
@@ -516,6 +581,43 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 					.getAttribute( 'data-runtime-image' )
 			)
 			.toBe( 'blocked' );
+
+		for ( const permission of [
+			'camera',
+			'microphone',
+			'geolocation',
+			'notifications',
+			'clipboard-read',
+		] ) {
+			await untrustedFrame.locator( `#request-${ permission }` ).click();
+		}
+		await expect
+			.poll( async () => {
+				return untrustedFrame
+					.locator( 'body' )
+					.evaluate( ( body ) => ( {
+						camera: body.dataset.camera,
+						clipboardRead: body.dataset.clipboardRead,
+						geolocation: body.dataset.geolocation,
+						microphone: body.dataset.microphone,
+						notifications: body.dataset.notifications,
+					} ) );
+			} )
+			.toEqual( {
+				camera: 'denied',
+				clipboardRead: 'denied',
+				geolocation: 'denied',
+				microphone: 'denied',
+				notifications: 'denied',
+			} );
+		await untrustedFrame.locator( '#request-fullscreen' ).click();
+		await expect
+			.poll( () =>
+				untrustedFrame
+					.locator( 'body' )
+					.getAttribute( 'data-fullscreen' )
+			)
+			.toBe( 'entered' );
 
 		await window
 			.locator( '#untrusted-frame' )

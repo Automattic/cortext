@@ -84,6 +84,9 @@ function loadMain(
 			installRuntimeAuthHeader,
 			isTrustedRuntimeFrame: () => true,
 		},
+		'./lib/session-permissions': {
+			installSessionPermissions: () => {},
+		},
 		'./lib/auto-update': {
 			scheduleUpdateCheck,
 			checkForUpdatesInteractive: () => {},
