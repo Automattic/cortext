@@ -1,5 +1,7 @@
 import apiFetch from '@wordpress/api-fetch';
 import { Notice } from '@wordpress/components';
+import { store as coreStore } from '@wordpress/core-data';
+import { useDispatch } from '@wordpress/data';
 import { DataViews } from '@wordpress/dataviews/wp';
 import {
 	useCallback,
@@ -109,6 +111,7 @@ export default function CollectionDataViews( {
 } ) {
 	const { fields, collection, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
+	const { saveEntityRecord } = useDispatch( coreStore );
 	const { touchRecent } = useRecents();
 	// Field IDs from the last schema sync. We use this to auto-show fields
 	// the user just created. `null` on first run means the saved view should
@@ -557,7 +560,12 @@ export default function CollectionDataViews( {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			const updated = await saveRowDocumentField( rowId, fieldId, value );
+			const updated = await saveRowDocumentField(
+				saveEntityRecord,
+				rowId,
+				fieldId,
+				value
+			);
 			touchRecent( {
 				kind: 'row',
 				id: updated?.id ?? rowId,
@@ -567,7 +575,7 @@ export default function CollectionDataViews( {
 			notifyCollectionRowsChanged( collectionId );
 			return updated;
 		},
-		[ collectionId, refresh, touchRecent ]
+		[ collectionId, refresh, saveEntityRecord, touchRecent ]
 	);
 
 	let dataViewLayoutType = 'table';
