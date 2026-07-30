@@ -23,6 +23,7 @@ const {
 	isTrustedRuntimeFrame,
 } = require( './lib/runtime-session' );
 const { installSessionPermissions } = require( './lib/session-permissions' );
+const { secureWebPreferences } = require( './lib/web-preferences' );
 const {
 	scheduleUpdateCheck,
 	checkForUpdatesInteractive,
@@ -141,6 +142,7 @@ function refreshMenu() {
 				settings.set( 'autoInstallUpdates', enabled );
 				setAutoDownload( enabled );
 			},
+			enableDevTools: ! app.isPackaged,
 		} )
 	);
 }
@@ -194,25 +196,6 @@ function openExternalUrl( url ) {
 			);
 		} );
 	} );
-}
-
-function secureWebPreferences( webPreferences, runtimeSession ) {
-	const inheritedPreferences = { ...( webPreferences || {} ) };
-	delete inheritedPreferences.partition;
-	delete inheritedPreferences.preload;
-	delete inheritedPreferences.session;
-	return {
-		...inheritedPreferences,
-		session: runtimeSession,
-		contextIsolation: true,
-		nodeIntegration: false,
-		nodeIntegrationInWorker: false,
-		nodeIntegrationInSubFrames: false,
-		sandbox: true,
-		webviewTag: false,
-		webSecurity: true,
-		allowRunningInsecureContent: false,
-	};
 }
 
 function configureTrustedWindow( win, runtimeSession, runtimeOrigin ) {
@@ -300,7 +283,11 @@ function createInternalWindow(
 		title: 'Cortext',
 		icon: APP_ICON,
 		backgroundColor: '#1d1d1d',
-		webPreferences: secureWebPreferences( webPreferences, runtimeSession ),
+		webPreferences: secureWebPreferences(
+			webPreferences,
+			runtimeSession,
+			! app.isPackaged
+		),
 	} );
 	if ( child.webContents.session !== runtimeSession ) {
 		child.destroy();
@@ -323,7 +310,11 @@ function createWindow( runtimeSession ) {
 		title: 'Cortext',
 		icon: APP_ICON,
 		backgroundColor: '#1d1d1d',
-		webPreferences: secureWebPreferences( {}, runtimeSession ),
+		webPreferences: secureWebPreferences(
+			{},
+			runtimeSession,
+			! app.isPackaged
+		),
 	} );
 	win.on( 'close', ( event ) => {
 		// electron-updater closes all windows before it emits before-quit. Allow

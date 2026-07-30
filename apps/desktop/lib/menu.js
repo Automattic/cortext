@@ -2,6 +2,22 @@ const { app, Menu } = require( 'electron' );
 
 const isMac = process.platform === 'darwin';
 
+function productionViewMenu() {
+	return {
+		label: 'View',
+		submenu: [
+			{ role: 'reload' },
+			{ role: 'forceReload' },
+			{ type: 'separator' },
+			{ role: 'resetZoom' },
+			{ role: 'zoomIn' },
+			{ role: 'zoomOut' },
+			{ type: 'separator' },
+			{ role: 'togglefullscreen' },
+		],
+	};
+}
+
 // Once we replace the default menu, add the standard roles back by hand. The
 // whole-submenu roles keep copy/paste/select-all/window shortcuts working, and
 // the app menu gets the update controls.
@@ -10,6 +26,7 @@ function buildAppMenu( {
 	onUpdateItem,
 	autoInstallUpdates,
 	onToggleAutoInstall,
+	enableDevTools = false,
 } ) {
 	const template = [
 		...( isMac
@@ -40,10 +57,10 @@ function buildAppMenu( {
 			  ]
 			: [] ),
 		{ role: 'editMenu' },
-		{ role: 'viewMenu' },
+		enableDevTools ? { role: 'viewMenu' } : productionViewMenu(),
 		{ role: 'windowMenu' },
 	];
 	return Menu.buildFromTemplate( template );
 }
 
-module.exports = { buildAppMenu };
+module.exports = { buildAppMenu, productionViewMenu };
