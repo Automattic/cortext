@@ -228,6 +228,10 @@ function runCheck( { manual } ) {
 // cannot load in a packaged build, use the old notify-only checker so users
 // still hear about updates.
 function scheduleUpdateCheck( options = {} ) {
+	// Keep packaged smoke tests offline and suppress update dialogs.
+	if ( process.env.CORTEXT_E2E === '1' ) {
+		return;
+	}
 	const ready = initAutoUpdates( options );
 	if ( ! ready ) {
 		if ( app.isPackaged ) {

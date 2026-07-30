@@ -66,10 +66,16 @@ dmg=(apps/desktop/dist/*.dmg)
 dmg="${dmg[0]}"
 # electron-builder signs, notarizes and staples the .app, then wraps it in an
 # unsigned .dmg — so the notarized artifact to verify is the app, not the dmg.
-app="apps/desktop/dist/mac-arm64/Cortext.app"
+app="$PWD/apps/desktop/dist/mac-arm64/Cortext.app"
 codesign --verify --strict --deep --verbose=2 "$app"
 spctl --assess --type exec --verbose=2 "$app"
 xcrun stapler validate "$app"
+
+echo "--- :mag: verify packaged app"
+npm --prefix apps/desktop run verify:app -- --app "$app"
+
+echo "--- :test_tube: smoke-test packaged app"
+node apps/desktop/scripts/packaged-app-smoke.mjs --app "$app"
 
 if ! "$publish"; then
   echo "--- :information_source: no release tag; signed DMG stashed as a Buildkite artifact"
