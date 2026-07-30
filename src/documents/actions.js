@@ -10,6 +10,11 @@ import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import { cascadeFavorites } from './favorites';
 import { afterDocumentTrash, applyInvalidationPack } from './invalidation';
+import {
+	duplicateDocumentRecord,
+	restoreDocumentRecord,
+	trashDocumentRecord,
+} from './mutations';
 
 function collectCascadeIds( record, cascade ) {
 	const ids = new Set( [ Number( record.id ) ] );
@@ -84,10 +89,10 @@ export async function renameDocument( record, title, ctx ) {
 }
 
 export async function duplicateDocument( record, ctx ) {
-	const created = await apiFetch( {
-		path: `/cortext/v1/documents/${ record.id }/duplicate`,
-		method: 'POST',
-	} );
+	const created = await duplicateDocumentRecord(
+		record,
+		ctx.receiveEntityRecords
+	);
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
 	notifySidebarTreeChanged( {
 		parentId: Number( created?.parent ?? record.parent ?? 0 ),
@@ -125,14 +130,10 @@ export async function duplicateDocument( record, ctx ) {
 // core-data does not drop the open record before the editor finishes its
 // block selection writes.
 export async function trashDocument( record, ctx ) {
-	const deleted = await apiFetch( {
-		path: `/wp/v2/crtxt_documents/${ record.id }`,
-		method: 'DELETE',
-	} );
-	const trashed = deleted?.previous ?? deleted;
-	if ( trashed?.id ) {
-		ctx.receiveEntityRecords( 'postType', DOCUMENT_POST_TYPE, [ trashed ] );
-	}
+	const deleted = await trashDocumentRecord(
+		record,
+		ctx.receiveEntityRecords
+	);
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
 	notifySidebarTreeChanged();
 	notifyDocumentTrashChanged();
@@ -149,14 +150,15 @@ export async function trashDocument( record, ctx ) {
 }
 
 export async function restoreDocument( record, ctx ) {
-	await apiFetch( {
-		path: `/cortext/v1/documents/${ record.id }/restore`,
-		method: 'POST',
-	} );
+	const response = await restoreDocumentRecord(
+		record,
+		ctx.receiveEntityRecords
+	);
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
 	notifySidebarTreeChanged();
 	notifyDocumentTrashChanged();
 	notifyCollectionRowsChanged();
+	return response;
 }
 
 export async function permanentlyDeleteDocument( record, ctx ) {

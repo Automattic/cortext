@@ -36,7 +36,6 @@ import {
 	ComplementaryArea,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import apiFetch from '@wordpress/api-fetch';
 
 import CanvasOwnerInspector, {
 	useIsCanvasOwnerSelected,
@@ -60,6 +59,7 @@ import {
 } from './page-queries';
 import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { definesTrait } from '../documents/capabilities';
+import { trashDocumentRecord } from '../documents/mutations';
 import { unlock } from '../lock-unlock';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
@@ -564,14 +564,7 @@ function PageActionsPanel( { postId } ) {
 		setError( null );
 		setIsTrashing( true );
 		try {
-			const deleted = await apiFetch( {
-				path: `/wp/v2/crtxt_documents/${ postId }`,
-				method: 'DELETE',
-			} );
-			const trashed = deleted?.previous ?? deleted;
-			if ( trashed?.id ) {
-				receiveEntityRecords( 'postType', POST_TYPE, [ trashed ] );
-			}
+			await trashDocumentRecord( { id: postId }, receiveEntityRecords );
 			invalidateResolution( 'getEntityRecords', [
 				'postType',
 				POST_TYPE,
