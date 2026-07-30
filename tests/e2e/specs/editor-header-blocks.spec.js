@@ -120,6 +120,75 @@ async function expectParagraphsAfterTitle( page, expected ) {
 		.toEqual( expected );
 }
 
+async function readCanvasHeightState( page ) {
+	const stateHandle = await page.waitForFunction(
+		() => {
+			const iframe = document.querySelector(
+				'iframe[name="editor-canvas"]'
+			);
+			const frameDoc = iframe?.contentDocument;
+			const body = frameDoc?.body;
+			const stylesWrapper = frameDoc?.querySelector(
+				'.editor-styles-wrapper'
+			);
+			const editor = frameDoc?.querySelector( '.cortext-canvas__editor' );
+			const frameWindow = frameDoc?.defaultView;
+			if ( ! body || ! stylesWrapper || ! editor || ! frameWindow ) {
+				return false;
+			}
+
+			const bodyRect = body.getBoundingClientRect();
+			const stylesWrapperRect = stylesWrapper.getBoundingClientRect();
+			const editorStyle = frameWindow.getComputedStyle( editor );
+			return {
+				viewportHeight: frameDoc.documentElement.clientHeight,
+				bodyTop: bodyRect.top,
+				bodyHeight: bodyRect.height,
+				stylesWrapperHeight: stylesWrapperRect.height,
+				editorPaddingBottom: parseFloat( editorStyle.paddingBottom ),
+			};
+		},
+		null,
+		{ timeout: 15_000 }
+	);
+	const state = await stateHandle.jsonValue();
+	await stateHandle.dispose();
+	return state;
+}
+
+async function readInspectorBorderState( page ) {
+	await page.waitForFunction(
+		() =>
+			!! document.querySelector(
+				'.interface-complementary-area.editor-sidebar__panel > .components-panel__header.editor-sidebar__panel-tabs'
+			),
+		null,
+		{ timeout: 15_000 }
+	);
+
+	return page.evaluate( () => {
+		const root = document.getElementById( 'cortext-root' );
+		const swatch = document.createElement( 'span' );
+		swatch.style.color = 'var(--cortext-canvas-border)';
+		root.appendChild( swatch );
+		const canvasBorder = window.getComputedStyle( swatch ).color;
+		swatch.remove();
+
+		const header = document.querySelector(
+			'.interface-complementary-area.editor-sidebar__panel > .components-panel__header.editor-sidebar__panel-tabs'
+		);
+		const body = document.querySelector(
+			'.cortext-document-inspector .components-panel__body'
+		);
+		return {
+			canvasBorder,
+			headerBorderBottom:
+				window.getComputedStyle( header ).borderBottomColor,
+			panelBorderTop: window.getComputedStyle( body ).borderTopColor,
+		};
+	} );
+}
+
 async function insertParagraphAt( page, content, index ) {
 	await page.evaluate(
 		( args ) => {
@@ -521,6 +590,82 @@ test.describe( 'editor header blocks', () => {
 			);
 			await waitForEditorPost( page, createdPage.id );
 			await exerciseHeaderGuard( page );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+		}
+	} );
+
+	test( 'keeps short document canvases as tall as the iframe', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let createdPage;
+		try {
+			createdPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'E2E Canvas Height Page',
+					status: 'private',
+					content: paragraphMarkup( 'Short page body.' ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ createdPage.id }`
+			);
+			await waitForEditorPost( page, createdPage.id );
+
+			const state = await readCanvasHeightState( page );
+			expect( state.bodyTop ).toBeLessThanOrEqual( 1 );
+			expect( state.stylesWrapperHeight ).toBeGreaterThanOrEqual(
+				state.viewportHeight - 1
+			);
+			expect( state.editorPaddingBottom ).toBeGreaterThanOrEqual( 72 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+		}
+	} );
+
+	test( 'uses the canvas palette for inspector tab separators', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let createdPage;
+		try {
+			createdPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'E2E Inspector Border Page',
+					status: 'private',
+					content: paragraphMarkup( 'Inspector border body.' ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ createdPage.id }`
+			);
+			await waitForEditorPost( page, createdPage.id );
+			await page.evaluate( () =>
+				document
+					.getElementById( 'cortext-root' )
+					?.setAttribute( 'data-theme', 'dark' )
+			);
+
+			const state = await readInspectorBorderState( page );
+			expect( state.headerBorderBottom ).toBe( state.canvasBorder );
+			expect( state.panelBorderTop ).toBe( state.canvasBorder );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,

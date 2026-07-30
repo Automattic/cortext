@@ -79,7 +79,9 @@ const {
 	areCanvasReadyRequirementsMet,
 	collectCollectionBodyClientIdsToRemove,
 	collectDuplicateHeaderClientIds,
+	useEditorBodyStyles,
 } = require( '../../../src/components/EditorBody' );
+const { renderHook } = require( '@testing-library/react' );
 
 const COLLECTION_ID = 7;
 const OWNER = 'cortext/data-view';
@@ -242,5 +244,61 @@ describe( 'areCanvasReadyRequirementsMet', () => {
 				isPropertiesResolving: true,
 			} )
 		).toBe( false );
+	} );
+} );
+
+describe( 'useEditorBodyStyles', () => {
+	it( 'keeps the merged styles reference stable while its inputs are unchanged', () => {
+		const baseStyles = [ { css: '.base {}' } ];
+		const extraStyles = [ { css: '.extra {}' } ];
+		const { result, rerender } = renderHook(
+			( props ) =>
+				useEditorBodyStyles(
+					props.baseStyles,
+					props.extraStyles,
+					props.isDocumentCanvas
+				),
+			{
+				initialProps: {
+					baseStyles,
+					extraStyles,
+					isDocumentCanvas: true,
+				},
+			}
+		);
+		const firstResult = result.current;
+
+		rerender( { baseStyles, extraStyles, isDocumentCanvas: true } );
+
+		expect( result.current ).toBe( firstResult );
+	} );
+
+	it( 'rebuilds the merged styles when extra styles change', () => {
+		const baseStyles = [ { css: '.base {}' } ];
+		const extraStyles = [ { css: '.extra {}' } ];
+		const { result, rerender } = renderHook(
+			( props ) =>
+				useEditorBodyStyles(
+					props.baseStyles,
+					props.extraStyles,
+					props.isDocumentCanvas
+				),
+			{
+				initialProps: {
+					baseStyles,
+					extraStyles,
+					isDocumentCanvas: true,
+				},
+			}
+		);
+		const firstResult = result.current;
+
+		rerender( {
+			baseStyles,
+			extraStyles: [ { css: '.next-extra {}' } ],
+			isDocumentCanvas: true,
+		} );
+
+		expect( result.current ).not.toBe( firstResult );
 	} );
 } );

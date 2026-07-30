@@ -34,7 +34,7 @@ jest.mock( '@wordpress/core-data', () => ( {
 	useEntityRecords: jest.fn(),
 } ) );
 
-jest.mock( '@wordpress/dataviews', () => {
+jest.mock( '@wordpress/dataviews/wp', () => {
 	const ReactLib = require( 'react' );
 	return {
 		__esModule: true,
@@ -94,9 +94,10 @@ jest.mock( '../../../src/components/DocumentIcon', () => ( {
 } ) );
 
 import { useEntityRecords } from '@wordpress/core-data';
-import { DataViews } from '@wordpress/dataviews';
+import { DataViews } from '@wordpress/dataviews/wp';
 import { useNavigate } from '@tanstack/react-router';
 
+import { DEFAULT_GRID_PREVIEW_SIZE } from '../../../src/components/dataViewAdapter';
 import PublishedDocumentsPane from '../../../src/components/PublishedDocumentsPane';
 import {
 	POST_TYPE,
@@ -152,6 +153,20 @@ describe( 'PublishedDocumentsPane', () => {
 		expect( PUBLISHED_DOCUMENTS_QUERY ).not.toHaveProperty(
 			'cortext_no_collections'
 		);
+	} );
+
+	it( 'passes DataViews 17 layout defaults to the published documents table', () => {
+		render( <PublishedDocumentsPane /> );
+
+		expect( DataViews ).toHaveBeenCalledTimes( 1 );
+		expect( DataViews.mock.calls[ 0 ][ 0 ].defaultLayouts ).toEqual( {
+			table: { layout: { density: 'compact' } },
+			grid: { layout: { previewSize: DEFAULT_GRID_PREVIEW_SIZE } },
+			list: { layout: {} },
+		} );
+		expect( DataViews.mock.calls[ 0 ][ 0 ].view.layout ).toEqual( {
+			density: 'compact',
+		} );
 	} );
 
 	it( 'shows pages, collection items, and collections from the same response', () => {

@@ -71,6 +71,34 @@ const DEFAULT_HEADER_BLOCK_NAMES = new Set( [
 const PROTECTED_HEADER_LOCK = { move: true, remove: true };
 const COLLECTION_LEGACY_BLOCK_LOCK = { move: true, remove: true, edit: true };
 const CANVAS_READY_IMAGE_TIMEOUT = 8000;
+const CANVAS_DOCUMENT_EDITOR_CSS = `
+	.editor-styles-wrapper {
+		box-sizing: border-box;
+		display: flow-root;
+		margin: 0;
+		min-height: 100vh;
+	}
+
+	.editor-styles-wrapper .cortext-canvas__editor:not(.cortext-canvas__editor--owner) {
+		padding-bottom: 72px;
+	}
+`;
+const CANVAS_DOCUMENT_EXTRA_STYLES = [ { css: CANVAS_DOCUMENT_EDITOR_CSS } ];
+
+export function useEditorBodyStyles(
+	baseStyles,
+	extraStyles,
+	isDocumentCanvas = false
+) {
+	return useMemo(
+		() => [
+			...( baseStyles ?? [] ),
+			...( isDocumentCanvas ? CANVAS_DOCUMENT_EXTRA_STYLES : [] ),
+			...( extraStyles ?? [] ),
+		],
+		[ baseStyles, extraStyles, isDocumentCanvas ]
+	);
+}
 
 // Schema-bearing documents add an owner block to the reserved header/body
 // prefix. Plain documents do not, so the set collapses to defaults.
@@ -1578,6 +1606,7 @@ function CanvasReadyEffect( {
 export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
+	isDocumentCanvas = false,
 	isLocked = false,
 	postId,
 	postType,
@@ -1589,9 +1618,11 @@ export default function EditorBody( {
 		( select ) => select( editorStore ).getEditorSettings().styles,
 		[]
 	);
-	const styles = extraStyles
-		? [ ...( baseStyles ?? [] ), ...extraStyles ]
-		: baseStyles;
+	const styles = useEditorBodyStyles(
+		baseStyles,
+		extraStyles,
+		isDocumentCanvas
+	);
 	const { themeSupportsLayout, hasRootPaddingAwareAlignments } = useSelect(
 		( select ) => {
 			const settings = select( blockEditorStore ).getSettings();

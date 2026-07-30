@@ -1,5 +1,5 @@
 import { Component, useState, useMemo, useCallback } from '@wordpress/element';
-import { DataViews } from '@wordpress/dataviews';
+import { DataViews } from '@wordpress/dataviews/wp';
 import { __ } from '@wordpress/i18n';
 
 import usePublicRows, { isPublicSortSupported } from '../hooks/usePublicRows';
@@ -8,6 +8,7 @@ import { normalizeView } from './dataViewColumns';
 import {
 	DEFAULT_LAYOUTS,
 	adaptViewForDataViews,
+	layoutForType,
 	mergeDataViewsChange,
 } from './dataViewAdapter';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
@@ -23,7 +24,7 @@ const DEFAULT_PUBLIC_VIEW = {
 	layout: { density: 'compact' },
 	layoutByType: {
 		table: { density: 'compact' },
-		grid: {},
+		grid: { ...DEFAULT_LAYOUTS.grid.layout },
 		list: {},
 	},
 	fieldsByType: {
@@ -94,11 +95,7 @@ function normalizeStyles( styles ) {
 }
 
 function normalizeLayout( layout, type ) {
-	const defaults = cloneObject( DEFAULT_LAYOUTS[ type ]?.layout );
-	const normalized = {
-		...defaults,
-		...cloneObject( layout ),
-	};
+	const normalized = layoutForType( type, cloneObject( layout ) );
 
 	const styles = normalizeStyles( normalized.styles );
 	if ( styles ) {
@@ -149,7 +146,7 @@ export function normalizePublicView( view ) {
 	const type = normalizeType( source.type ?? DEFAULT_PUBLIC_VIEW.type );
 	const layoutByType = normalizeLayoutByType( source.layoutByType );
 
-	return {
+	const normalized = {
 		...DEFAULT_PUBLIC_VIEW,
 		...source,
 		type,
@@ -168,6 +165,9 @@ export function normalizePublicView( view ) {
 		layoutByType,
 		fieldsByType: normalizeFieldsByType( source.fieldsByType ),
 	};
+	delete normalized.infiniteScrollEnabled;
+	delete normalized.startPosition;
+	return normalized;
 }
 
 export function PublicDataViewErrorFallback() {
@@ -251,18 +251,21 @@ export default function PublicDataView( { collectionId, view: initialView } ) {
 		);
 	}, [] );
 
+	const dataViewsView = useMemo(
+		() =>
+			adaptViewForDataViews( reconciledView, {
+				applyDefaultTableTitleWidth: false,
+			} ),
+		[ reconciledView ]
+	);
 	const { data: dataFiltered, paginationInfo } = useMemo(
 		() =>
 			filterSortAndPaginateWithGroups(
 				data,
-				{ ...reconciledView, sort: null },
+				{ ...dataViewsView, sort: null },
 				fields
 			),
-		[ data, reconciledView, fields ]
-	);
-	const dataViewsView = useMemo(
-		() => adaptViewForDataViews( reconciledView ),
-		[ reconciledView ]
+		[ data, dataViewsView, fields ]
 	);
 
 	// Read-only: the public page shows the saved view, not an editable

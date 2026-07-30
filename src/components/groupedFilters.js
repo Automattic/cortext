@@ -1,5 +1,5 @@
 import { getDate } from '@wordpress/date';
-import { filterSortAndPaginate } from '@wordpress/dataviews';
+import { filterSortAndPaginate } from '@wordpress/dataviews/wp';
 
 const MANUAL_SORT_ID = 'manual';
 

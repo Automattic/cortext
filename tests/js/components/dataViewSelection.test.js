@@ -99,7 +99,7 @@ describe( 'dataViewSelection', () => {
 			rowIds(
 				rowsInDataViewRenderOrder(
 					rows,
-					{ groupByField: 'status' },
+					{ groupBy: { field: 'status' } },
 					fields
 				)
 			)

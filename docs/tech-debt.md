@@ -18,9 +18,9 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 **DataViews has no inline cell editing.**
 
-**What.** DataViews v6 can render values and edit them through a separate `DataForm`, but it cannot turn a rendered value into an inline editor. Cortext mounts its own editor from `field.render` (documented as a display renderer, but the only hook available), keeps edit state per cell, and sends saves through `RowMutationContext` because `field.render` only receives `{ item }`. Tab and Shift+Tab live in the same layer: editors catch Tab, ask the parent for the next editable cell through `requestNext`, and the target cell opens through the same `editRequest` channel used to focus the title cell in a fresh row. Table, grid, and list use that surface when a visible field supports it.
+**What.** DataViews v17 can render values and edit them through a separate `DataForm`, but it cannot turn a rendered value into an inline editor. Cortext mounts its own editor from `field.render` (documented as a display renderer, but the only hook available), keeps edit state per cell, and sends saves through `RowMutationContext` because `field.render` only receives `{ item }`. Tab and Shift+Tab live in the same layer: editors catch Tab, ask the parent for the next editable cell through `requestNext`, and the target cell opens through the same `editRequest` channel used to focus the title cell in a fresh row. Table, grid, and list use that surface when a visible field supports it.
 
-DataViews renders an actual `<table>`; Cortext switches it to `table-layout: fixed` so resize widths behave as real column constraints, renders the display shell, and overlays the editor on top via `position: absolute` so the table only sees the display state while the editor is open. The shell's `min-height` is pinned to 40px to match `__next40pxDefaultSize`, the height of TextControl/NumberControl/SelectControl with the modern WP size flag. DataViews paints row height via the td's `padding-block`, varied per density; the shell zeroes that padding and replicates the per-density row heights via `min-height` overrides so the hover/edit highlight covers the row edge to edge. Balanced and comfortable mirror DataViews v6 (12 / 16); compact is intentionally tighter than upstream (4 → 0) to match the 40px editor floor, and compact is the default in `createDefaultView` and `DEFAULT_LAYOUTS`.
+DataViews renders an actual `<table>`; Cortext switches it to `table-layout: fixed` so resize widths behave as real column constraints, renders the display shell, and overlays the editor on top via `position: absolute` so the table only sees the display state while the editor is open. The shell's `min-height` is pinned to 40px to match `__next40pxDefaultSize`, the height of TextControl/NumberControl/SelectControl with the modern WP size flag. DataViews paints row height via the td's `padding-block`, varied per density; the shell zeroes that padding and replicates the per-density row heights via `min-height` overrides so the hover/edit highlight covers the row edge to edge. Balanced and comfortable mirror DataViews 17 (12 / 16); compact is intentionally tighter than upstream (4 → 0) to match the 40px editor floor, and compact is the default in `createDefaultView` and `DEFAULT_LAYOUTS`.
 
 **Where.** `src/components/EditableCell.js`, `RowMutationContext` and `requestNext` in `src/components/CollectionDataViews.js`, plus the `.cortext-editable-cell`, `.cortext-cell-checkbox`, and `.cortext-data-view .dataviews-view-table` rules in `src/components/CollectionDataViews.scss`.
 
@@ -28,13 +28,13 @@ DataViews renders an actual `<table>`; Cortext switches it to `table-layout: fix
 
 <a id="td-dataviews-multiselect-control"></a>
 
-**DataViews has no multiselect form control.**
+**DataViews cannot manage Cortext options from its array control.**
 
-**What.** DataViews v6 ships `text`, `integer`, `email`, `datetime`, `radio`, `select`, `toggleGroup`, `boolean`, and `checkbox` controls but no multiselect. Cortext used to bridge that with `FormTokenField`, but option editing outgrew it: multiselect now opens the same option picker as Select so users can create, recolor, rename, delete, and migrate options from the cell. That gives one option-management surface, but every multiselect cell still carries a custom editor instead of a DataViews-native control.
+**What.** DataViews v17 renders arrays with `FormTokenField`. Cortext uses the same option picker for Select and Multiselect so users can create, recolor, rename, delete, and migrate options from a cell. The built-in array control has no hooks for that workflow, so every multiselect cell still uses a custom editor.
 
 **Where.** `src/components/MultiselectEdit.js`.
 
-**Solution.** A `multiselect` dataform-control upstream that DataForm and a future inline-edit mode resolve from `Edit: 'multiselect'`. It needs hooks for custom option rendering and option management, not just a token input, otherwise Cortext still needs the picker.
+**Solution.** Add hooks for custom option rendering and option management to the array control, or add a `multiselect` control that DataForm and a future inline-edit mode can resolve from `Edit: 'multiselect'`.
 
 <a id="td-dataviews-layout-slots"></a>
 
@@ -42,23 +42,13 @@ DataViews renders an actual `<table>`; Cortext switches it to `table-layout: fix
 
 **What.** DataViews owns layout markup but exposes no place to add content. Cortext needs two slots.
 
-The first is an append row at the bottom of a layout for the "+ New" affordance. Table and list use a Cortext footer mounted just outside `<DataViews>`, with a CSS layer that works around DataViews' default `height: 100%`. Grid is trickier: the button needs to sit with the cards, so Cortext finds the rendered `.dataviews-view-grid` node and portals `DataViewNewRowButton` into it. Empty grid views fall back to a local grid shell until DataViews renders a real grid node.
+The first is an append row at the bottom of a layout for the "+ New" affordance. Table and list use a Cortext footer mounted just outside `<DataViews>`, with a CSS layer that works around DataViews' default `height: 100%`. Grid is trickier: the button needs to sit with the cards, so Cortext finds the last rendered `.dataviews-view-grid__row` and portals a grid cell into it. Empty grid views fall back to a local grid shell until DataViews renders a real grid row.
 
 The second is a footer row for column summaries and table-level bulk actions. The calculation footer has to find the rendered `.dataviews-view-table`, watch for it with a `MutationObserver`, and portal a `<tfoot>` into the table after DataViews renders. Table bulk-action controls share that footer row so selected-row controls and column summaries sit on one line. Calculations also need rows after search/filter but before pagination, which DataViews does not hand back; Cortext runs DataViews' `filterSortAndPaginate` helper a second time with `page` and `perPage` removed.
 
 **Where.** `DataViewNewRowButton` in `src/components/DataViewNewRowButton.js`, `GridNewRowPortal` in `src/components/GridNewRowPortal.js`, `TableCalculationsFooter` in `src/components/TableCalculationsFooter.js`, the footer mount and second filtering pass in `src/components/CollectionDataViews.js`, and the footer / new-row-card / footer-row rules in `src/components/CollectionDataViews.scss`, `src/components/CollectionDataViews.grid.scss`, and `src/components/CollectionDataViews.list.scss`.
 
 **Solution.** Upstream needs an append-item slot per layout (covers "+ New"), a table `renderFooter` / `renderSummaryRow` slot (covers calculations and table-level bulk actions), and a helper that returns filtered rows before pagination (covers summary computation). The internal `view.calculations` storage concern is separate; see [td-table-calculations-schema](#td-table-calculations-schema).
-
-<a id="td-dataviews-fieldtype-union"></a>
-
-**DataViews `FieldType` union has no decimal `number` or `url`.**
-
-**What.** DataViews v6's `FieldType` union is `'text' | 'integer' | 'datetime' | 'date' | 'media' | 'boolean' | 'email' | 'array'`. Cortext has `number` (decimals allowed) and `url`, neither of which has an exact match. Numbers map to `'integer'` so the filter UI offers numeric operators, then Cortext disables DataViews' integer-only validator, attaches a decimal-aware sort comparator, and provides a decimal-safe number filter control because the built-in integer `between` control applies whole-number min/max bounds. URLs still map to `'text'`, which is close enough for contains/starts-with filters but not an exact semantic type.
-
-**Where.** `mapField` in `src/hooks/fieldMapping.js`.
-
-**Solution.** A decimal-friendly `'number'` type and a `'url'` type, or a cleaner way for consumers to supply custom field controls / operator sets without borrowing the nearest built-in type.
 
 <a id="td-dataviews-option-color"></a>
 
@@ -94,9 +84,9 @@ The second is a footer row for column summaries and table-level bulk actions. Th
 
 **Add-field header piggybacks on the DataViews actions column.**
 
-**What.** The table's `+ add field` button sits in DataViews' row-actions column header. `ColumnHeaderActions` finds `th.dataviews-view-table__actions-column` and portals the button there; CSS hides the built-in "Actions" label and keeps the header cell sticky on the right. This is cleaner than the old synthetic `__add_field` column because it no longer leaks into `view.fields`, but it still leans on DataViews internals. The create-field flow also reveals the new trailing column itself: it carries the created field ID back to `CollectionDataViews`, waits until the field marker exists in the rendered header, then scrolls `.dataviews-wrapper` to the right edge.
+**What.** The table's `+ add field` button sits in DataViews' row-actions column header. `ColumnHeaderActions` finds `th.dataviews-view-table__actions-column` and portals the button there; CSS hides the built-in "Actions" label and keeps the header cell sticky on the right. The old synthetic `__add_field` column leaked into `view.fields`. Using the actions column avoids that, but still depends on DataViews internals. The create-field flow also reveals the new trailing column itself: it carries the created field ID back to `CollectionDataViews`, waits until the field marker exists in the rendered header, then scrolls `.dataviews-layout__container` to the right edge.
 
-**Where.** `src/components/fields/ColumnHeaderActions.js` (actions-column lookup and portal), `src/components/CollectionDataViews.js` and `src/components/dataViewScroll.js` (created-field reveal and `.dataviews-wrapper` scroll), `src/components/CollectionDataViews.scss` (`.dataviews-view-table__actions-column` overrides), and the legacy `__add_field` cleanup in `src/components/CollectionDataViews.js`.
+**Where.** `src/components/fields/ColumnHeaderActions.js` (actions-column lookup and portal), `src/components/CollectionDataViews.js` and `src/components/dataViewScroll.js` (created-field reveal and layout scroll), `src/components/CollectionDataViews.scss` (`.dataviews-view-table__actions-column` overrides), and the legacy `__add_field` cleanup in `src/components/CollectionDataViews.js`.
 
 **Solution.** A trailing table-header slot, an add-column slot, or a header action area separate from per-row actions, plus refs for the table scroll wrapper and rendered headers. Then the portal targets a real extension point, the reveal code stops querying DataViews DOM, and the sticky/header-label CSS disappears.
 
@@ -134,7 +124,7 @@ The second is a footer row for column summaries and table-level bulk actions. Th
 
 **DataViews has no row reorder API.**
 
-**What.** Manual order lives on the row posts, but DataViews doesn't give row refs, drag handles, drop targets, or an `onReorder` hook. Cortext decorates the layouts after DataViews renders them: finds rows by internal class selectors, matches them to `rows` by visible index, portals dnd-kit handles into the first data cell, places fixed drop targets over row gaps, clones a few cells for the drag preview, and holds CSS transforms while the REST request and refetch finish.
+**What.** Manual order lives on the row posts, but DataViews doesn't give row refs, drag handles, drop targets, or an `onReorder` hook. Cortext decorates the layouts after DataViews renders them: finds rows by internal class selectors, matches them to `rows` by visible index, portals dnd-kit handles into the first table cell or the list row, and uses the grid card itself as the drag activator. It places fixed drop targets over row gaps, clones part of each row or card for the drag preview, and holds CSS transforms while the REST request and refetch finish.
 
 That makes row reorder sensitive to DataViews DOM changes: density classes, bulk-selection cells, fullscreen mode, block embedding, and scroll containers all matter. Grid still uses before/after card targets because a linear row gap doesn't map cleanly to a two-dimensional card layout.
 
@@ -156,7 +146,7 @@ That makes row reorder sensitive to DataViews DOM changes: density classes, bulk
 
 **Loading skeletons track DataViews layouts by hand.**
 
-**What.** DataViews has no loading slot for individual layouts. Cortext renders `CollectionRowsSkeleton` beside `<DataViews>` while the first page loads; without it, the collection pane collapses and jumps when rows arrive. The placeholder has table/list row variants and a grid card variant, so switching layouts does not briefly show the wrong shape. The brittle part is sizing: the table/list skeleton copies DataViews row heights for compact, balanced, and comfortable density. The grid skeleton copies Cortext's card min size and spacing, which sit on top of DataViews' grid classes. The two match in the current build, but a DataViews density or markup change could make the placeholder drift from the real view.
+**What.** DataViews has no loading slot for individual layouts. Cortext renders `CollectionRowsSkeleton` beside `<DataViews>` while the first page loads; without it, the collection pane collapses and jumps when rows arrive. The placeholder has table/list row variants and a grid card variant, so switching layouts does not briefly show the wrong shape. The brittle part is sizing: the table/list skeleton copies DataViews row heights for compact, balanced, and comfortable density. The grid skeleton has its own card size and gap, so it can drift from the real grid when DataViews changes its markup or the user changes density.
 
 **Where.** `CollectionRowsSkeleton` in `src/components/Skeleton.js`, the rows-skeleton mount in `src/components/CollectionDataViews.js`, and the `.cortext-collection-skeleton` / `.cortext-data-view__rows-skeleton` rules in `src/components/Skeleton.scss` and `src/components/CollectionDataViews.scss`.
 
@@ -170,13 +160,33 @@ That makes row reorder sensitive to DataViews DOM changes: density classes, bulk
 
 **Where.** `src/components/dataViewAdapter.js`, `src/components/dataViewViewState.js`, `normalizeView` in `src/components/dataViewColumns.js`, the DataViews mounts in `src/components/CollectionDataViews.js` and `src/components/PublicDataView.js`, and the data-view block attributes in `src/blocks/data-view/block.json`.
 
-**Solution.** Native per-layout settings on DataViews would let Cortext map to upstream's shape instead of carrying separate buckets.
+**Solution.** Native per-layout settings on DataViews would let Cortext map to upstream's shape instead of carrying separate buckets. One cleanup does not need to wait for upstream: move the shared `infiniteScrollEnabled` and `startPosition` key list into `dataViewViewState.js`. Cortext strips both keys in the adapter, the saved-view normalizer, and the public renderer because its data loaders use page-based pagination. Those checks protect different boundaries, but they should not carry separate copies of the contract.
+
+<a id="td-dataviews-grid-density"></a>
+
+**Grid column count ignores density and padding.**
+
+**What.** DataViews v17 calculates the grid's column count with a fixed 32px gap and the container's outer width. The rendered gap is 16px, 24px, or 32px depending on density, and the cards sit inside a padded content area. Near a breakpoint, DataViews can pick the wrong number of columns: rows either leave room for another card or squeeze cards below the selected preview size. Cortext keeps the native density control and saves its value, so it inherits this mismatch.
+
+**Where.** `useGridColumns` in DataViews' grid preview-size picker calculates the count. Cortext stores the setting in `layoutForGridDataViews` in `src/components/dataViewAdapter.js` and lets DataViews render the corresponding gap.
+
+**Solution.** DataViews should calculate columns from the content width and the rendered gap.
+
+<a id="td-dataviews-grid-card-composition"></a>
+
+**DataViews grid has no card composition hooks.**
+
+**What.** Cortext keeps the native grid for density, grouping, selection, and keyboard behavior, then reshapes each card with CSS. The rules move the media, title, fields, badges, actions, and selection checkbox by relying on DataViews class names, direct children, and sibling order. Row reorder clones the same private structure for its drag preview. A markup change can break the live card and its preview independently.
+
+**Where.** The card layout in `src/components/CollectionDataViews.grid.scss`, `cloneGridCardPreview` in `src/components/DataViewRowReorder.js`, and the grid-preview rules in `src/components/DataViewRowReorder.scss`.
+
+**Solution.** DataViews could expose documented card parts or render slots. Cortext can also switch the grid to DataViews' free-composition mode and render the card DOM locally. That removes the private selectors, but Cortext would then own card selection, grouping, keyboard behavior, and row-drag integration. Moving to a local grid is a layout migration and is too large for this upgrade PR.
 
 <a id="td-dataviews-list-row-hooks"></a>
 
 **DataViews list lacks row-open and compact metadata hooks.**
 
-**What.** DataViews list is close enough to use, but it does not expose the pieces Cortext needs for the list it wants: opening a row from the blank part of the row, keeping focus without a selected-row state, showing metadata as a compact inline run, and placing "+ New" as the last row. Cortext keeps the native layout and fills those gaps locally: empty controlled selection, capture-phase pointer and keyboard handlers for row open, CSS that reshapes DataViews' title/media/field/action DOM, and a footer button styled like a row. The parts to watch are the `.dataviews-view-list > [role="row"]` lookup, `.dataviews-view-list__item` as the focus/open target, and the CSS grid/contents overrides that put title, metadata, media, and actions on one row.
+**What.** DataViews list is close enough to use, but it does not expose the pieces Cortext needs for the list it wants: opening a row from the blank part of the row, keeping focus without a selected-row state, showing metadata as a compact inline run, and placing "+ New" as the last row. Cortext keeps the native layout and fills those gaps locally: empty controlled selection, capture-phase pointer and keyboard handlers for row open, CSS that reshapes DataViews' title/media/field/action DOM, and a footer button styled like a row. The parts to watch are the `.dataviews-view-list [role="row"]` lookup, `.dataviews-view-list__item` as the focus/open target, and the CSS grid/contents overrides that put title, metadata, media, and actions on one row.
 
 **Where.** List open/focus handling in `src/components/CollectionDataViews.js`, list row lookup in `src/components/dataViewItemLookup.js`, list reorder decoration in `src/components/DataViewRowReorder.js`, `DataViewNewRowButton`'s `list-row` presentation, and the list rules in `src/components/CollectionDataViews.list.scss`.
 
@@ -210,12 +220,12 @@ That makes row reorder sensitive to DataViews DOM changes: density classes, bulk
 
 **What.** Several gaps in `Menu` (privateApis, Ariakit underneath) and `Popover` push policy into consumers.
 
-- `Menu`'s outside-click is scoped to one document. The `cortext/data-view` block and row properties render inside Gutenberg's editor iframe, so clicks on the editor sidebar or top toolbar never reach Ariakit. Cortext adds a `mousedown` listener on `window.parent.document` while the menu is open.
-- `Menu.Item` has no destructive variant. The legacy `MenuItem` accepted `isDestructive` and rendered the row in red; the new privateApis `Menu.Item` dropped that prop without a replacement (verified in `node_modules/@wordpress/components/build-types/menu/types.d.ts` against `ItemProps`). Cortext paints the red itself with a className and one CSS rule, scoped to inactive rows so focus/hover overrides it.
-- `Menu.Popover` does not portal by default. Inside a `<th>` with `text-transform: uppercase`, that cascades into the menu items. Cortext passes `portal` explicitly everywhere.
-- Submenus only accept menu primitives. `Menu.SubmenuTriggerItem` opens a `Menu.Popover` that only accepts `Menu.Item` / `Menu.Group` / `Menu.Separator` children. Cortext's Edit field and Calculate submenus have tile previews, labelled value rows, and nested popovers, so they stay as sibling popovers with a manual hover bridge. The parent menu ignores outside-clicks that land in `.cortext-format-submenu`, `.cortext-format-submenu__flyout`, or `.cortext-table-calculation-submenu`.
-- Nested `Popover` outside-clicks do not close the host. `Popover` handles outside clicks one popover at a time. In the option editor, after a color edit the first click outside both popovers only closed the small option menu; the main picker stayed open. Cortext listens for `pointerdown` while the option menu is open and asks the host to close when the click lands outside both popovers.
-- Cascading `Popover` has no fallback placement. `Popover` can shift a submenu along the cross axis but does not try a left-side fallback when a `right-start` cascade runs past the viewport edge. Cortext measures the outer menu and the portaled submenu and switches between `right-start`, `left-start`, and `bottom-start` based on clip detection.
+-   `Menu`'s outside-click is scoped to one document. The `cortext/data-view` block and row properties render inside Gutenberg's editor iframe, so clicks on the editor sidebar or top toolbar never reach Ariakit. Cortext adds a `mousedown` listener on `window.parent.document` while the menu is open.
+-   `Menu.Item` has no destructive variant. The legacy `MenuItem` accepted `isDestructive` and rendered the row in red; the new privateApis `Menu.Item` dropped that prop without a replacement (verified in `node_modules/@wordpress/components/build-types/menu/types.d.ts` against `ItemProps`). Cortext paints the red itself with a className and one CSS rule, scoped to inactive rows so focus/hover overrides it.
+-   `Menu.Popover` does not portal by default. Inside a `<th>` with `text-transform: uppercase`, that cascades into the menu items. Cortext passes `portal` explicitly everywhere.
+-   Submenus only accept menu primitives. `Menu.SubmenuTriggerItem` opens a `Menu.Popover` that only accepts `Menu.Item` / `Menu.Group` / `Menu.Separator` children. Cortext's Edit field and Calculate submenus have tile previews, labelled value rows, and nested popovers, so they stay as sibling popovers with a manual hover bridge. The parent menu ignores outside-clicks that land in `.cortext-format-submenu`, `.cortext-format-submenu__flyout`, or `.cortext-table-calculation-submenu`.
+-   Nested `Popover` outside-clicks do not close the host. `Popover` handles outside clicks one popover at a time. In the option editor, after a color edit the first click outside both popovers only closed the small option menu; the main picker stayed open. Cortext listens for `pointerdown` while the option menu is open and asks the host to close when the click lands outside both popovers.
+-   Cascading `Popover` has no fallback placement. `Popover` can shift a submenu along the cross axis but does not try a left-side fallback when a `right-start` cascade runs past the viewport edge. Cortext measures the outer menu and the portaled submenu and switches between `right-start`, `left-start`, and `bottom-start` based on clip detection.
 
 **Where.** `src/components/fields/FieldActionsMenu.js` (outside-click document listener, portal opt-in, hover bridge), `src/components/fields/ColumnHeaderActions.js` and `src/components/fields/ColumnHeaderActions.scss` (destructive item class and rule), `FieldFormatPopover` and `TableCalculationMenu` (sibling submenus and outside-click guards), `useSubmenuPlacement` in `src/hooks/useSubmenuPlacement.js`, and `EditOptionsPopover` in `src/components/fields/EditOptionsPopover.js` (nested popover dismiss).
 
@@ -339,6 +349,16 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 **Solution.** dnd-kit honors `inert` (or computed `pointer-events: none`) on an ancestor, letting consumers drop the prop-drilling. Any tree-shaped surface that uses a CSS-clipped collapse animation has to thread `disabled` through its rows itself until then.
 
+<a id="td-wordbless-wordpress-7-tag"></a>
+
+**WorDBless has not tagged its WordPress 7 support yet.**
+
+**What.** The PHP test suite follows WorDBless's `trunk` branch because the latest tagged release only accepts WordPress 6.6, while trunk accepts WordPress 7. `composer.lock` pins the commit used by CI, so installs are repeatable. A dependency update can still move the branch before a release is cut.
+
+**Where.** The `automattic/wordbless` requirement in `composer.json` and its pinned source reference in `composer.lock`.
+
+**Solution.** Move back to a tagged constraint as soon as WorDBless publishes a release that accepts WordPress 7. The lockfile already protects normal installs; adding another manual commit pin to `composer.json` would only create a second value to maintain.
+
 ---
 
 ## Internal debt
@@ -347,39 +367,36 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 <a id="td-rows-not-in-core-data"></a>
 
-**Rows aren't in `core-data`'s entity store.**
+**Collection row queries bypass `core-data`.**
 
-**What.** Rows still sit outside `core-data`. `useCollectionRows` owns fetch state, the `requestId` race guard, the manual `refresh()` counter, and the choice between server and client mode (paged REST when the table can express the query; a fallback that fetches pages of 100 with a small concurrency cap otherwise). Mutations still POST directly with `apiFetch`, then ask the hook to refetch. Since there is no shared row store, trash and restore fire small row / document-trash events that open row queries and the sidebar Trash list refetch. Relation chips add a second read path: `useCollectionRowsByIds` calls `/cortext/v1/rows?include[]=…` so the picker can show labels without walking the target collection.
+**What.** Rows share the static `crtxt_document` post type with pages and collections, but collection views still fetch them through `/cortext/v1/rows`. That endpoint handles field-aware filters, sorting, calculations, relation hydration, and the fallback from paged server queries to bounded client-side queries. As a result, `useCollectionRows` also owns fetch state, race protection, and a manual `refresh()` counter. Mutations save the underlying document with `apiFetch`, then refresh open row queries. Trash and restore use row and document-trash events to refresh collection views and the sidebar. Relation chips add another read path through `useCollectionRowsByIds` so the picker can load selected labels without walking the collection.
 
-Full-page collection creation hits a related edge: `core-data` may have cached `/wp/v2/types` before a new collection's row CPT was registered. The sidebar and DataView block creator invalidate `getEntitiesConfig('postType')` after creation so the next row `useEntityRecord` can see the new entity.
+**Where.** `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/useTrashedDocuments.js`, with call sites in `src/components/CollectionDataViews.js`, `src/components/RowProperties.js`, `src/components/EditableCell.js`, `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, `src/documents/actions.js`, and `src/components/relations/RelationEditor.js`.
 
-**Where.** `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/useTrashedDocuments.js`, with call sites in `src/components/CollectionDataViews.js` (`saveRowField`, `onCreated`, row trash), `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, `src/blocks/data-view/edit.js`, `src/components/Sidebar.js` (post-type entity-config invalidation after collection creation), and `src/components/relations/RelationEditor.js` (paged target-row search and selected-row label lookup).
+**Solution.** Keep `/cortext/v1/rows` as the collection-query projection while it provides behavior the standard endpoint cannot express, but use `core-data` as the canonical store for individual `crtxt_document` records and writes. Row query results can prime that store or return document IDs alongside computed field data. `saveEntityRecord` can then update the shared record cache, while the collection-query cache only invalidates projections affected by that record. This would remove several local workarounds:
 
-**Solution.** Switch to `useEntityRecords('postType', \`crtxt_${slug}\`, query)` plus `saveEntityRecord` for writes once the remaining query shapes can be expressed there. `core-data` would then own caching, race protection, and post-mutation invalidation. Knock-on workarounds it deletes:
+-   The `refresh()` handles and invalidation events exist only because rows aren't reactive.
+-   Half of `RowMutationContext` (also driven by [td-dataviews-inline-editing](#td-dataviews-inline-editing)) exists because cells do not write through the shared `core-data` record.
+-   `onCreated` still runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic for unconstrained views. With reactive pagination Cortext could watch `totalPages` instead of guessing.
+-   Relation label lookup can use the shared document records instead of a one-off include query.
 
-- The `refresh()` handles and invalidation events exist only because rows aren't reactive.
-- Half of `RowMutationContext` (also driven by [td-dataviews-inline-editing](#td-dataviews-inline-editing)) exists because cells can't reach a `core-data` store that isn't there.
-- `onCreated` still runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic for unconstrained views. With reactive pagination Cortext could watch `totalPages` instead of guessing.
-- The server/client planner becomes normal resolver queries instead of a local fetch policy.
-- Relation label lookup becomes a normal entity-record resolver instead of a one-off include query.
-
-Worth a small spike before committing. Dynamic post-type discovery also needs a real answer: either `core-data` learns about new row CPTs after collection creation, or each collection-creation path keeps the post-type entity-config invalidation nearby. That does not mean every document-shaped query belongs in `core-data`: single records and mutations should use the entity store when WordPress can model them, while cross-type product views like Trash can stay behind `/cortext/v1/documents/*` endpoints.
+The query planner, field calculations, and hydrated relation data can remain behind the row endpoint. Document identity and mutations need one owner; product queries can keep the shape they need.
 
 <a id="td-modified-by-plugin-stored"></a>
 
-**`_modified_by` is plugin-stored, not native.**
+**`_modified_by` has no current writer.**
 
-**What.** WordPress core stores `post_modified` (timestamp) but not who last edited the post. The "Last edited by" system column needs that information, so a `save_post` hook on entry CPTs records `_modified_by` post meta with the current user ID on every save. Skipped when no user is signed in (CLI imports, cron, seeds, unauthenticated REST) so background writes don't clobber the last real editor with `0`. Risk: third-party plugins that bypass `save_post` (direct DB writes) won't update `_modified_by`. Acceptable for the block's scope; entries created before this hook fall back to the post author when the meta is absent.
+**What.** WordPress stores when a post changed, but not who changed it. `RowsController` reads `_modified_by` when that meta exists and otherwise falls back to `post_author`. Cortext no longer writes `_modified_by` during normal document saves, so "Last edited by" usually shows the creator and can show stale legacy data.
 
-**Where.** `record_modified_by` in `includes/PostType/CollectionEntries.php`, read by `format_row` in `includes/Rest/RowsController.php`.
+**Where.** The row response and calculation paths in `includes/Rest/RowsController.php`.
 
-**Solution.** Either core grows native "last editor" tracking (unlikely; long-standing wishlist), or accept the hook as the canonical answer. No upstream issue to file; this is plugin-managed state.
+**Solution.** If the column must identify the last editor, write `_modified_by` for authenticated `crtxt_document` saves and cover both REST and non-REST writes. Otherwise, label the value as the author instead of implying data Cortext does not have.
 
 <a id="td-field-meta-global-delete"></a>
 
 **Field-meta cleanup uses a global delete.**
 
-**What.** `Field::cleanup_after_delete` calls `delete_post_meta_by_key( "field-<id>" )`, which wipes that key from every post, not just Cortext document posts. The collision risk is theoretical (`<id>` is a globally unique `crtxt_field` post ID, so any postmeta keyed that way belongs to a Cortext entry by construction), but the code doesn't enforce that. A scoped `DELETE pm … INNER JOIN wp_posts p … WHERE p.post_type IN (…)` would prove the scope, but WorDBless (see [td-wordbless-row-coverage](#td-wordbless-row-coverage)) can't run JOINs and its in-memory `$wpdb->posts` isn't exposed via SQL; `WP_Query`/`get_posts` against dynamic entry CPTs returns empty in the mock, so the per-post fallback also can't be unit-tested here.
+**What.** `Field::cleanup_after_delete` calls `delete_post_meta_by_key( "field-<id>" )`, which wipes that key from every post, not just Cortext documents. A collision is unlikely because `<id>` is the globally unique ID of a `crtxt_field`, but the code does not enforce the boundary. A scoped `DELETE` joining `wp_posts` and requiring `p.post_type = 'crtxt_document'` would make that boundary explicit. WorDBless cannot execute the JOIN, so this needs a real database test rather than a mock that only appears to cover it.
 
 **Where.** `Field::cleanup_after_delete` in `includes/PostType/Field.php`.
 
@@ -487,9 +504,29 @@ The row-detail layout setting means public rendering cannot just print every fie
 
 **Where.** `src/blocks/document-properties/{block.json,edit.js,index.js}` defines the editor block. `includes/Editor/DocumentPropertiesBlock.php` registers it on the server with the placeholder `render_callback`. `src/components/DocumentPropertiesContext.js` passes `fields`, `allFields`, `detailLayoutEntries`, `fallbackRecord`, `rowId`, visibility state, and layout-edit requests from Canvas or RowEditor. `src/components/RowProperties.js` renders the editor-only property surface and relation controls. `src/components/EditorBody.js` (`EnsureHeaderBlocks`) inserts the block after the title when schema exists and removes it when schema disappears. `detail_layout` is registered by `Document::register_collection_meta()` in `includes/PostType/Document.php`; the editor normalizes it in `src/hooks/detailLayout.js` and threads it through `src/hooks/useCollectionFields.js`. The schema accessor is `Cortext\Rest\RowsFilterQuery::field_schema_for( $collection_id )`; field values are formatted by `RowsController::format_typed_value()`.
 
-**Solution.** Fill in `DocumentPropertiesBlock::render()` so `the_content()` emits `<div class="cortext-document-properties">...</div>` with formatted values for rows whose collection has fields. Reuse `RowsController::format_typed_value()`, and add a small PHP normalizer for `detail_layout` so public markup follows the editor's field order and visibility. Share the same SCSS through `src/frontend.scss` so public markup matches the editor. This pass also needs a decision on row CPTs: today they are not `publicly_queryable`.
+**Solution.** Fill in `DocumentPropertiesBlock::render()` so `the_content()` emits `<div class="cortext-document-properties">...</div>` with formatted values for rows whose collection has fields. Reuse `RowsController::format_typed_value()`, and add a small PHP normalizer for `detail_layout` so public markup follows the editor's field order and visibility. Share the same SCSS through `src/frontend.scss` so public markup matches the editor.
 
 ### Editor and workspace UX
+
+<a id="td-block-canvas-style-runtime-bridge"></a>
+
+**Bundled WordPress component styles stop at the BlockCanvas boundary.**
+
+**What.** DataViews 17 and `@wordpress/components` 36 register generated CSS through `@wordpress/style-runtime`. WordPress 7.0 does not register the BlockCanvas iframe as a target, so those rules land in the parent document while the DataView renders inside the canvas. Cortext copies the missing Menu, search, toolbar, InputControl, and Stack rules. The Menu fallback is the riskiest part: it uses broad ARIA and data selectors plus private child order, so it can also restyle an unrelated menu inside the iframe.
+
+**Where.** The Menu fallback and DataViews toolbar/search rules in `src/components/CollectionDataViews.scss`, the Stack fallback in `src/components/CollectionDataViews.grid.scss`, and the `BlockCanvas` mount in `src/components/EditorBody.js`.
+
+**Solution.** This can be fixed in Cortext now. Add `@wordpress/style-runtime` as a direct dependency, register the BlockCanvas iframe document while it is mounted, and remove the copied component rules once the generated styles reach the iframe. Keep the bridge only until BlockCanvas registers style-runtime documents itself.
+
+<a id="td-canvas-interface-skeleton-clone"></a>
+
+**Canvas carries a local copy of `InterfaceSkeleton`.**
+
+**What.** An earlier build resolved `InterfaceSkeleton` through a WordPress runtime that did not expose the component, so Cortext copied the part of the shell it uses. The copy now owns the secondary-sidebar animation, media-query listeners, a `ResizeObserver`, and the upstream `interface-interface-skeleton__*` class contract. Cortext still loads the upstream stylesheet, so a markup, breakpoint, or animation change can leave the local shell behind.
+
+**Where.** `CanvasInterfaceSkeleton`, `AnimatedSecondarySidebar`, and `useMediaQuery` in `src/components/Canvas.js`; the upstream stylesheet and class overrides in `src/components/Canvas.scss`; and `tests/js/components/Canvas.test.js`.
+
+**Solution.** The current build bundles `@wordpress/interface`, and the installed package exports `InterfaceSkeleton`, so this can be removed now. Restore the package component and keep the small Cortext layout overrides. If Cortext later chooses to own a different shell, give it Cortext classes and styles instead of copying the upstream DOM contract.
 
 <a id="td-data-view-block-height"></a>
 
@@ -567,7 +604,7 @@ Keep this local for now, but treat it as custom drag-and-drop code. It measures 
 
 **Bulk row trash fans out through per-row REST calls.**
 
-**What.** Bulk row trash still calls the same row REST delete endpoint as the single-row action. The client sends one `DELETE /wp/v2/<row post type>/<id>` request per selected row, capped at four concurrent requests by `allSettledWithConcurrency`. That cap keeps a large selection from flooding the server, and the `Promise.allSettled`-style result list keeps partial failures easy to handle. It is acceptable for the current DataView scale, but not a real bulk operation: moving 100 rows to Trash still means 100 REST writes, just in a small queue. There is no atomic all-or-nothing behavior, no server-side progress state, and no way to resume if the browser goes away mid-run.
+**What.** Bulk row trash still calls the same document REST delete endpoint as the single-row action. The client sends one `DELETE /wp/v2/crtxt_documents/<id>` request per selected row, capped at four concurrent requests by `allSettledWithConcurrency`. That cap keeps a large selection from flooding the server, and the `Promise.allSettled`-style result list keeps partial failures easy to handle. It is acceptable for the current DataView scale, but not a real bulk operation: moving 100 rows to Trash still means 100 REST writes, just in a small queue. There is no atomic all-or-nothing behavior, no server-side progress state, and no way to resume if the browser goes away mid-run.
 
 **Where.** `requestDeleteRows` in `src/components/CollectionDataViews.js`, the queue helper in `src/components/allSettledWithConcurrency.js`, and coverage in `tests/js/components/allSettledWithConcurrency.test.js`.
 
@@ -623,9 +660,9 @@ Drag/drop and `menu_order` accounting look at both pages and collections through
 
 **Collection duplication cannot clone relation schema.**
 
-**What.** Duplicating a full-page collection creates the new collection, registers its row CPT, and copies field posts that stand on their own. It skips relations because a relation is really a pair: the forward field plus the reverse field on another collection. A safe copy has to create or update both sides, keep the cardinality, and remap ids without touching the original relation. Until that exists, the REST response lists skipped fields and the sidebar tells the user the copy is missing columns. Rollups that read through a skipped relation belong in the same bucket; they are not useful until the copied schema has its own relation target.
+**What.** Duplicating a full-page collection creates another `crtxt_document`, gives it its own `crtxt_trait` mirror term, and copies field posts that stand on their own. It skips relations because a relation is really a pair: the forward field plus the reverse field on another collection. A safe copy has to create or update both sides, keep the cardinality, and remap IDs without touching the original relation. Until that exists, the REST response lists skipped fields and the sidebar tells the user the copy is missing columns. Rollups that read through a skipped relation belong in the same bucket; they are not useful until the copied schema has its own relation target.
 
-**Where.** `CollectionDuplicator::duplicate()`, `clone_fields()`, and `remap_rollup_references()` in `includes/Documents/CollectionDuplicator.php`, plus the skipped-field notice in `src/components/Sidebar.js` and duplicate coverage in `tests/php/test-rest-collections.php`.
+**Where.** `DocumentDuplicator::duplicate()`, `clone_schema()`, and `remap_rollup_references()` in `includes/Documents/DocumentDuplicator.php`; the notice flows through `src/documents/actions.js` and `src/components/Sidebar.js`. Coverage lives in `tests/php/test-document-duplicator.php` and `tests/php/test-rest-collections.php`.
 
 **Solution.** Add a relation-aware schema copy step. It should clone and remap the forward and reverse fields together, or skip every dependent field, including rollups that point at skipped relations. The duplicate should never carry references back to the source collection's fields. Once that exists, the sidebar notice can name the exact skipped field types instead of treating them all as generic missing columns.
 

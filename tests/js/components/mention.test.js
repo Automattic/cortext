@@ -1,5 +1,6 @@
 jest.mock( '@wordpress/hooks', () => ( {
 	addFilter: jest.fn(),
+	applyFilters: jest.fn( ( _hookName, value ) => value ),
 } ) );
 
 jest.mock( '@wordpress/api-fetch', () => ( {

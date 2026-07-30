@@ -179,7 +179,7 @@ function formatPublicDisplay( value, type, elements ) {
 		// their titles instead.
 		return textValue( value );
 	}
-	return formatDisplay( value, type, elements );
+	return formatDisplay( value, type, { elements } );
 }
 
 function textValue( value ) {
@@ -288,7 +288,7 @@ function mapPublicField( fieldDef ) {
 		case 'number':
 			return {
 				...base,
-				type: 'text',
+				type: 'number',
 			};
 		case 'email':
 			return {
@@ -298,7 +298,7 @@ function mapPublicField( fieldDef ) {
 		case 'url':
 			return {
 				...base,
-				type: 'text',
+				type: 'url',
 			};
 		case 'select':
 			return {

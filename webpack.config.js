@@ -1,5 +1,4 @@
 const path = require( 'path' );
-const webpack = require( 'webpack' );
 const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
 const DependencyExtractionWebpackPlugin = require( '@wordpress/dependency-extraction-webpack-plugin' );
 const MiniCssExtractPlugin = require( 'mini-css-extract-plugin' );
@@ -11,20 +10,9 @@ const { BundleAnalyzerPlugin } = require( 'webpack-bundle-analyzer' );
 //
 // `@wordpress/private-apis` deliberately stays EXTERNAL (uses WP core's
 // `wp-private-apis` script handle). Bundling it would give us a separate
-// WeakMap from WP core's, breaking any cross-boundary `unlock()` —
-// notably `@wordpress/dataviews` reaches into objects WP core locked.
+// WeakMap from WP core's, breaking `unlock()` where bundled route code and
+// Cortext's component adapters consume private APIs exposed by core.
 const BUNDLED = new Set( [ '@wordpress/route' ] );
-
-// `@wordpress/route` opts into private-apis under its own module name, but
-// WP 6.9's allowlist only includes `@wordpress/router` (the older plural
-// package). Replace route's lock-unlock with a shim that opts in under an
-// allowed name. That keeps lock/unlock on WP core's shared WeakMap, so
-// other bundled packages (dataviews, interface, ...) that cross the
-// boundary still work.
-const routeLockUnlockShim = path.resolve(
-	__dirname,
-	'src/shims/route-lock-unlock.mjs'
-);
 
 module.exports = {
 	...defaultConfig,
@@ -120,10 +108,6 @@ module.exports = {
 			}
 			return plugin;
 		} ),
-		new webpack.NormalModuleReplacementPlugin(
-			/@wordpress[\\/]route[\\/]build-module[\\/]lock-unlock\.mjs$/,
-			routeLockUnlockShim
-		),
 		...( process.env.ANALYZE
 			? [
 					new BundleAnalyzerPlugin( {
