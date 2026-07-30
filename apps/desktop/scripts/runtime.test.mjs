@@ -231,6 +231,9 @@ test( 'waitForProcessExit sends SIGKILL, then rejects if the process stays alive
 		waitForProcessExit( child, {
 			gracePeriodMs: 5,
 			forcePeriodMs: 5,
+			// Pin the platform: on Windows the escalation is taskkill, not
+			// SIGKILL, and it would reach a real process on the host.
+			platform: 'linux',
 			sendSignal: ( target, killProcessGroup, signal ) => {
 				signals.push( { target, killProcessGroup, signal } );
 			},
