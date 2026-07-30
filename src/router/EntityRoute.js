@@ -479,17 +479,13 @@ export default function EntityRoute( { history } ) {
 	);
 	const isRow = Boolean( editorRowContext );
 
-	const { invalidateResolution, receiveEntityRecords } =
-		useDispatch( 'core' );
+	const { invalidateResolution } = useDispatch( 'core' );
 
 	// Restore still has two cache paths: pages use core-data for the tree, rows
 	// use collection-scoped queries. Both refresh the Trash list; rows also
 	// notify open collections because relations and rollups can change elsewhere.
 	const onRestoreDocument = useCallback(
-		( postId, postType, response ) => {
-			if ( response?.post && postType ) {
-				receiveEntityRecords( 'postType', postType, [ response.post ] );
-			}
+		( postId, _postType, response ) => {
 			// Every document shares one post type, so a restore always re-enters
 			// the workspace tree and leaves the Trash list.
 			invalidateResolution( 'getEntityRecords', [
@@ -514,7 +510,7 @@ export default function EntityRoute( { history } ) {
 				notifyCollectionRowsChanged();
 			}
 		},
-		[ invalidateResolution, receiveEntityRecords, isRow ]
+		[ invalidateResolution, isRow ]
 	);
 
 	const editorRecentTarget =
