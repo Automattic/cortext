@@ -30,7 +30,8 @@ export async function createDocument( input, ctx ) {
 	const created = await ctx.saveEntityRecord(
 		'postType',
 		DOCUMENT_POST_TYPE,
-		payload
+		payload,
+		{ throwOnError: true }
 	);
 	if ( created?.id ) {
 		applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
