@@ -2,6 +2,49 @@
 
 Running log for desktop-specific runtime and packaging decisions. Keep the detailed benchmark numbers in PR comments or artifacts unless they become stable product guidance.
 
+## 2026-07-30 — Harden and test the packaged Electron app
+
+**Decision.** The dedicated `persist:cortext` session denies permissions by
+default. HTTP and HTTPS frames may use fullscreen. Only the exact runtime origin
+may write sanitized clipboard data. That origin and HTTPS embeds may use DRM
+and third-party storage. Cortext blocks camera and microphone access, display
+capture, location, notifications, clipboard reads, filesystem and device
+access, input locks, requests to open external apps, and any permission it does
+not recognize. The existing window-open and navigation handlers still control
+external links.
+
+Packaged builds turn off DevTools and remove "Toggle Developer Tools" from the
+View menu. Application code lives in `app.asar`. Electron fuses disable Node
+execution modes, Node environment and CLI inspector options, browser-process V8
+snapshot loading, code outside `app.asar`, and extra `file://` privileges. They
+also enable ASAR integrity checks. During packaged validation, `loadFile()`
+failed with these ASAR and fuse settings. Cortext now serves loading and error
+pages through an exact-match `cortext-shell://` handler in the dedicated
+session, under a restrictive CSP.
+
+After signing and notarizing the app, Buildkite reads the fuse settings from the
+executable and checks the ASAR layout, bundled runtime files, and arm64 PHP
+binary. It then starts the same `.app` with a temporary profile and update
+checks disabled. The smoke test attaches only to Chromium's renderer through
+CDP on loopback. It loads the canvas, confirms that a request without the token
+gets `403`, checks that a second instance exits, and waits for Electron, PHP,
+and the runtime port to shut down. Buildkite runs all of this before it uploads
+the artifact.
+
+**Why.** Tests launched from source skip `app.isPackaged`, ASAR paths, copied
+resources, fuse bits, and the signed executable. Code signing and Gatekeeper can
+accept an app that crashes on launch. The smoke test has already caught this
+once: with extra file-protocol privileges disabled, the old `loadFile()` startup
+path no longer worked.
+
+**Deferred.** Cookie encryption remains disabled because enabling its fuse
+migrates profiles in a way older builds cannot reverse. It needs a separate
+rollout. This change leaves entitlements alone. HTTP and HTTPS embeds may still
+render and use fullscreen; the Cortext origin and HTTPS embeds may also use DRM
+and third-party storage. Only the smoke command enables loopback CDP, and the
+test attaches to the renderer. Normal app launches do not open a debugging
+port.
+
 ## 2026-07-28 — Give each desktop profile its own runtime origin
 
 **Decision.** New desktop profiles take the first free loopback port in the
@@ -55,7 +98,7 @@ Every app window uses a dedicated Electron session. Its browser storage remains
 persistent so theme, layout, and integration preferences survive restarts, but
 the token is never stored there. HTTP caching is disabled, and cookies, service
 workers, and Cache API data for the runtime are cleared at launch. The session
-adds the token as an internal header to requests for `http://127.0.0.1:9402/`
+adds the token as an internal header to requests for the selected runtime origin
 that come from a Cortext frame, reading the frame origin Chromium already
 resolved instead of inferring trust from `Sec-Fetch-Site` or the current window
 URL. Embedded third-party frames render, so the Embed block keeps working, but
@@ -71,7 +114,8 @@ The PHP, FrankenPHP, and PHP-FPM runtime paths reject requests without the
 matching token before serving WordPress or static files. Caddy then removes the
 header before proxying to PHP and filters it from error logs. The benchmark
 follows the same contract with its own ephemeral token and never includes it in
-the recorded results. The loopback address and fixed port 9402 remain unchanged.
+the recorded results. The loopback address remains unchanged; the runtime port
+is selected per profile as documented above.
 
 **Why.** The desktop-only autologin makes every accepted WordPress request an
 administrator request. Requiring a per-launch secret prevents web pages and
