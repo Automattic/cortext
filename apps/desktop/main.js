@@ -3,13 +3,13 @@ const {
 	BrowserWindow,
 	dialog,
 	Menu,
+	protocol,
 	session,
 	shell,
 } = require( 'electron' );
 const crypto = require( 'crypto' );
 const path = require( 'path' );
 const fs = require( 'fs' );
-const { pathToFileURL } = require( 'url' );
 const {
 	LEGACY_PORT,
 	RUNTIME_AUTH_HEADER,
@@ -23,6 +23,12 @@ const {
 	isTrustedRuntimeFrame,
 } = require( './lib/runtime-session' );
 const { installSessionPermissions } = require( './lib/session-permissions' );
+const {
+	ERROR_URL,
+	LOADING_URL,
+	installShellProtocol,
+	registerShellScheme,
+} = require( './lib/shell-protocol' );
 const { secureWebPreferences } = require( './lib/web-preferences' );
 const {
 	scheduleUpdateCheck,
@@ -44,12 +50,14 @@ const RESOURCES_DIR = app.isPackaged ? process.resourcesPath : __dirname;
 const SNAPSHOT_ZIP = path.join( RESOURCES_DIR, 'snapshot.zip' );
 const APP_ICON = path.join( __dirname, 'assets/icon.png' );
 const LOADING_PAGE = path.resolve( __dirname, 'loading.html' );
-const LOADING_URL = pathToFileURL( LOADING_PAGE ).href;
 const ERROR_PAGE = path.resolve( __dirname, 'error.html' );
-const ERROR_URL = pathToFileURL( ERROR_PAGE ).href;
 const RUNTIME_SESSION_PARTITION = 'persist:cortext';
 // The local shell pages Cortext loads itself, before and instead of the runtime.
 const TRUSTED_DOCUMENT_URLS = [ LOADING_URL, ERROR_URL ];
+
+// Electron requires scheme registration before app.ready. Install the handler
+// on the runtime session once it exists.
+registerShellScheme( protocol );
 
 // One instance owns the extracted site and the runtime port. A second launch
 // would extract on top of the first one's half-written files, so hand focus
@@ -348,7 +356,7 @@ async function loadSite( win, runtimeOrigin ) {
 		} );
 	} catch ( err ) {
 		console.error( '[cortext-desktop] failed to reach PHP server:', err );
-		await win.loadFile( ERROR_PAGE );
+		await win.loadURL( ERROR_URL );
 	}
 }
 
@@ -360,6 +368,10 @@ async function startDesktop() {
 			RUNTIME_SESSION_PARTITION,
 			{ cache: false }
 		);
+		installShellProtocol( runtimeSession, {
+			loadingPage: LOADING_PAGE,
+			errorPage: ERROR_PAGE,
+		} );
 
 		if (
 			process.platform === 'darwin' &&
@@ -379,7 +391,7 @@ async function startDesktop() {
 		} );
 		// Load the loading screen before any site refresh so users never stare at
 		// a blank window.
-		await win.loadFile( LOADING_PAGE );
+		await win.loadURL( LOADING_URL );
 
 		const siteRoot = getSiteRoot();
 		recoverInterruptedSwap( siteRoot );
@@ -457,7 +469,7 @@ async function startDesktop() {
 		}
 		console.error( '[cortext-desktop]', err );
 		if ( win ) {
-			win.loadFile( ERROR_PAGE );
+			win.loadURL( ERROR_URL );
 		} else {
 			app.quit();
 		}

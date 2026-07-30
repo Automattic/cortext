@@ -58,6 +58,9 @@ function loadMain(
 			BrowserWindow,
 			dialog: { showErrorBox },
 			Menu,
+			protocol: {
+				registerSchemesAsPrivileged: () => {},
+			},
 			session: {
 				fromPartition: () => runtimeSession,
 			},
@@ -86,6 +89,12 @@ function loadMain(
 		},
 		'./lib/session-permissions': {
 			installSessionPermissions: () => {},
+		},
+		'./lib/shell-protocol': {
+			ERROR_URL: 'cortext-shell://app/error',
+			LOADING_URL: 'cortext-shell://app/loading',
+			installShellProtocol: () => {},
+			registerShellScheme: () => {},
 		},
 		'./lib/auto-update': {
 			scheduleUpdateCheck,
@@ -405,7 +414,7 @@ test( 'closing while runtime storage is cleared never finishes startup', async (
 	let finishStorageClear;
 	let markStorageClearStarted;
 	let installHeaderCalls = 0;
-	let loadUrlCalls = 0;
+	let runtimeLoadCalls = 0;
 	let quitCalls = 0;
 	let stopCalls = 0;
 	const windows = [];
@@ -432,8 +441,10 @@ test( 'closing while runtime storage is cleared never finishes startup', async (
 			return Promise.resolve();
 		}
 
-		loadURL() {
-			loadUrlCalls += 1;
+		loadURL( url ) {
+			if ( url.startsWith( 'http://127.0.0.1:' ) ) {
+				runtimeLoadCalls += 1;
+			}
 			return Promise.resolve();
 		}
 
@@ -488,5 +499,5 @@ test( 'closing while runtime storage is cleared never finishes startup', async (
 	finishStorageClear();
 	await new Promise( ( resolve ) => setImmediate( resolve ) );
 	assert.equal( installHeaderCalls, 0 );
-	assert.equal( loadUrlCalls, 0 );
+	assert.equal( runtimeLoadCalls, 0 );
 } );
