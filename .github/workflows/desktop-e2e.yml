@@ -125,21 +125,23 @@ jobs:
                       apps/desktop/playwright-report/
                   retention-days: 7
 
-    # Unit tests cover the Windows-specific branches with a mocked platform.
-    # This job runs those tests on Windows and builds the snapshot there too.
-    # It cannot launch the app until we bundle the Windows PHP runtime.
+    # Build the bundled PHP runtime before exercising the same launch path a
+    # Windows checkout uses.
     windows:
-        name: Desktop tests and snapshot (Windows)
-        runs-on: windows-latest
+        name: Playwright (Electron, Windows)
+        runs-on: windows-2022
         needs: changes
         if: needs.changes.outputs.desktop_changed == 'true'
-        timeout-minutes: 30
+        timeout-minutes: 90
+        env:
+            CORTEXT_STATIC_PHP_VERSION: '8.5'
+            CORTEXT_SPC_VERSION: '2.8.5'
         steps:
             - uses: actions/checkout@v7.0.0
 
             - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
               with:
-                  php-version: '8.3'
+                  php-version: ${{ env.CORTEXT_STATIC_PHP_VERSION }}
                   extensions: pdo_sqlite, sqlite3, mbstring, json, curl, openssl
                   tools: composer:v2
                   coverage: none
@@ -162,10 +164,55 @@ jobs:
               working-directory: apps/desktop
               run: npm ci
 
+            # Electron 42 skips the binary download during npm ci. Fetch it here
+            # so Playwright has something to launch.
+            - name: Install Electron binary
+              working-directory: apps/desktop
+              run: npx install-electron
+
             - name: Run desktop unit tests
               working-directory: apps/desktop
               run: npm run test:unit
 
+            - name: Add Git build tools to PATH
+              shell: pwsh
+              run: |
+                  $gitTools = Join-Path $env:ProgramFiles 'Git\usr\bin'
+                  $patch = Join-Path $gitTools 'patch.exe'
+                  if (-not (Test-Path $patch)) {
+                    throw "Git's patch.exe was not found at $patch"
+                  }
+                  $gitTools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+            - name: Cache bundled PHP runtime
+              uses: actions/cache@v6.1.0
+              with:
+                  path: apps/desktop/runtime/bin/php.exe
+                  key: desktop-runtime-php-${{ runner.os }}-${{ runner.arch }}-${{ env.CORTEXT_STATIC_PHP_VERSION }}-${{ env.CORTEXT_SPC_VERSION }}-${{ hashFiles('apps/desktop/scripts/install-runtime.mjs') }}
+
+            # The installer compiles on a cache miss and verifies the restored
+            # executable on a cache hit.
+            - name: Build bundled PHP runtime
+              working-directory: apps/desktop
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+              run: npm run runtime:php
+
             - name: Build snapshot
               working-directory: apps/desktop
+              env:
+                  CORTEXT_PHP_BIN: ${{ github.workspace }}/apps/desktop/runtime/bin/php.exe
               run: npm run snapshot
+
+            - name: Run desktop smoke test
+              working-directory: apps/desktop
+              run: npm run test:e2e
+
+            - if: failure()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: desktop-playwright-artifacts-windows
+                  path: |
+                      apps/desktop/test-results/
+                      apps/desktop/playwright-report/
+                  retention-days: 7

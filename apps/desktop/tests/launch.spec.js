@@ -13,6 +13,7 @@ const { test, expect, _electron: electron } = require( '@playwright/test' );
 const { spawn } = require( 'node:child_process' );
 const { once } = require( 'node:events' );
 const http = require( 'node:http' );
+const net = require( 'node:net' );
 const path = require( 'node:path' );
 const {
 	existsSync,
@@ -460,6 +461,46 @@ async function expectSecondInstanceToExit( app, userDataPath ) {
 		.toBe( true );
 }
 
+function canBindRuntimePort( origin ) {
+	const endpoint = new URL( origin );
+	return new Promise( ( resolve, reject ) => {
+		const server = net.createServer();
+		server.unref();
+		server.once( 'error', ( error ) => {
+			if ( [ 'EACCES', 'EADDRINUSE' ].includes( error.code ) ) {
+				resolve( false );
+				return;
+			}
+			reject( error );
+		} );
+		server.listen(
+			{
+				host: endpoint.hostname,
+				port: Number( endpoint.port ),
+				exclusive: true,
+			},
+			() => {
+				server.close( ( error ) => {
+					if ( error ) {
+						reject( error );
+						return;
+					}
+					resolve( true );
+				} );
+			}
+		);
+	} );
+}
+
+async function expectRuntimePortToBeFree( origin ) {
+	await expect
+		.poll( () => canBindRuntimePort( origin ), {
+			message: `Expected ${ origin } to be free after Cortext closed.`,
+			timeout: 15 * 1000,
+		} )
+		.toBe( true );
+}
+
 test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 	const occupiedPortServer = http.createServer( ( _request, response ) => {
 		response.writeHead( 200 );
@@ -747,6 +788,9 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 		).toBe( true );
 	} finally {
 		await app.close();
+		if ( runtimeOrigin ) {
+			await expectRuntimePortToBeFree( runtimeOrigin );
+		}
 		await new Promise( ( resolve, reject ) => {
 			occupiedPortServer.close( ( error ) => {
 				if ( error ) {
@@ -790,6 +834,7 @@ test( 'reloads, preserves preferences, and exits with its window', async () => {
 		await window.close();
 		await exitPromise;
 		didExit = true;
+		await expectRuntimePortToBeFree( runtimeOrigin );
 
 		( { app: relaunchedApp } = await launchDesktopApp( userDataPath ) );
 		await expectTemporaryUserData( relaunchedApp, userDataPath );
@@ -812,6 +857,9 @@ test( 'reloads, preserves preferences, and exits with its window', async () => {
 		}
 		if ( relaunchedApp ) {
 			await relaunchedApp.close();
+		}
+		if ( runtimeOrigin ) {
+			await expectRuntimePortToBeFree( runtimeOrigin );
 		}
 	}
 } );
