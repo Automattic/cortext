@@ -11,7 +11,8 @@
  */
 
 import { Button, CheckboxControl } from '@wordpress/components';
-import { useSelect } from '@wordpress/data';
+import { store as coreStore } from '@wordpress/core-data';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import {
 	Fragment,
@@ -1035,6 +1036,7 @@ export default function RowProperties( {
 		updateFieldFormat,
 		refreshRows,
 	} = useContext( RowMutationContext );
+	const { saveEntityRecord } = useDispatch( coreStore );
 	const [ localOptionOverrides, setLocalOptionOverrides ] = useState( {} );
 	const [ localFormatOverrides, setLocalFormatOverrides ] = useState( {} );
 	const [ activeLayoutFieldId, setActiveLayoutFieldId ] = useState( null );
@@ -1075,12 +1077,9 @@ export default function RowProperties( {
 		},
 		[ updateFieldFormat ]
 	);
-	// Field edits save as minimal REST patches (see `rowDocumentMutations`)
-	// while the panel still reads from `editorStore`, so this hand-rolled
-	// optimistic layer bridges the two: `local*` holds the in-flight edit and
-	// `committed*` holds a saved value until the live `row` catches up. Rows in
-	// core-data (tech-debt.md#td-rows-not-in-core-data) would let
-	// `saveEntityRecord` do this and delete the block.
+	// Row writes use core-data, but this panel still reads from `editorStore`
+	// and the REST row. Keep in-flight (`local*`) and saved (`committed*`) values
+	// here until row reads move too.
 	const [ committedMeta, setCommittedMeta ] = useState( {} );
 	const [ committedHydratedMeta, setCommittedHydratedMeta ] = useState( {} );
 	const [ committedTitle, setCommittedTitle ] = useState( undefined );
@@ -1192,6 +1191,7 @@ export default function RowProperties( {
 
 			try {
 				const updated = await saveRowDocumentField(
+					saveEntityRecord,
 					entry.rowId,
 					fieldId,
 					entry.value
@@ -1237,6 +1237,7 @@ export default function RowProperties( {
 			clearSaveTimer,
 			collectionId,
 			refreshRows,
+			saveEntityRecord,
 		]
 	);
 
@@ -1289,6 +1290,7 @@ export default function RowProperties( {
 			for ( const [ fieldId, entry ] of entries ) {
 				try {
 					const updated = await saveRowDocumentField(
+						saveEntityRecord,
 						entry.rowId,
 						fieldId,
 						entry.value
@@ -1329,6 +1331,7 @@ export default function RowProperties( {
 			clearLocalFieldValue,
 			collectionId,
 			refreshRows,
+			saveEntityRecord,
 		]
 	);
 
