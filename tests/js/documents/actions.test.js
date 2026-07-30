@@ -44,7 +44,8 @@ describe( 'createDocument', () => {
 		expect( ctx.saveEntityRecord ).toHaveBeenCalledWith(
 			'postType',
 			DOCUMENT_POST_TYPE,
-			{ status: 'draft' }
+			{ status: 'draft' },
+			{ throwOnError: true }
 		);
 		expect( result ).toEqual( { id: 42, slug: 'untitled' } );
 	} );
@@ -61,7 +62,8 @@ describe( 'createDocument', () => {
 		expect( ctx.saveEntityRecord ).toHaveBeenCalledWith(
 			'postType',
 			DOCUMENT_POST_TYPE,
-			{ title: 'Untitled', status: 'private', parent: 3 }
+			{ title: 'Untitled', status: 'private', parent: 3 },
+			{ throwOnError: true }
 		);
 	} );
 
@@ -92,6 +94,16 @@ describe( 'createDocument', () => {
 		expect( result ).toBeNull();
 		expect( ctx.invalidateResolution ).not.toHaveBeenCalled();
 	} );
+
+	it( 'rejects without invalidating caches when saving fails', async () => {
+		const error = new Error( 'save failed' );
+		const ctx = makeCtx();
+		ctx.saveEntityRecord.mockRejectedValue( error );
+
+		await expect( createDocument( {}, ctx ) ).rejects.toBe( error );
+
+		expect( ctx.invalidateResolution ).not.toHaveBeenCalled();
+	} );
 } );
 
 describe( 'useCreateDocument', () => {
@@ -120,7 +132,8 @@ describe( 'useCreateDocument', () => {
 		expect( saveEntityRecord ).toHaveBeenCalledWith(
 			'postType',
 			DOCUMENT_POST_TYPE,
-			{ status: 'draft', title: 'About' }
+			{ status: 'draft', title: 'About' },
+			{ throwOnError: true }
 		);
 		expect( invalidateResolution ).toHaveBeenCalledTimes(
 			afterDocumentTrash.length
@@ -145,7 +158,8 @@ describe( 'useCreateDocument', () => {
 		expect( saveEntityRecord ).toHaveBeenCalledWith(
 			'postType',
 			DOCUMENT_POST_TYPE,
-			{ status: 'draft' }
+			{ status: 'draft' },
+			{ throwOnError: true }
 		);
 	} );
 } );
@@ -177,7 +191,8 @@ describe( 'useCreateCollectionDocument', () => {
 				title: 'Tasks',
 				parent: 3,
 				cortext_collection: true,
-			}
+			},
+			{ throwOnError: true }
 		);
 	} );
 
@@ -198,7 +213,8 @@ describe( 'useCreateCollectionDocument', () => {
 		expect( saveEntityRecord ).toHaveBeenCalledWith(
 			'postType',
 			DOCUMENT_POST_TYPE,
-			{ status: 'draft', cortext_collection: true }
+			{ status: 'draft', cortext_collection: true },
+			{ throwOnError: true }
 		);
 	} );
 } );
