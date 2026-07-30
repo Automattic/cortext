@@ -28,6 +28,19 @@ function defaultIsFile( candidate, platform ) {
 	}
 }
 
+function bundledRuntimeExecutable(
+	appDir,
+	commandName,
+	platform = process.platform
+) {
+	const pathApi = platform === 'win32' ? path.win32 : path;
+	const executable =
+		platform === 'win32' && ! commandName.toLowerCase().endsWith( '.exe' )
+			? `${ commandName }.exe`
+			: commandName;
+	return pathApi.join( appDir, 'runtime/bin', executable );
+}
+
 function windowsExtensions(
 	command,
 	env,
@@ -133,6 +146,7 @@ function findExecutable(
 
 module.exports = {
 	DEFAULT_WINDOWS_PATHEXT,
+	bundledRuntimeExecutable,
 	envValue,
 	findExecutable,
 };

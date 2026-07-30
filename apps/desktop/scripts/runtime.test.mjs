@@ -8,7 +8,6 @@ import test from 'node:test';
 import runtimeHelpers from '../lib/runtime.js';
 
 const {
-	bundledRuntimeExecutable,
 	childProcessOptions,
 	findRuntimeExecutable,
 	isPortBindFailure,
@@ -55,17 +54,6 @@ test( 'runtime lookup skips Windows batch wrappers', () => {
 			isFile: ( candidate ) => files.has( candidate.toLowerCase() ),
 		} ),
 		'C:\\native\\php.EXE'
-	);
-} );
-
-test( 'bundled PHP resolves to php.exe on Windows and php elsewhere', () => {
-	assert.equal(
-		bundledRuntimeExecutable( 'C:\\Cortext', 'php', 'win32' ),
-		path.win32.join( 'C:\\Cortext', 'runtime/bin', 'php.exe' )
-	);
-	assert.equal(
-		bundledRuntimeExecutable( '/Applications/Cortext', 'php', 'darwin' ),
-		path.join( '/Applications/Cortext', 'runtime/bin', 'php' )
 	);
 } );
 

@@ -3,7 +3,12 @@ import test from 'node:test';
 
 import executableHelpers from '../lib/executable.js';
 
-const { DEFAULT_WINDOWS_PATHEXT, envValue, findExecutable } = executableHelpers;
+const {
+	DEFAULT_WINDOWS_PATHEXT,
+	bundledRuntimeExecutable,
+	envValue,
+	findExecutable,
+} = executableHelpers;
 
 function windowsFiles( files ) {
 	const normalized = new Set( files.map( ( file ) => file.toLowerCase() ) );
@@ -13,6 +18,17 @@ function windowsFiles( files ) {
 test( 'Windows environment lookup is case-insensitive', () => {
 	assert.equal( envValue( { Path: 'C:\\bin' }, 'PATH', 'win32' ), 'C:\\bin' );
 	assert.equal( envValue( { pathext: '.EXE' }, 'PATHEXT', 'win32' ), '.EXE' );
+} );
+
+test( 'bundled runtime executables use the platform filename', () => {
+	assert.equal(
+		bundledRuntimeExecutable( 'C:\\Cortext', 'php', 'win32' ),
+		'C:\\Cortext\\runtime\\bin\\php.exe'
+	);
+	assert.equal(
+		bundledRuntimeExecutable( '/Applications/Cortext', 'php', 'darwin' ),
+		'/Applications/Cortext/runtime/bin/php'
+	);
 } );
 
 test( 'findExecutable searches quoted Windows PATH entries with PATHEXT', () => {
