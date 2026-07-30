@@ -62,6 +62,48 @@ composer phpcs       # WordPress Coding Standards
 composer test:php    # PHPUnit (via WorDBless)
 ```
 
+### Backend performance benchmarks
+
+Before running either backend suite, create the same deterministic dataset that CI uses. Because `--reset` deletes all existing Cortext content in that wp-env instance, run this in a disposable benchmark environment:
+
+```
+pnpm run env:start
+pnpm exec wp-env run cli wp cortext perf-seed \
+  --reset \
+  --force \
+  --collections=3 \
+  --rows=1250 \
+  --fields=8 \
+  --wide-fields=40 \
+  --relations=1 \
+  --rollups=1
+```
+
+Run the paired PR-impact suite first, before anything changes the fixture. It compares `shape=full` with `shape=ids`, including a single request for 1,000 IDs. It also compares the projected link-suggestion request used by Gutenberg with its pre-optimization version, which performed extra enrichment work:
+
+```
+pnpm exec wp-env run cli wp cortext perf-bench \
+  --suite=row-shapes \
+  --iterations=20 \
+  --warmup=2 \
+  --pretty
+```
+
+Then run the default suite against its performance budgets:
+
+```
+pnpm exec wp-env run cli wp cortext perf-bench \
+  --iterations=10 \
+  --warmup=1 \
+  --budget=includes/CLI/perf-budgets.json \
+  --fail-on-budget \
+  --pretty
+```
+
+The default suite changes benchmark values, so run `perf-seed --reset --force` again before rerunning `row-shapes`. Add `--scenario=<substring>` to either command to run a specific scenario locally. The paired report shows latency, SQL query count, net retained memory, serialized payload size, and the reduction in each metric. For the 1,000-ID comparison, each of the ten full pages counts as a separate request. The report sums latency, query counts, and payload sizes across those requests, but uses the largest per-request net retained memory delta.
+
+These REST scenarios run inside WordPress from the WP-CLI process, so they never cross an HTTP server or the network. Their timings also exclude JSON encoding. Use the results to compare backend work and response size, not end-to-end browser latency.
+
 ### End-to-end tests
 
 E2E tests run against a dedicated wp-env instance on port 8889, separate from the development site:

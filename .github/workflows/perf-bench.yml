@@ -4,7 +4,7 @@ on:
     push:
         branches: [main]
         paths:
-            - includes/CLI/**
+            - includes/**
             - src/**
             - tests/e2e/specs/perf-ui.spec.js
             - .github/workflows/perf-bench.yml
@@ -70,7 +70,19 @@ jobs:
                   --relations=1
                   --rollups=1
 
+            - name: Benchmark row shapes and link suggestions
+              run: |
+                  set -euo pipefail
+                  mkdir -p artifacts
+
+                  pnpm exec wp-env run cli wp cortext perf-bench \
+                    --suite=row-shapes \
+                    --iterations=20 \
+                    --warmup=2 \
+                    --pretty | tee artifacts/perf-bench-row-shapes.json
+
             - name: Run backend benchmark
+              if: always()
               run: |
                   set -euo pipefail
                   mkdir -p artifacts
@@ -104,7 +116,6 @@ jobs:
                   fi
 
                   exit "$status"
-
             - name: Run UI benchmark
               if: ${{ false }}
               env:
@@ -128,6 +139,7 @@ jobs:
               run: |
                   mkdir -p artifacts
                   php .github/scripts/write-perf-bench-summary.php --current=artifacts/perf-bench.json | tee artifacts/perf-bench-summary.md
+                  php .github/scripts/write-perf-bench-summary.php --current=artifacts/perf-bench-row-shapes.json | tee artifacts/perf-bench-row-shapes-summary.md
                   if [ -s artifacts/perf-ui.json ]; then
                     php .github/scripts/write-perf-ui-summary.php --current=artifacts/perf-ui.json | tee artifacts/perf-ui-summary.md
                   fi
