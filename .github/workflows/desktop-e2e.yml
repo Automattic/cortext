@@ -125,8 +125,8 @@ jobs:
                       apps/desktop/playwright-report/
                   retention-days: 7
 
-    # Build the bundled PHP runtime before exercising the same launch path a
-    # Windows checkout uses.
+    # Build the bundled PHP runtime, then launch Cortext the same way it runs
+    # from a Windows checkout.
     windows:
         name: Playwright (Electron, Windows)
         runs-on: windows-2022
@@ -164,8 +164,8 @@ jobs:
               working-directory: apps/desktop
               run: npm ci
 
-            # Electron 42 skips the binary download during npm ci. Fetch it here
-            # so Playwright has something to launch.
+            # npm ci does not download Electron 42's binary, so install it
+            # separately for Playwright.
             - name: Install Electron binary
               working-directory: apps/desktop
               run: npx install-electron
@@ -174,7 +174,7 @@ jobs:
               working-directory: apps/desktop
               run: npm run test:unit
 
-            - name: Add Git build tools to PATH
+            - name: Add Git's build tools to PATH
               shell: pwsh
               run: |
                   $gitTools = Join-Path $env:ProgramFiles 'Git\usr\bin'
@@ -190,9 +190,8 @@ jobs:
                   path: apps/desktop/runtime/bin/php.exe
                   key: desktop-runtime-php-${{ runner.os }}-${{ runner.arch }}-${{ env.CORTEXT_STATIC_PHP_VERSION }}-${{ env.CORTEXT_SPC_VERSION }}-${{ hashFiles('apps/desktop/scripts/install-runtime.mjs') }}
 
-            # The installer compiles on a cache miss and verifies the restored
-            # executable on a cache hit.
-            - name: Build bundled PHP runtime
+            # Build PHP on a cache miss. The installer still checks cached binaries.
+            - name: Build bundled PHP
               working-directory: apps/desktop
               env:
                   GITHUB_TOKEN: ${{ github.token }}
@@ -204,7 +203,7 @@ jobs:
                   CORTEXT_PHP_BIN: ${{ github.workspace }}/apps/desktop/runtime/bin/php.exe
               run: npm run snapshot
 
-            - name: Run desktop smoke test
+            - name: Run desktop E2E tests
               working-directory: apps/desktop
               run: npm run test:e2e
 

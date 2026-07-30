@@ -146,14 +146,14 @@ export function phpRuntimeDescriptor(
 	}
 
 	throw new Error(
-		`Bundled PHP is only supported on macOS and Windows. Current platform: ${ platform }.`
+		`Bundled PHP only supports macOS and Windows, not ${ platform }.`
 	);
 }
 
 function macPlatformKey( platform = process.platform, arch = process.arch ) {
 	if ( platform !== 'darwin' ) {
 		throw new Error(
-			`This runtime is only available on macOS. Current platform: ${ platform }.`
+			`This runtime only supports macOS, not ${ platform }.`
 		);
 	}
 	return phpRuntimeDescriptor( platform, arch ).key;
@@ -370,7 +370,7 @@ export function verifyPhp(
 	] );
 	if ( actualVersion !== expectedVersion ) {
 		throw new Error(
-			`Bundled PHP ${ actualVersion } does not match requested PHP ${ expectedVersion }.`
+			`Bundled PHP is ${ actualVersion }, but this build needs PHP ${ expectedVersion }.`
 		);
 	}
 
@@ -381,7 +381,7 @@ export function verifyPhp(
 	for ( const required of requiredPhpModules( extensions ) ) {
 		if ( ! modules.includes( required ) ) {
 			throw new Error(
-				`Bundled PHP is missing required module: ${ required }`
+				`Bundled PHP is missing the ${ required } module.`
 			);
 		}
 	}
@@ -400,7 +400,7 @@ export function verifyPhp(
 		const parsed = JSON.parse( jit || 'null' );
 		if ( ! parsed || parsed.enabled !== true ) {
 			throw new Error(
-				'Bundled PHP did not report enabled OPcache JIT.'
+				'OPcache JIT is not enabled in the bundled PHP runtime.'
 			);
 		}
 	}

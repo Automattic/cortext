@@ -78,7 +78,7 @@ function fakeDependencies( { files = [], getOutput = phpOutput() } = {} ) {
 	};
 }
 
-test( 'PHP runtime descriptors preserve macOS artifacts and paths', () => {
+test( 'macOS keeps its existing SPC assets and paths', () => {
 	assert.deepEqual( phpRuntimeDescriptor( 'darwin', 'arm64' ), {
 		key: 'macos-aarch64',
 		spcAsset: 'spc-macos-aarch64.tar.gz',
@@ -99,7 +99,7 @@ test( 'PHP runtime descriptors preserve macOS artifacts and paths', () => {
 	} );
 } );
 
-test( 'the Windows descriptor uses native executable names', () => {
+test( 'Windows uses native executable names', () => {
 	assert.deepEqual( phpRuntimeDescriptor( 'win32', 'x64' ), {
 		key: 'windows-x64',
 		spcAsset: 'spc-windows-x64.exe',
@@ -111,31 +111,31 @@ test( 'the Windows descriptor uses native executable names', () => {
 	} );
 } );
 
-test( 'unsupported platforms and Windows architectures fail early', () => {
+test( 'unsupported platforms and architectures fail before setup starts', () => {
 	assert.throws(
 		() => phpRuntimeDescriptor( 'win32', 'arm64' ),
 		/Unsupported Windows architecture: arm64/
 	);
 	assert.throws(
 		() => phpRuntimeDescriptor( 'linux', 'x64' ),
-		/only supported on macOS and Windows/
+		/only supports macOS and Windows/
 	);
 } );
 
-test( 'FrankenPHP and Caddy remain macOS-only', () => {
+test( 'FrankenPHP and Caddy are still macOS-only', () => {
 	assert.equal( frankenPlatformName( 'darwin', 'arm64' ), 'mac-arm64' );
 	assert.equal( caddyPlatformName( 'darwin', 'x64' ), 'mac_amd64' );
 	assert.throws(
 		() => frankenPlatformName( 'win32', 'x64' ),
-		/only available on macOS/
+		/only supports macOS/
 	);
 	assert.throws(
 		() => caddyPlatformName( 'win32', 'x64' ),
-		/only available on macOS/
+		/only supports macOS/
 	);
 } );
 
-test( 'run and output preserve spawn errors', () => {
+test( 'spawn errors surface unchanged', () => {
 	const spawnError = Object.assign( new Error( 'spawn missing ENOENT' ), {
 		code: 'ENOENT',
 	} );
@@ -157,7 +157,7 @@ test( 'run and output preserve spawn errors', () => {
 	);
 } );
 
-test( 'required modules stay in sync with compiled extensions', () => {
+test( 'PHP verifies every extension it compiles', () => {
 	const extensions = phpExtensions( true );
 	const modules = requiredPhpModules( extensions );
 
@@ -172,7 +172,7 @@ test( 'required modules stay in sync with compiled extensions', () => {
 	assert.ok( modules.includes( 'apcu' ) );
 } );
 
-test( 'PHP verification checks the requested major and minor version', () => {
+test( 'PHP rejects the wrong major or minor version', () => {
 	assert.throws(
 		() =>
 			verifyPhp( '/runtime/php', {
@@ -180,11 +180,11 @@ test( 'PHP verification checks the requested major and minor version', () => {
 				getOutput: phpOutput( { version: '8.4' } ),
 				log: () => {},
 			} ),
-		/Bundled PHP 8\.4 does not match requested PHP 8\.5/
+		/Bundled PHP is 8\.4, but this build needs PHP 8\.5/
 	);
 } );
 
-test( 'PHP verification checks every compiled module', () => {
+test( 'PHP fails verification when a compiled module is missing', () => {
 	const extensions = phpExtensions( true );
 	const withoutBcmath = extensions.filter(
 		( extension ) => extension !== 'bcmath'
@@ -197,7 +197,7 @@ test( 'PHP verification checks every compiled module', () => {
 				getOutput: phpOutput( { extensions: withoutBcmath } ),
 				log: () => {},
 			} ),
-		/missing required module: bcmath/
+		/missing the bcmath module/
 	);
 	assert.doesNotThrow( () =>
 		verifyPhp( '/runtime/php', {
@@ -209,7 +209,7 @@ test( 'PHP verification checks every compiled module', () => {
 	);
 } );
 
-test( 'Windows installs SPC directly and compiles PHP without Unix tools', async () => {
+test( 'Windows copies SPC directly and skips Unix-only setup', async () => {
 	const root = resolve( 'test-runtime-windows' );
 	const binDir = resolve( root, 'runtime/bin' );
 	const cacheDir = resolve( root, '.runtime-cache' );
@@ -281,7 +281,7 @@ test( 'Windows installs SPC directly and compiles PHP without Unix tools', async
 	assert.equal( calls.output[ 0 ].command, dest );
 } );
 
-test( 'Windows only runs doctor when it needs to compile PHP', async () => {
+test( 'Windows skips doctor when PHP is already built', async () => {
 	const root = resolve( 'test-runtime-windows-built' );
 	const binDir = resolve( root, 'runtime/bin' );
 	const cacheDir = resolve( root, '.runtime-cache' );
@@ -310,7 +310,7 @@ test( 'Windows only runs doctor when it needs to compile PHP', async () => {
 	] );
 } );
 
-test( 'a cached Windows PHP binary is always verified', async () => {
+test( 'Windows verifies cached PHP before reusing it', async () => {
 	const root = resolve( 'test-runtime-windows-cached' );
 	const binDir = resolve( root, 'runtime/bin' );
 	const cacheDir = resolve( root, '.runtime-cache' );
@@ -337,7 +337,7 @@ test( 'a cached Windows PHP binary is always verified', async () => {
 	);
 } );
 
-test( 'macOS keeps tar extraction, pkg-config and executable modes', async () => {
+test( 'macOS still extracts SPC, installs pkg-config, and sets executable permissions', async () => {
 	const root = resolve( 'test-runtime-macos' );
 	const binDir = resolve( root, 'runtime/bin' );
 	const cacheDir = resolve( root, '.runtime-cache' );

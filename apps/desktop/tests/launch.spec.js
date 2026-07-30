@@ -495,7 +495,7 @@ function canBindRuntimePort( origin ) {
 async function expectRuntimePortToBeFree( origin ) {
 	await expect
 		.poll( () => canBindRuntimePort( origin ), {
-			message: `Expected ${ origin } to be free after Cortext closed.`,
+			message: `Cortext closed, but ${ origin } is still in use.`,
 			timeout: 15 * 1000,
 		} )
 		.toBe( true );

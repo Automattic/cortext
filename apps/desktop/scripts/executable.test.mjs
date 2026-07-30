@@ -20,7 +20,7 @@ test( 'Windows environment lookup is case-insensitive', () => {
 	assert.equal( envValue( { pathext: '.EXE' }, 'PATHEXT', 'win32' ), '.EXE' );
 } );
 
-test( 'bundled runtime executables use the platform filename', () => {
+test( 'bundled runtime paths use .exe on Windows', () => {
 	assert.equal(
 		bundledRuntimeExecutable( 'C:\\Cortext', 'php', 'win32' ),
 		'C:\\Cortext\\runtime\\bin\\php.exe'
