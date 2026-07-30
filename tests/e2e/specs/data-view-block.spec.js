@@ -2563,6 +2563,151 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'duplicates a row and keeps its field values after reload', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+		const duplicateTitle = 'Copy of The Left Hand of Darkness';
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Row duplicate test page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const table = canvas.locator( '.dataviews-view-table' );
+			const originalRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: 'The Left Hand of Darkness' } );
+
+			await expect( originalRow ).toBeVisible();
+			await originalRow.hover();
+			await originalRow
+				.getByRole( 'button', { name: 'Actions' } )
+				.click( { force: true } );
+			const duplicateResponsePromise = page.waitForResponse(
+				( response ) =>
+					response.request().method() === 'POST' &&
+					new URL( response.url() ).pathname.endsWith(
+						`/wp-json/cortext/v1/documents/${ fixture.entry.id }/duplicate`
+					)
+			);
+			await canvas.getByRole( 'menuitem', { name: 'Duplicate' } ).click();
+			const duplicateResponse = await duplicateResponsePromise;
+			expect( duplicateResponse.ok() ).toBe( true );
+			const duplicateEnvelope = await duplicateResponse.json();
+			fixture.duplicateId = Number( duplicateEnvelope.id );
+			expect( fixture.duplicateId ).toBeGreaterThan( 0 );
+
+			const duplicateRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: duplicateTitle } );
+			await expect( duplicateRow ).toBeVisible();
+			await expect( duplicateRow ).toContainText( 'Ursula K. Le Guin' );
+
+			const rows = await requestUtils.rest( {
+				path: '/wp/v2/crtxt_documents',
+				params: {
+					context: 'edit',
+					status: 'draft,private,publish',
+					per_page: 100,
+					cortext_trait: fixture.collection.id,
+				},
+			} );
+			const duplicate = rows.find(
+				( row ) => Number( row.id ) === fixture.duplicateId
+			);
+			expect( duplicate ).toBeTruthy();
+			expect( duplicate.title.raw ).toBe( duplicateTitle );
+			expect( duplicate.meta[ `field-${ fixture.field.id }` ] ).toBe(
+				'Ursula K. Le Guin'
+			);
+
+			const cachedDuplicate = await page.evaluate(
+				( { duplicateId, fieldKey } ) => {
+					const record = window.wp.data
+						.select( 'core' )
+						.getEntityRecord(
+							'postType',
+							'crtxt_document',
+							duplicateId
+						);
+					if ( ! record ) {
+						return null;
+					}
+					return {
+						id: record.id,
+						title: record.title?.raw,
+						fieldValue: record.meta?.[ fieldKey ],
+					};
+				},
+				{
+					duplicateId: fixture.duplicateId,
+					fieldKey: `field-${ fixture.field.id }`,
+				}
+			);
+			expect( cachedDuplicate ).toEqual( {
+				id: fixture.duplicateId,
+				title: duplicateTitle,
+				fieldValue: 'Ursula K. Le Guin',
+			} );
+
+			await page.reload();
+			await expect( duplicateRow ).toBeVisible();
+			await expect( duplicateRow ).toContainText( 'Ursula K. Le Guin' );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.duplicateId &&
+					`/wp/v2/crtxt_documents/${ fixture.duplicateId }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'creates a collection from the placeholder and can switch collections', async ( {
 		admin,
 		page,
