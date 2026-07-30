@@ -43,11 +43,9 @@ Cortext still falls back to port 0, trading origin stability for starting at all
 profile to a new origin strands browser-only preferences under the old origin.
 The user may need to re-enter those preferences and the local Notion key.
 WordPress settings and uploads are unaffected, but documents are only partly so:
-blocks that embed uploaded media keep the previous origin in their markup, so
-those images need re-inserting. That is not specific to a port change. Content
-stores absolute URLs today, which also blocks syncing documents between a
-desktop profile and a remote site, and the fix belongs with that work: store the
-attachment identity and resolve the URL at render, the way mentions already do.
+blocks that embed uploaded media keep the previous origin in their markup and
+nothing rewrites them, at save or at render, so those images need re-inserting.
+That is a property of how block content stores URLs, not of the port change.
 
 ## 2026-07-24 — Authenticate every local runtime request
 
