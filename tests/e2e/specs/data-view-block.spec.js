@@ -3821,6 +3821,259 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'queues inline saves while row details are open and shows save errors', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+		const firstStatus = 'First queued value';
+		const successfulStatus = 'Ready for review';
+		const failedStatus = 'This must not persist';
+		const failureMessage = 'Forced row save failure.';
+		let delayedSaveHandler;
+		let failedSaveHandler;
+		let releaseFirstSave = () => {};
+		let rowSavePattern;
+
+		try {
+			Object.assign(
+				fixture,
+				await createCalculationFixture( requestUtils )
+			);
+			const statusKey = `field-${ fixture.fields.status.id }`;
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Concurrent inline row saves',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', statusKey ],
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page
+				.getByRole( 'region', { name: 'Content' } )
+				.frameLocator( 'iframe[name="editor-canvas"]' );
+			const table = canvas.locator( '.dataviews-view-table' );
+			const alphaRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: 'Alpha Book' } );
+
+			await expect( alphaRow ).toBeVisible();
+			await alphaRow.hover();
+			await alphaRow.locator( '.cortext-title-cell__open' ).click();
+
+			const detail = page.getByRole( 'dialog', { name: 'Detail' } );
+			await expect( detail ).toBeVisible();
+			await expect(
+				activeRowDetailCanvas( detail )
+					.locator( '[data-type="core/post-title"]' )
+					.first()
+			).toHaveText( 'Alpha Book' );
+
+			rowSavePattern = new RegExp(
+				`/wp-json/wp/v2/crtxt_documents/${ fixture.rows[ 0 ].id }(?:\\?|$)`
+			);
+			const isExpectedMetaSave = ( request, fieldKey, expectedValue ) => {
+				if (
+					request.method() !== 'POST' ||
+					! rowSavePattern.test( request.url() )
+				) {
+					return false;
+				}
+				try {
+					return (
+						request.postDataJSON()?.meta?.[ fieldKey ] ===
+						expectedValue
+					);
+				} catch {
+					return false;
+				}
+			};
+
+			const firstSaveGate = new Promise( ( resolve ) => {
+				releaseFirstSave = resolve;
+			} );
+			delayedSaveHandler = async ( route ) => {
+				if (
+					isExpectedMetaSave(
+						route.request(),
+						statusKey,
+						firstStatus
+					)
+				) {
+					await firstSaveGate;
+				}
+				await route.continue();
+			};
+			await page.route( rowSavePattern, delayedSaveHandler );
+
+			const firstSaveRequest = page.waitForRequest( ( request ) =>
+				isExpectedMetaSave( request, statusKey, firstStatus )
+			);
+			const statusCell = alphaRow.getByText( 'Alpha', {
+				exact: true,
+			} );
+			// The open side peek intercepts pointer events over the canvas. Click
+			// the hidden grid control directly so this test can focus on save
+			// ordering.
+			await statusCell.evaluate( ( cell ) => cell.click() );
+			const statusInput = alphaRow.getByRole( 'textbox', {
+				name: 'Status',
+				exact: true,
+			} );
+			await statusInput.fill( firstStatus, { force: true } );
+			await statusInput.press( 'Enter' );
+			await firstSaveRequest;
+			await expect( statusInput ).toHaveValue( firstStatus );
+
+			await statusInput.fill( successfulStatus, { force: true } );
+			const secondSaveRequest = page.waitForRequest( ( request ) =>
+				isExpectedMetaSave( request, statusKey, successfulStatus )
+			);
+			await statusInput.press( 'Enter' );
+			await expect( statusInput ).toHaveValue( successfulStatus );
+
+			const secondSaveStartedWhileFirstWasPending = await Promise.race( [
+				secondSaveRequest.then( () => true ),
+				page.waitForTimeout( 250 ).then( () => false ),
+			] );
+			expect( secondSaveStartedWhileFirstWasPending ).toBe( false );
+
+			releaseFirstSave();
+			await secondSaveRequest;
+
+			await expect
+				.poll( async () => {
+					const row = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_documents/${ fixture.rows[ 0 ].id }`,
+						params: { context: 'edit' },
+					} );
+					return row.meta[ statusKey ];
+				} )
+				.toBe( successfulStatus );
+			await expect( detail ).toBeVisible();
+
+			await page.unroute( rowSavePattern, delayedSaveHandler );
+			delayedSaveHandler = null;
+			failedSaveHandler = async ( route ) => {
+				if (
+					isExpectedMetaSave(
+						route.request(),
+						statusKey,
+						failedStatus
+					)
+				) {
+					await route.fulfill( {
+						status: 500,
+						contentType: 'application/json',
+						body: JSON.stringify( {
+							code: 'cortext_test_save_failure',
+							message: failureMessage,
+							data: { status: 500 },
+						} ),
+					} );
+					return;
+				}
+				await route.continue();
+			};
+			await page.route( rowSavePattern, failedSaveHandler );
+
+			await expect(
+				alphaRow.getByText( successfulStatus, { exact: true } )
+			).toBeVisible();
+			await alphaRow
+				.getByText( successfulStatus, { exact: true } )
+				.evaluate( ( cell ) => cell.click() );
+			const failingInput = alphaRow.getByRole( 'textbox', {
+				name: 'Status',
+				exact: true,
+			} );
+			await failingInput.fill( failedStatus, { force: true } );
+			const failedSaveRequest = page.waitForRequest( ( request ) =>
+				isExpectedMetaSave( request, statusKey, failedStatus )
+			);
+			await failingInput.press( 'Enter' );
+			await failedSaveRequest;
+
+			await expect(
+				canvas.getByText( failureMessage, { exact: true } )
+			).toBeVisible();
+			await expect( failingInput ).toHaveValue( failedStatus );
+
+			const persistedAfterFailure = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ fixture.rows[ 0 ].id }`,
+				params: { context: 'edit' },
+			} );
+			expect( persistedAfterFailure.meta[ statusKey ] ).toBe(
+				successfulStatus
+			);
+
+			await page.unroute( rowSavePattern, failedSaveHandler );
+			failedSaveHandler = null;
+			await page.reload();
+
+			const reloadedCanvas = page
+				.getByRole( 'region', { name: 'Content' } )
+				.frameLocator( 'iframe[name="editor-canvas"]' );
+			const reloadedRow = reloadedCanvas
+				.locator( '.dataviews-view-table tbody > tr' )
+				.filter( { hasText: 'Alpha Book' } );
+			await expect( reloadedRow ).toContainText( successfulStatus );
+		} finally {
+			releaseFirstSave();
+			if ( rowSavePattern && delayedSaveHandler ) {
+				await page
+					.unroute( rowSavePattern, delayedSaveHandler )
+					.catch( () => {} );
+			}
+			if ( rowSavePattern && failedSaveHandler ) {
+				await page
+					.unroute( rowSavePattern, failedSaveHandler )
+					.catch( () => {} );
+			}
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_documents/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			for ( const field of Object.values( fixture.fields ?? {} ) ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ field.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'row detail toolbar stays separate from the parent DataView toolbar', async ( {
 		admin,
 		page,
