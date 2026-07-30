@@ -1034,11 +1034,16 @@ function stopProcessEntries( entries, options = {} ) {
 	);
 }
 
-function isAddressInUseFailure( entries ) {
-	return entries.some( ( entry ) =>
-		/(?:address already in use|eaddrinuse|bind: address)/i.test(
-			entry.outputTail
-		)
+function isPortBindFailure( entries, port ) {
+	const phpListenFailure = new RegExp(
+		`failed to listen on 127\\.0\\.0\\.1:${ port }(?:\\s|$)`,
+		'i'
+	);
+	return entries.some(
+		( entry ) =>
+			/(?:address already in use|eaddrinuse|bind: address|only one usage of each socket address)/i.test(
+				entry.outputTail
+			) || phpListenFailure.test( entry.outputTail )
 	);
 }
 
@@ -1122,12 +1127,15 @@ async function launchRuntime( handle, options ) {
 			// The child `exit` event may precede the final stderr data. Wait for
 			// stdio to close before deciding whether this was a bind collision.
 			await waitForProcessOutputToClose( failedProcesses );
-			const addressInUse = isAddressInUseFailure( failedProcesses );
+			const portBindFailure = isPortBindFailure(
+				failedProcesses,
+				selectedPort
+			);
 			for ( const cleanupPath of failedCleanupPaths ) {
 				fs.rmSync( cleanupPath, { recursive: true, force: true } );
 			}
 
-			if ( ! addressInUse || attempt > 0 ) {
+			if ( ! portBindFailure || attempt > 0 ) {
 				throw error;
 			}
 
@@ -1246,6 +1254,7 @@ module.exports = {
 	childProcessOptions,
 	findRuntimeExecutable,
 	findAvailablePort,
+	isPortBindFailure,
 	isValidPort,
 	normalizeRuntime,
 	phpCliWorkerConfig,
