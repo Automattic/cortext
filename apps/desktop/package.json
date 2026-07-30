@@ -15,9 +15,11 @@
 		"test": "npm run test:e2e",
 		"test:unit": "node --test scripts/*.test.mjs",
 		"test:e2e": "playwright test",
+		"verify:app": "node scripts/verify-packaged-app.mjs",
 		"dist": "electron-builder"
 	},
 	"devDependencies": {
+		"@electron/fuses": "1.8.0",
 		"@playwright/test": "^1.60.0",
 		"electron": "^42.3.3",
 		"electron-builder": "^26.15.3",
@@ -26,6 +28,17 @@
 	"build": {
 		"appId": "com.automattic.cortext",
 		"productName": "Cortext",
+		"asar": true,
+		"electronFuses": {
+			"runAsNode": false,
+			"enableCookieEncryption": false,
+			"enableNodeOptionsEnvironmentVariable": false,
+			"enableNodeCliInspectArguments": false,
+			"enableEmbeddedAsarIntegrityValidation": true,
+			"onlyLoadAppFromAsar": true,
+			"loadBrowserProcessSpecificV8Snapshot": false,
+			"grantFileProtocolExtraPrivileges": false
+		},
 		"directories": {
 			"output": "dist"
 		},
