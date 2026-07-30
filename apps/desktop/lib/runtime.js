@@ -111,7 +111,14 @@ function isEnabled( value ) {
 }
 
 function addPhpIni( args, key, value ) {
-	args.push( '-d', `${ key }=${ value }` );
+	// PHP parses -d values with php.ini grammar even when Node passes argv
+	// directly. Quote paths so Windows short names such as RUNNER~1 are not
+	// treated as expressions, and keep literal path characters literal.
+	const encodedValue = String( value )
+		.replaceAll( '\\', '\\\\' )
+		.replaceAll( '"', '\\"' )
+		.replaceAll( '$', '\\$' );
+	args.push( '-d', `${ key }="${ encodedValue }"` );
 }
 
 function ensureDir( dir ) {

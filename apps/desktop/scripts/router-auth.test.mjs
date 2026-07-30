@@ -47,7 +47,9 @@ function makeFixture() {
 
 function makeUnprotectedFixture() {
 	const wordpressDir = fs.mkdtempSync(
-		path.join( os.tmpdir(), 'cortext-router-legacy-' )
+		// PHP's -d parser treats an unquoted tilde as INI syntax. Windows CI
+		// commonly places temp files below RUNNER~1, so keep that case covered.
+		path.join( os.tmpdir(), 'cortext-router-legacy-RUNNER~1-' )
 	);
 	fs.writeFileSync(
 		path.join( wordpressDir, 'router.php' ),
