@@ -446,7 +446,7 @@ tr:is(:hover, .is-hovered) > td.dataviews-view-table__actions-column {
 .cortext-data-view
 .dataviews-view-table
 tbody
-tr:is(:hover, .is-hovered) > td:is(:hover, :focus-within) {
+tr:is(:hover, .is-hovered) > td:hover {
 	background-color: $table-cell-hover-background;
 }
 
@@ -671,18 +671,23 @@ tbody > tr > td:not(:first-child) {
 		min-height: 28px;
 		padding: 0 $grid-unit-10;
 		border: $border-width solid transparent;
-		color: var(--wp-admin-theme-color, #3858e9);
+		color: $gray-700;
 		font-size: 12px;
 		line-height: 1;
 		box-sizing: border-box;
 		opacity: 0;
 		pointer-events: none;
 
-		&:focus-visible,
 		&:hover,
-		&:focus {
+		&:focus-visible {
 			border-color: $gray-300;
-			color: var(--wp-admin-theme-color, #3858e9);
+			color: $gray-900;
+		}
+
+		// The Button ring comes from `:focus`, so a pointer click leaves the
+		// open row outlined. Reserve the ring for keyboard focus.
+		&:focus:not(:focus-visible) {
+			box-shadow: none;
 		}
 	}
 }
@@ -730,6 +735,15 @@ tr:has(.cortext-title-cell--is-opening)
 .cortext-title-cell__open.components-button {
 	opacity: 1;
 	pointer-events: auto;
+}
+
+// `.cortext-title-cell` fills the td, so tinting it on focus splits the row
+// into two shades. A pointer-focused Open button is not an edit, so it leaves
+// the row background alone; the title editor and keyboard focus still tint.
+.cortext-title-cell:focus-within:has(
+.cortext-title-cell__open:focus:not(:focus-visible)
+) {
+	background: transparent;
 }
 
 .cortext-data-view
