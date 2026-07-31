@@ -149,7 +149,9 @@ export default function RevisionsHeader( {
 				<ConfirmDialog
 					onConfirm={ async () => {
 						setIsConfirming( false );
-						await restoreRevision();
+						// restoreRevision raises its own error notice, and the
+						// dialog drops whatever onConfirm returns.
+						await restoreRevision().catch( () => {} );
 					} }
 					onCancel={ () => setIsConfirming( false ) }
 					confirmButtonText={ __( 'Restore', 'cortext' ) }

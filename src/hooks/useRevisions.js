@@ -11,7 +11,9 @@ import { __ } from '@wordpress/i18n';
 import { store as noticesStore } from '@wordpress/notices';
 
 import { unlock } from '../lock-unlock';
+import { notifyBacklinksChanged } from './backlinksInvalidation';
 import { notifyDocumentRecordChanged } from './documentRecordInvalidation';
+import { notifyCollectionRowsChanged } from './rowInvalidation';
 
 const BASE_REVISION_FIELDS = [
 	'id',
@@ -20,17 +22,6 @@ const BASE_REVISION_FIELDS = [
 	'author',
 	'meta',
 	'featured_media',
-	'title.raw',
-	'excerpt.raw',
-	'content.raw',
-];
-
-const EDITOR_REVISION_FIELDS = [
-	'id',
-	'date',
-	'modified',
-	'author',
-	'meta',
 	'title.raw',
 	'excerpt.raw',
 	'content.raw',
@@ -231,23 +222,6 @@ export function revisionQuery( revisionKey = 'id', order = 'desc' ) {
 	};
 }
 
-export function editorRevisionQuery( revisionKey = 'id', order ) {
-	const query = {
-		per_page: -1,
-		context: 'edit',
-		_fields: [
-			...new Set( [ ...EDITOR_REVISION_FIELDS, revisionKey ] ),
-		].join(),
-	};
-
-	if ( order ) {
-		query.orderby = 'date';
-		query.order = order;
-	}
-
-	return query;
-}
-
 let didRegisterRevisionSelectors = false;
 
 function getEditorRevisionRecord( select, state, order ) {
@@ -316,35 +290,6 @@ function registerRevisionSelectors() {
 }
 
 registerRevisionSelectors();
-
-export function recentRevisionQuery( revisionKey = 'id' ) {
-	return {
-		per_page: 3,
-		orderby: 'date',
-		order: 'desc',
-		_fields: `${ revisionKey },date,author`,
-	};
-}
-
-export function revisionInvalidationQueries( revisionKey = 'id' ) {
-	const queries = [
-		revisionQuery( revisionKey, 'desc' ),
-		revisionQuery( revisionKey, 'asc' ),
-		editorRevisionQuery( revisionKey ),
-		editorRevisionQuery( revisionKey, 'asc' ),
-		recentRevisionQuery( revisionKey ),
-	];
-	const seen = new Set();
-
-	return queries.filter( ( query ) => {
-		const key = JSON.stringify( query );
-		if ( seen.has( key ) ) {
-			return false;
-		}
-		seen.add( key );
-		return true;
-	} );
-}
 
 export function useRevisions( postType, postId, { order = 'desc' } = {} ) {
 	const revisionState = useSelect(
@@ -513,8 +458,11 @@ export function useRevisionControls( {
 	} = useDispatch( coreStore );
 	const { createErrorNotice, createSuccessNotice } =
 		useDispatch( noticesStore );
-	const invalidationQueries = useMemo(
-		() => revisionInvalidationQueries( revisionKey ),
+	// The desc collection is the only revisions query anything resolves: the
+	// history panel reads it and the editor's current/previous revision
+	// selectors are pointed at it too.
+	const invalidationQuery = useMemo(
+		() => revisionQuery( revisionKey, 'desc' ),
 		[ revisionKey ]
 	);
 	const selectRevision = useCallback(
@@ -559,20 +507,29 @@ export function useRevisionControls( {
 						reason: 'revision-restore',
 					} );
 				}
-				invalidationQueries.forEach( ( query ) => {
-					invalidateResolution( 'getRevisions', [
-						'postType',
-						postType,
-						postId,
-						query,
-					] );
-				} );
+				// Rows and backlinks live outside core-data, so receiving the
+				// record above does not reach them. Restoring rewrites field
+				// values, relation pointers and the links in post_content, so
+				// both need their own nudge.
+				notifyCollectionRowsChanged();
+				notifyBacklinksChanged();
+				invalidateResolution( 'getRevisions', [
+					'postType',
+					postType,
+					postId,
+					invalidationQuery,
+				] );
 				setCurrentRevisionId?.( null );
 				createSuccessNotice(
-					__(
-						'Revision restored. Your previous version is still in history.',
-						'cortext'
-					),
+					response?.contentOnly
+						? __(
+								'Content restored. This version predates property history, so the icon, cover and properties were left as they are.',
+								'cortext'
+						  )
+						: __(
+								'Revision restored. Your previous version is still in history.',
+								'cortext'
+						  ),
 					{
 						id: 'cortext-revision-restored',
 						type: 'snackbar',
@@ -600,7 +557,7 @@ export function useRevisionControls( {
 			createSuccessNotice,
 			currentRevisionId,
 			invalidateResolution,
-			invalidationQueries,
+			invalidationQuery,
 			postId,
 			postType,
 			receiveEntityRecords,
