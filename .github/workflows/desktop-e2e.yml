@@ -47,7 +47,7 @@ jobs:
                     echo "desktop_changed=false" >> "$GITHUB_OUTPUT"
                   fi
 
-    playwright:
+    linux:
         name: Playwright (Electron, Linux)
         runs-on: ubuntu-latest
         needs: changes
@@ -86,8 +86,8 @@ jobs:
               working-directory: apps/desktop
               run: npm ci
 
-            # Electron 42 skips the binary download during npm ci. Fetch it here
-            # so Playwright has something to launch.
+            # npm ci does not download Electron 42's binary, so install it
+            # separately for Playwright.
             - name: Install Electron binary
               working-directory: apps/desktop
               run: npx install-electron
@@ -112,14 +112,14 @@ jobs:
 
             # Electron needs an X server on Linux runners; xvfb-run provides
             # one for the test process and tears it down after.
-            - name: Run desktop smoke test
+            - name: Run desktop E2E tests
               working-directory: apps/desktop
               run: xvfb-run --auto-servernum npm run test:e2e
 
             - if: failure()
               uses: actions/upload-artifact@v7
               with:
-                  name: desktop-playwright-artifacts
+                  name: desktop-playwright-artifacts-linux
                   path: |
                       apps/desktop/test-results/
                       apps/desktop/playwright-report/
