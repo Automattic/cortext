@@ -346,6 +346,10 @@ final class DocumentsController {
 			return $result;
 		}
 
+		// Costs one internal REST request that runs the full row enrichment
+		// (relations, rollups, formula materialization) for the new row. That
+		// buys clients a canonical record they can cache instead of the
+		// envelope, so a null here still leaves the duplicate successful.
 		$post           = get_post( (int) $result['id'] );
 		$result['post'] = $post instanceof WP_Post
 			? $this->prepared_post( $post )
