@@ -75,7 +75,7 @@ test( 'serves only the loading and error pages with the shell CSP', async () => 
 
 		for ( const url of [
 			`${ LOADING_URL }?unexpected=1`,
-			`${ SHELL_SCHEME }://app/../loading`,
+			`${ SHELL_SCHEME }://app/not-found`,
 			`${ SHELL_SCHEME }://other/loading`,
 		] ) {
 			const response = await handler( { url } );

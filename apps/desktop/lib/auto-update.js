@@ -181,7 +181,7 @@ function initAutoUpdates( {
 		mainWindow = window ?? mainWindow;
 		return true;
 	}
-	if ( ! app.isPackaged || process.env.CORTEXT_E2E === '1' ) {
+	if ( ! app.isPackaged ) {
 		return false;
 	}
 	try {

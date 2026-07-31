@@ -63,4 +63,4 @@ function buildAppMenu( {
 	return Menu.buildFromTemplate( template );
 }
 
-module.exports = { buildAppMenu, productionViewMenu };
+module.exports = { buildAppMenu };
