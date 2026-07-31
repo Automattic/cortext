@@ -12,6 +12,7 @@ namespace Cortext\Tests;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
+use Cortext\Relations;
 use Cortext\Rest\RestoreRevisionController;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
@@ -192,6 +193,167 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
+	public function test_rejects_restore_when_another_user_holds_post_lock(): void {
+		require_once ABSPATH . 'wp-admin/includes/post.php';
+
+		$owner_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $owner_id );
+		$page_id = $this->create_page( array( 'post_title' => 'Current title' ) );
+		wp_set_post_lock( $page_id );
+
+		$revision_id = $this->create_revision(
+			$page_id,
+			array( 'post_title' => 'Old title' )
+		);
+
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$response = $this->restore_revision( $page_id, $revision_id );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame(
+			'cortext_revision_restore_locked_document',
+			$response->get_data()['code']
+		);
+		$this->assertSame( 'Current title', get_post( $page_id )->post_title );
+	}
+
+	public function test_invalid_relation_revision_is_rejected_before_any_restore_writes(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$source_collection_id = $this->create_collection();
+		$target_collection_id = $this->create_collection();
+		$relation_id          = $this->create_field(
+			'Relation',
+			'relation',
+			array(
+				'related_collection_id'     => (string) $target_collection_id,
+				'relation_reverse_field_id' => '999999',
+			)
+		);
+		add_post_meta( $source_collection_id, 'cortext_fields', (string) $relation_id );
+
+		$row_id    = $this->create_row( $source_collection_id );
+		$target_id = $this->create_row( $target_collection_id );
+		update_post_meta( $row_id, Relations::meta_key( $relation_id ), (string) $target_id );
+		$current_icon = '{"type":"wp","name":"star"}';
+		$old_icon     = '{"type":"wp","name":"home"}';
+		update_post_meta( $row_id, DocumentIdentity::META_KEY, $current_icon );
+
+		$revision_id = $this->create_revision(
+			$row_id,
+			array( 'post_title' => 'Old title' )
+		);
+		$this->add_revision_meta( $revision_id, Relations::meta_key( $relation_id ), (string) $target_id );
+		$this->add_revision_meta( $revision_id, DocumentIdentity::META_KEY, $old_icon );
+		$revision_count = count( wp_get_post_revisions( $row_id ) );
+
+		$response = $this->restore_revision( $row_id, $revision_id );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_relation_reverse_missing', $response->get_data()['code'] );
+		$this->assertSame( 'Page', get_post( $row_id )->post_title );
+		$this->assertSame( $current_icon, get_post_meta( $row_id, DocumentIdentity::META_KEY, true ) );
+		$this->assertSame(
+			array( (string) $target_id ),
+			get_post_meta( $row_id, Relations::meta_key( $relation_id ), false )
+		);
+		$this->assertCount( $revision_count, wp_get_post_revisions( $row_id ) );
+	}
+
+	public function test_restore_filters_deleted_fields_from_historical_collection_schema(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_collection();
+		$existing_id   = (int) get_post_meta( $collection_id, 'cortext_fields', true );
+		$deleted_id    = $this->create_field( 'Deleted field' );
+		$revision_id   = $this->create_revision( $collection_id );
+		$this->add_revision_meta( $revision_id, 'cortext_fields', (string) $existing_id );
+		$this->add_revision_meta( $revision_id, 'cortext_fields', (string) $deleted_id );
+		$this->add_revision_meta(
+			$revision_id,
+			'cortext_detail_layout',
+			array(
+				'fields' => array(
+					array(
+						'field'   => "field-{$existing_id}",
+						'visible' => true,
+					),
+					array(
+						'field'   => "field-{$deleted_id}",
+						'visible' => true,
+					),
+				),
+			)
+		);
+		wp_delete_post( $deleted_id, true );
+
+		$response = $this->restore_revision( $collection_id, $revision_id );
+		$layout   = get_post_meta( $collection_id, 'cortext_detail_layout', true );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( (string) $existing_id ),
+			get_post_meta( $collection_id, 'cortext_fields', false )
+		);
+		$this->assertSame( "field-{$existing_id}", $layout['fields'][0]['field'] );
+		$this->assertCount( 1, $layout['fields'] );
+	}
+
+	public function test_restore_uses_cached_meta_when_snapshot_prunes_selected_revision(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$page_id  = $this->create_page( array( 'post_title' => 'Current title' ) );
+		$old_icon = '{"type":"wp","name":"home"}';
+		update_post_meta( $page_id, DocumentIdentity::META_KEY, '{"type":"wp","name":"star"}' );
+		$revision_id = $this->create_revision(
+			$page_id,
+			array( 'post_title' => 'Old title' )
+		);
+		$this->add_revision_meta( $revision_id, DocumentIdentity::META_KEY, $old_icon );
+
+		$prune_selected = static function () use ( $revision_id ): void {
+			if ( get_post( $revision_id ) instanceof \WP_Post ) {
+				wp_delete_post_revision( $revision_id );
+			}
+		};
+		add_action( '_wp_put_post_revision', $prune_selected );
+		try {
+			$response = $this->restore_revision( $page_id, $revision_id );
+		} finally {
+			remove_action( '_wp_put_post_revision', $prune_selected );
+		}
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNull( get_post( $revision_id ) );
+		$this->assertSame( 'Old title', get_post( $page_id )->post_title );
+		$this->assertSame( $old_icon, get_post_meta( $page_id, DocumentIdentity::META_KEY, true ) );
+	}
+
+	public function test_restores_fields_from_every_trait_on_multi_trait_row(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$first_collection_id  = $this->create_collection();
+		$second_collection_id = $this->create_collection();
+		$first_field_id       = (int) get_post_meta( $first_collection_id, 'cortext_fields', true );
+		$second_field_id      = (int) get_post_meta( $second_collection_id, 'cortext_fields', true );
+		$row_id               = $this->create_row( $first_collection_id );
+		$second_term_id       = TraitTaxonomy::term_id_for_trait( $second_collection_id );
+		wp_set_object_terms( $row_id, array( $second_term_id ), TraitTaxonomy::TAXONOMY, true );
+
+		update_post_meta( $row_id, Relations::meta_key( $first_field_id ), 'new first' );
+		update_post_meta( $row_id, Relations::meta_key( $second_field_id ), 'new second' );
+		$revision_id = $this->create_revision( $row_id );
+		$this->add_revision_meta( $revision_id, Relations::meta_key( $first_field_id ), 'old first' );
+		$this->add_revision_meta( $revision_id, Relations::meta_key( $second_field_id ), 'old second' );
+
+		$response = $this->restore_revision( $row_id, $revision_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'old first', get_post_meta( $row_id, Relations::meta_key( $first_field_id ), true ) );
+		$this->assertSame( 'old second', get_post_meta( $row_id, Relations::meta_key( $second_field_id ), true ) );
+		$this->assertSame( 2, $response->get_data()['metaRestored']['fields'] );
+	}
+
 	public function test_rejects_restore_for_trashed_document(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$page_id     = $this->create_page();
@@ -269,18 +431,30 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 	private function create_collection(): int {
 		$id = $this->create_page();
 
+		$field_id = $this->create_field( 'Name' );
+		add_post_meta( $id, 'cortext_fields', (string) $field_id );
+
+		return $id;
+	}
+
+	/**
+	 * Creates a field post.
+	 *
+	 * @param string               $title Field title.
+	 * @param string               $type  Field type.
+	 * @param array<string,string> $meta Extra field metadata.
+	 */
+	private function create_field( string $title, string $type = 'text', array $meta = array() ): int {
 		$field_id = (int) wp_insert_post(
 			array(
 				'post_type'   => Field::POST_TYPE,
 				'post_status' => 'private',
-				'post_title'  => 'Name',
-				'meta_input'  => array( 'type' => 'text' ),
+				'post_title'  => $title,
+				'meta_input'  => array_merge( array( 'type' => $type ), $meta ),
 			)
 		);
 		$this->assertGreaterThan( 0, $field_id );
-		add_post_meta( $id, 'cortext_fields', (string) $field_id );
-
-		return $id;
+		return $field_id;
 	}
 
 	private function create_row( int $collection_id ): int {
