@@ -96,6 +96,23 @@ jobs:
                   VERSION: ${{ steps.milestone.outputs.version }}
               run: node scripts/bump-release-version.mjs "$VERSION"
 
+            - name: Update WordPress.org changelog
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  MILESTONE: ${{ steps.milestone.outputs.title }}
+                  REPOSITORY: ${{ github.repository }}
+                  VERSION: ${{ steps.milestone.outputs.version }}
+              run: |
+                  mkdir -p .context
+                  node scripts/release-notes.mjs \
+                    --repo "$REPOSITORY" \
+                    --milestone "$MILESTONE" \
+                    --version "$VERSION" \
+                    --strict > .context/release-notes.md
+                  node scripts/update-readme-changelog.mjs \
+                    "$VERSION" \
+                    .context/release-notes.md
+
             - name: Commit release metadata
               if: ${{ ! inputs.dry_run }}
               env:

@@ -37,10 +37,10 @@ const OTHER_AREA = 'Other';
 const AREA_ORDER = [
 	'Canvas',
 	'Collections',
+	'Shell',
 	'Desktop',
 	'Performance',
 	'Publishing',
-	'Shell',
 	OTHER_AREA,
 ];
 
