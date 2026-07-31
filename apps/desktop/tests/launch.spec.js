@@ -418,6 +418,9 @@ function waitForProcessExit( app, timeoutMs = 10000 ) {
 }
 
 async function expectSecondInstanceToExit( app, userDataPath ) {
+	const executablePath = await app.evaluate( ( { app } ) =>
+		app.getPath( 'exe' )
+	);
 	await app.evaluate( ( { app } ) => {
 		globalThis.__cortextE2ESecondInstanceSeen = false;
 		app.once( 'second-instance', () => {
@@ -434,13 +437,14 @@ async function expectSecondInstanceToExit( app, userDataPath ) {
 	if ( process.platform === 'linux' ) {
 		secondInstanceArgs.unshift( '--no-sandbox' );
 	}
-	const secondInstance = spawn( app.process().spawnfile, secondInstanceArgs, {
+	const secondInstance = spawn( executablePath, secondInstanceArgs, {
 		env: {
 			...process.env,
 			CORTEXT_DEVTOOLS: '0',
 			CORTEXT_E2E: '1',
 		},
 		stdio: 'ignore',
+		windowsHide: true,
 	} );
 	let timeoutId;
 	const timeout = new Promise( ( _resolve, reject ) => {
