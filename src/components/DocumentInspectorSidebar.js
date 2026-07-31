@@ -730,6 +730,22 @@ function CollectionInspectorContent( { postId, postType } ) {
 	);
 }
 
+// Revision inspector: the identity the revision carried, then the properties
+// that changed against the previous revision. Documents without property
+// fields still get the identity panel, so the tab is never empty.
+function RevisionInspectorContent( { postId, postType } ) {
+	return (
+		<div className="cortext-document-inspector">
+			<PageIdentityInspectorPanel
+				postId={ postId }
+				postType={ postType }
+				title={ __( 'Identity', 'cortext' ) }
+			/>
+			<RevisionPropertiesDiff />
+		</div>
+	);
+}
+
 // Row inspector for property actions. Values stay in the document block; the
 // sidebar handles visibility and field creation.
 function RowInspectorContent( { postId } ) {
@@ -841,26 +857,29 @@ export default function DocumentInspectorSidebar( {
 				isActiveByDefault
 				tabs={ tabs }
 			>
-				{ isRevisionsMode ? (
-					<div className="cortext-document-inspector">
-						<RevisionPropertiesDiff />
-					</div>
-				) : (
-					<InspectorFrame isLocked={ isReadOnly }>
-						{ isCollection && (
-							<CollectionInspectorContent
-								postId={ postId }
-								postType={ postType }
-							/>
-						) }
-						{ ! isCollection && hasTrait && (
-							<RowInspectorContent postId={ postId } />
-						) }
-						{ ! isCollection && ! hasTrait && (
-							<DocumentInspectorContent postId={ postId } />
-						) }
-					</InspectorFrame>
-				) }
+				<InspectorFrame isLocked={ isReadOnly }>
+					{ isRevisionsMode ? (
+						<RevisionInspectorContent
+							postId={ postId }
+							postType={ postType }
+						/>
+					) : (
+						<>
+							{ isCollection && (
+								<CollectionInspectorContent
+									postId={ postId }
+									postType={ postType }
+								/>
+							) }
+							{ ! isCollection && hasTrait && (
+								<RowInspectorContent postId={ postId } />
+							) }
+							{ ! isCollection && ! hasTrait && (
+								<DocumentInspectorContent postId={ postId } />
+							) }
+						</>
+					) }
+				</InspectorFrame>
 			</InspectorComplementaryArea>
 			{ showBlockTab && (
 				<InspectorComplementaryArea

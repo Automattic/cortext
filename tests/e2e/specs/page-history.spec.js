@@ -339,6 +339,29 @@ test.describe( 'Visual revision history', () => {
 				new RegExp( `history-cover-old-${ SUFFIX }` )
 			);
 
+			// The revision inspector carries the identity the revision held, so
+			// pages without property fields still get a populated tab.
+			await header
+				.getByRole( 'button', { name: 'Revision properties' } )
+				.click();
+			const revisionInspector = page.locator(
+				'.cortext-document-inspector'
+			);
+			await expect( revisionInspector ).toContainText( 'Identity' );
+			await expect(
+				revisionInspector.locator(
+					'.cortext-document-inspector__featured-image-preview img'
+				)
+			).toHaveAttribute(
+				'src',
+				new RegExp( `history-cover-old-${ SUFFIX }` )
+			);
+
+			await page
+				.locator( '.cortext-revisions-header' )
+				.getByRole( 'button', { name: 'Revision history' } )
+				.click();
+
 			await header
 				.getByRole( 'button', { name: 'Restore revision' } )
 				.click();
