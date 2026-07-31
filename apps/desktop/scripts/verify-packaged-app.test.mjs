@@ -146,19 +146,27 @@ test( 'verifier rejects an unpacked ASAR payload', async ( t ) => {
 	);
 } );
 
-test( 'verifier requires executable arm64 PHP', async ( t ) => {
-	const { appPath, phpPath } = await createFixture( t );
-	await chmod( phpPath, 0o644 );
+// Windows treats X_OK as an existence check, so exercise the executable bit on
+// the POSIX runners and keep the architecture check below portable.
+test(
+	'verifier requires executable PHP',
+	{ skip: process.platform === 'win32' },
+	async ( t ) => {
+		const { appPath, phpPath } = await createFixture( t );
+		await chmod( phpPath, 0o644 );
 
-	await assert.rejects(
-		verifyPackagedApp( appPath, {
-			platform: 'darwin',
-			readArchitectures: () => [ 'arm64' ],
-		} ),
-		/Bundled PHP is not executable/
-	);
+		await assert.rejects(
+			verifyPackagedApp( appPath, {
+				platform: 'darwin',
+				readArchitectures: () => [ 'arm64' ],
+			} ),
+			/Bundled PHP is not executable/
+		);
+	}
+);
 
-	await chmod( phpPath, 0o755 );
+test( 'verifier requires arm64 PHP', async ( t ) => {
+	const { appPath } = await createFixture( t );
 	await assert.rejects(
 		verifyPackagedApp( appPath, {
 			platform: 'darwin',
