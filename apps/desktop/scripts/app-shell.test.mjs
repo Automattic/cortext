@@ -25,6 +25,14 @@ function requireWithMocks( modulePath, mocks ) {
 	}
 }
 
+function runtimeHandle() {
+	return {
+		origin: 'http://127.0.0.1:9403',
+		port: 9403,
+		ready: Promise.resolve(),
+	};
+}
+
 function loadMain(
 	app,
 	stopRuntime,
@@ -39,7 +47,7 @@ function loadMain(
 			clearStorageData: async () => {},
 		},
 		scheduleUpdateCheck = () => {},
-		startRuntime = () => {},
+		startRuntime = runtimeHandle,
 	} = {}
 ) {
 	// Every test here runs as the instance that holds the lock.
@@ -58,8 +66,10 @@ function loadMain(
 			},
 		},
 		'./lib/runtime': {
-			DEFAULT_PORT: 9402,
+			LEGACY_PORT: 9402,
 			RUNTIME_AUTH_HEADER: 'X-Cortext-Desktop-Token',
+			isValidPort: ( port ) =>
+				Number.isInteger( port ) && port >= 1 && port <= 65535,
 			startRuntime,
 			stopRuntime,
 		},
@@ -87,7 +97,7 @@ function loadMain(
 		},
 		'./lib/menu': { buildAppMenu: () => [] },
 		'./lib/settings': {
-			get: () => true,
+			get: ( key ) => ( key === 'autoInstallUpdates' ? true : undefined ),
 			set: () => {},
 		},
 	} );
@@ -102,7 +112,7 @@ function quitEvent() {
 	};
 }
 
-test( 'a second instance leaves without touching the site', () => {
+test( 'a second instance leaves without touching the site', async () => {
 	let exitCalls = 0;
 	let ensureCalls = 0;
 
@@ -115,7 +125,7 @@ test( 'a second instance leaves without touching the site', () => {
 		},
 		quit: () => {},
 		requestSingleInstanceLock: () => false,
-		whenReady: () => new Promise( () => {} ),
+		whenReady: () => Promise.resolve(),
 	} );
 
 	loadMain(
@@ -128,6 +138,7 @@ test( 'a second instance leaves without touching the site', () => {
 			},
 		}
 	);
+	await new Promise( ( resolve ) => setImmediate( resolve ) );
 
 	assert.equal( exitCalls, 1 );
 	assert.equal( ensureCalls, 0 );
@@ -274,7 +285,7 @@ test( 'updater closes the window, then waits for the runtime before quitting', a
 			scheduleUpdateCheck: ( options ) => {
 				updaterOptions = options;
 			},
-			startRuntime: () => ( { ready: Promise.resolve() } ),
+			startRuntime: runtimeHandle,
 		}
 	);
 
@@ -364,7 +375,7 @@ test( 'closing during site preparation never starts the runtime', async () => {
 			},
 			startRuntime: () => {
 				startCalls += 1;
-				return { ready: Promise.resolve() };
+				return runtimeHandle();
 			},
 		}
 	);
@@ -385,4 +396,94 @@ test( 'closing during site preparation never starts the runtime', async () => {
 	await new Promise( ( resolve ) => setImmediate( resolve ) );
 	assert.equal( refreshCalls, 0 );
 	assert.equal( startCalls, 0 );
+} );
+
+test( 'closing while runtime storage is cleared never finishes startup', async () => {
+	let finishStorageClear;
+	let markStorageClearStarted;
+	let installHeaderCalls = 0;
+	let loadUrlCalls = 0;
+	let quitCalls = 0;
+	let stopCalls = 0;
+	const windows = [];
+	const storageClearFinished = new Promise( ( resolve ) => {
+		finishStorageClear = resolve;
+	} );
+	const storageClearStarted = new Promise( ( resolve ) => {
+		markStorageClearStarted = resolve;
+	} );
+
+	class FakeWindow extends EventEmitter {
+		constructor( options ) {
+			super();
+			this.webContents = new EventEmitter();
+			Object.assign( this.webContents, {
+				openDevTools: () => {},
+				session: options.webPreferences.session,
+				setWindowOpenHandler: () => {},
+			} );
+			windows.push( this );
+		}
+
+		loadFile() {
+			return Promise.resolve();
+		}
+
+		loadURL() {
+			loadUrlCalls += 1;
+			return Promise.resolve();
+		}
+
+		setTitle() {}
+	}
+
+	const app = new EventEmitter();
+	Object.assign( app, {
+		isPackaged: false,
+		name: 'Cortext',
+		getPath: ( name ) => `/tmp/cortext-${ name }`,
+		getVersion: () => '1.0.0',
+		quit: () => {
+			quitCalls += 1;
+		},
+		whenReady: () => Promise.resolve(),
+	} );
+
+	loadMain(
+		app,
+		async () => {
+			stopCalls += 1;
+		},
+		undefined,
+		{
+			BrowserWindow: FakeWindow,
+			installRuntimeAuthHeader: () => {
+				installHeaderCalls += 1;
+				return () => {};
+			},
+			Menu: { setApplicationMenu: () => {} },
+			runtimeSession: {
+				clearStorageData: () => {
+					markStorageClearStarted();
+					return storageClearFinished;
+				},
+			},
+			startRuntime: runtimeHandle,
+		}
+	);
+
+	await storageClearStarted;
+	assert.equal( windows.length, 1 );
+
+	const closeEvent = quitEvent();
+	windows[ 0 ].emit( 'close', closeEvent );
+	await new Promise( ( resolve ) => setImmediate( resolve ) );
+	assert.equal( closeEvent.preventDefaultCalled, true );
+	assert.equal( stopCalls, 1 );
+	assert.equal( quitCalls, 1 );
+
+	finishStorageClear();
+	await new Promise( ( resolve ) => setImmediate( resolve ) );
+	assert.equal( installHeaderCalls, 0 );
+	assert.equal( loadUrlCalls, 0 );
 } );

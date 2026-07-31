@@ -32,9 +32,8 @@ export function buildWpConfig() {
 		lines.push( `define( '${ key }', '${ randomSalt() }' );` );
 	}
 	lines.push( "$table_prefix = 'wp_';" );
+	lines.push( "require_once __DIR__ . '/cortext-runtime-bootstrap.php';" );
 	const guardedConstants = [
-		[ 'WP_HOME', "'http://127.0.0.1:9402'" ],
-		[ 'WP_SITEURL', "'http://127.0.0.1:9402'" ],
 		[ 'CORTEXT_DESKTOP', 'true' ],
 		[ 'DISABLE_WP_CRON', 'true' ],
 		// The mu-plugin repeats these for desktop sites created by older builds.

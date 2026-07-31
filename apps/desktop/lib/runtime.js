@@ -1,15 +1,28 @@
 const { spawn } = require( 'child_process' );
 const fs = require( 'fs' );
 const http = require( 'http' );
+const net = require( 'net' );
 const os = require( 'os' );
 const path = require( 'path' );
 const { findExecutable } = require( './executable' );
 
-const DEFAULT_PORT = 9402;
+// Existing profiles used this origin before runtime ports became per-profile.
+// Keeping it as their first preference preserves origin-scoped browser state.
+const LEGACY_PORT = 9402;
+// Ports offered to a profile that has no preference yet. The band starts just
+// past the legacy port so an upgrading profile keeps its claim on that one, and
+// sits below the ephemeral range the kernel hands out for outbound sockets
+// (49152+ on macOS, 32768+ on Linux). A port saved from that range would be
+// competing with the short-lived loopback traffic churning through it.
+const RUNTIME_PORT_FIRST = 9403;
+const RUNTIME_PORT_LAST = 9498;
 const DEFAULT_READY_PATH = '/wp-includes/images/blank.gif';
 const RUNTIME_AUTH_HEADER = 'X-Cortext-Desktop-Token';
 const RUNTIME_AUTH_ENV = 'CORTEXT_DESKTOP_AUTH_TOKEN';
 const WINDOWS_DIRECT_EXECUTABLE_EXTENSIONS = [ '.COM', '.EXE' ];
+const RUNTIME_HOST_ENV = 'CORTEXT_DESKTOP_RUNTIME_HOST';
+const RUNTIME_ORIGIN_ENV = 'CORTEXT_DESKTOP_RUNTIME_ORIGIN';
+const RUNTIME_BOOTSTRAP_ENV = 'CORTEXT_DESKTOP_RUNTIME_BOOTSTRAP';
 const EXPLORATION_OBJECT_CACHE_MARKER =
 	'Cortext Desktop APCu object-cache exploration drop-in';
 
@@ -75,17 +88,19 @@ function resolveExecutable( envName, bundledPath, commandName, installHint ) {
 	);
 }
 
-function pipeProcessOutput( child ) {
-	if ( process.env.CORTEXT_RUNTIME_QUIET === '1' ) {
-		child.stdout.resume();
-		child.stderr.resume();
-		return;
-	}
+function pipeProcessOutput( child, onOutput ) {
+	const quiet = process.env.CORTEXT_RUNTIME_QUIET === '1';
 	child.stdout.on( 'data', ( chunk ) => {
-		process.stdout.write( chunk );
+		onOutput( chunk );
+		if ( ! quiet ) {
+			process.stdout.write( chunk );
+		}
 	} );
 	child.stderr.on( 'data', ( chunk ) => {
-		process.stderr.write( chunk );
+		onOutput( chunk );
+		if ( ! quiet ) {
+			process.stderr.write( chunk );
+		}
 	} );
 }
 
@@ -96,7 +111,14 @@ function isEnabled( value ) {
 }
 
 function addPhpIni( args, key, value ) {
-	args.push( '-d', `${ key }=${ value }` );
+	// PHP parses -d values with php.ini grammar even when Node passes argv
+	// directly. Quote paths so Windows short names such as RUNNER~1 are not
+	// treated as expressions, and keep literal path characters literal.
+	const encodedValue = String( value )
+		.replaceAll( '\\', '\\\\' )
+		.replaceAll( '"', '\\"' )
+		.replaceAll( '$', '\\$' );
+	args.push( '-d', `${ key }="${ encodedValue }"` );
 }
 
 function ensureDir( dir ) {
@@ -157,6 +179,22 @@ function configureRuntimeRouter( wordpressDir, appDir ) {
 	}
 
 	fs.copyFileSync( sourcePath, path.join( wordpressDir, 'router.php' ) );
+}
+
+function configureRuntimeBootstrap( wordpressDir, appDir ) {
+	const sourcePath = path.join( appDir, 'runtime/bootstrap.php' );
+	if ( ! fs.existsSync( sourcePath ) ) {
+		throw new Error(
+			`Desktop runtime bootstrap not found at ${ sourcePath }.`
+		);
+	}
+
+	const bootstrapPath = path.join(
+		wordpressDir,
+		'cortext-runtime-bootstrap.php'
+	);
+	fs.copyFileSync( sourcePath, bootstrapPath );
+	return bootstrapPath;
 }
 
 function configurePreloadFiles( wordpressDir, appDir ) {
@@ -241,12 +279,21 @@ function childProcessOptions( options = {} ) {
 
 function addProcess( handle, name, command, args, options = {} ) {
 	const child = spawn( command, args, childProcessOptions( options ) );
-	handle.processes.push( {
+	const entry = {
 		name,
 		child,
 		killProcessGroup: options.detached === true,
+		expectedExit: false,
+		outputClosed: false,
+		outputTail: '',
+	};
+	handle.processes.push( entry );
+	pipeProcessOutput( child, ( chunk ) => {
+		entry.outputTail = `${ entry.outputTail }${ chunk }`.slice( -8192 );
 	} );
-	pipeProcessOutput( child );
+	child.once( 'close', () => {
+		entry.outputClosed = true;
+	} );
 
 	child.on( 'exit', ( code, signal ) => {
 		console.log(
@@ -254,6 +301,8 @@ function addProcess( handle, name, command, args, options = {} ) {
 		);
 		if (
 			! handle.stopping &&
+			! handle.starting &&
+			! entry.expectedExit &&
 			typeof handle.onUnexpectedExit === 'function'
 		) {
 			handle.onUnexpectedExit( name, code, signal );
@@ -284,7 +333,13 @@ function phpCliWorkerConfig( env = process.env, platform = process.platform ) {
 	};
 }
 
-function waitForHttpReady( handle, port, authToken, timeoutMs = 30000 ) {
+function waitForHttpReady(
+	handle,
+	port,
+	authToken,
+	runtimeOrigin,
+	timeoutMs = 30000
+) {
 	return new Promise( ( resolve, reject ) => {
 		let settled = false;
 		let lastFailure = null;
@@ -411,7 +466,40 @@ function waitForHttpReady( handle, port, authToken, timeoutMs = 30000 ) {
 					return;
 				}
 
+				const invalidHostStatus = await requestStatus( {
+					Host: `localhost:${ port }`,
+					[ RUNTIME_AUTH_HEADER ]: authToken,
+				} );
+				if ( settled ) {
+					return;
+				}
+				if ( invalidHostStatus !== 403 ) {
+					fail(
+						new Error(
+							`Runtime security check failed: invalid Host request returned HTTP ${ invalidHostStatus }.`
+						)
+					);
+					return;
+				}
+
+				const invalidOriginStatus = await requestStatus( {
+					Origin: 'https://example.com',
+					[ RUNTIME_AUTH_HEADER ]: authToken,
+				} );
+				if ( settled ) {
+					return;
+				}
+				if ( invalidOriginStatus !== 403 ) {
+					fail(
+						new Error(
+							`Runtime security check failed: invalid Origin request returned HTTP ${ invalidOriginStatus }.`
+						)
+					);
+					return;
+				}
+
 				const authenticatedStatus = await requestStatus( {
+					Origin: runtimeOrigin,
 					[ RUNTIME_AUTH_HEADER ]: authToken,
 				} );
 				if ( settled ) {
@@ -448,7 +536,8 @@ function startPhpCli(
 	port,
 	appDir,
 	runtimeStateDir,
-	authToken
+	runtimeEnvironment,
+	bootstrapPath
 ) {
 	const phpBin = resolveExecutable(
 		'CORTEXT_PHP_BIN',
@@ -469,8 +558,10 @@ function startPhpCli(
 		`[cortext-desktop] starting php -S (127.0.0.1:${ port }) against ${ wordpressDir }`
 	);
 	const workerConfig = phpCliWorkerConfig();
+	const phpIniArgs = phpCliIniArgs( wordpressDir, appDir, runtimeStateDir );
+	addPhpIni( phpIniArgs, 'auto_prepend_file', bootstrapPath );
 	const phpArgs = [
-		...phpCliIniArgs( wordpressDir, appDir, runtimeStateDir ),
+		...phpIniArgs,
 		'-S',
 		`127.0.0.1:${ port }`,
 		'-t',
@@ -479,7 +570,7 @@ function startPhpCli(
 	];
 	const phpEnv = {
 		...process.env,
-		[ RUNTIME_AUTH_ENV ]: authToken,
+		...runtimeEnvironment,
 	};
 	if ( process.platform === 'win32' ) {
 		delete phpEnv.CORTEXT_PHP_CLI_SERVER_WORKERS;
@@ -499,7 +590,13 @@ function startPhpCli(
 	} );
 }
 
-function startFrankenPhp( handle, wordpressDir, port, appDir, authToken ) {
+function startFrankenPhp(
+	handle,
+	wordpressDir,
+	port,
+	appDir,
+	runtimeEnvironment
+) {
 	const frankenBin = resolveExecutable(
 		'CORTEXT_FRANKENPHP_BIN',
 		bundledRuntimeExecutable( appDir, 'frankenphp' ),
@@ -527,7 +624,7 @@ function startFrankenPhp( handle, wordpressDir, port, appDir, authToken ) {
 			cwd: wordpressDir,
 			env: {
 				...process.env,
-				[ RUNTIME_AUTH_ENV ]: authToken,
+				...runtimeEnvironment,
 				CORTEXT_PORT: String( port ),
 				CORTEXT_WORDPRESS_ROOT: wordpressDir,
 				CORTEXT_CADDY_STORAGE: path.join( handle.stateDir, 'caddy' ),
@@ -538,7 +635,7 @@ function startFrankenPhp( handle, wordpressDir, port, appDir, authToken ) {
 	);
 }
 
-function writePhpFpmConfig( runtimeStateDir, wordpressDir ) {
+function writePhpFpmConfig( runtimeStateDir, wordpressDir, bootstrapPath ) {
 	fs.mkdirSync( runtimeStateDir, { recursive: true } );
 	const socketDir = fs.mkdtempSync(
 		path.join( os.tmpdir(), 'cortext-fpm-' )
@@ -570,6 +667,7 @@ function writePhpFpmConfig( runtimeStateDir, wordpressDir ) {
 				'php-errors.log'
 			) }`,
 			'php_admin_flag[log_errors] = on',
+			`php_admin_value[auto_prepend_file] = ${ bootstrapPath }`,
 			'php_value[opcache.enable] = 1',
 			'php_value[opcache.validate_timestamps] = 0',
 			'',
@@ -585,7 +683,8 @@ function startPhpFpmCaddy(
 	port,
 	appDir,
 	runtimeStateDir,
-	authToken
+	runtimeEnvironment,
+	bootstrapPath
 ) {
 	const phpFpmBin = resolveExecutable(
 		'CORTEXT_PHP_FPM_BIN',
@@ -604,7 +703,11 @@ function startPhpFpmCaddy(
 		throw new Error( `PHP-FPM Caddyfile not found at ${ configPath }.` );
 	}
 
-	const fpm = writePhpFpmConfig( runtimeStateDir, wordpressDir );
+	const fpm = writePhpFpmConfig(
+		runtimeStateDir,
+		wordpressDir,
+		bootstrapPath
+	);
 	handle.cleanupPaths.push( fpm.socketDir );
 	console.log(
 		`[cortext-desktop] starting php-fpm + Caddy (127.0.0.1:${ port }) against ${ wordpressDir }`
@@ -618,7 +721,7 @@ function startPhpFpmCaddy(
 			cwd: wordpressDir,
 			env: {
 				...process.env,
-				[ RUNTIME_AUTH_ENV ]: authToken,
+				...runtimeEnvironment,
 			},
 		}
 	);
@@ -631,7 +734,7 @@ function startPhpFpmCaddy(
 			cwd: wordpressDir,
 			env: {
 				...process.env,
-				[ RUNTIME_AUTH_ENV ]: authToken,
+				...runtimeEnvironment,
 				CORTEXT_PORT: String( port ),
 				CORTEXT_WORDPRESS_ROOT: wordpressDir,
 				CORTEXT_PHP_FPM_SOCKET: fpm.socketPath,
@@ -641,59 +744,82 @@ function startPhpFpmCaddy(
 	);
 }
 
-function startRuntime( {
-	appDir,
-	wordpressDir,
-	port = DEFAULT_PORT,
-	runtime = process.env.CORTEXT_RUNTIME,
-	runtimeStateDir,
-	onUnexpectedExit,
-	authToken,
-} ) {
-	if ( typeof authToken !== 'string' || authToken.trim().length === 0 ) {
-		throw new TypeError( 'startRuntime requires a non-empty authToken.' );
-	}
+function isValidPort( port ) {
+	return Number.isInteger( port ) && port >= 1 && port <= 65535;
+}
 
-	const normalized = normalizeRuntime( runtime );
-	const handle = {
-		runtime: normalized,
-		processes: [],
-		cleanupPaths: [],
-		stopping: false,
-		onUnexpectedExit,
-	};
-	const stateDir =
-		runtimeStateDir ||
-		fs.mkdtempSync( path.join( os.tmpdir(), 'cortext-desktop-runtime-' ) );
-	handle.stateDir = stateDir;
+function inspectAvailablePort( port ) {
+	return new Promise( ( resolve, reject ) => {
+		const server = net.createServer();
+		server.unref();
+		server.once( 'error', reject );
+		server.listen( port, '127.0.0.1', () => {
+			const address = server.address();
+			const selectedPort =
+				address && typeof address === 'object' ? address.port : null;
+			server.close( ( error ) => {
+				if ( error ) {
+					reject( error );
+					return;
+				}
+				resolve( selectedPort );
+			} );
+		} );
+	} );
+}
 
-	configureObjectCacheDropIn( wordpressDir, appDir );
-	configureRuntimeRouter( wordpressDir, appDir );
-	configureDesktopUpdateLock( wordpressDir, appDir );
-
-	if ( normalized === 'php' ) {
-		startPhpCli( handle, wordpressDir, port, appDir, stateDir, authToken );
-	} else if ( normalized === 'franken' ) {
-		startFrankenPhp( handle, wordpressDir, port, appDir, authToken );
-	} else if ( normalized === 'php-fpm' ) {
-		startPhpFpmCaddy(
-			handle,
-			wordpressDir,
-			port,
-			appDir,
-			stateDir,
-			authToken
-		);
-	}
-
-	handle.ready = waitForHttpReady( handle, port, authToken ).catch(
-		async ( error ) => {
-			// Report why startup failed, not why the cleanup afterwards did.
-			await stopRuntime( handle ).catch( () => {} );
+async function claimPort( port ) {
+	try {
+		return { port: await inspectAvailablePort( port ) };
+	} catch ( error ) {
+		if ( error.code !== 'EADDRINUSE' ) {
 			throw error;
 		}
-	);
-	return handle;
+		return null;
+	}
+}
+
+async function findAvailablePort( preferredPort ) {
+	if ( preferredPort !== undefined && preferredPort !== null ) {
+		if ( ! isValidPort( preferredPort ) ) {
+			throw new TypeError(
+				'startRuntime port must be an integer between 1 and 65535.'
+			);
+		}
+		const preferred = await claimPort( preferredPort );
+		if ( preferred ) {
+			return preferred.port;
+		}
+	}
+
+	for ( let port = RUNTIME_PORT_FIRST; port <= RUNTIME_PORT_LAST; port++ ) {
+		const claimed = await claimPort( port );
+		if ( claimed ) {
+			return claimed.port;
+		}
+	}
+
+	// Every band port is taken. Start anyway on whatever the kernel offers; the
+	// profile loses origin stability, not the ability to run.
+	return inspectAvailablePort( 0 );
+}
+
+function runtimeEndpoint( port ) {
+	const host = `127.0.0.1:${ port }`;
+	return {
+		host,
+		origin: `http://${ host }`,
+		port,
+	};
+}
+
+function makeRuntimeEnvironment( authToken, endpoint, bootstrapPath ) {
+	return {
+		[ RUNTIME_AUTH_ENV ]: authToken,
+		[ RUNTIME_HOST_ENV ]: endpoint.host,
+		[ RUNTIME_ORIGIN_ENV ]: endpoint.origin,
+		[ RUNTIME_BOOTSTRAP_ENV ]: bootstrapPath,
+	};
 }
 
 function isProcessRunning( child ) {
@@ -866,6 +992,230 @@ function waitForProcessExit(
 	} );
 }
 
+function waitForProcessOutputToClose( entries, timeoutMs = 5500 ) {
+	return Promise.all(
+		entries.map(
+			( entry ) =>
+				new Promise( ( resolve ) => {
+					if ( ! entry.child || entry.outputClosed ) {
+						resolve();
+						return;
+					}
+					const timer = setTimeout( () => {
+						entry.child.off( 'close', onClose );
+						resolve();
+					}, timeoutMs );
+					const onClose = () => {
+						clearTimeout( timer );
+						entry.child.off( 'close', onClose );
+						resolve();
+					};
+					entry.child.once( 'close', onClose );
+					if ( entry.outputClosed ) {
+						onClose();
+					}
+				} )
+		)
+	);
+}
+
+function stopProcessEntries( entries, options = {} ) {
+	const processes = [ ...entries ].reverse();
+	for ( const entry of processes ) {
+		entry.expectedExit = true;
+	}
+	return Promise.all(
+		processes.map( ( { child, killProcessGroup } ) =>
+			waitForProcessExit( child, {
+				killProcessGroup,
+				...options,
+			} )
+		)
+	);
+}
+
+function isPortBindFailure( entries, port ) {
+	const phpListenFailure = new RegExp(
+		`failed to listen on 127\\.0\\.0\\.1:${ port }(?:\\s|$)`,
+		'i'
+	);
+	return entries.some(
+		( entry ) =>
+			/(?:address already in use|eaddrinuse|bind: address|only one usage of each socket address)/i.test(
+				entry.outputTail
+			) || phpListenFailure.test( entry.outputTail )
+	);
+}
+
+async function launchRuntime( handle, options ) {
+	const {
+		appDir,
+		wordpressDir,
+		port,
+		runtimeStateDir,
+		authToken,
+		bootstrapPath,
+		portAllocator,
+	} = options;
+	let selectedPort = await portAllocator( port );
+	if ( ! isValidPort( selectedPort ) ) {
+		throw new Error( 'Runtime port allocator returned an invalid port.' );
+	}
+
+	for ( let attempt = 0; attempt < 2; attempt++ ) {
+		if ( handle.stopping ) {
+			throw new Error( 'Runtime startup was cancelled.' );
+		}
+
+		const endpoint = runtimeEndpoint( selectedPort );
+		const runtimeEnvironment = makeRuntimeEnvironment(
+			authToken,
+			endpoint,
+			bootstrapPath
+		);
+		const processStart = handle.processes.length;
+		const cleanupStart = handle.cleanupPaths.length;
+
+		handle.port = endpoint.port;
+		handle.host = endpoint.host;
+		handle.origin = endpoint.origin;
+
+		if ( handle.runtime === 'php' ) {
+			startPhpCli(
+				handle,
+				wordpressDir,
+				endpoint.port,
+				appDir,
+				runtimeStateDir,
+				runtimeEnvironment,
+				bootstrapPath
+			);
+		} else if ( handle.runtime === 'franken' ) {
+			startFrankenPhp(
+				handle,
+				wordpressDir,
+				endpoint.port,
+				appDir,
+				runtimeEnvironment
+			);
+		} else if ( handle.runtime === 'php-fpm' ) {
+			startPhpFpmCaddy(
+				handle,
+				wordpressDir,
+				endpoint.port,
+				appDir,
+				runtimeStateDir,
+				runtimeEnvironment,
+				bootstrapPath
+			);
+		}
+
+		try {
+			await waitForHttpReady(
+				handle,
+				endpoint.port,
+				authToken,
+				endpoint.origin
+			);
+			handle.starting = false;
+			return handle;
+		} catch ( error ) {
+			const failedProcesses = handle.processes.splice( processStart );
+			const failedCleanupPaths =
+				handle.cleanupPaths.splice( cleanupStart );
+			await stopProcessEntries( failedProcesses );
+			// The child `exit` event may precede the final stderr data. Wait for
+			// stdio to close before deciding whether this was a bind collision.
+			await waitForProcessOutputToClose( failedProcesses );
+			const portBindFailure = isPortBindFailure(
+				failedProcesses,
+				selectedPort
+			);
+			for ( const cleanupPath of failedCleanupPaths ) {
+				fs.rmSync( cleanupPath, { recursive: true, force: true } );
+			}
+
+			if ( ! portBindFailure || attempt > 0 ) {
+				throw error;
+			}
+
+			console.warn(
+				`[cortext-desktop] runtime port ${ selectedPort } was claimed during startup; choosing another`
+			);
+			selectedPort = await portAllocator();
+			if ( ! isValidPort( selectedPort ) ) {
+				throw new Error(
+					'Runtime port allocator returned an invalid port.'
+				);
+			}
+		}
+	}
+
+	throw new Error( 'Unable to start the desktop runtime.' );
+}
+
+function startRuntime( {
+	appDir,
+	wordpressDir,
+	port,
+	runtime = process.env.CORTEXT_RUNTIME,
+	runtimeStateDir,
+	onUnexpectedExit,
+	authToken,
+	portAllocator = findAvailablePort,
+} ) {
+	if ( typeof authToken !== 'string' || authToken.trim().length === 0 ) {
+		throw new TypeError( 'startRuntime requires a non-empty authToken.' );
+	}
+	if ( typeof portAllocator !== 'function' ) {
+		throw new TypeError( 'startRuntime portAllocator must be a function.' );
+	}
+	if ( port !== undefined && port !== null && ! isValidPort( port ) ) {
+		throw new TypeError(
+			'startRuntime port must be an integer between 1 and 65535.'
+		);
+	}
+
+	const normalized = normalizeRuntime( runtime );
+	const handle = {
+		runtime: normalized,
+		processes: [],
+		cleanupPaths: [],
+		starting: true,
+		stopping: false,
+		onUnexpectedExit,
+		port: null,
+		host: null,
+		origin: null,
+	};
+	const stateDir =
+		runtimeStateDir ||
+		fs.mkdtempSync( path.join( os.tmpdir(), 'cortext-desktop-runtime-' ) );
+	handle.stateDir = stateDir;
+
+	configureObjectCacheDropIn( wordpressDir, appDir );
+	configureRuntimeRouter( wordpressDir, appDir );
+	const bootstrapPath = configureRuntimeBootstrap( wordpressDir, appDir );
+	configureDesktopUpdateLock( wordpressDir, appDir );
+
+	handle.ready = launchRuntime( handle, {
+		appDir,
+		wordpressDir,
+		port,
+		runtimeStateDir: stateDir,
+		authToken,
+		bootstrapPath,
+		portAllocator,
+	} ).catch( async ( error ) => {
+		if ( ! handle.stopping ) {
+			// Report why startup failed, not why the cleanup afterwards did.
+			await stopRuntime( handle ).catch( () => {} );
+		}
+		throw error;
+	} );
+	return handle;
+}
+
 function stopRuntime( handle, options = {} ) {
 	if ( ! handle ) {
 		return Promise.resolve();
@@ -876,16 +1226,8 @@ function stopRuntime( handle, options = {} ) {
 	handle.stopping = true;
 
 	const stopPromise = ( async () => {
-		const processes = [ ...( handle.processes || [] ) ].reverse();
 		try {
-			await Promise.all(
-				processes.map( ( { child, killProcessGroup } ) =>
-					waitForProcessExit( child, {
-						killProcessGroup,
-						...options,
-					} )
-				)
-			);
+			await stopProcessEntries( handle.processes || [], options );
 		} finally {
 			for ( const cleanupPath of handle.cleanupPaths || [] ) {
 				fs.rmSync( cleanupPath, { recursive: true, force: true } );
@@ -903,12 +1245,17 @@ function stopRuntime( handle, options = {} ) {
 }
 
 module.exports = {
-	DEFAULT_PORT,
+	LEGACY_PORT,
 	RUNTIME_AUTH_HEADER,
+	RUNTIME_PORT_FIRST,
+	RUNTIME_PORT_LAST,
 	WINDOWS_DIRECT_EXECUTABLE_EXTENSIONS,
 	bundledRuntimeExecutable,
 	childProcessOptions,
 	findRuntimeExecutable,
+	findAvailablePort,
+	isPortBindFailure,
+	isValidPort,
 	normalizeRuntime,
 	phpCliWorkerConfig,
 	runWindowsTaskkill,

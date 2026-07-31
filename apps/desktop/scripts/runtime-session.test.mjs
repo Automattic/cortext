@@ -6,7 +6,7 @@ import runtimeSessionModule from '../lib/runtime-session.js';
 const { installRuntimeAuthHeader } = runtimeSessionModule;
 const AUTH_HEADER = 'X-Cortext-Desktop-Token';
 const AUTH_TOKEN = 'private-runtime-token';
-const RUNTIME_ORIGIN = 'http://127.0.0.1:9402';
+const RUNTIME_ORIGIN = 'http://127.0.0.1:43123';
 const LOADING_URL = 'file:///Applications/Cortext.app/loading.html';
 const RUNTIME_FRAME = {
 	url: `${ RUNTIME_ORIGIN }/wp-admin/admin.php?page=cortext`,
@@ -111,6 +111,15 @@ test( 'never sends the runtime token to another origin', async () => {
 	} );
 
 	assert.deepEqual( result.requestHeaders, { Accept: 'image/*' } );
+
+	const otherLoopbackPort = await sendHeaders(
+		listeners.onBeforeSendHeaders,
+		{
+			url: 'http://127.0.0.1:43124/wp-admin/',
+			requestHeaders: {},
+		}
+	);
+	assert.equal( otherLoopbackPort.requestHeaders[ AUTH_HEADER ], undefined );
 } );
 
 test( 'does not authenticate a redirect chain that leaves the runtime', async () => {

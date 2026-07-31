@@ -11,6 +11,7 @@ const {
 	bundledRuntimeExecutable,
 	childProcessOptions,
 	findRuntimeExecutable,
+	isPortBindFailure,
 	phpCliWorkerConfig,
 	runWindowsTaskkill,
 	stopRuntime,
@@ -74,6 +75,36 @@ test( 'child process options hide the Windows console', () => {
 		cwd: 'C:\\site',
 		windowsHide: true,
 	} );
+} );
+
+test( 'runtime startup recognizes cross-platform port bind failures', () => {
+	const cases = [
+		[
+			'Failed to listen on 127.0.0.1:9402 (reason: Address already in use)',
+			true,
+		],
+		[
+			'Failed to listen on 127.0.0.1:9402 (reason: An attempt was made to access a socket in a way forbidden by its access permissions)',
+			true,
+		],
+		[
+			'listen tcp 127.0.0.1:9402: bind: Only one usage of each socket address is normally permitted.',
+			true,
+		],
+		[ 'PHP Parse error: syntax error in bootstrap.php', false ],
+		[
+			'Failed to listen on 127.0.0.1:9403 (reason: An attempt was made to access a socket in a way forbidden by its access permissions)',
+			false,
+		],
+	];
+
+	for ( const [ outputTail, expected ] of cases ) {
+		assert.equal(
+			isPortBindFailure( [ { outputTail } ], 9402 ),
+			expected,
+			outputTail
+		);
+	}
 } );
 
 test( 'Windows ignores PHP CLI worker settings and does not detach', () => {

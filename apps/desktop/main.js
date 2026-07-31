@@ -11,8 +11,9 @@ const path = require( 'path' );
 const fs = require( 'fs' );
 const { pathToFileURL } = require( 'url' );
 const {
-	DEFAULT_PORT: PORT,
+	LEGACY_PORT,
 	RUNTIME_AUTH_HEADER,
+	isValidPort,
 	startRuntime,
 	stopRuntime,
 } = require( './lib/runtime' );
@@ -44,7 +45,6 @@ const LOADING_PAGE = path.resolve( __dirname, 'loading.html' );
 const LOADING_URL = pathToFileURL( LOADING_PAGE ).href;
 const ERROR_PAGE = path.resolve( __dirname, 'error.html' );
 const ERROR_URL = pathToFileURL( ERROR_PAGE ).href;
-const RUNTIME_ORIGIN = `http://127.0.0.1:${ PORT }`;
 const RUNTIME_SESSION_PARTITION = 'persist:cortext';
 // The local shell pages Cortext loads itself, before and instead of the runtime.
 const TRUSTED_DOCUMENT_URLS = [ LOADING_URL, ERROR_URL ];
@@ -52,12 +52,14 @@ const TRUSTED_DOCUMENT_URLS = [ LOADING_URL, ERROR_URL ];
 // One instance owns the extracted site and the runtime port. A second launch
 // would extract on top of the first one's half-written files, so hand focus
 // back to the window already running and leave.
-if ( ! app.requestSingleInstanceLock() ) {
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if ( ! hasSingleInstanceLock ) {
 	app.exit( 0 );
 }
 
 let runtimeHandle = null;
 let removeRuntimeAuthHeader = null;
+let mainWindow = null;
 let quitting = false;
 const childWindows = new Set();
 let allowQuit = false;
@@ -67,6 +69,13 @@ let appQuitPromise = null;
 
 function getSiteRoot() {
 	return path.join( app.getPath( 'userData' ), 'site' );
+}
+
+function preferredRuntimePort( storedPort, hadExistingSite ) {
+	if ( isValidPort( storedPort ) ) {
+		return storedPort;
+	}
+	return hadExistingSite ? LEGACY_PORT : undefined;
 }
 
 function stopRuntimeBeforeQuit() {
@@ -135,22 +144,21 @@ function refreshMenu() {
 	);
 }
 
-function isAllowedTopLevelUrl( url ) {
+function isAllowedTopLevelUrl( url, runtimeOrigin ) {
 	return (
-		hasOrigin( url, RUNTIME_ORIGIN ) ||
-		TRUSTED_DOCUMENT_URLS.includes( url )
+		hasOrigin( url, runtimeOrigin ) || TRUSTED_DOCUMENT_URLS.includes( url )
 	);
 }
 
 // Third-party frames may render so blocks such as Embed keep working. They
 // cannot reach the runtime: the token only rides on requests whose frame origin
 // is Cortext's own, and that origin is inherited, not claimed.
-function isAllowedFrameUrl( url ) {
+function isAllowedFrameUrl( url, runtimeOrigin ) {
 	if ( url === 'about:blank' || url === 'about:srcdoc' ) {
 		return true;
 	}
 	// The editor canvas is a blob: frame, which carries the runtime origin.
-	if ( hasOrigin( url, RUNTIME_ORIGIN ) ) {
+	if ( hasOrigin( url, runtimeOrigin ) ) {
 		return true;
 	}
 	try {
@@ -160,8 +168,10 @@ function isAllowedFrameUrl( url ) {
 	}
 }
 
-function isAllowedDocumentUrl( url, isMainFrame ) {
-	return isMainFrame ? isAllowedTopLevelUrl( url ) : isAllowedFrameUrl( url );
+function isAllowedDocumentUrl( url, isMainFrame, runtimeOrigin ) {
+	return isMainFrame
+		? isAllowedTopLevelUrl( url, runtimeOrigin )
+		: isAllowedFrameUrl( url, runtimeOrigin );
 }
 
 function openExternalUrl( url ) {
@@ -204,7 +214,7 @@ function secureWebPreferences( webPreferences, runtimeSession ) {
 	};
 }
 
-function configureTrustedWindow( win, runtimeSession ) {
+function configureTrustedWindow( win, runtimeSession, runtimeOrigin ) {
 	win.on( 'page-title-updated', ( event ) => {
 		event.preventDefault();
 		win.setTitle( 'Cortext' );
@@ -212,7 +222,7 @@ function configureTrustedWindow( win, runtimeSession ) {
 
 	const { webContents } = win;
 	webContents.on( 'will-navigate', ( event ) => {
-		if ( ! isAllowedTopLevelUrl( event.url ) ) {
+		if ( ! isAllowedTopLevelUrl( event.url, runtimeOrigin ) ) {
 			event.preventDefault();
 			openExternalUrl( event.url );
 			return;
@@ -222,7 +232,7 @@ function configureTrustedWindow( win, runtimeSession ) {
 		if (
 			! isTrustedRuntimeFrame(
 				event.initiator,
-				RUNTIME_ORIGIN,
+				runtimeOrigin,
 				TRUSTED_DOCUMENT_URLS
 			)
 		) {
@@ -230,19 +240,24 @@ function configureTrustedWindow( win, runtimeSession ) {
 		}
 	} );
 	webContents.on( 'will-frame-navigate', ( event ) => {
-		if ( event.isMainFrame || isAllowedDocumentUrl( event.url, false ) ) {
+		if (
+			event.isMainFrame ||
+			isAllowedDocumentUrl( event.url, false, runtimeOrigin )
+		) {
 			return;
 		}
 		event.preventDefault();
 	} );
 	webContents.on( 'will-redirect', ( event ) => {
-		if ( isAllowedDocumentUrl( event.url, event.isMainFrame ) ) {
+		if (
+			isAllowedDocumentUrl( event.url, event.isMainFrame, runtimeOrigin )
+		) {
 			return;
 		}
 		event.preventDefault();
 	} );
 	webContents.setWindowOpenHandler( ( { url } ) => {
-		if ( ! hasOrigin( url, RUNTIME_ORIGIN ) ) {
+		if ( ! hasOrigin( url, runtimeOrigin ) ) {
 			openExternalUrl( url );
 			return { action: 'deny' };
 		}
@@ -250,13 +265,22 @@ function configureTrustedWindow( win, runtimeSession ) {
 		return {
 			action: 'allow',
 			createWindow: ( options ) =>
-				createInternalWindow( options, runtimeSession, win )
-					.webContents,
+				createInternalWindow(
+					options,
+					runtimeSession,
+					runtimeOrigin,
+					win
+				).webContents,
 		};
 	} );
 }
 
-function createInternalWindow( options, runtimeSession, parent ) {
+function createInternalWindow(
+	options,
+	runtimeSession,
+	runtimeOrigin,
+	parent
+) {
 	const windowOptions = { ...options };
 	const { webPreferences } = windowOptions;
 	delete windowOptions.webPreferences;
@@ -287,7 +311,7 @@ function createInternalWindow( options, runtimeSession, parent ) {
 	child.once( 'closed', () => {
 		childWindows.delete( child );
 	} );
-	configureTrustedWindow( child, runtimeSession );
+	configureTrustedWindow( child, runtimeSession, runtimeOrigin );
 	return child;
 }
 
@@ -310,15 +334,13 @@ function createWindow( runtimeSession ) {
 		void quitAfterRuntimeStops();
 	} );
 
-	configureTrustedWindow( win, runtimeSession );
 	return win;
 }
 
-async function loadSite( win ) {
+async function loadSite( win, runtimeOrigin ) {
 	try {
-		await runtimeHandle.ready;
 		await win.loadURL(
-			`http://127.0.0.1:${ PORT }/wp-admin/admin.php?page=cortext`
+			`${ runtimeOrigin }/wp-admin/admin.php?page=cortext`
 		);
 		if ( ! app.isPackaged && process.env.CORTEXT_DEVTOOLS !== '0' ) {
 			win.webContents.openDevTools( { mode: 'detach' } );
@@ -338,7 +360,7 @@ async function loadSite( win ) {
 	}
 }
 
-app.whenReady().then( async () => {
+async function startDesktop() {
 	let win = null;
 	try {
 		const authToken = crypto.randomBytes( 32 ).toString( 'hex' );
@@ -346,16 +368,6 @@ app.whenReady().then( async () => {
 			RUNTIME_SESSION_PARTITION,
 			{ cache: false }
 		);
-		await runtimeSession.clearStorageData( {
-			origin: RUNTIME_ORIGIN,
-			storages: [ 'cookies', 'serviceworkers', 'cachestorage' ],
-		} );
-		removeRuntimeAuthHeader = installRuntimeAuthHeader( runtimeSession, {
-			authHeader: RUNTIME_AUTH_HEADER,
-			authToken,
-			runtimeOrigin: RUNTIME_ORIGIN,
-			trustedDocumentUrls: TRUSTED_DOCUMENT_URLS,
-		} );
 
 		if (
 			process.platform === 'darwin' &&
@@ -367,12 +379,21 @@ app.whenReady().then( async () => {
 
 		refreshMenu();
 		win = createWindow( runtimeSession );
+		mainWindow = win;
+		win.once( 'closed', () => {
+			if ( mainWindow === win ) {
+				mainWindow = null;
+			}
+		} );
 		// Load the loading screen before any site refresh so users never stare at
 		// a blank window.
 		await win.loadFile( LOADING_PAGE );
 
 		const siteRoot = getSiteRoot();
 		recoverInterruptedSwap( siteRoot );
+		const hadExistingSite = fs.existsSync(
+			path.join( siteRoot, 'wordpress' )
+		);
 		console.log( `[cortext-desktop] preparing site at ${ siteRoot }` );
 		await ensureSiteFromSnapshot( {
 			snapshotZip: SNAPSHOT_ZIP,
@@ -393,10 +414,15 @@ app.whenReady().then( async () => {
 			return;
 		}
 		const wordpressDir = path.join( siteRoot, 'wordpress' );
+		const runtimePort = preferredRuntimePort(
+			settings.get( 'runtimePort' ),
+			hadExistingSite
+		);
 
 		runtimeHandle = startRuntime( {
 			appDir: RESOURCES_DIR,
 			authToken,
+			port: runtimePort,
 			wordpressDir,
 			runtimeStateDir: path.join(
 				app.getPath( 'temp' ),
@@ -409,8 +435,33 @@ app.whenReady().then( async () => {
 			},
 		} );
 
-		await loadSite( win );
+		await runtimeHandle.ready;
+		if ( quitting ) {
+			return;
+		}
+		const runtimeOrigin = runtimeHandle.origin;
+		if ( settings.get( 'runtimePort' ) !== runtimeHandle.port ) {
+			settings.set( 'runtimePort', runtimeHandle.port );
+		}
+		await runtimeSession.clearStorageData( {
+			origin: runtimeOrigin,
+			storages: [ 'cookies', 'serviceworkers', 'cachestorage' ],
+		} );
+		if ( quitting ) {
+			return;
+		}
+		removeRuntimeAuthHeader = installRuntimeAuthHeader( runtimeSession, {
+			authHeader: RUNTIME_AUTH_HEADER,
+			authToken,
+			runtimeOrigin,
+			trustedDocumentUrls: TRUSTED_DOCUMENT_URLS,
+		} );
+		configureTrustedWindow( win, runtimeSession, runtimeOrigin );
+		await loadSite( win, runtimeOrigin );
 	} catch ( err ) {
+		if ( quitting ) {
+			return;
+		}
 		console.error( '[cortext-desktop]', err );
 		if ( win ) {
 			win.loadFile( ERROR_PAGE );
@@ -418,18 +469,22 @@ app.whenReady().then( async () => {
 			app.quit();
 		}
 	}
-} );
+}
 
-app.on( 'second-instance', () => {
-	const [ existing ] = BrowserWindow.getAllWindows();
-	if ( ! existing ) {
-		return;
-	}
-	if ( existing.isMinimized() ) {
-		existing.restore();
-	}
-	existing.focus();
-} );
+if ( hasSingleInstanceLock ) {
+	app.on( 'second-instance', () => {
+		if ( ! mainWindow || mainWindow.isDestroyed() ) {
+			return;
+		}
+		if ( mainWindow.isMinimized() ) {
+			mainWindow.restore();
+		}
+		mainWindow.show();
+		mainWindow.focus();
+	} );
+
+	app.whenReady().then( startDesktop );
+}
 
 app.on( 'window-all-closed', () => {
 	app.quit();

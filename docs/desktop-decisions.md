@@ -2,6 +2,51 @@
 
 Running log for desktop-specific runtime and packaging decisions. Keep the detailed benchmark numbers in PR comments or artifacts unless they become stable product guidance.
 
+## 2026-07-28 — Give each desktop profile its own runtime origin
+
+**Decision.** New desktop profiles take the first free loopback port in the
+9403-9498 band and save it in that profile's settings. Later launches reuse it
+so browser-backed preferences and the local Notion key remain under a stable
+Chromium origin. If the saved port is occupied, Cortext scans the band again and
+saves the new choice. Profiles upgraded from the fixed-port build try their
+legacy port first to preserve the same origin-scoped data.
+
+The PHP and experimental Caddy runtimes receive the selected origin through
+their environment. A bootstrap defines `WP_HOME` and `WP_SITEURL` before the
+preserved `wp-config.php` loads, so both new snapshots and existing sites
+generate URLs for the active origin without replacing salts or user config.
+Every runtime requires the exact loopback `Host`; an `Origin` header may be
+absent, but if present it must match exactly. Caddy also binds explicitly to
+`127.0.0.1`.
+
+Only one Electron process may use a profile at a time. A second launch focuses
+the existing window instead of starting another runtime against the same
+SQLite database.
+
+**Why the port is stable per profile, not per launch.** Chromium partitions
+local storage by the complete origin, including the port. Rotating it on every
+launch would make theme and layout preferences disappear and strand the local
+Notion key under old origins. The per-launch authentication token remains the
+security credential; the port is collision avoidance and origin scoping, not a
+secret.
+
+**Why a fixed band instead of asking the kernel.** Binding port 0 returns a port
+from the ephemeral range (49152+ on macOS, 32768+ on Linux), which is the range
+the kernel hands out for outbound sockets. That is the right answer for a port
+that lives seconds and the wrong one for a port saved across launches: loopback
+traffic from local servers, proxies and other apps churns through it constantly.
+The 9403-9498 band is never handed out spontaneously, so only software that
+explicitly binds there can take a saved port. When the whole band is occupied
+Cortext still falls back to port 0, trading origin stability for starting at all.
+
+**Collision trade-off.** If another process takes the saved port, moving the
+profile to a new origin strands browser-only preferences under the old origin.
+The user may need to re-enter those preferences and the local Notion key.
+WordPress settings and uploads are unaffected, but documents are only partly so:
+blocks that embed uploaded media keep the previous origin in their markup and
+nothing rewrites them, at save or at render, so those images need re-inserting.
+That is a property of how block content stores URLs, not of the port change.
+
 ## 2026-07-24 — Authenticate every local runtime request
 
 **Decision.** Each Electron launch generates a new random 256-bit token, keeps
