@@ -3,14 +3,12 @@ import { store as coreStore } from '@wordpress/core-data';
 import {
 	createRegistrySelector,
 	useDispatch,
-	useRegistry,
 	useSelect,
 } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { store as noticesStore } from '@wordpress/notices';
-import { addQueryArgs } from '@wordpress/url';
 
 import { unlock } from '../lock-unlock';
 import { notifyDocumentRecordChanged } from './documentRecordInvalidation';
@@ -96,16 +94,20 @@ export function revisionFeaturedMediaChanged(
 	);
 }
 
-function revisionIdentifier( revision, revisionKey = 'id' ) {
-	return revision?.[ revisionKey ] ?? revision?.id;
+export function revisionIdentityRecord(
+	currentRevision,
+	previousRevision,
+	revisionDiffStatus
+) {
+	if ( revisionDiffStatus === 'removed' ) {
+		return previousRevision ?? currentRevision;
+	}
+
+	return currentRevision;
 }
 
-function findRevisionById( revisions, revisionId, revisionKey = 'id' ) {
-	return revisions?.find(
-		( revision ) =>
-			String( revisionIdentifier( revision, revisionKey ) ) ===
-			String( revisionId )
-	);
+function revisionIdentifier( revision, revisionKey = 'id' ) {
+	return revision?.[ revisionKey ] ?? revision?.id;
 }
 
 function useRevisionRecord( { postId, postType, revisionId, revisionKey } ) {
@@ -152,6 +154,7 @@ export function useRevisionedDocumentIdentity( {
 	postType,
 	meta,
 	featuredId,
+	revisionDiffStatus,
 } = {} ) {
 	const {
 		currentRevision,
@@ -164,31 +167,37 @@ export function useRevisionedDocumentIdentity( {
 	const currentRevisionRecord = useRevisionRecord( {
 		postId,
 		postType,
-		revisionId: currentRevision?.id ?? currentRevisionId,
+		revisionId:
+			revisionIdentifier( currentRevision, revisionKey ) ??
+			currentRevisionId,
 		revisionKey,
 	} );
 	const previousRevisionRecord = useRevisionRecord( {
 		postId,
 		postType,
 		revisionId:
-			previousRevision?.id ??
-			revisionIdentifier( previousRevision, revisionKey ),
+			revisionIdentifier( previousRevision, revisionKey ) ??
+			previousRevision?.id,
 		revisionKey,
 	} );
 	const effectiveCurrentRevision = currentRevisionRecord ?? currentRevision;
 	const effectivePreviousRevision =
 		previousRevisionRecord ?? previousRevision;
+	const identityRevision =
+		isRevisionsMode && isShowingRevisionDiff
+			? revisionIdentityRecord(
+					effectiveCurrentRevision,
+					effectivePreviousRevision,
+					revisionDiffStatus
+			  )
+			: effectiveCurrentRevision;
 
 	return {
 		iconMeta: isRevisionsMode
-			? revisionMetaValue(
-					effectiveCurrentRevision,
-					'cortext_document_icon',
-					''
-			  )
+			? revisionMetaValue( identityRevision, 'cortext_document_icon', '' )
 			: meta?.cortext_document_icon ?? '',
 		featuredId: isRevisionsMode
-			? revisionFeaturedMedia( effectiveCurrentRevision, 0 )
+			? revisionFeaturedMedia( identityRevision, 0 )
 			: featuredId,
 		isRevisionsMode,
 		currentRevision: effectiveCurrentRevision,
@@ -239,23 +248,6 @@ export function editorRevisionQuery( revisionKey = 'id', order ) {
 	return query;
 }
 
-export function completeRevisionRecordFields( records, query ) {
-	if ( ! query?._fields ) {
-		return records;
-	}
-
-	const fields = query._fields.split( ',' ).filter( Boolean );
-	return records.map( ( record ) => {
-		const nextRecord = { ...record };
-		fields.forEach( ( field ) => {
-			if ( ! hasOwnProperty( nextRecord, field ) ) {
-				nextRecord[ field ] = undefined;
-			}
-		} );
-		return nextRecord;
-	} );
-}
-
 let didRegisterRevisionSelectors = false;
 
 function getEditorRevisionRecord( select, state, order ) {
@@ -277,14 +269,10 @@ function getEditorRevisionRecord( select, state, order ) {
 		'postType',
 		postType,
 		postId,
-		editorRevisionQuery( revisionKey, order )
+		revisionQuery( revisionKey, 'desc' )
 	);
 	if ( ! revisions ) {
 		return null;
-	}
-
-	if ( order !== 'asc' ) {
-		return findRevisionById( revisions, revisionId, revisionKey ) ?? null;
 	}
 
 	const currentIndex = revisions.findIndex(
@@ -292,7 +280,11 @@ function getEditorRevisionRecord( select, state, order ) {
 			String( revisionIdentifier( revision, revisionKey ) ) ===
 			String( revisionId )
 	);
-	return currentIndex > 0 ? revisions[ currentIndex - 1 ] : null;
+	if ( order !== 'asc' ) {
+		return currentIndex >= 0 ? revisions[ currentIndex ] : null;
+	}
+
+	return currentIndex >= 0 ? revisions[ currentIndex + 1 ] ?? null : null;
 }
 
 function registerRevisionSelectors() {
@@ -378,8 +370,16 @@ export function useRevisions( postType, postId, { order = 'desc' } = {} ) {
 			const hasResolved =
 				core.hasFinishedResolution?.( 'getRevisions', args ) ??
 				( ! isLoading && Array.isArray( data ) );
-			const error =
+			const resolutionError =
 				core.getResolutionError?.( 'getRevisions', args ) ?? null;
+			// Core-data deliberately swallows getRevisions API failures. A
+			// finished resolution with no collection is therefore the only signal
+			// that the request failed; a successful empty response is stored as [].
+			const error =
+				resolutionError ??
+				( hasResolved && data === null
+					? new Error( __( 'Could not load revisions.', 'cortext' ) )
+					: null );
 
 			return {
 				data: Array.isArray( data ) ? data : [],
@@ -425,9 +425,12 @@ export function useRevisionAuthor( authorId ) {
 	);
 }
 
-export function useRevisionControls( { postId, postType } = {} ) {
+export function useRevisionControls( {
+	isReadOnly = false,
+	postId,
+	postType,
+} = {} ) {
 	const [ isRestoring, setIsRestoring ] = useState( false );
-	const registry = useRegistry();
 	const {
 		isAvailable,
 		isRevisionsMode,
@@ -438,6 +441,7 @@ export function useRevisionControls( { postId, postType } = {} ) {
 		postStatus,
 		isDirty,
 		isSaving,
+		isPostLocked,
 		revisionKey,
 		revisionsUrl,
 	} = useSelect(
@@ -478,6 +482,7 @@ export function useRevisionControls( { postId, postType } = {} ) {
 				postStatus: store.getCurrentPostAttribute( 'status' ),
 				isDirty: store.isEditedPostDirty?.() ?? false,
 				isSaving: store.isSavingPost?.() ?? false,
+				isPostLocked: store.isPostLocked?.() ?? false,
 				revisionKey: entityConfig?.revisionKey || 'id',
 				revisionsUrl:
 					postId &&
@@ -492,14 +497,18 @@ export function useRevisionControls( { postId, postType } = {} ) {
 	// editor has unsaved edits (would be silently discarded) or a save is in
 	// flight, and on trashed documents (restore the document first).
 	const isTrashed = postStatus === 'trash';
-	const canRestore = ! isTrashed && ! isDirty && ! isSaving;
+	const canRestore =
+		! isReadOnly &&
+		! isPostLocked &&
+		! isTrashed &&
+		! isDirty &&
+		! isSaving;
 	const { setCurrentRevisionId, setShowRevisionDiff } = unlock(
 		useDispatch( editorStore )
 	);
 	const {
 		clearEntityRecordEdits,
 		receiveEntityRecords,
-		receiveRevisions,
 		invalidateResolution,
 	} = useDispatch( coreStore );
 	const { createErrorNotice, createSuccessNotice } =
@@ -508,116 +517,11 @@ export function useRevisionControls( { postId, postType } = {} ) {
 		() => revisionInvalidationQueries( revisionKey ),
 		[ revisionKey ]
 	);
-	const previewQueries = useMemo(
-		() => [
-			editorRevisionQuery( revisionKey ),
-			editorRevisionQuery( revisionKey, 'asc' ),
-		],
-		[ revisionKey ]
-	);
-	const refreshRevisionPreviewRecords = useCallback(
-		async ( revisionId ) => {
-			if ( ! postType || ! postId ) {
-				return revisionId;
-			}
-
-			previewQueries.forEach( ( query ) => {
-				invalidateResolution( 'getRevisions', [
-					'postType',
-					postType,
-					postId,
-					query,
-				] );
-			} );
-
-			const receivedRecords = await Promise.all(
-				previewQueries.map( async ( query ) => {
-					try {
-						if ( ! revisionsUrl || ! receiveRevisions ) {
-							return [];
-						}
-						const response = await apiFetch( {
-							path: addQueryArgs( revisionsUrl, query ),
-						} );
-						const records = Array.isArray( response )
-							? response
-							: Object.values( response ?? {} );
-						const completeRecords = completeRevisionRecordFields(
-							records,
-							query
-						);
-						await receiveRevisions(
-							'postType',
-							postType,
-							postId,
-							completeRecords,
-							query,
-							false,
-							{}
-						);
-						return completeRecords;
-					} catch {
-						// If the fetch fails, still enter revisions mode so the
-						// normal notices/resolvers can surface the error.
-						return [];
-					}
-				} )
-			);
-			const selectedRecord = receivedRecords
-				.flat()
-				.find( ( revision ) =>
-					findRevisionById( [ revision ], revisionId, revisionKey )
-				);
-
-			for ( let attempt = 0; attempt < 10; attempt++ ) {
-				const revisions = registry
-					.select( coreStore )
-					.getRevisions(
-						'postType',
-						postType,
-						postId,
-						previewQueries[ 0 ]
-					);
-				if ( findRevisionById( revisions, revisionId, revisionKey ) ) {
-					return (
-						revisionIdentifier( selectedRecord, revisionKey ) ??
-						revisionId
-					);
-				}
-				await new Promise( ( resolve ) => setTimeout( resolve, 10 ) );
-			}
-			return (
-				revisionIdentifier( selectedRecord, revisionKey ) ?? revisionId
-			);
-		},
-		[
-			invalidateResolution,
-			postId,
-			postType,
-			previewQueries,
-			receiveRevisions,
-			registry,
-			revisionKey,
-			revisionsUrl,
-		]
-	);
-
 	const selectRevision = useCallback(
 		( revisionId ) => {
-			if ( ! revisionId ) {
-				setCurrentRevisionId?.( revisionId );
-				return;
-			}
-			refreshRevisionPreviewRecords( revisionId ).then(
-				( resolvedRevisionId ) => {
-					setCurrentRevisionId?.( resolvedRevisionId ?? revisionId );
-				},
-				() => {
-					setCurrentRevisionId?.( revisionId );
-				}
-			);
+			setCurrentRevisionId?.( revisionId );
 		},
-		[ refreshRevisionPreviewRecords, setCurrentRevisionId ]
+		[ setCurrentRevisionId ]
 	);
 	const exitRevisions = useCallback( () => {
 		setCurrentRevisionId?.( null );
@@ -715,6 +619,7 @@ export function useRevisionControls( { postId, postType } = {} ) {
 		isTrashed,
 		isDirty,
 		isSaving,
+		isPostLocked,
 		canRestore,
 		isRestoring,
 		revisionKey,

@@ -4,11 +4,18 @@ import {
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
 import { dateI18n, getDate, getSettings } from '@wordpress/date';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { seen, unseen } from '@wordpress/icons';
+import { backup, cog, seen, unseen } from '@wordpress/icons';
+import { store as interfaceStore } from '@wordpress/interface';
 
 import { useRevisionControls } from '../hooks/useRevisions';
+import {
+	DOCUMENT_INSPECTOR,
+	INSPECTOR_SCOPE,
+	REVISION_HISTORY_PANEL,
+} from './editorPanelConstants';
 
 function revisionLabel( revision ) {
 	const date = revision?.date ?? revision?.modified;
@@ -22,25 +29,43 @@ function revisionLabel( revision ) {
 	);
 }
 
-export default function RevisionsHeader( { postId, postType } ) {
+export default function RevisionsHeader( {
+	isReadOnly = false,
+	postId,
+	postType,
+} ) {
 	const [ isConfirming, setIsConfirming ] = useState( false );
+	const activeArea = useSelect(
+		( select ) =>
+			select( interfaceStore ).getActiveComplementaryArea(
+				INSPECTOR_SCOPE
+			),
+		[]
+	);
+	const { enableComplementaryArea } = useDispatch( interfaceStore );
 	const {
 		canRestore,
 		currentRevision,
 		exitRevisions,
 		isDirty,
+		isPostLocked,
 		isRestoring,
 		isSaving,
 		isShowingRevisionDiff,
 		isTrashed,
 		restoreRevision,
 		toggleDiff,
-	} = useRevisionControls( { postId, postType } );
+	} = useRevisionControls( { isReadOnly, postId, postType } );
 
 	let restoreReason = __( 'Restore revision', 'cortext' );
 	if ( isTrashed ) {
 		restoreReason = __(
 			'Take this page out of Trash before restoring a revision.',
+			'cortext'
+		);
+	} else if ( isReadOnly || isPostLocked ) {
+		restoreReason = __(
+			'This document is read-only. Resolve the editing lock before restoring a revision.',
 			'cortext'
 		);
 	} else if ( isDirty || isSaving ) {
@@ -53,6 +78,30 @@ export default function RevisionsHeader( { postId, postType } ) {
 	return (
 		<div className="cortext-revisions-header">
 			<div className="cortext-revisions-header__tools">
+				<Button
+					icon={ backup }
+					label={ __( 'Revision history', 'cortext' ) }
+					isPressed={ activeArea === REVISION_HISTORY_PANEL }
+					onClick={ () =>
+						enableComplementaryArea(
+							INSPECTOR_SCOPE,
+							REVISION_HISTORY_PANEL
+						)
+					}
+					size="compact"
+				/>
+				<Button
+					icon={ cog }
+					label={ __( 'Revision properties', 'cortext' ) }
+					isPressed={ activeArea === DOCUMENT_INSPECTOR }
+					onClick={ () =>
+						enableComplementaryArea(
+							INSPECTOR_SCOPE,
+							DOCUMENT_INSPECTOR
+						)
+					}
+					size="compact"
+				/>
 				<Button
 					icon={ isShowingRevisionDiff ? unseen : seen }
 					label={
@@ -84,7 +133,12 @@ export default function RevisionsHeader( { postId, postType } ) {
 					accessibleWhenDisabled
 					variant="primary"
 					isBusy={ isRestoring }
-					disabled={ ! canRestore || isRestoring }
+					disabled={
+						isReadOnly ||
+						isPostLocked ||
+						! canRestore ||
+						isRestoring
+					}
 					onClick={ () => setIsConfirming( true ) }
 					size="compact"
 				>

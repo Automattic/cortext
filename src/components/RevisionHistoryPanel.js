@@ -1,4 +1,5 @@
 import { Button, Spinner } from '@wordpress/components';
+import { useEntityRecord } from '@wordpress/core-data';
 import { dateI18n, getDate, getSettings, humanTimeDiff } from '@wordpress/date';
 import { useSelect } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
@@ -10,6 +11,7 @@ import { __, sprintf } from '@wordpress/i18n';
 
 import {
 	INSPECTOR_SCOPE,
+	DOCUMENT_INSPECTOR,
 	REVISION_HISTORY_PANEL,
 } from './editorPanelConstants';
 import {
@@ -54,6 +56,7 @@ function RevisionAuthor( { authorId } ) {
 }
 
 function RevisionRow( {
+	badgeLabel,
 	isCurrent,
 	isSelected,
 	onSelect,
@@ -72,12 +75,12 @@ function RevisionRow( {
 			]
 				.filter( Boolean )
 				.join( ' ' ) }
-			role="option"
-			aria-selected={ isSelected }
 		>
 			<Button
 				className="cortext-revision-history__button"
 				variant="tertiary"
+				isPressed={ isSelected }
+				aria-current={ isCurrent ? 'true' : undefined }
 				onClick={ () => onSelect( id ) }
 			>
 				<span className="cortext-revision-history__main">
@@ -88,19 +91,26 @@ function RevisionRow( {
 					>
 						{ formatRevisionTime( date ) }
 					</time>
-					{ isCurrent ? (
+					{ badgeLabel ? (
 						<span className="cortext-revision-history__badge">
-							{ __( 'Current', 'cortext' ) }
+							{ badgeLabel }
 						</span>
 					) : null }
 				</span>
-				<RevisionAuthor authorId={ revision?.author } />
+				{ revision?.author ? (
+					<RevisionAuthor authorId={ revision.author } />
+				) : null }
 			</Button>
 		</li>
 	);
 }
 
 export default function RevisionHistoryPanel( { postId, postType } ) {
+	const { record: currentRecord } = useEntityRecord(
+		'postType',
+		postType,
+		postId
+	);
 	const { data, isLoading, hasResolved, error, revisionKey } = useRevisions(
 		postType,
 		postId
@@ -119,7 +129,8 @@ export default function RevisionHistoryPanel( { postId, postType } ) {
 		if (
 			isAvailable &&
 			currentRevisionId &&
-			activeArea !== REVISION_HISTORY_PANEL
+			activeArea !== REVISION_HISTORY_PANEL &&
+			activeArea !== DOCUMENT_INSPECTOR
 		) {
 			exitRevisions();
 		}
@@ -129,6 +140,11 @@ export default function RevisionHistoryPanel( { postId, postType } ) {
 		return null;
 	}
 
+	const currentRow = {
+		id: `current-${ postId }`,
+		author: currentRecord?.author,
+		modified: currentRecord?.modified,
+	};
 	const latestRevisionId = revisionId( data[ 0 ], revisionKey );
 
 	return (
@@ -162,31 +178,42 @@ export default function RevisionHistoryPanel( { postId, postType } ) {
 					{ __( 'No revisions yet.', 'cortext' ) }
 				</p>
 			) : null }
-			{ data.length > 0 ? (
-				<ul
-					className="cortext-revision-history__list"
-					role="listbox"
-					aria-label={ sprintf(
-						/* translators: %d: document id. */
-						__( 'Revisions for document %d', 'cortext' ),
-						postId
-					) }
-				>
-					{ data.map( ( revision ) => {
-						const id = revisionId( revision, revisionKey );
-						return (
-							<RevisionRow
-								key={ id }
-								revision={ revision }
-								revisionKey={ revisionKey }
-								isCurrent={ id === latestRevisionId }
-								isSelected={ id === currentRevisionId }
-								onSelect={ selectRevision }
-							/>
-						);
-					} ) }
-				</ul>
-			) : null }
+			<ul
+				className="cortext-revision-history__list"
+				aria-label={ sprintf(
+					/* translators: %d: document id. */
+					__( 'Versions for document %d', 'cortext' ),
+					postId
+				) }
+			>
+				<RevisionRow
+					badgeLabel={ __( 'Current', 'cortext' ) }
+					isCurrent
+					isSelected={ ! currentRevisionId }
+					onSelect={ exitRevisions }
+					revision={ currentRow }
+					revisionKey="id"
+				/>
+				{ data.length > 0
+					? data.map( ( revision ) => {
+							const id = revisionId( revision, revisionKey );
+							return (
+								<RevisionRow
+									key={ id }
+									badgeLabel={
+										id === latestRevisionId
+											? __( 'Latest revision', 'cortext' )
+											: null
+									}
+									revision={ revision }
+									revisionKey={ revisionKey }
+									isSelected={ id === currentRevisionId }
+									onSelect={ selectRevision }
+								/>
+							);
+					  } )
+					: null }
+			</ul>
 		</ComplementaryArea>
 	);
 }

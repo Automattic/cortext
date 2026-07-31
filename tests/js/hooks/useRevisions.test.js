@@ -7,6 +7,8 @@
  * `invalidateResolution` deep-match on these args, so the shape must stay
  * stable.
  */
+import { act, renderHook } from '@testing-library/react';
+
 jest.mock( '@wordpress/api-fetch', () => ( {
 	__esModule: true,
 	default: jest.fn(),
@@ -37,18 +39,30 @@ jest.mock( '../../../src/lock-unlock', () => ( {
 	unlock: ( value ) => value,
 } ) );
 
+import apiFetch from '@wordpress/api-fetch';
+import { useDispatch, useSelect } from '@wordpress/data';
+
 import {
-	completeRevisionRecordFields,
 	editorRevisionQuery,
 	recentRevisionQuery,
 	revisionFeaturedMedia,
 	revisionFeaturedMediaChanged,
+	revisionIdentityRecord,
 	revisionIconChanged,
 	revisionInvalidationQueries,
 	revisionMetaValue,
 	revisionQuery,
 	revisionRecordQuery,
+	useRevisionControls,
+	useRevisions,
 } from '../../../src/hooks/useRevisions';
+
+beforeEach( () => {
+	apiFetch.mockReset();
+	useDispatch.mockReset();
+	useDispatch.mockReturnValue( {} );
+	useSelect.mockReset();
+} );
 
 describe( 'revisionQuery', () => {
 	it( 'builds a stable edit-context query ordered newest first', () => {
@@ -138,28 +152,6 @@ describe( 'revision cache invalidation queries', () => {
 			recentRevisionQuery( 'id' ),
 		] );
 	} );
-
-	it( 'marks requested dotted fields as received when REST omits them', () => {
-		expect(
-			completeRevisionRecordFields(
-				[
-					{
-						id: 10,
-						title: { raw: 'Title' },
-						content: { raw: 'Body' },
-					},
-				],
-				editorRevisionQuery( 'id' )
-			)
-		).toEqual( [
-			expect.objectContaining( {
-				id: 10,
-				'title.raw': undefined,
-				'excerpt.raw': undefined,
-				'content.raw': undefined,
-			} ),
-		] );
-	} );
 } );
 
 describe( 'revision identity helpers', () => {
@@ -216,5 +208,136 @@ describe( 'revision identity helpers', () => {
 				{ meta: { _thumbnail_id: '22' } }
 			)
 		).toBe( true );
+	} );
+
+	it( 'uses the previous identity for removed diff blocks', () => {
+		const current = { id: 20, featured_media: 0 };
+		const previous = { id: 10, featured_media: 45 };
+
+		expect( revisionIdentityRecord( current, previous, 'removed' ) ).toBe(
+			previous
+		);
+		expect( revisionIdentityRecord( current, previous, 'modified' ) ).toBe(
+			current
+		);
+	} );
+} );
+
+describe( 'useRevisions', () => {
+	function mockRevisionEntity( {
+		data = [],
+		error = null,
+		hasResolved = true,
+		isLoading = false,
+	} = {} ) {
+		useSelect.mockImplementation( ( callback ) =>
+			callback( () => ( {
+				getEntityConfig: () => ( {
+					revisionKey: 'id',
+				} ),
+				getRevisions: () => data,
+				getResolutionError: () => error,
+				hasFinishedResolution: () => hasResolved,
+				isResolving: () => isLoading,
+			} ) )
+		);
+	}
+
+	it( 'surfaces swallowed REST errors instead of treating them as empty history', () => {
+		mockRevisionEntity( { data: null } );
+		useDispatch.mockReturnValue( { invalidateResolution: jest.fn() } );
+
+		const { result } = renderHook( () => useRevisions( 'page', 7 ) );
+
+		expect( result.current.error ).toEqual(
+			new Error( 'Could not load revisions.' )
+		);
+		expect( result.current.data ).toEqual( [] );
+	} );
+
+	it( 'keeps a successful empty response distinct from an error', () => {
+		mockRevisionEntity( { data: [] } );
+		useDispatch.mockReturnValue( { invalidateResolution: jest.fn() } );
+
+		const { result } = renderHook( () => useRevisions( 'page', 7 ) );
+
+		expect( result.current.error ).toBeNull();
+		expect( result.current.data ).toEqual( [] );
+	} );
+
+	it( 'uses core-data caching and refreshes through its resolution lifecycle', () => {
+		const revisions = [ { id: 20 }, { id: 10 } ];
+		const invalidateResolution = jest.fn();
+		mockRevisionEntity( { data: revisions } );
+		useDispatch.mockReturnValue( { invalidateResolution } );
+
+		const { result } = renderHook( () => useRevisions( 'page', 7 ) );
+		expect( result.current.data ).toBe( revisions );
+
+		act( () => result.current.refresh() );
+
+		expect( invalidateResolution ).toHaveBeenCalledWith( 'getRevisions', [
+			'postType',
+			'page',
+			7,
+			result.current.query,
+		] );
+	} );
+} );
+
+describe( 'useRevisionControls', () => {
+	it( 'commits rapid revision selections synchronously without refetching history', () => {
+		const setCurrentRevisionId = jest.fn();
+		const editorSelectors = {
+			getCurrentRevisionId: () => null,
+			isRevisionsMode: () => false,
+			isShowingRevisionDiff: () => false,
+			getCurrentRevision: () => null,
+			getPreviousRevision: () => null,
+			getCurrentPostAttribute: () => 'publish',
+			isEditedPostDirty: () => false,
+			isSavingPost: () => false,
+			isPostLocked: () => false,
+		};
+		const coreSelectors = {
+			getEntityConfig: () => ( {
+				revisionKey: 'id',
+				getRevisionsUrl: () => '/wp/v2/pages/7/revisions',
+			} ),
+		};
+		useSelect.mockImplementation( ( callback ) =>
+			callback( ( store ) =>
+				store === 'editor' ? editorSelectors : coreSelectors
+			)
+		);
+		useDispatch.mockImplementation( ( store ) => {
+			if ( store === 'editor' ) {
+				return { setCurrentRevisionId, setShowRevisionDiff: jest.fn() };
+			}
+			if ( store === 'notices' ) {
+				return {
+					createErrorNotice: jest.fn(),
+					createSuccessNotice: jest.fn(),
+				};
+			}
+			return {
+				clearEntityRecordEdits: jest.fn(),
+				invalidateResolution: jest.fn(),
+				receiveEntityRecords: jest.fn(),
+			};
+		} );
+
+		const { result } = renderHook( () =>
+			useRevisionControls( { postId: 7, postType: 'page' } )
+		);
+
+		act( () => {
+			result.current.selectRevision( 10 );
+			result.current.selectRevision( 20 );
+		} );
+
+		expect( setCurrentRevisionId.mock.calls ).toEqual( [ [ 10 ], [ 20 ] ] );
+		expect( result.current.canRestore ).toBe( true );
+		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 } );

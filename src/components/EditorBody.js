@@ -1726,6 +1726,7 @@ export default function EditorBody( {
 		[ ownerBlockName, postId, record ]
 	);
 	const isReadOnly = isTrashed || isLocked || isRevisionsMode;
+	const isCanvasDisabled = isTrashed || isLocked;
 	const renderAppender =
 		shouldUseHeaderAwareAppender && ! isReadOnly
 			? () => (
@@ -1810,7 +1811,7 @@ export default function EditorBody( {
 					onRestored={ onRestored }
 				/>
 			) }
-			{ isReadOnly ? (
+			{ isCanvasDisabled ? (
 				<Disabled className="cortext-canvas__locked">
 					{ blockCanvas }
 				</Disabled>

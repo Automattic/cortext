@@ -134,16 +134,16 @@
 		color: var(--cortext-button-primary-text);
 	}
 
-	&__restore.components-button.is-primary:hover:not(:disabled),
-	&__restore.components-button.is-primary:focus:not(:disabled) {
-		background: var(--cortext-button-primary-hover-surface);
-		color: var(--cortext-button-primary-text);
-	}
-
 	&__restore.components-button.is-primary:disabled {
 		background: var(--cortext-button-primary-surface);
 		color: var(--cortext-button-primary-text);
 		opacity: 0.45;
+	}
+
+	&__restore.components-button.is-primary:hover:not(:disabled),
+	&__restore.components-button.is-primary:focus:not(:disabled) {
+		background: var(--cortext-button-primary-hover-surface);
+		color: var(--cortext-button-primary-text);
 	}
 }
 

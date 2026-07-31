@@ -9,6 +9,8 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
 const mockUseRevisionControls = jest.fn();
+const mockEnableComplementaryArea = jest.fn();
+let mockActiveArea = 'cortext/revision-history';
 
 jest.mock( '../../../src/hooks/useRevisions', () => ( {
 	__esModule: true,
@@ -46,6 +48,22 @@ jest.mock( '@wordpress/components', () => ( {
 	),
 } ) );
 
+jest.mock( '@wordpress/data', () => ( {
+	__esModule: true,
+	useDispatch: () => ( {
+		enableComplementaryArea: mockEnableComplementaryArea,
+	} ),
+	useSelect: ( callback ) =>
+		callback( () => ( {
+			getActiveComplementaryArea: () => mockActiveArea,
+		} ) ),
+} ) );
+
+jest.mock( '@wordpress/interface', () => ( {
+	__esModule: true,
+	store: {},
+} ) );
+
 jest.mock( '@wordpress/date', () => ( {
 	__esModule: true,
 	dateI18n: ( format, value ) => String( value ),
@@ -55,6 +73,8 @@ jest.mock( '@wordpress/date', () => ( {
 
 jest.mock( '@wordpress/icons', () => ( {
 	__esModule: true,
+	backup: 'backup',
+	cog: 'cog',
 	seen: 'seen',
 	unseen: 'unseen',
 } ) );
@@ -73,6 +93,7 @@ function controls( overrides = {} ) {
 		currentRevision: { date: '2026-06-01T00:00:00' },
 		exitRevisions: jest.fn(),
 		isDirty: false,
+		isPostLocked: false,
 		isRestoring: false,
 		isSaving: false,
 		isShowingRevisionDiff: false,
@@ -83,16 +104,19 @@ function controls( overrides = {} ) {
 	};
 }
 
-function renderHeader( overrides ) {
+function renderHeader( overrides, props = {} ) {
 	const value = controls( overrides );
 	mockUseRevisionControls.mockReturnValue( value );
-	render( <RevisionsHeader postId={ 7 } postType="crtxt_document" /> );
+	render(
+		<RevisionsHeader postId={ 7 } postType="crtxt_document" { ...props } />
+	);
 	return value;
 }
 
 describe( 'RevisionsHeader', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
+		mockActiveArea = 'cortext/revision-history';
 	} );
 
 	it( 'enables Restore on a clean document', () => {
@@ -122,6 +146,22 @@ describe( 'RevisionsHeader', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'blocks Restore while the document is read-only', () => {
+		renderHeader( { canRestore: false }, { isReadOnly: true } );
+
+		expect( screen.getByText( 'Restore' ) ).toBeDisabled();
+		expect(
+			screen.getByLabelText(
+				'This document is read-only. Resolve the editing lock before restoring a revision.'
+			)
+		).toBeInTheDocument();
+		expect( mockUseRevisionControls ).toHaveBeenCalledWith( {
+			isReadOnly: true,
+			postId: 7,
+			postType: 'crtxt_document',
+		} );
+	} );
+
 	it( 'restores after confirmation', () => {
 		const value = renderHeader();
 
@@ -138,5 +178,21 @@ describe( 'RevisionsHeader', () => {
 		fireEvent.click( screen.getByLabelText( 'Show changes' ) );
 
 		expect( value.toggleDiff ).toHaveBeenCalled();
+	} );
+
+	it( 'switches between history and revision properties', () => {
+		renderHeader();
+
+		fireEvent.click( screen.getByLabelText( 'Revision properties' ) );
+		expect( mockEnableComplementaryArea ).toHaveBeenCalledWith(
+			'cortext',
+			'cortext/document-inspector'
+		);
+
+		fireEvent.click( screen.getByLabelText( 'Revision history' ) );
+		expect( mockEnableComplementaryArea ).toHaveBeenCalledWith(
+			'cortext',
+			'cortext/revision-history'
+		);
 	} );
 } );

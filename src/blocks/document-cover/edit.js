@@ -37,6 +37,24 @@ export default function Edit( { context, clientId } ) {
 		postId
 	);
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
+	const { coverIndex, hasIconBlock, revisionDiffStatus } = useSelect(
+		( select ) => {
+			const store = select( blockEditorStore );
+			const revisionBlock = clientId ? store.getBlock( clientId ) : null;
+			return {
+				coverIndex: clientId ? store.getBlockIndex( clientId ) : 0,
+				hasIconBlock: store
+					.getBlocks()
+					.some(
+						( block ) => block.name === 'cortext/document-icon'
+					),
+				revisionDiffStatus:
+					revisionBlock?.__revisionDiffStatus?.status ??
+					revisionBlock?.attributes?.__revisionDiffStatus?.status,
+			};
+		},
+		[ clientId ]
+	);
 	const {
 		featuredId: displayFeaturedId,
 		featuredMediaChanged,
@@ -46,6 +64,7 @@ export default function Edit( { context, clientId } ) {
 		postType,
 		meta,
 		featuredId,
+		revisionDiffStatus,
 	} );
 	const blockProps = useBlockProps( {
 		className: [
@@ -55,20 +74,6 @@ export default function Edit( { context, clientId } ) {
 			.filter( Boolean )
 			.join( ' ' ),
 	} );
-	const { coverIndex, hasIconBlock } = useSelect(
-		( select ) => {
-			const store = select( blockEditorStore );
-			return {
-				coverIndex: clientId ? store.getBlockIndex( clientId ) : 0,
-				hasIconBlock: store
-					.getBlocks()
-					.some(
-						( block ) => block.name === 'cortext/document-icon'
-					),
-			};
-		},
-		[ clientId ]
-	);
 	const { record: media } = useEntityRecord(
 		'root',
 		'media',

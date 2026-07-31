@@ -134,7 +134,11 @@ function DocumentActions( {
 	if ( isRevisionsMode ) {
 		return (
 			<TopBarActionsFill>
-				<RevisionsHeader postId={ postId } postType={ postType } />
+				<RevisionsHeader
+					isReadOnly={ disabled }
+					postId={ postId }
+					postType={ postType }
+				/>
 			</TopBarActionsFill>
 		);
 	}

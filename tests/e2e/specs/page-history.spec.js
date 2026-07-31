@@ -54,6 +54,9 @@ function baseUrlPort() {
 }
 
 function resolveWpEnvConfig() {
+	if ( process.env.WP_ENV_CONFIG ) {
+		return process.env.WP_ENV_CONFIG;
+	}
 	const port = baseUrlPort();
 	if ( port && port === readWpEnvPort( '.wp-env.test.json' ) ) {
 		return '.wp-env.test.json';
@@ -289,12 +292,16 @@ test.describe( 'Visual revision history', () => {
 			await expect( panel ).toBeVisible();
 			const canvas = page.frameLocator( '[name="editor-canvas"]' );
 
-			const currentRevision = panel
+			const currentVersion = panel
 				.locator( '.cortext-revision-history__button' )
 				.filter( { hasText: 'Current' } )
 				.first();
-			await expect( currentRevision ).toBeVisible();
-			await currentRevision.click();
+			await expect( currentVersion ).toBeVisible();
+
+			const historicalRevisions = panel
+				.locator( '.cortext-revision-history__button' )
+				.filter( { hasNotText: 'Current' } );
+			await historicalRevisions.first().click();
 
 			const header = page.locator( '.cortext-revisions-header' );
 			await expect( header ).toBeVisible();
@@ -320,10 +327,7 @@ test.describe( 'Visual revision history', () => {
 
 			// Selecting a revision drops the canvas into read-only revisions
 			// mode and swaps the top bar for the revisions header.
-			const previousRevision = panel
-				.locator( '.cortext-revision-history__button' )
-				.filter( { hasNotText: 'Current' } )
-				.first();
+			const previousRevision = historicalRevisions.nth( 1 );
 			await expect( previousRevision ).toBeVisible();
 			await previousRevision.click();
 
@@ -392,9 +396,8 @@ test.describe( 'Visual revision history', () => {
 				} )
 				.toBe( true );
 
-			// The restored state also becomes the latest revision; otherwise
-			// reopening history after a restore marks the pre-restore snapshot
-			// as "Current" and the visual history feels broken.
+			// The restored state also becomes the latest historical revision;
+			// otherwise reopening history starts from the pre-restore snapshot.
 			await expect
 				.poll( async () => {
 					const history = await requestUtils.rest( {
@@ -416,9 +419,9 @@ test.describe( 'Visual revision history', () => {
 				await expect( panel ).toBeVisible();
 			}
 
-			const revisionButtons = panel.locator(
-				'.cortext-revision-history__button'
-			);
+			const revisionButtons = panel
+				.locator( '.cortext-revision-history__button' )
+				.filter( { hasNotText: 'Current' } );
 			await expect
 				.poll( async () => revisionButtons.count() )
 				.toBeGreaterThan( 1 );

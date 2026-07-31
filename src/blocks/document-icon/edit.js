@@ -12,7 +12,7 @@ import {
 	ToolbarGroup,
 } from '@wordpress/components';
 import { useEntityProp, store as coreStore } from '@wordpress/core-data';
-import { useDispatch } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { replace, trash } from '@wordpress/icons';
 
 import DocumentIcon from '../../components/DocumentIcon';
@@ -24,10 +24,23 @@ export default function Edit( { context, clientId } ) {
 	const postType = context?.postType;
 
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
+	const revisionDiffStatus = useSelect(
+		( select ) => {
+			const block = clientId
+				? select( blockEditorStore ).getBlock( clientId )
+				: null;
+			return (
+				block?.__revisionDiffStatus?.status ??
+				block?.attributes?.__revisionDiffStatus?.status
+			);
+		},
+		[ clientId ]
+	);
 	const { iconChanged, iconMeta } = useRevisionedDocumentIdentity( {
 		postId,
 		postType,
 		meta,
+		revisionDiffStatus,
 	} );
 	const blockProps = useBlockProps( {
 		className: [
