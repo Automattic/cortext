@@ -245,8 +245,10 @@ export default function RowEditor( {
 	rowId,
 	shouldAcquirePostLock = false,
 } ) {
-	// Use the parent registry so restored records reach RowDetailView and the
-	// collection grid, not only the editor subregistry.
+	// EditorProvider's subregistry only re-registers core/block-editor and
+	// core/editor, so `core` resolves to the root registry from either side of
+	// the boundary. Reading the dispatcher here keeps that explicit: lifecycle
+	// responses land in the record cache RowDetailView and the grid read.
 	const { receiveEntityRecords } = useDispatch( coreStore );
 
 	return (
