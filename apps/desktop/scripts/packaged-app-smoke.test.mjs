@@ -3,7 +3,17 @@ import http from 'node:http';
 import { once } from 'node:events';
 import test from 'node:test';
 
-import { request } from './packaged-app-smoke.mjs';
+import { appendErrorDetails, request } from './packaged-app-smoke.mjs';
+
+test( 'keeps packaged output in an already rendered error stack', () => {
+	const error = new Error( 'Canvas did not load.' );
+	error.stack = `Error: ${ error.message }\n    at waitForCanvas`;
+
+	appendErrorDetails( error, 'Packaged app output:\nPHP failed.' );
+
+	assert.match( error.message, /Packaged app output:\nPHP failed\./ );
+	assert.match( error.stack, /Packaged app output:\nPHP failed\./ );
+} );
 
 async function listen( handler ) {
 	const server = http.createServer( handler );

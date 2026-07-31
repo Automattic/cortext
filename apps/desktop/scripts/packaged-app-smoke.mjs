@@ -56,6 +56,14 @@ function assert( condition, message ) {
 	}
 }
 
+export function appendErrorDetails( error, details ) {
+	const suffix = `\n\n${ details }`;
+	error.message = `${ error.message }${ suffix }`;
+	if ( typeof error.stack === 'string' ) {
+		error.stack = `${ error.stack }${ suffix }`;
+	}
+}
+
 function delay( milliseconds ) {
 	return new Promise( ( resolve ) => setTimeout( resolve, milliseconds ) );
 }
@@ -434,9 +442,10 @@ async function runSmoke( appPath ) {
 		console.log( 'Cortext exited with code 0 and PHP stopped.' );
 	} catch ( error ) {
 		if ( first?.output ) {
-			error.message = `${
-				error.message
-			}\n\nPackaged app output:\n${ first.output() }`;
+			appendErrorDetails(
+				error,
+				`Packaged app output:\n${ first.output() }`
+			);
 		}
 		throw error;
 	} finally {
