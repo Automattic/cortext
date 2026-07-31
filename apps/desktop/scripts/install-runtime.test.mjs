@@ -15,7 +15,20 @@ import {
 	verifyPhp,
 } from './install-runtime.mjs';
 
-function phpOutput( { version = '8.5', extensions = phpExtensions() } = {} ) {
+const TEST_PHP_VERSION = '8.5';
+const TEST_SPC_VERSION = '2.8.5';
+const TEST_EXTENSIONS = phpExtensions( false );
+const TEST_RUNTIME_OPTIONS = {
+	phpVersion: TEST_PHP_VERSION,
+	spcVersion: TEST_SPC_VERSION,
+	withApcu: false,
+	withJit: false,
+};
+
+function phpOutput( {
+	version = TEST_PHP_VERSION,
+	extensions = TEST_EXTENSIONS,
+} = {} ) {
 	const modules = requiredPhpModules( extensions ).join( '\n' );
 
 	return ( command, args ) => {
@@ -176,7 +189,7 @@ test( 'PHP rejects the wrong major or minor version', () => {
 	assert.throws(
 		() =>
 			verifyPhp( '/runtime/php', {
-				phpVersion: '8.5.4',
+				phpVersion: `${ TEST_PHP_VERSION }.4`,
 				getOutput: phpOutput( { version: '8.4' } ),
 				log: () => {},
 			} ),
@@ -194,6 +207,8 @@ test( 'PHP fails verification when a compiled module is missing', () => {
 		() =>
 			verifyPhp( '/runtime/php', {
 				extensions,
+				phpVersion: TEST_PHP_VERSION,
+				withJit: false,
 				getOutput: phpOutput( { extensions: withoutBcmath } ),
 				log: () => {},
 			} ),
@@ -202,6 +217,7 @@ test( 'PHP fails verification when a compiled module is missing', () => {
 	assert.doesNotThrow( () =>
 		verifyPhp( '/runtime/php', {
 			extensions,
+			phpVersion: TEST_PHP_VERSION,
 			withJit: true,
 			getOutput: phpOutput( { extensions } ),
 			log: () => {},
@@ -213,7 +229,7 @@ test( 'Windows copies SPC directly and skips Unix-only setup', async () => {
 	const root = resolve( 'test-runtime-windows' );
 	const binDir = resolve( root, 'runtime/bin' );
 	const cacheDir = resolve( root, '.runtime-cache' );
-	const spcDir = resolve( cacheDir, 'spc-build-2.8.5' );
+	const spcDir = resolve( cacheDir, `spc-build-${ TEST_SPC_VERSION }` );
 	const spcDownload = resolve( cacheDir, 'spc-windows-x64.exe' );
 	const spcBin = resolve( spcDir, 'spc.exe' );
 	const builtPhp = resolve( spcDir, 'buildroot/bin/php.exe' );
@@ -223,6 +239,7 @@ test( 'Windows copies SPC directly and skips Unix-only setup', async () => {
 	await installPhp(
 		{ force: false, rebuild: false },
 		{
+			...TEST_RUNTIME_OPTIONS,
 			platform: 'win32',
 			arch: 'x64',
 			binDir,
@@ -233,7 +250,7 @@ test( 'Windows copies SPC directly and skips Unix-only setup', async () => {
 
 	assert.deepEqual( calls.downloads, [
 		{
-			url: 'https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-windows-x64.exe',
+			url: `https://github.com/crazywhalecc/static-php-cli/releases/download/${ TEST_SPC_VERSION }/spc-windows-x64.exe`,
 			destination: spcDownload,
 		},
 	] );
@@ -249,16 +266,16 @@ test( 'Windows copies SPC directly and skips Unix-only setup', async () => {
 			[
 				spcBin,
 				'download',
-				`--for-extensions=${ phpExtensions().join( ',' ) }`,
-				'--with-php=8.5',
+				`--for-extensions=${ TEST_EXTENSIONS.join( ',' ) }`,
+				`--with-php=${ TEST_PHP_VERSION }`,
 				'--prefer-pre-built',
 				'--retry=2',
 			],
-			[ spcBin, 'switch-php-version', '8.5' ],
+			[ spcBin, 'switch-php-version', TEST_PHP_VERSION ],
 			[
 				spcBin,
 				'build',
-				phpExtensions().join( ',' ),
+				TEST_EXTENSIONS.join( ',' ),
 				'--build-cli',
 				'--disable-opcache-jit',
 				'-I',
@@ -285,7 +302,7 @@ test( 'Windows skips doctor when PHP is already built', async () => {
 	const root = resolve( 'test-runtime-windows-built' );
 	const binDir = resolve( root, 'runtime/bin' );
 	const cacheDir = resolve( root, '.runtime-cache' );
-	const spcDir = resolve( cacheDir, 'spc-build-2.8.5' );
+	const spcDir = resolve( cacheDir, `spc-build-${ TEST_SPC_VERSION }` );
 	const spcBin = resolve( spcDir, 'spc.exe' );
 	const builtPhp = resolve( spcDir, 'buildroot/bin/php.exe' );
 	const dest = resolve( binDir, 'php.exe' );
@@ -296,6 +313,7 @@ test( 'Windows skips doctor when PHP is already built', async () => {
 	await installPhp(
 		{ force: false, rebuild: false },
 		{
+			...TEST_RUNTIME_OPTIONS,
 			platform: 'win32',
 			arch: 'x64',
 			binDir,
@@ -320,6 +338,7 @@ test( 'Windows verifies cached PHP before reusing it', async () => {
 	await installPhp(
 		{ force: false, rebuild: false },
 		{
+			...TEST_RUNTIME_OPTIONS,
 			platform: 'win32',
 			arch: 'x64',
 			binDir,
@@ -341,7 +360,7 @@ test( 'macOS still extracts SPC, installs pkg-config, and sets executable permis
 	const root = resolve( 'test-runtime-macos' );
 	const binDir = resolve( root, 'runtime/bin' );
 	const cacheDir = resolve( root, '.runtime-cache' );
-	const spcDir = resolve( cacheDir, 'spc-build-2.8.5' );
+	const spcDir = resolve( cacheDir, `spc-build-${ TEST_SPC_VERSION }` );
 	const spcDownload = resolve( cacheDir, 'spc-macos-aarch64.tar.gz' );
 	const spcBin = resolve( spcDir, 'spc' );
 	const dest = resolve( binDir, 'php' );
@@ -350,6 +369,7 @@ test( 'macOS still extracts SPC, installs pkg-config, and sets executable permis
 	await installPhp(
 		{ force: false, rebuild: false },
 		{
+			...TEST_RUNTIME_OPTIONS,
 			platform: 'darwin',
 			arch: 'arm64',
 			binDir,
@@ -359,7 +379,7 @@ test( 'macOS still extracts SPC, installs pkg-config, and sets executable permis
 	);
 
 	assert.deepEqual( calls.downloads[ 0 ], {
-		url: 'https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-macos-aarch64.tar.gz',
+		url: `https://github.com/crazywhalecc/static-php-cli/releases/download/${ TEST_SPC_VERSION }/spc-macos-aarch64.tar.gz`,
 		destination: spcDownload,
 	} );
 	assert.deepEqual( calls.run[ 0 ], {
