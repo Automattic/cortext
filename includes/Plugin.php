@@ -16,6 +16,7 @@ use Cortext\Block\DataView;
 use Cortext\Editor\DocumentCoverBlock;
 use Cortext\Editor\DocumentIconBlock;
 use Cortext\Editor\DocumentPropertiesBlock;
+use Cortext\Editor\RevisionMetaFormat;
 use Cortext\Editor\RevisionThrottle;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Frontend\AdminBar;
@@ -71,6 +72,7 @@ final class Plugin {
 		$trash_cascade = new TrashCascade();
 		$trash_cascade->register();
 
+		( new RevisionMetaFormat() )->register();
 		( new RevisionThrottle() )->register();
 		( new DocumentIconBlock() )->register();
 		( new DocumentCoverBlock() )->register();

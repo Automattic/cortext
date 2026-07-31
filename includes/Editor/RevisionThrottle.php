@@ -33,6 +33,14 @@ final class RevisionThrottle {
 	 */
 	private static int $bypass_depth = 0;
 
+	/**
+	 * Scoped suppression depth for operations that take their own explicit
+	 * snapshots and must not leave WordPress's automatic one behind.
+	 *
+	 * @var int
+	 */
+	private static int $suppress_depth = 0;
+
 	public function register(): void {
 		add_filter( 'wp_save_post_revision_post_has_changed', array( $this, 'throttle_revision' ), 10, 3 );
 		add_filter( 'wp_revisions_to_keep', array( $this, 'cap_revisions' ), 10, 2 );
@@ -52,6 +60,23 @@ final class RevisionThrottle {
 			return $callback();
 		} finally {
 			self::$bypass_depth = max( 0, self::$bypass_depth - 1 );
+		}
+	}
+
+	/**
+	 * Runs a callback while revision creation is suppressed.
+	 *
+	 * @template T
+	 *
+	 * @param callable():T $callback Operation that snapshots on its own terms.
+	 * @return T
+	 */
+	public static function with_suppression( callable $callback ) {
+		++self::$suppress_depth;
+		try {
+			return $callback();
+		} finally {
+			self::$suppress_depth = max( 0, self::$suppress_depth - 1 );
 		}
 	}
 
@@ -81,6 +106,12 @@ final class RevisionThrottle {
 	public function throttle_revision( bool $post_has_changed, WP_Post $last_revision, WP_Post $post ): bool {
 		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
 			return $post_has_changed;
+		}
+
+		// Suppression wins over bypass: a caller that asked for neither an
+		// automatic revision nor a throttled one gets none.
+		if ( self::$suppress_depth > 0 ) {
+			return false;
 		}
 
 		if ( self::is_bypassed() ) {

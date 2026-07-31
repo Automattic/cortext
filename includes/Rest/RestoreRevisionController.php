@@ -11,8 +11,10 @@ namespace Cortext\Rest;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Editor\RevisionMetaFormat;
 use Cortext\Editor\RevisionThrottle;
 use Cortext\FieldValues\FieldValueIndex;
+use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -122,16 +124,23 @@ final class RestoreRevisionController {
 		// Revision fields come unslashed from get_post(), and wp_update_post()
 		// unslashes its input, so re-slash to keep backslashes intact. Mirrors
 		// core's wp_restore_post_revision() ("Since data is from DB.").
-		$updated = wp_update_post(
-			wp_slash(
-				array(
-					'ID'           => $post_id,
-					'post_title'   => $restore_plan['post']['post_title'],
-					'post_content' => $restore_plan['post']['post_content'],
-					'post_excerpt' => $restore_plan['post']['post_excerpt'],
-				)
-			),
-			true
+		//
+		// Suppress WordPress's own post_updated revision: it would land between
+		// the content write and the meta write, recording restored content
+		// against pre-restore metadata. The explicit snapshots on either side of
+		// this call already cover the before and after states.
+		$updated = RevisionThrottle::with_suppression(
+			static fn() => wp_update_post(
+				wp_slash(
+					array(
+						'ID'           => $post_id,
+						'post_title'   => $restore_plan['post']['post_title'],
+						'post_content' => $restore_plan['post']['post_content'],
+						'post_excerpt' => $restore_plan['post']['post_excerpt'],
+					)
+				),
+				true
+			)
 		);
 		if ( $updated instanceof WP_Error ) {
 			return $updated;
@@ -152,6 +161,7 @@ final class RestoreRevisionController {
 				'restoredSnapshot' => $restored_snapshot_id,
 				'post'             => $this->prepared_post( $post_id ),
 				'metaRestored'     => $meta_result,
+				'contentOnly'      => $restore_plan['content_only'],
 			),
 			200
 		);
@@ -234,7 +244,8 @@ final class RestoreRevisionController {
 	 *     post:array{post_title:string,post_content:string,post_excerpt:string},
 	 *     schema:array<string,mixed[]>,
 	 *     identity:array<string,mixed[]>,
-	 *     fields:array<int,array{type:string,values:mixed[],collection_id:int,relation?:array}>
+	 *     fields:array<int,array{type:string,values:mixed[],collection_id:int,relation?:array}>,
+	 *     collections:int[]
 	 * }|WP_Error
 	 */
 	private function prepare_restore_plan( int $post_id, WP_Post $revision ): array|WP_Error {
@@ -242,28 +253,52 @@ final class RestoreRevisionController {
 		$identity_keys = array( DocumentIdentity::META_KEY, '_thumbnail_id' );
 		$revision_id   = (int) $revision->ID;
 		$plan          = array(
-			'post'     => array(
+			'post'         => array(
 				'post_title'   => (string) $revision->post_title,
 				'post_content' => (string) $revision->post_content,
 				'post_excerpt' => (string) $revision->post_excerpt,
 			),
-			'schema'   => array(),
-			'identity' => array(),
-			'fields'   => array(),
+			'schema'       => array(),
+			'identity'     => array(),
+			'fields'       => array(),
+			'collections'  => array(),
+			'content_only' => false,
 		);
 
-		foreach ( $schema_keys as $key ) {
-			$plan['schema'][ $key ] = get_post_meta( $revision_id, $key, false );
+		// A revision stored before Cortext revisioned metadata knows nothing
+		// about the icon, cover, schema or field values. Treating that silence
+		// as "empty" would clear all of them on the live document, so restore
+		// the content it does know and leave everything else alone.
+		if ( ! RevisionMetaFormat::carries_meta( $revision_id ) ) {
+			$plan['content_only'] = true;
+			return $plan;
 		}
-		$plan['schema'] = $this->filter_revision_schema( $plan['schema'] );
+
+		foreach ( $schema_keys as $key ) {
+			// Revisions taken before these keys became revisioned carry no copy
+			// at all, and restoring from an absent value would delete a
+			// collection's live field schema. An empty list is how an absent key
+			// reads, so only replace what the revision actually holds.
+			$values = get_post_meta( $revision_id, $key, false );
+			if ( array() !== $values ) {
+				$plan['schema'][ $key ] = $values;
+			}
+		}
+		$plan['schema'] = $this->filter_revision_schema( $post_id, $plan['schema'] );
 
 		foreach ( $identity_keys as $key ) {
 			$plan['identity'][ $key ] = get_post_meta( $revision_id, $key, false );
 		}
 
 		foreach ( $this->field_contexts_for_document( $post_id ) as $field_id => $collection_id ) {
+			$plan['collections'][ $collection_id ] = $collection_id;
+
 			$field_type = (string) get_post_meta( $field_id, 'type', true );
-			if ( '' === $field_type || 'rollup' === $field_type ) {
+			// Rollups and formulas are derived, not authored: their stored value
+			// is materialised output. Writing a revision's copy back would
+			// resurrect a stale result, so they get recomputed after the fields
+			// they depend on land.
+			if ( '' === $field_type || 'rollup' === $field_type || 'formula' === $field_type ) {
 				continue;
 			}
 
@@ -292,7 +327,7 @@ final class RestoreRevisionController {
 	 *
 	 * @param int   $post_id Document being restored.
 	 * @param array $plan    Output from prepare_restore_plan().
-	 * @return array{fields:int,relations:int,schema:int,identity:int}
+	 * @return array{fields:int,relations:int,schema:int,identity:int,formulas:int}
 	 */
 	private function apply_restore_plan( int $post_id, array $plan ): array {
 		$restored = array(
@@ -300,6 +335,7 @@ final class RestoreRevisionController {
 			'relations' => 0,
 			'schema'    => 0,
 			'identity'  => 0,
+			'formulas'  => 0,
 		);
 
 		foreach ( $plan['schema'] as $key => $values ) {
@@ -336,26 +372,49 @@ final class RestoreRevisionController {
 			$index->index_row_field( $post_id, $field_id, $field['collection_id'] );
 		}
 
+		// Mirrors Document::apply_meta_updates(): formulas are materialised from
+		// the values that just landed, then indexed from the fresh result.
+		foreach ( $plan['collections'] as $collection_id ) {
+			FormulaMaterializer::recompute_row( $collection_id, $post_id );
+			foreach ( Document::collection_field_ids( $collection_id ) as $field_id ) {
+				if ( 'formula' === (string) get_post_meta( $field_id, 'type', true ) ) {
+					$index->index_row_field( $post_id, $field_id, $collection_id );
+					++$restored['formulas'];
+				}
+			}
+		}
+
 		return $restored;
 	}
 
 	/**
 	 * Drops field IDs whose field posts no longer exist from historical schema.
 	 *
-	 * @param array<string,mixed[]> $schema Historical schema metadata.
+	 * Keys the revision does not carry are absent here; a layout restored on its
+	 * own is validated against the document's live field list instead.
+	 *
+	 * @param int                   $post_id Document being restored.
+	 * @param array<string,mixed[]> $schema  Historical schema metadata.
 	 * @return array<string,mixed[]>
 	 */
-	private function filter_revision_schema( array $schema ): array {
+	private function filter_revision_schema( int $post_id, array $schema ): array {
+		$field_ids = $schema['cortext_fields'] ?? Document::collection_field_ids( $post_id );
 		$valid_ids = array();
-		foreach ( $schema['cortext_fields'] as $value ) {
+		foreach ( $field_ids as $value ) {
 			$field_id = (int) $value;
 			$field    = get_post( $field_id );
 			if ( $field_id > 0 && $field instanceof WP_Post && Field::POST_TYPE === $field->post_type ) {
 				$valid_ids[] = $field_id;
 			}
 		}
-		$valid_ids                = array_values( array_unique( $valid_ids ) );
-		$schema['cortext_fields'] = array_map( 'strval', $valid_ids );
+		$valid_ids = array_values( array_unique( $valid_ids ) );
+		if ( isset( $schema['cortext_fields'] ) ) {
+			$schema['cortext_fields'] = array_map( 'strval', $valid_ids );
+		}
+
+		if ( ! isset( $schema['cortext_detail_layout'] ) ) {
+			return $schema;
+		}
 
 		$layouts = array();
 		foreach ( $schema['cortext_detail_layout'] as $value ) {

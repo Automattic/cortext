@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Editor\RevisionMetaFormat;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -30,6 +31,7 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 		( new Document() )->register_post_type();
 		( new Document() )->register_collection_meta();
 		( new DocumentIdentity() )->register();
+		( new RevisionMetaFormat() )->register();
 		( new TraitTaxonomy() )->register_taxonomy();
 		$trait_taxonomy = new TraitTaxonomy();
 		add_action( 'added_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
@@ -159,6 +161,57 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( '', get_post_meta( $page_id, DocumentIdentity::META_KEY, true ) );
 		$this->assertSame( 0, (int) get_post_thumbnail_id( $page_id ) );
+	}
+
+	public function test_restore_of_unmarked_revision_leaves_every_meta_value_alone(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_collection();
+		$field_id      = (int) get_post_meta( $collection_id, 'cortext_fields', true );
+		$row_id        = $this->create_row( $collection_id );
+		$icon          = '{"type":"wp","name":"star"}';
+		update_post_meta( $row_id, DocumentIdentity::META_KEY, $icon );
+		update_post_meta( $row_id, '_thumbnail_id', '222' );
+		update_post_meta( $row_id, Relations::meta_key( $field_id ), 'live value' );
+
+		// Written by a build that did not revision metadata yet, so its silence
+		// about the icon, cover and field values means "unknown", not "empty".
+		$revision_id = $this->create_legacy_revision(
+			$row_id,
+			array( 'post_title' => 'Old title' )
+		);
+
+		$response = $this->restore_revision( $row_id, $revision_id );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $data['contentOnly'] );
+		$this->assertSame( 'Old title', get_post( $row_id )->post_title );
+		$this->assertSame( $icon, get_post_meta( $row_id, DocumentIdentity::META_KEY, true ) );
+		$this->assertSame( 222, (int) get_post_thumbnail_id( $row_id ) );
+		$this->assertSame( 'live value', get_post_meta( $row_id, Relations::meta_key( $field_id ), true ) );
+		$this->assertSame(
+			array(
+				'fields'    => 0,
+				'relations' => 0,
+				'schema'    => 0,
+				'identity'  => 0,
+				'formulas'  => 0,
+			),
+			$data['metaRestored']
+		);
+	}
+
+	public function test_restore_of_marked_revision_is_not_content_only(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$page_id     = $this->create_page();
+		$revision_id = $this->create_revision( $page_id );
+
+		$response = $this->restore_revision( $page_id, $revision_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( $response->get_data()['contentOnly'] );
 	}
 
 	public function test_restore_snapshot_keeps_current_icon_and_cover_reversible(): void {
@@ -297,6 +350,96 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 		);
 		$this->assertSame( "field-{$existing_id}", $layout['fields'][0]['field'] );
 		$this->assertCount( 1, $layout['fields'] );
+	}
+
+	public function test_restore_keeps_collection_schema_when_revision_carries_none(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_collection();
+		$field_id      = (int) get_post_meta( $collection_id, 'cortext_fields', true );
+		$revision_id   = $this->create_revision(
+			$collection_id,
+			array( 'post_title' => 'Old title' )
+		);
+
+		$response = $this->restore_revision( $collection_id, $revision_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Old title', get_post( $collection_id )->post_title );
+		// Revisions older than the revisioned-meta registration hold no schema.
+		// Restoring one must not blank the collection's live field list.
+		$this->assertSame(
+			array( (string) $field_id ),
+			get_post_meta( $collection_id, 'cortext_fields', false )
+		);
+		$this->assertSame( 0, $response->get_data()['metaRestored']['schema'] );
+	}
+
+	public function test_restore_validates_historical_layout_against_live_schema(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_collection();
+		$existing_id   = (int) get_post_meta( $collection_id, 'cortext_fields', true );
+		$foreign_id    = $this->create_field( 'Field from another collection' );
+		$revision_id   = $this->create_revision( $collection_id );
+		$this->add_revision_meta(
+			$revision_id,
+			'cortext_detail_layout',
+			array(
+				'fields' => array(
+					array(
+						'field'   => "field-{$existing_id}",
+						'visible' => true,
+					),
+					array(
+						'field'   => "field-{$foreign_id}",
+						'visible' => true,
+					),
+				),
+			)
+		);
+
+		$response = $this->restore_revision( $collection_id, $revision_id );
+		$layout   = get_post_meta( $collection_id, 'cortext_detail_layout', true );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( "field-{$existing_id}", $layout['fields'][0]['field'] );
+		$this->assertCount( 1, $layout['fields'] );
+	}
+
+	public function test_restore_recomputes_formula_instead_of_replaying_stored_output(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_collection();
+		$number_id     = $this->create_field( 'Amount', 'number' );
+		$formula_id    = $this->create_field(
+			'Doubled',
+			'formula',
+			array( 'expression' => "prop(\"Amount\") * 2" )
+		);
+		add_post_meta( $collection_id, 'cortext_fields', (string) $number_id );
+		add_post_meta( $collection_id, 'cortext_fields', (string) $formula_id );
+
+		$row_id = $this->create_row( $collection_id );
+		update_post_meta( $row_id, Relations::meta_key( $number_id ), '10' );
+		update_post_meta( $row_id, Relations::meta_key( $formula_id ), '20' );
+
+		$revision_id = $this->create_revision( $row_id );
+		$this->add_revision_meta( $revision_id, Relations::meta_key( $number_id ), '4' );
+		// Stale materialised output: it does not match the restored input.
+		$this->add_revision_meta( $revision_id, Relations::meta_key( $formula_id ), '999' );
+
+		$response = $this->restore_revision( $row_id, $revision_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '4', get_post_meta( $row_id, Relations::meta_key( $number_id ), true ) );
+		$this->assertNotSame(
+			'999',
+			get_post_meta( $row_id, Relations::meta_key( $formula_id ), true ),
+			'A revision must never replay a formula value verbatim.'
+		);
+		// Name + Amount are authored; the formula is derived and excluded.
+		$this->assertSame( 2, $response->get_data()['metaRestored']['fields'] );
 	}
 
 	public function test_restore_uses_cached_meta_when_snapshot_prunes_selected_revision(): void {
@@ -479,12 +622,26 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 	}
 
 	/**
-	 * Creates a revision post for a document.
+	 * Creates a revision post for a document, stamped as carrying metadata the
+	 * way `wp_save_post_revision()` would.
 	 *
 	 * @param int                  $parent_id Document ID.
 	 * @param array<string,string> $args Revision post overrides.
 	 */
 	private function create_revision( int $parent_id, array $args = array() ): int {
+		$id = $this->create_legacy_revision( $parent_id, $args );
+		update_metadata( 'post', $id, RevisionMetaFormat::META_KEY, RevisionMetaFormat::VERSION );
+		return $id;
+	}
+
+	/**
+	 * Creates a revision from before Cortext revisioned metadata: no marker, and
+	 * therefore no knowledge of the icon, cover, schema or field values.
+	 *
+	 * @param int                  $parent_id Document ID.
+	 * @param array<string,string> $args Revision post overrides.
+	 */
+	private function create_legacy_revision( int $parent_id, array $args = array() ): int {
 		$id = (int) wp_insert_post(
 			array_merge(
 				array(

@@ -97,6 +97,36 @@ final class Test_Revision_Throttle extends BaseTestCase {
 		);
 	}
 
+	public function test_scoped_suppression_blocks_revision_outside_interval_window(): void {
+		$throttle = new RevisionThrottle();
+		$post     = $this->make_post( self::PAGE_POST_TYPE );
+		$revision = $this->make_revision( 601 );
+
+		$result = RevisionThrottle::with_suppression(
+			static fn() => $throttle->throttle_revision( true, $revision, $post )
+		);
+
+		$this->assertFalse( $result );
+		$this->assertTrue(
+			$throttle->throttle_revision( true, $revision, $post ),
+			'The suppression must not leak beyond the scoped callback.'
+		);
+	}
+
+	public function test_suppression_wins_over_an_active_bypass(): void {
+		$throttle = new RevisionThrottle();
+		$post     = $this->make_post( self::PAGE_POST_TYPE );
+		$revision = $this->make_revision( 60 );
+
+		$result = RevisionThrottle::with_bypass(
+			static fn() => RevisionThrottle::with_suppression(
+				static fn() => $throttle->throttle_revision( true, $revision, $post )
+			)
+		);
+
+		$this->assertFalse( $result );
+	}
+
 	public function test_filter_bypass_allows_revision_inside_interval_window(): void {
 		$throttle = new RevisionThrottle();
 		$post     = $this->make_post( self::PAGE_POST_TYPE );
