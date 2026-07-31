@@ -116,6 +116,18 @@ test( 'findExecutable accepts an explicit quoted Windows path', () => {
 	);
 } );
 
+test( 'findExecutable uses POSIX paths for non-Windows targets', () => {
+	assert.equal(
+		findExecutable( 'php', {
+			platform: 'darwin',
+			env: { PATH: '/usr/local/bin:/usr/bin' },
+			cwd: '/workspace',
+			isFile: ( candidate ) => candidate === '/usr/local/bin/php',
+		} ),
+		'/usr/local/bin/php'
+	);
+} );
+
 test( 'findExecutable returns null when no PATH candidate exists', () => {
 	assert.equal(
 		findExecutable( 'php', {

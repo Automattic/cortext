@@ -33,7 +33,7 @@ function bundledRuntimeExecutable(
 	commandName,
 	platform = process.platform
 ) {
-	const pathApi = platform === 'win32' ? path.win32 : path;
+	const pathApi = platform === 'win32' ? path.win32 : path.posix;
 	const executable =
 		platform === 'win32' && ! commandName.toLowerCase().endsWith( '.exe' )
 			? `${ commandName }.exe`
@@ -94,7 +94,7 @@ function findExecutable(
 	}
 
 	const trimmed = command.trim().replace( /^"(.*)"$/, '$1' );
-	const pathApi = platform === 'win32' ? path.win32 : path;
+	const pathApi = platform === 'win32' ? path.win32 : path.posix;
 	const extensions =
 		platform === 'win32'
 			? windowsExtensions(
