@@ -133,6 +133,13 @@ the requested milestone version. On a real release, it commits those changes as
 the milestone, write release notes, and create or update the draft GitHub
 Release.
 
+The version-bump job authenticates with a write-enabled deploy key scoped to
+this repository so it can push the release commit through the `main` ruleset.
+Add `Deploy keys` to the `Protect main` ruleset bypass list with `Always allow`
+and store the private key as the `RELEASE_DEPLOY_KEY` secret in the protected
+`GitHub Releases` environment. The default `GITHUB_TOKEN` cannot bypass the
+ruleset.
+
 Buildkite owns the macOS desktop DMG. The release tag build signs, notarizes,
 and staples the app, then uploads the DMG to the same draft Release.
 
