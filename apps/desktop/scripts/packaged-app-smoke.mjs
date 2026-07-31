@@ -18,8 +18,6 @@ const CORTEXT_URL_PATTERN = /\/wp-admin\/admin\.php\?page=cortext(?:&|$)/;
 const CORTEXT_ROOT_SELECTOR = '#cortext-root';
 const ACTIVE_CANVAS_SELECTOR =
 	'.cortext-workspace__pane[data-active="true"] .cortext-canvas';
-const ACTIVE_CANVAS_LOADING_SELECTOR =
-	'.cortext-workspace__pane[data-active="true"] .cortext-canvas__loading';
 const START_TIMEOUT_MS = 120_000;
 const EXIT_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 250;
@@ -306,23 +304,51 @@ async function firstRendererPage( browser ) {
 	throw new Error( 'Cortext did not open a renderer page.' );
 }
 
-async function waitForCortextShell( page ) {
-	await page.waitForURL( CORTEXT_URL_PATTERN, {
-		timeout: START_TIMEOUT_MS,
-		waitUntil: 'domcontentloaded',
-	} );
-	await page.locator( CORTEXT_ROOT_SELECTOR ).waitFor( {
-		state: 'visible',
-		timeout: 30_000,
-	} );
-	await page.locator( ACTIVE_CANVAS_LOADING_SELECTOR ).waitFor( {
-		state: 'hidden',
-		timeout: 30_000,
-	} );
-	await page.locator( ACTIVE_CANVAS_SELECTOR ).waitFor( {
-		state: 'visible',
-		timeout: 30_000,
-	} );
+// Every milestone here shares the cold-start budget. The app is unpacking the
+// snapshot, installing WordPress and compiling PHP for the first time, and the
+// canvas is the last thing to land, so it needs at least as long as the URL it
+// depends on.
+//
+// The canvas replaces the loading pane rather than appearing beside it, and both
+// selectors need an active pane, so a visible canvas already means the load
+// finished. Waiting on the loader separately would pass against a pane that has
+// not mounted yet, since Playwright counts an absent element as hidden.
+export async function waitForCortextShell( page ) {
+	const started = Date.now();
+	const milestones = [];
+	const reached = ( name ) =>
+		milestones.push( `${ name } ${ Date.now() - started }ms` );
+
+	try {
+		await page.waitForURL( CORTEXT_URL_PATTERN, {
+			timeout: START_TIMEOUT_MS,
+			waitUntil: 'domcontentloaded',
+		} );
+		reached( 'url' );
+
+		await page.locator( CORTEXT_ROOT_SELECTOR ).waitFor( {
+			state: 'visible',
+			timeout: START_TIMEOUT_MS,
+		} );
+		reached( 'shell' );
+
+		await page.locator( ACTIVE_CANVAS_SELECTOR ).waitFor( {
+			state: 'visible',
+			timeout: START_TIMEOUT_MS,
+		} );
+		reached( 'canvas' );
+	} catch ( error ) {
+		// A bare locator timeout cannot distinguish a slow agent from a wedged
+		// one. Report how far the boot got so the first failure is diagnosable.
+		appendErrorDetails(
+			error,
+			`Shell milestones: ${ milestones.join( ', ' ) || 'none reached' }\n` +
+				`Gave up after ${ Date.now() - started }ms.`
+		);
+		throw error;
+	}
+
+	console.log( `Cortext shell ready: ${ milestones.join( ', ' ) }.` );
 }
 
 async function assertRuntimeIsClosed( runtimeOrigin ) {
