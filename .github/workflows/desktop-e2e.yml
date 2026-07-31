@@ -174,16 +174,6 @@ jobs:
               working-directory: apps/desktop
               run: npm run test:unit
 
-            - name: Add Git's build tools to PATH
-              shell: pwsh
-              run: |
-                  $gitTools = Join-Path $env:ProgramFiles 'Git\usr\bin'
-                  $patch = Join-Path $gitTools 'patch.exe'
-                  if (-not (Test-Path $patch)) {
-                    throw "Git's patch.exe was not found at $patch"
-                  }
-                  $gitTools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
             - name: Restore bundled PHP runtime
               id: php-runtime-cache
               uses: actions/cache/restore@v6.1.0
@@ -195,9 +185,17 @@ jobs:
             - name: Build bundled PHP
               id: build-php
               working-directory: apps/desktop
+              shell: pwsh
               env:
                   GITHUB_TOKEN: ${{ github.token }}
-              run: npm run runtime:php
+              run: |
+                  $gitTools = Join-Path $env:ProgramFiles 'Git\usr\bin'
+                  $patch = Join-Path $gitTools 'patch.exe'
+                  if (-not (Test-Path $patch)) {
+                    throw "Git's patch.exe was not found at $patch"
+                  }
+                  $env:PATH = "$env:PATH;$gitTools"
+                  npm run runtime:php
 
             - name: Save bundled PHP runtime
               if: ${{ success() && steps.build-php.outcome == 'success' && steps.php-runtime-cache.outputs.cache-hit != 'true' }}
