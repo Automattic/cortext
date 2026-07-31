@@ -28,6 +28,19 @@ function defaultIsFile( candidate, platform ) {
 	}
 }
 
+function bundledRuntimeExecutable(
+	appDir,
+	commandName,
+	platform = process.platform
+) {
+	const pathApi = platform === 'win32' ? path.win32 : path.posix;
+	const executable =
+		platform === 'win32' && ! commandName.toLowerCase().endsWith( '.exe' )
+			? `${ commandName }.exe`
+			: commandName;
+	return pathApi.join( appDir, 'runtime/bin', executable );
+}
+
 function windowsExtensions(
 	command,
 	env,
@@ -81,7 +94,7 @@ function findExecutable(
 	}
 
 	const trimmed = command.trim().replace( /^"(.*)"$/, '$1' );
-	const pathApi = platform === 'win32' ? path.win32 : path;
+	const pathApi = platform === 'win32' ? path.win32 : path.posix;
 	const extensions =
 		platform === 'win32'
 			? windowsExtensions(
@@ -133,6 +146,7 @@ function findExecutable(
 
 module.exports = {
 	DEFAULT_WINDOWS_PATHEXT,
+	bundledRuntimeExecutable,
 	envValue,
 	findExecutable,
 };

@@ -4,7 +4,7 @@ const http = require( 'http' );
 const net = require( 'net' );
 const os = require( 'os' );
 const path = require( 'path' );
-const { findExecutable } = require( './executable' );
+const { bundledRuntimeExecutable, findExecutable } = require( './executable' );
 
 // Existing profiles used this origin before runtime ports became per-profile.
 // Keeping it as their first preference preserves origin-scoped browser state.
@@ -50,19 +50,6 @@ function findRuntimeExecutable( command, options = {} ) {
 		allowedWindowsExtensions:
 			platform === 'win32' ? WINDOWS_DIRECT_EXECUTABLE_EXTENSIONS : null,
 	} );
-}
-
-function bundledRuntimeExecutable(
-	appDir,
-	commandName,
-	platform = process.platform
-) {
-	const pathApi = platform === 'win32' ? path.win32 : path;
-	const executable =
-		platform === 'win32' && ! commandName.toLowerCase().endsWith( '.exe' )
-			? `${ commandName }.exe`
-			: commandName;
-	return pathApi.join( appDir, 'runtime/bin', executable );
 }
 
 function resolveExecutable( envName, bundledPath, commandName, installHint ) {
@@ -1250,7 +1237,6 @@ module.exports = {
 	RUNTIME_PORT_FIRST,
 	RUNTIME_PORT_LAST,
 	WINDOWS_DIRECT_EXECUTABLE_EXTENSIONS,
-	bundledRuntimeExecutable,
 	childProcessOptions,
 	findRuntimeExecutable,
 	findAvailablePort,

@@ -17,10 +17,9 @@ const DESKTOP_DIR = resolve( __dirname, '..' );
 const BIN_DIR = resolve( DESKTOP_DIR, 'runtime/bin' );
 const CACHE_DIR = resolve( DESKTOP_DIR, '.runtime-cache' );
 
-const PHP_VERSION = process.env.CORTEXT_STATIC_PHP_VERSION || '8.5';
-const SPC_VERSION = process.env.CORTEXT_SPC_VERSION || '2.8.5';
-const FRANKENPHP_VERSION =
-	process.env.CORTEXT_FRANKENPHP_VERSION || 'v1.12.2';
+export const PHP_VERSION = process.env.CORTEXT_STATIC_PHP_VERSION || '8.5';
+export const SPC_VERSION = process.env.CORTEXT_SPC_VERSION || '2.8.5';
+const FRANKENPHP_VERSION = process.env.CORTEXT_FRANKENPHP_VERSION || 'v1.12.2';
 const CADDY_VERSION = process.env.CORTEXT_CADDY_VERSION || '2.11.3';
 
 function isEnabled( value ) {
@@ -37,7 +36,7 @@ const PHP_WITH_APCU =
 const PHP_WITH_JIT =
 	PHP_EXPERIMENTAL || isEnabled( process.env.CORTEXT_STATIC_PHP_JIT );
 
-const BASE_PHP_EXTENSIONS = [
+export const BASE_PHP_EXTENSIONS = [
 	'opcache',
 	'pdo',
 	'pdo_sqlite',
@@ -66,9 +65,9 @@ const BASE_PHP_EXTENSIONS = [
 	'exif',
 ];
 
-function phpExtensions() {
+export function phpExtensions( withApcu = PHP_WITH_APCU ) {
 	const extensions = [ ...BASE_PHP_EXTENSIONS ];
-	if ( PHP_WITH_APCU ) {
+	if ( withApcu ) {
 		extensions.push( 'apcu' );
 	}
 	return extensions;
@@ -101,59 +100,113 @@ function readOptions() {
 	return options;
 }
 
-function platformKey() {
-	if ( process.platform !== 'darwin' ) {
+export function phpRuntimeDescriptor(
+	platform = process.platform,
+	arch = process.arch
+) {
+	if ( platform === 'darwin' ) {
+		if ( arch === 'arm64' ) {
+			return {
+				key: 'macos-aarch64',
+				spcAsset: 'spc-macos-aarch64.tar.gz',
+				spcExecutable: 'spc',
+				builtPhp: 'buildroot/bin/php',
+				runtimePhp: 'php',
+				spcPackageRoot: 'aarch64-darwin',
+				archive: true,
+			};
+		}
+		if ( arch === 'x64' ) {
+			return {
+				key: 'macos-x86_64',
+				spcAsset: 'spc-macos-x86_64.tar.gz',
+				spcExecutable: 'spc',
+				builtPhp: 'buildroot/bin/php',
+				runtimePhp: 'php',
+				spcPackageRoot: 'x86_64-darwin',
+				archive: true,
+			};
+		}
+		throw new Error( `Unsupported macOS architecture: ${ arch }.` );
+	}
+
+	if ( platform === 'win32' ) {
+		if ( arch === 'x64' ) {
+			return {
+				key: 'windows-x64',
+				spcAsset: 'spc-windows-x64.exe',
+				spcExecutable: 'spc.exe',
+				builtPhp: 'buildroot/bin/php.exe',
+				runtimePhp: 'php.exe',
+				spcPackageRoot: null,
+				archive: false,
+			};
+		}
+		throw new Error( `Unsupported Windows architecture: ${ arch }.` );
+	}
+
+	throw new Error(
+		`Bundled PHP only supports macOS and Windows, not ${ platform }.`
+	);
+}
+
+function macPlatformKey( platform = process.platform, arch = process.arch ) {
+	if ( platform !== 'darwin' ) {
 		throw new Error(
-			`Only macOS runtime artifacts are supported by this exploration script. Current platform: ${ process.platform }.`
+			`This runtime only supports macOS, not ${ platform }.`
 		);
 	}
-	if ( process.arch === 'arm64' ) {
-		return 'macos-aarch64';
-	}
-	if ( process.arch === 'x64' ) {
-		return 'macos-x86_64';
-	}
-	throw new Error( `Unsupported macOS architecture: ${ process.arch }.` );
+	return phpRuntimeDescriptor( platform, arch ).key;
 }
 
-function spcPackageRoot() {
-	if ( process.arch === 'arm64' ) {
-		return 'aarch64-darwin';
-	}
-	if ( process.arch === 'x64' ) {
-		return 'x86_64-darwin';
-	}
-	throw new Error( `Unsupported macOS architecture: ${ process.arch }.` );
+export function frankenPlatformName(
+	platform = process.platform,
+	arch = process.arch
+) {
+	return macPlatformKey( platform, arch ) === 'macos-aarch64'
+		? 'mac-arm64'
+		: 'mac-x86_64';
 }
 
-function frankenPlatformName() {
-	return platformKey() === 'macos-aarch64' ? 'mac-arm64' : 'mac-x86_64';
+export function caddyPlatformName(
+	platform = process.platform,
+	arch = process.arch
+) {
+	return macPlatformKey( platform, arch ) === 'macos-aarch64'
+		? 'mac_arm64'
+		: 'mac_amd64';
 }
 
-function caddyPlatformName() {
-	return platformKey() === 'macos-aarch64' ? 'mac_arm64' : 'mac_amd64';
-}
-
-function run( command, args, options = {} ) {
-	const result = spawnSync( command, args, {
+export function run( command, args, options = {}, spawn = spawnSync ) {
+	const result = spawn( command, args, {
 		stdio: 'inherit',
 		...options,
 	} );
+	if ( result.error ) {
+		throw result.error;
+	}
 	if ( result.status !== 0 ) {
 		throw new Error(
-			`${ command } ${ args.join( ' ' ) } failed with exit code ${ result.status }`
+			`${ command } ${ args.join( ' ' ) } failed with exit code ${
+				result.status
+			}`
 		);
 	}
 }
 
-function output( command, args ) {
-	const result = spawnSync( command, args, {
+export function output( command, args, spawn = spawnSync ) {
+	const result = spawn( command, args, {
 		encoding: 'utf8',
 		stdio: [ 'ignore', 'pipe', 'pipe' ],
 	} );
+	if ( result.error ) {
+		throw result.error;
+	}
 	if ( result.status !== 0 ) {
 		throw new Error(
-			`${ command } ${ args.join( ' ' ) } failed: ${ result.stderr || result.stdout }`
+			`${ command } ${ args.join( ' ' ) } failed: ${
+				result.stderr || result.stdout
+			}`
 		);
 	}
 	return ( result.stdout || result.stderr ).trim();
@@ -183,7 +236,9 @@ function download( url, dest, redirects = 0 ) {
 			if ( ! response.statusCode || response.statusCode >= 400 ) {
 				response.resume();
 				rejectDownload(
-					new Error( `Download failed (${ response.statusCode }) for ${ url }` )
+					new Error(
+						`Download failed (${ response.statusCode }) for ${ url }`
+					)
 				);
 				return;
 			}
@@ -207,47 +262,71 @@ async function ensureDownload( url, dest ) {
 	return dest;
 }
 
-function installExecutable( src, dest, force ) {
-	if ( existsSync( dest ) && ! force ) {
-		console.log( `[runtime] ${ dest } already exists. Use --force to replace it.` );
+function installExecutable(
+	src,
+	dest,
+	force,
+	{ makeExecutable = true, dependencies = {} } = {}
+) {
+	const {
+		exists = existsSync,
+		mkdir = mkdirSync,
+		copyFile = copyFileSync,
+		chmod = chmodSync,
+		log = console.log,
+	} = dependencies;
+
+	if ( exists( dest ) && ! force ) {
+		log( `[runtime] ${ dest } already exists. Use --force to replace it.` );
 		return false;
 	}
-	mkdirSync( dirname( dest ), { recursive: true } );
-	copyFileSync( src, dest );
-	chmodSync( dest, 0o755 );
-	console.log( `[runtime] Installed ${ dest }` );
+	mkdir( dirname( dest ), { recursive: true } );
+	copyFile( src, dest );
+	if ( makeExecutable ) {
+		chmod( dest, 0o755 );
+	}
+	log( `[runtime] Installed ${ dest }` );
 	return true;
 }
 
 async function installFranken( options ) {
+	const platformName = frankenPlatformName();
 	const dest = resolve( BIN_DIR, 'frankenphp' );
 	if ( existsSync( dest ) && ! options.force ) {
-		console.log( `[runtime] ${ dest } already exists. Use --force to replace it.` );
-		console.log( output( dest, [ 'version' ] ).split( '\n' )[0] );
+		console.log(
+			`[runtime] ${ dest } already exists. Use --force to replace it.`
+		);
+		console.log( output( dest, [ 'version' ] ).split( '\n' )[ 0 ] );
 		return;
 	}
 
-	const asset = `frankenphp-${ frankenPlatformName() }`;
+	const asset = `frankenphp-${ platformName }`;
 	const url = `https://github.com/php/frankenphp/releases/download/${ FRANKENPHP_VERSION }/${ asset }`;
 	const cachePath = resolve( CACHE_DIR, asset );
 
 	await ensureDownload( url, cachePath );
 	installExecutable( cachePath, dest, options.force );
-	console.log( output( dest, [ 'version' ] ).split( '\n' )[0] );
+	console.log( output( dest, [ 'version' ] ).split( '\n' )[ 0 ] );
 }
 
 async function installCaddy( options ) {
+	const platformName = caddyPlatformName();
 	const dest = resolve( BIN_DIR, 'caddy' );
 	if ( existsSync( dest ) && ! options.force ) {
-		console.log( `[runtime] ${ dest } already exists. Use --force to replace it.` );
-		console.log( output( dest, [ 'version' ] ).split( '\n' )[0] );
+		console.log(
+			`[runtime] ${ dest } already exists. Use --force to replace it.`
+		);
+		console.log( output( dest, [ 'version' ] ).split( '\n' )[ 0 ] );
 		return;
 	}
 
-	const asset = `caddy_${ CADDY_VERSION }_${ caddyPlatformName() }.tar.gz`;
+	const asset = `caddy_${ CADDY_VERSION }_${ platformName }.tar.gz`;
 	const url = `https://github.com/caddyserver/caddy/releases/download/v${ CADDY_VERSION }/${ asset }`;
 	const archive = resolve( CACHE_DIR, asset );
-	const extractDir = resolve( CACHE_DIR, `caddy-${ CADDY_VERSION }-${ caddyPlatformName() }` );
+	const extractDir = resolve(
+		CACHE_DIR,
+		`caddy-${ CADDY_VERSION }-${ platformName }`
+	);
 	const extracted = resolve( extractDir, 'caddy' );
 
 	await ensureDownload( url, archive );
@@ -257,49 +336,58 @@ async function installCaddy( options ) {
 		run( 'tar', [ '-xzf', archive, '-C', extractDir ] );
 	}
 	installExecutable( extracted, dest, options.force );
-	console.log( output( dest, [ 'version' ] ).split( '\n' )[0] );
+	console.log( output( dest, [ 'version' ] ).split( '\n' )[ 0 ] );
 }
 
-function verifyPhp( phpBin ) {
-	const modules = output( phpBin, [ '-m' ] )
-		.split( '\n' )
-		.map( ( module ) => module.trim().toLowerCase() );
-	const requiredModules = [
-		'pdo',
-		'pdo_sqlite',
-		'sqlite3',
-		'mbstring',
-		'curl',
-		'openssl',
-		'zip',
-		'gd',
-		'xml',
-		'dom',
-		'simplexml',
-		'xmlreader',
-		'xmlwriter',
-		'phar',
-		'session',
-		'tokenizer',
-		'fileinfo',
-		'filter',
-		'ctype',
-		'iconv',
-		'zend opcache',
-	];
+export function requiredPhpModules( extensions = phpExtensions() ) {
+	return extensions.map( ( extension ) =>
+		extension === 'opcache' ? 'zend opcache' : extension.toLowerCase()
+	);
+}
 
-	if ( PHP_WITH_APCU ) {
-		requiredModules.push( 'apcu' );
+function phpMajorMinor( version ) {
+	const match = String( version ).match( /^(\d+)\.(\d+)/ );
+	if ( ! match ) {
+		throw new Error( `Invalid PHP version: ${ version }` );
+	}
+	return `${ match[ 1 ] }.${ match[ 2 ] }`;
+}
+
+export function verifyPhp(
+	phpBin,
+	{
+		phpVersion = PHP_VERSION,
+		extensions = phpExtensions(),
+		withJit = PHP_WITH_JIT,
+		getOutput = output,
+		log = console.log,
+	} = {}
+) {
+	const expectedVersion = phpMajorMinor( phpVersion );
+	const actualVersion = getOutput( phpBin, [
+		'-r',
+		"echo PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;",
+	] );
+	if ( actualVersion !== expectedVersion ) {
+		throw new Error(
+			`Bundled PHP is ${ actualVersion }, but this build needs PHP ${ expectedVersion }.`
+		);
 	}
 
-	for ( const required of requiredModules ) {
+	const modules = getOutput( phpBin, [ '-m' ] )
+		.split( '\n' )
+		.map( ( module ) => module.trim().toLowerCase() );
+
+	for ( const required of requiredPhpModules( extensions ) ) {
 		if ( ! modules.includes( required ) ) {
-			throw new Error( `Bundled PHP is missing required module: ${ required }` );
+			throw new Error(
+				`Bundled PHP is missing the ${ required } module.`
+			);
 		}
 	}
 
-	if ( PHP_WITH_JIT ) {
-		const jit = output( phpBin, [
+	if ( withJit ) {
+		const jit = getOutput( phpBin, [
 			'-d',
 			'opcache.enable_cli=1',
 			'-d',
@@ -311,50 +399,96 @@ function verifyPhp( phpBin ) {
 		] );
 		const parsed = JSON.parse( jit || 'null' );
 		if ( ! parsed || parsed.enabled !== true ) {
-			throw new Error( 'Bundled PHP did not report enabled OPcache JIT.' );
+			throw new Error(
+				'OPcache JIT is not enabled in the bundled PHP runtime.'
+			);
 		}
 	}
 
-	console.log( output( phpBin, [ '-v' ] ).split( '\n' )[0] );
+	log( getOutput( phpBin, [ '-v' ] ).split( '\n' )[ 0 ] );
 }
 
-async function installPhp( options ) {
-	const dest = resolve( BIN_DIR, 'php' );
-	if ( existsSync( dest ) && ! options.force ) {
-		console.log( `[runtime] ${ dest } already exists. Use --force to replace it.` );
-		verifyPhp( dest );
+export async function installPhp(
+	options,
+	{
+		platform = process.platform,
+		arch = process.arch,
+		phpVersion = PHP_VERSION,
+		spcVersion = SPC_VERSION,
+		withApcu = PHP_WITH_APCU,
+		withJit = PHP_WITH_JIT,
+		binDir = BIN_DIR,
+		cacheDir = CACHE_DIR,
+		dependencies = {},
+	} = {}
+) {
+	const descriptor = phpRuntimeDescriptor( platform, arch );
+	const deps = {
+		exists: existsSync,
+		mkdir: mkdirSync,
+		copyFile: copyFileSync,
+		chmod: chmodSync,
+		ensureDownload,
+		run,
+		output,
+		log: console.log,
+		...dependencies,
+	};
+	const extensions = phpExtensions( withApcu );
+	const dest = resolve( binDir, descriptor.runtimePhp );
+
+	if ( deps.exists( dest ) && ! options.force ) {
+		deps.log(
+			`[runtime] ${ dest } already exists. Use --force to replace it.`
+		);
+		verifyPhp( dest, {
+			phpVersion,
+			extensions,
+			withJit,
+			getOutput: deps.output,
+			log: deps.log,
+		} );
 		return;
 	}
 
-	const spcAsset = `spc-${ platformKey() }.tar.gz`;
-	const spcUrl = `https://github.com/crazywhalecc/static-php-cli/releases/download/${ SPC_VERSION }/${ spcAsset }`;
-	const spcArchive = resolve( CACHE_DIR, spcAsset );
-	const spcDir = resolve( CACHE_DIR, `spc-build-${ SPC_VERSION }` );
-	const spcBin = resolve( spcDir, 'spc' );
-	const builtPhp = resolve( spcDir, 'buildroot/bin/php' );
+	const spcUrl = `https://github.com/crazywhalecc/static-php-cli/releases/download/${ spcVersion }/${ descriptor.spcAsset }`;
+	const spcDownload = resolve( cacheDir, descriptor.spcAsset );
+	const spcDir = resolve( cacheDir, `spc-build-${ spcVersion }` );
+	const spcBin = resolve( spcDir, descriptor.spcExecutable );
+	const builtPhp = resolve( spcDir, descriptor.builtPhp );
 
-	await ensureDownload( spcUrl, spcArchive );
-	if ( ! existsSync( spcBin ) ) {
-		mkdirSync( spcDir, { recursive: true } );
-		run( 'tar', [ '-xzf', spcArchive, '-C', spcDir ] );
-		chmodSync( spcBin, 0o755 );
+	await deps.ensureDownload( spcUrl, spcDownload );
+	if ( ! deps.exists( spcBin ) ) {
+		deps.mkdir( spcDir, { recursive: true } );
+		if ( descriptor.archive ) {
+			deps.run( 'tar', [ '-xzf', spcDownload, '-C', spcDir ] );
+			deps.chmod( spcBin, 0o755 );
+		} else {
+			deps.copyFile( spcDownload, spcBin );
+		}
 	}
 
-	if ( ! existsSync( builtPhp ) || options.rebuild ) {
-		const pkgConfig = resolve(
-			spcDir,
-			'pkgroot',
-			spcPackageRoot(),
-			'bin/pkg-config'
-		);
-		if ( ! existsSync( pkgConfig ) ) {
-			run( spcBin, [ 'install-pkg', 'pkg-config' ], { cwd: spcDir } );
+	if ( ! deps.exists( builtPhp ) || options.rebuild ) {
+		if ( descriptor.archive ) {
+			const pkgConfig = resolve(
+				spcDir,
+				'pkgroot',
+				descriptor.spcPackageRoot,
+				'bin/pkg-config'
+			);
+			if ( ! deps.exists( pkgConfig ) ) {
+				deps.run( spcBin, [ 'install-pkg', 'pkg-config' ], {
+					cwd: spcDir,
+				} );
+			}
+		} else {
+			deps.run( spcBin, [ 'doctor', '--auto-fix' ], { cwd: spcDir } );
 		}
 
-		const extensionList = phpExtensions().join( ',' );
+		const extensionList = extensions.join( ',' );
 		const buildArgs = [ 'build', extensionList, '--build-cli' ];
 
-		if ( ! PHP_WITH_JIT ) {
+		if ( ! withJit ) {
 			buildArgs.push( '--disable-opcache-jit' );
 		}
 
@@ -367,26 +501,37 @@ async function installPhp( options ) {
 			'pcre.jit=1'
 		);
 
-		run(
+		deps.run(
 			spcBin,
 			[
 				'download',
 				`--for-extensions=${ extensionList }`,
-				`--with-php=${ PHP_VERSION }`,
+				`--with-php=${ phpVersion }`,
 				'--prefer-pre-built',
 				'--retry=2',
 			],
 			{ cwd: spcDir }
 		);
-		run( spcBin, [ 'switch-php-version', PHP_VERSION ], { cwd: spcDir } );
-		run( spcBin, buildArgs, { cwd: spcDir } );
+		deps.run( spcBin, [ 'switch-php-version', phpVersion ], {
+			cwd: spcDir,
+		} );
+		deps.run( spcBin, buildArgs, { cwd: spcDir } );
 	}
 
-	installExecutable( builtPhp, dest, true );
-	verifyPhp( dest );
+	installExecutable( builtPhp, dest, true, {
+		makeExecutable: descriptor.archive,
+		dependencies: deps,
+	} );
+	verifyPhp( dest, {
+		phpVersion,
+		extensions,
+		withJit,
+		getOutput: deps.output,
+		log: deps.log,
+	} );
 }
 
-async function main() {
+export async function main() {
 	const options = readOptions();
 	if ( options.runtime === 'php' ) {
 		await installPhp( options );
@@ -401,7 +546,12 @@ async function main() {
 	}
 }
 
-main().catch( ( err ) => {
-	console.error( `[runtime] ${ err.message }` );
-	process.exitCode = 1;
-} );
+if (
+	process.argv[ 1 ] &&
+	resolve( process.argv[ 1 ] ) === fileURLToPath( import.meta.url )
+) {
+	main().catch( ( err ) => {
+		console.error( `[runtime] ${ err.message }` );
+		process.exitCode = 1;
+	} );
+}

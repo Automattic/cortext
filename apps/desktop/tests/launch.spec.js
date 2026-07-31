@@ -13,6 +13,7 @@ const { test, expect, _electron: electron } = require( '@playwright/test' );
 const { spawn } = require( 'node:child_process' );
 const { once } = require( 'node:events' );
 const http = require( 'node:http' );
+const net = require( 'node:net' );
 const path = require( 'node:path' );
 const {
 	existsSync,
@@ -417,6 +418,9 @@ function waitForProcessExit( app, timeoutMs = 10000 ) {
 }
 
 async function expectSecondInstanceToExit( app, userDataPath ) {
+	const executablePath = await app.evaluate( ( { app } ) =>
+		app.getPath( 'exe' )
+	);
 	await app.evaluate( ( { app } ) => {
 		globalThis.__cortextE2ESecondInstanceSeen = false;
 		app.once( 'second-instance', () => {
@@ -433,13 +437,14 @@ async function expectSecondInstanceToExit( app, userDataPath ) {
 	if ( process.platform === 'linux' ) {
 		secondInstanceArgs.unshift( '--no-sandbox' );
 	}
-	const secondInstance = spawn( app.process().spawnfile, secondInstanceArgs, {
+	const secondInstance = spawn( executablePath, secondInstanceArgs, {
 		env: {
 			...process.env,
 			CORTEXT_DEVTOOLS: '0',
 			CORTEXT_E2E: '1',
 		},
 		stdio: 'ignore',
+		windowsHide: true,
 	} );
 	let timeoutId;
 	const timeout = new Promise( ( _resolve, reject ) => {
@@ -457,6 +462,46 @@ async function expectSecondInstanceToExit( app, userDataPath ) {
 				app.evaluate( () => globalThis.__cortextE2ESecondInstanceSeen ),
 			{ timeout: 10 * 1000 }
 		)
+		.toBe( true );
+}
+
+function canBindRuntimePort( origin ) {
+	const endpoint = new URL( origin );
+	return new Promise( ( resolve, reject ) => {
+		const server = net.createServer();
+		server.unref();
+		server.once( 'error', ( error ) => {
+			if ( [ 'EACCES', 'EADDRINUSE' ].includes( error.code ) ) {
+				resolve( false );
+				return;
+			}
+			reject( error );
+		} );
+		server.listen(
+			{
+				host: endpoint.hostname,
+				port: Number( endpoint.port ),
+				exclusive: true,
+			},
+			() => {
+				server.close( ( error ) => {
+					if ( error ) {
+						reject( error );
+						return;
+					}
+					resolve( true );
+				} );
+			}
+		);
+	} );
+}
+
+async function expectRuntimePortToBeFree( origin ) {
+	await expect
+		.poll( () => canBindRuntimePort( origin ), {
+			message: `Cortext closed, but ${ origin } is still in use.`,
+			timeout: 15 * 1000,
+		} )
 		.toBe( true );
 }
 
@@ -747,6 +792,9 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 		).toBe( true );
 	} finally {
 		await app.close();
+		if ( runtimeOrigin ) {
+			await expectRuntimePortToBeFree( runtimeOrigin );
+		}
 		await new Promise( ( resolve, reject ) => {
 			occupiedPortServer.close( ( error ) => {
 				if ( error ) {
@@ -790,6 +838,7 @@ test( 'reloads, preserves preferences, and exits with its window', async () => {
 		await window.close();
 		await exitPromise;
 		didExit = true;
+		await expectRuntimePortToBeFree( runtimeOrigin );
 
 		( { app: relaunchedApp } = await launchDesktopApp( userDataPath ) );
 		await expectTemporaryUserData( relaunchedApp, userDataPath );
@@ -812,6 +861,9 @@ test( 'reloads, preserves preferences, and exits with its window', async () => {
 		}
 		if ( relaunchedApp ) {
 			await relaunchedApp.close();
+		}
+		if ( runtimeOrigin ) {
+			await expectRuntimePortToBeFree( runtimeOrigin );
 		}
 	}
 } );
