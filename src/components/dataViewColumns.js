@@ -20,14 +20,14 @@ export const TITLE_FIELD_ID = 'title';
 export const COVER_FIELD_ID = 'cover';
 export const GHOST_FIELD_ID = '__add_field';
 export const MANUAL_SORT_ID = 'manual';
-export const MAX_COLUMN_WIDTH = 640;
+export const MAX_COLUMN_WIDTH = 1200;
 
-// Per-type minimum widths. 32px is wide enough for a checkbox-sized
-// affordance and lets autofit shrink short values (single-digit integers,
-// short text) down to their rendered width. Title stays wider because it's
-// the row identity; dates need room for a typical formatted value.
+// A 32px minimum fits checkbox-sized controls and still lets autofit shrink
+// columns around short values such as single-digit numbers. The title needs
+// more room for the row identity and inline Open action; dates need to fit a
+// typical formatted value.
 export const MIN_WIDTHS = {
-	title: 80,
+	title: 160,
 	date: 64,
 	datetime: 64,
 };
@@ -123,11 +123,9 @@ export function pruneFiltersForFields( filters, validIds ) {
 	return changed ? next : filters;
 }
 
-// Reconciles a saved view against the live field set: drops style entries for
-// fields that no longer exist, clamps persisted widths into the current
-// [min, max] range, and re-prepends the title id when reorder/cleanup left it
-// out. Other view settings (sort, filters, density, search, perPage) are left
-// to the caller — those have their own reconciliation rules.
+// Saved views can outlive their fields. Clean stale references here so a
+// deleted field cannot break rendering or disable view interactions. Sort and
+// filters stay with their callers because each has extra validity rules.
 export function normalizeView( view, validIds, options = {} ) {
 	const titleId = options.titleId ?? TITLE_FIELD_ID;
 	const validSet =
@@ -158,6 +156,9 @@ export function normalizeView( view, validIds, options = {} ) {
 	const fieldsChanged =
 		currentFields.length !== nextFields.length ||
 		currentFields.some( ( id, i ) => id !== nextFields[ i ] );
+	const groupByField = view?.groupBy?.field;
+	const groupByChanged =
+		groupByField !== undefined && ! validSet.has( groupByField );
 	const rawCalculations = view?.calculations;
 	const hasCalculationObject =
 		rawCalculations &&
@@ -177,13 +178,29 @@ export function normalizeView( view, validIds, options = {} ) {
 	const calculationsChanged =
 		( rawCalculations !== undefined && ! hasCalculationObject ) ||
 		! sameShallowObject( currentCalculations, nextCalculations );
+	const visibilityChanged =
+		view?.type !== 'table' &&
+		Object.prototype.hasOwnProperty.call( view ?? {}, 'showTitle' );
+	const unsupportedViewStateChanged =
+		Object.prototype.hasOwnProperty.call(
+			view ?? {},
+			'infiniteScrollEnabled'
+		) ||
+		Object.prototype.hasOwnProperty.call( view ?? {}, 'startPosition' );
 	const layoutChanged =
 		layoutResult.changed ||
 		layoutByTypeResult.changed ||
 		fieldsByTypeResult.changed ||
-		displayFieldResult.changed;
+		displayFieldResult.changed ||
+		visibilityChanged ||
+		unsupportedViewStateChanged;
 
-	if ( ! fieldsChanged && ! layoutChanged && ! calculationsChanged ) {
+	if (
+		! fieldsChanged &&
+		! layoutChanged &&
+		! calculationsChanged &&
+		! groupByChanged
+	) {
 		return view;
 	}
 
@@ -203,6 +220,16 @@ export function normalizeView( view, validIds, options = {} ) {
 		} else {
 			delete nextView[ key ];
 		}
+	}
+	if ( visibilityChanged ) {
+		delete nextView.showTitle;
+	}
+	if ( unsupportedViewStateChanged ) {
+		delete nextView.infiniteScrollEnabled;
+		delete nextView.startPosition;
+	}
+	if ( groupByChanged ) {
+		delete nextView.groupBy;
 	}
 	if ( layoutByTypeResult.layoutByType !== undefined ) {
 		nextView.layoutByType = layoutByTypeResult.layoutByType;
@@ -274,9 +301,9 @@ export function withNewlyVisibleFields(
 	return inserted ? { ...view, fields: next } : view;
 }
 
-// Applies a width to a single column. Always returns through the layout shape
-// the library reads. We pin `maxWidth` to the user's chosen width too, so the
-// saved shape remains defensive if DataViews changes its table sizing again.
+// Keep widths in the layout shape DataViews expects. `width` stores the user's
+// choice, while `maxWidth` stays at the global limit so later drags can make
+// the column wider.
 export function withColumnWidth( view, fieldId, width, fieldType ) {
 	const clamped = clampWidth( width, fieldType, fieldId );
 	const layout = view?.layout ?? {};
@@ -286,7 +313,7 @@ export function withColumnWidth( view, fieldId, width, fieldType ) {
 		...previous,
 		width: clamped,
 		minWidth: getMinWidth( fieldType, fieldId ),
-		maxWidth: clamped,
+		maxWidth: MAX_COLUMN_WIDTH,
 	};
 	return {
 		...view,

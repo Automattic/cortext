@@ -29,6 +29,7 @@ const Canvas = lazy( () =>
 );
 import CanvasSkeleton from '../components/CanvasSkeleton';
 import { RowMutationContext } from '../components/EditableCell';
+import ExperimentsPane from '../components/ExperimentsPane';
 import ImportPane from '../components/ImportPane';
 import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
 import { CanvasProgressBar } from '../components/Skeleton';
@@ -48,6 +49,7 @@ import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import useCollectionFields from '../hooks/useCollectionFields';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import EmptyState from './EmptyState';
 import { computeDocumentUri, useResolveDocument } from './useResolveEntity';
 import { init, parseTarget, reducer } from './entityRouteReducer';
@@ -172,9 +174,10 @@ export default function EntityRoute( { history } ) {
 			} );
 			return;
 		}
-		// Import and Published are light static panes. Use a plain fade so
-		// Chrome's default blend does not wash the transition to white.
+		// Settings panes are lightweight and mostly static. A plain fade keeps
+		// Chrome's default blend from washing out the transition to white.
 		if (
+			after.active.kind === 'experiments' ||
 			after.active.kind === 'import' ||
 			after.active.kind === 'published'
 		) {
@@ -292,6 +295,18 @@ export default function EntityRoute( { history } ) {
 	] );
 
 	useEffect( () => {
+		if ( target.kind !== 'redirect' ) {
+			return;
+		}
+
+		navigate( {
+			to: '/$',
+			params: { _splat: target.to },
+			replace: true,
+		} );
+	}, [ target, navigate ] );
+
+	useEffect( () => {
 		if ( target.kind !== 'document' || target.id === null ) {
 			return;
 		}
@@ -398,6 +413,10 @@ export default function EntityRoute( { history } ) {
 				POST_TYPE,
 				TRASHED_PAGES_QUERY,
 			] );
+			notifySidebarTreeChanged( {
+				parentId: Number( response?.post?.parent ?? 0 ),
+				revealId: Number( postId ),
+			} );
 			notifyDocumentTrashChanged();
 			// A restored row lives inside a collection's data view rather than
 			// the tree, and can change rollups and relations elsewhere, so
@@ -466,6 +485,9 @@ export default function EntityRoute( { history } ) {
 						<PublishedDocumentsPane />
 					</WorkspacePane>
 				) : null }
+				<WorkspacePane active={ active.kind === 'experiments' }>
+					<ExperimentsPane />
+				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'import' }>
 					<ImportPane />
 				</WorkspacePane>

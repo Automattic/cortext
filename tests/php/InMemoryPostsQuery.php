@@ -23,17 +23,29 @@ namespace Cortext\Tests;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\PostType\Document;
 use WorDBless\Posts as WorDBlessPosts;
+use WeakMap;
 use WP_Post;
 use WP_Query;
 
 trait InMemoryPostsQuery {
 
+	/**
+	 * `found_posts` totals for queries handled by `posts_pre_query`.
+	 *
+	 * @var WeakMap<WP_Query,int>|null
+	 */
+	private static ?WeakMap $in_memory_found_posts = null;
+
 	protected function install_in_memory_posts_query(): void {
+		self::$in_memory_found_posts = new WeakMap();
 		add_filter( 'posts_pre_query', array( $this, 'serve_posts_from_memory' ), 10, 2 );
+		add_filter( 'found_posts', array( $this, 'serve_found_posts_from_memory' ), 10, 2 );
 	}
 
 	protected function uninstall_in_memory_posts_query(): void {
 		remove_filter( 'posts_pre_query', array( $this, 'serve_posts_from_memory' ), 10 );
+		remove_filter( 'found_posts', array( $this, 'serve_found_posts_from_memory' ), 10 );
+		self::$in_memory_found_posts = null;
 	}
 
 	/**
@@ -48,6 +60,10 @@ trait InMemoryPostsQuery {
 	 * @return mixed
 	 */
 	public function serve_posts_from_memory( $pre, WP_Query $query ) {
+		if ( null !== self::$in_memory_found_posts && isset( self::$in_memory_found_posts[ $query ] ) ) {
+			unset( self::$in_memory_found_posts[ $query ] );
+		}
+
 		$vars = $query->query_vars;
 
 		$wants_parent_filter   = ! empty( $vars['post_parent'] );
@@ -187,10 +203,16 @@ trait InMemoryPostsQuery {
 		// posts_pre_query short-circuits the SQL path, so WP_Query never calls
 		// set_found_posts(). Set the count here so callers still get pagination
 		// totals from `$query->found_posts`.
-		$query->found_posts = count( $candidates );
+		$total = count( $candidates );
+		if ( null === self::$in_memory_found_posts ) {
+			self::$in_memory_found_posts = new WeakMap();
+		}
+		self::$in_memory_found_posts[ $query ] = $total;
+		$query->found_posts                    = $total;
 
 		$per_page = (int) ( $vars['posts_per_page'] ?? 0 );
 		$page     = max( 1, (int) ( $vars['paged'] ?? 1 ) );
+		$query->max_num_pages = $per_page > 0 ? (int) ceil( $total / $per_page ) : 0;
 		if ( $per_page > 0 ) {
 			$candidates = array_slice( $candidates, ( $page - 1 ) * $per_page, $per_page );
 		}
@@ -200,6 +222,19 @@ trait InMemoryPostsQuery {
 		}
 
 		return $candidates;
+	}
+
+	/**
+	 * Returns the stored total for a query handled by `posts_pre_query`.
+	 *
+	 * @param int      $found_posts Existing found-post count.
+	 * @param WP_Query $query       Query being counted.
+	 */
+	public function serve_found_posts_from_memory( int $found_posts, WP_Query $query ): int {
+		if ( null !== self::$in_memory_found_posts && isset( self::$in_memory_found_posts[ $query ] ) ) {
+			return self::$in_memory_found_posts[ $query ];
+		}
+		return $found_posts;
 	}
 
 	/**

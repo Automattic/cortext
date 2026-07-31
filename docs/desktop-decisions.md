@@ -2,6 +2,103 @@
 
 Running log for desktop-specific runtime and packaging decisions. Keep the detailed benchmark numbers in PR comments or artifacts unless they become stable product guidance.
 
+## 2026-07-28 — Give each desktop profile its own runtime origin
+
+**Decision.** New desktop profiles take the first free loopback port in the
+9403-9498 band and save it in that profile's settings. Later launches reuse it
+so browser-backed preferences and the local Notion key remain under a stable
+Chromium origin. If the saved port is occupied, Cortext scans the band again and
+saves the new choice. Profiles upgraded from the fixed-port build try their
+legacy port first to preserve the same origin-scoped data.
+
+The PHP and experimental Caddy runtimes receive the selected origin through
+their environment. A bootstrap defines `WP_HOME` and `WP_SITEURL` before the
+preserved `wp-config.php` loads, so both new snapshots and existing sites
+generate URLs for the active origin without replacing salts or user config.
+Every runtime requires the exact loopback `Host`; an `Origin` header may be
+absent, but if present it must match exactly. Caddy also binds explicitly to
+`127.0.0.1`.
+
+Only one Electron process may use a profile at a time. A second launch focuses
+the existing window instead of starting another runtime against the same
+SQLite database.
+
+**Why the port is stable per profile, not per launch.** Chromium partitions
+local storage by the complete origin, including the port. Rotating it on every
+launch would make theme and layout preferences disappear and strand the local
+Notion key under old origins. The per-launch authentication token remains the
+security credential; the port is collision avoidance and origin scoping, not a
+secret.
+
+**Why a fixed band instead of asking the kernel.** Binding port 0 returns a port
+from the ephemeral range (49152+ on macOS, 32768+ on Linux), which is the range
+the kernel hands out for outbound sockets. That is the right answer for a port
+that lives seconds and the wrong one for a port saved across launches: loopback
+traffic from local servers, proxies and other apps churns through it constantly.
+The 9403-9498 band is never handed out spontaneously, so only software that
+explicitly binds there can take a saved port. When the whole band is occupied
+Cortext still falls back to port 0, trading origin stability for starting at all.
+
+**Collision trade-off.** If another process takes the saved port, moving the
+profile to a new origin strands browser-only preferences under the old origin.
+The user may need to re-enter those preferences and the local Notion key.
+WordPress settings and uploads are unaffected, but documents are only partly so:
+blocks that embed uploaded media keep the previous origin in their markup and
+nothing rewrites them, at save or at render, so those images need re-inserting.
+That is a property of how block content stores URLs, not of the port change.
+
+## 2026-07-24 — Authenticate every local runtime request
+
+**Decision.** Each Electron launch generates a new random 256-bit token, keeps
+it in memory, and passes it to the local runtime through its environment.
+Every app window uses a dedicated Electron session. Its browser storage remains
+persistent so theme, layout, and integration preferences survive restarts, but
+the token is never stored there. HTTP caching is disabled, and cookies, service
+workers, and Cache API data for the runtime are cleared at launch. The session
+adds the token as an internal header to requests for `http://127.0.0.1:9402/`
+that come from a Cortext frame, reading the frame origin Chromium already
+resolved instead of inferring trust from `Sec-Fetch-Site` or the current window
+URL. Embedded third-party frames render, so the Embed block keeps working, but
+they stay outside the boundary: origin inheritance covers frames nested inside
+them and popups they open, and a request with no frame behind it, such as one
+from a service worker, is never authenticated. External top-level links leave
+the app through the system browser; an embedded frame cannot steer the app
+window; document redirects to another origin are blocked; internal popups use
+the same protected session. A request chain that leaves the runtime cannot
+regain the token by redirecting back.
+
+The PHP, FrankenPHP, and PHP-FPM runtime paths reject requests without the
+matching token before serving WordPress or static files. Caddy then removes the
+header before proxying to PHP and filters it from error logs. The benchmark
+follows the same contract with its own ephemeral token and never includes it in
+the recorded results. The loopback address and fixed port 9402 remain unchanged.
+
+**Why.** The desktop-only autologin makes every accepted WordPress request an
+administrator request. Requiring a per-launch secret prevents web pages and
+accidental localhost clients from reaching that session just because they know
+the port. The secret is not persisted, logged, or placed in a URL.
+
+**Limit.** This is a boundary against browser-originated and accidental local
+requests, not against hostile native software running as the same macOS user.
+Such a process can already read the user's Cortext application data.
+
+**Product boundary.** Desktop hides publishing and copy-link affordances, and
+published localhost routes remain behind the same token. They are not shareable
+in Safari or another client. Public publishing remains a feature of Cortext on
+a WordPress web site.
+
+**Migration note.** Moving from Electron's default session to the dedicated
+partition resets existing browser-only desktop preferences once. The WordPress
+database, documents, uploads, and application settings are unaffected.
+
+## 2026-06-19 — In-place auto-updates over GitHub Releases
+
+**Decision.** The signed desktop app now updates itself from GitHub Releases with `electron-updater`. The mac build ships both `dmg` and `zip`: users download the DMG for first install, while Squirrel.Mac installs the zip. The `github` publish config makes electron-builder write `latest-mac.yml` and `app-update.yml`, and Buildkite uploads the zip, blockmap, and `latest-mac.yml` to the same draft Release as the DMG. The plugin workflow still owns the Release; Buildkite only attaches desktop assets. Drafts remain hidden from the updater. Once a human publishes a Release, the installed app can pick it up. The app menu has one `autoInstallUpdates` checkbox plus a "Check for Updates..." / "Restart to Apply Update" item. On first launch after an app update, Cortext also refreshes the bundled WordPress and plugin code in the extracted site, preserving the SQLite database, uploads, and wp-config. WordPress handles any database upgrade on the next load.
+
+**Why GitHub Releases and not a self-hosted feed.** WordPress Studio uses the same Squirrel path, but its feed comes from WordPress.com and the Apps CDN. Cortext does not have that infrastructure. Reading assets from GitHub Releases keeps the release path small: we already create the Release, sign the app, and upload assets there. We borrowed Studio's runtime behavior (state tracking, manual vs silent dialogs, move-to-Applications prompt, retrying transient network errors), not its feed. The version marker refresh follows the same idea: swap code, leave user data alone.
+
+**Revisit when.** We ship Intel or universal builds, add beta/nightly channels, need wp-config migrations instead of carrying the old file forward, or replace the checkbox with a real preferences window.
+
 ## 2026-06-16 — Buildkite owns the signed macOS DMG
 
 **Decision.** GitHub Actions prepares the plugin ZIP, validates the release milestone, writes release notes, and creates or updates the draft GitHub Release. Buildkite is the only macOS DMG publisher: the release tag build builds the bundled PHP runtime and distribution snapshot, runs electron-builder, signs and notarizes the app, verifies the signed app, and uploads the DMG to the same draft Release.

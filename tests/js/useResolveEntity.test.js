@@ -14,6 +14,7 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 import apiFetch from '@wordpress/api-fetch';
 import {
 	computeDocumentUri,
+	isSettingsUri,
 	parseIdFromUri,
 	useResolveDocument,
 } from '../../src/router/useResolveEntity';
@@ -46,6 +47,22 @@ describe( 'parseIdFromUri', () => {
 	it( 'returns null for a nullish uri', () => {
 		expect( parseIdFromUri( undefined ) ).toBeNull();
 		expect( parseIdFromUri( null ) ).toBeNull();
+	} );
+} );
+
+describe( 'isSettingsUri', () => {
+	it( 'recognizes the Settings landing route', () => {
+		expect( isSettingsUri( 'settings' ) ).toBe( true );
+	} );
+
+	it( 'recognizes Settings child routes', () => {
+		expect( isSettingsUri( 'settings/import' ) ).toBe( true );
+	} );
+
+	it( 'ignores lookalike document uris', () => {
+		expect( isSettingsUri( 'settings-42' ) ).toBe( false );
+		expect( isSettingsUri( 'about-us-42' ) ).toBe( false );
+		expect( isSettingsUri( '' ) ).toBe( false );
 	} );
 } );
 

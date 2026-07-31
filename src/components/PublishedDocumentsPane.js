@@ -12,13 +12,14 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
 } from '@wordpress/components';
-import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews/wp';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { useNavigate } from '@tanstack/react-router';
 
 import './PublishedDocumentsPane.scss';
 
 import DocumentIcon from './DocumentIcon';
+import { DEFAULT_GRID_PREVIEW_SIZE } from './dataViewAdapter';
 import {
 	POST_TYPE as DOCUMENT_POST_TYPE,
 	PUBLISHED_DOCUMENTS_QUERY,
@@ -26,7 +27,11 @@ import {
 import { computeDocumentUri } from '../router/useResolveEntity';
 import { definesTrait, hasTrait } from '../documents/capabilities';
 
-const DEFAULT_LAYOUTS = { table: { density: 'compact' }, grid: {}, list: {} };
+const DEFAULT_LAYOUTS = {
+	table: { layout: { density: 'compact' } },
+	grid: { layout: { previewSize: DEFAULT_GRID_PREVIEW_SIZE } },
+	list: { layout: {} },
+};
 
 const DEFAULT_VIEW = {
 	type: 'table',
@@ -36,7 +41,7 @@ const DEFAULT_VIEW = {
 	fields: [ 'title', 'type', 'modified', 'link' ],
 	sort: { field: 'modified', direction: 'desc' },
 	filters: [],
-	layout: {},
+	layout: { density: 'compact' },
 };
 
 const TYPE_PAGE = 'page';

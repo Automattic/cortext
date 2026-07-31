@@ -52,6 +52,7 @@ import {
 	DEFAULT_ROW_DETAIL_MODE,
 	ROW_DETAIL_MODES,
 } from '../../components/rowDetailUtils';
+import { DEFAULT_GRID_PREVIEW_SIZE } from '../../components/dataViewAdapter';
 import {
 	ROW_DETAIL_MODE_ICONS,
 	ROW_DETAIL_MODE_LABELS,
@@ -96,7 +97,7 @@ function createDefaultView() {
 		layout: { density: 'compact' },
 		layoutByType: {
 			table: { density: 'compact' },
-			grid: {},
+			grid: { previewSize: DEFAULT_GRID_PREVIEW_SIZE },
 			list: {},
 		},
 		fieldsByType: {
@@ -343,10 +344,14 @@ function CollectionInspectorControls( {
 	} = useCollectionFieldsContext();
 	const isCollectionValid = ! isResolving && collectionId && collection;
 	const visibleFieldIds = view?.fields ?? [];
-	const tableLayout = {
-		...( view?.layoutByType?.table ?? {} ),
-		...( view?.type === 'table' ? view?.layout ?? {} : {} ),
+	const activeLayoutType = view?.type ?? 'table';
+	const activeLayout = {
+		...( view?.layoutByType?.[ activeLayoutType ] ?? {} ),
+		...( view?.layout ?? {} ),
 	};
+	const defaultDensity =
+		activeLayoutType === 'table' ? 'compact' : 'balanced';
+	const showDensityControl = [ 'table', 'grid' ].includes( activeLayoutType );
 
 	// Checked fields follow the table order. Unchecked fields keep schema order.
 	const visibleFieldsInOrder = visibleFieldIds
@@ -518,32 +523,31 @@ function CollectionInspectorControls( {
 								) ) }
 							</ToggleGroupControl>
 						) }
-						<SelectControl
-							label={ __( 'Density', 'cortext' ) }
-							value={ tableLayout.density ?? 'compact' }
-							options={ DENSITY_OPTIONS }
-							onChange={ ( density ) =>
-								onChangeView( {
-									...view,
-									layout:
-										view?.type === 'table'
-											? {
-													...( view?.layout ?? {} ),
-													density,
-											  }
-											: view?.layout,
-									layoutByType: {
-										...( view?.layoutByType ?? {} ),
-										table: {
-											...tableLayout,
+						{ showDensityControl && (
+							<SelectControl
+								label={ __( 'Density', 'cortext' ) }
+								value={ activeLayout.density ?? defaultDensity }
+								options={ DENSITY_OPTIONS }
+								onChange={ ( density ) =>
+									onChangeView( {
+										...view,
+										layout: {
+											...( view?.layout ?? {} ),
 											density,
 										},
-									},
-								} )
-							}
-							__next40pxDefaultSize
-							__nextHasNoMarginBottom
-						/>
+										layoutByType: {
+											...( view?.layoutByType ?? {} ),
+											[ activeLayoutType ]: {
+												...activeLayout,
+												density,
+											},
+										},
+									} )
+								}
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+							/>
+						) }
 						<SelectControl
 							label={ __( 'Per page', 'cortext' ) }
 							value={ String( view?.perPage ?? 25 ) }

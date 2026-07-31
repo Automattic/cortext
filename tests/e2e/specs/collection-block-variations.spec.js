@@ -27,6 +27,12 @@ async function deleteIfCreated( requestUtils, path ) {
 	}
 }
 
+function dataViewTableRow( canvas, title ) {
+	return canvas.locator( '.dataviews-view-table tbody tr' ).filter( {
+		hasText: title,
+	} );
+}
+
 async function createCollectionFixture( requestUtils ) {
 	const suffix = Date.now().toString( 36 ).slice( -4 );
 
@@ -190,7 +196,7 @@ test.describe( 'Collection block creation variations', () => {
 			await canvas.getByRole( 'button', { name: /E2E Books/ } ).click();
 
 			await expect(
-				canvas.getByText( 'The Left Hand of Darkness' )
+				dataViewTableRow( canvas, 'The Left Hand of Darkness' )
 			).toBeVisible();
 
 			await savePost( page );

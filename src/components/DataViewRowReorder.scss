@@ -17,7 +17,7 @@ tbody > tr > td.cortext-row-reorder-cell,
 .cortext-data-view
 .dataviews-view-table.has-compact-density
 tbody > tr > td.cortext-row-reorder-cell {
-	padding-left: var(--cortext-row-drag-content-offset);
+	padding-inline-start: var(--cortext-row-drag-content-offset);
 }
 
 // Row reorder transitions are off at rest. The drop freeze applies transforms
@@ -38,22 +38,22 @@ body.cortext-row-dragging .cortext-row-reorder-target {
 	will-change: transform;
 }
 
+// Normal drops remove the dragging class before cleanup. Forced cleanup can
+// skip that step, so this class suppresses the stale transition.
+body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
+	transition: none !important;
+}
+
 // List layout sets its own row `transition` (background-color/box-shadow) that
 // outranks the rule above, so displaced list rows would snap to the new spot
 // instead of sliding. Re-assert transform easing for reordered list rows while
 // a drag is active so list matches the table.
 body.cortext-row-dragging
 .dataviews-view-list
-div[role="row"].cortext-row-reorder-target {
+[role="row"].cortext-row-reorder-target {
 	transition:
 		transform 120ms ease,
 		opacity 120ms ease;
-}
-
-// Last-resort guard for `clearVisualState({ withoutTransition: true })`.
-// The body-class flip above is what prevents the drop flicker.
-body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
-	transition: none !important;
 }
 
 // Hide the source placeholder, including collapsed table borders, while the
@@ -70,7 +70,7 @@ body.cortext-row-reorder-no-transition .cortext-row-reorder-target {
 .cortext-row-drag-handle {
 	position: absolute;
 	top: 50%;
-	left: 0;
+	inset-inline-start: 0;
 	width: var(--cortext-row-drag-handle-size);
 	height: var(--cortext-row-drag-handle-size);
 	padding: 0;
@@ -137,10 +137,20 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	content: none;
 }
 
+.cortext-row-drop-indicator--card::before {
+	inset: 0;
+	border: 2px solid var(--cortext-accent);
+	border-radius: 6px;
+}
+
 // The preview gets the source row's measured width. Use inset shadows for the
 // accent and outline; real borders, or an outer outline shadow, make it look
 // wider than the source row.
 .cortext-row-drag-preview {
+	--cortext-row-drag-handle-size: 24px;
+	--cortext-row-drag-content-gap: 6px;
+	--cortext-row-drag-content-offset: calc(var(--cortext-row-drag-handle-size) + var(--cortext-row-drag-content-gap));
+
 	display: flex;
 	align-items: stretch;
 	max-width: calc(100vw - 48px);
@@ -171,7 +181,10 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 
 .cortext-row-drag-preview__cell-content-wrapper {
 	display: flex;
+	flex: 1 1 auto;
 	align-items: center;
+	width: 100%;
+	min-width: 0;
 	min-height: $grid-unit-40;
 }
 
@@ -215,11 +228,289 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 
 .cortext-row-drag-preview--comfortable
 .cortext-row-drag-preview__cell--checkbox,
-.cortext-row-drag-preview--comfortable
-.cortext-row-drag-preview__cell--actions,
-.cortext-row-drag-preview--comfortable
-.cortext-row-drag-preview__cell--spacer {
+.cortext-row-drag-preview--comfortable .cortext-row-drag-preview__cell--actions,
+.cortext-row-drag-preview--comfortable .cortext-row-drag-preview__cell--spacer {
 	padding: 0;
+}
+
+// Preview cells are divs, so the table-cell rules that reserve room for the
+// drag handle do not apply. Repeat that offset to keep the title aligned.
+.cortext-row-drag-preview .cortext-row-drag-preview__cell--primary {
+	padding-inline-start: var(--cortext-row-drag-content-offset);
+	padding-inline-end: 0;
+}
+
+.cortext-row-drag-preview--compact .cortext-row-drag-preview__cell--primary {
+	padding-block: 0;
+}
+
+.cortext-row-drag-preview--compact
+.cortext-row-drag-preview__cell--primary
+.cortext-editable-cell__shell {
+	box-sizing: border-box;
+}
+
+.cortext-row-drag-preview--list-row {
+	display: block;
+	border-radius: 4px;
+	background: $white;
+	box-shadow:
+		0 0 0 $border-width $gray-200,
+		0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.cortext-row-drag-preview__list-row {
+	position: relative;
+	box-sizing: border-box;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	color: $gray-900;
+	background: $white;
+	overflow: hidden;
+}
+
+.cortext-row-drag-preview__list-row .dataviews-view-list__item-wrapper {
+	position: relative;
+	box-sizing: border-box;
+	display: flex;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	padding: $grid-unit-10 $grid-unit-20;
+	padding-inline-start: var(--cortext-row-drag-content-offset);
+}
+
+.cortext-row-drag-preview__list-row
+.dataviews-view-list__item-wrapper > :where([role="gridcell"]:has(> .dataviews-view-list__item)) + * {
+	position: relative;
+	z-index: 1;
+	width: 100%;
+	min-width: 0;
+}
+
+.cortext-row-drag-preview__list-row .dataviews-view-list__media-wrapper {
+	box-sizing: border-box;
+	display: block;
+	flex: 0 0 $grid-unit-30;
+	width: $grid-unit-30;
+	min-width: $grid-unit-30;
+	max-width: $grid-unit-30;
+	height: $grid-unit-30;
+	min-height: $grid-unit-30;
+	max-height: $grid-unit-30;
+	border-radius: 4px;
+	background: transparent;
+	overflow: hidden;
+}
+
+.cortext-row-drag-preview__list-row
+.dataviews-view-list__media-wrapper:not(:has(img)) {
+	display: none;
+}
+
+.cortext-row-drag-preview__list-row .dataviews-view-list__media-wrapper img {
+	display: block;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	height: 100%;
+	min-height: 0;
+	max-height: 100%;
+	aspect-ratio: 1;
+	object-fit: cover;
+}
+
+.cortext-row-drag-preview__list-row
+.dataviews-view-list__media-wrapper:has(img) + .dataviews-view-list__field-wrapper
+.cortext-title-cell__icon {
+	display: none;
+}
+
+.cortext-row-drag-preview__list-row .dataviews-view-list__field-wrapper {
+	width: 100%;
+	min-width: 0;
+	min-height: 0;
+	flex: 1 1 auto;
+}
+
+.cortext-row-drag-preview__list-row
+.dataviews-view-list__field-wrapper > :first-child {
+	width: 100%;
+	min-width: 0;
+	gap: $grid-unit-10;
+	align-items: center;
+}
+
+.cortext-row-drag-preview__list-row .dataviews-title-field {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: $grid-unit-30;
+	line-height: $grid-unit-30;
+	font-weight: 500;
+	color: $gray-900;
+}
+
+.cortext-row-drag-preview__list-row .dataviews-view-list__fields {
+	display: flex;
+	flex-wrap: wrap;
+	gap: $grid-unit-05 $grid-unit-10;
+	min-width: 0;
+}
+
+.cortext-row-drag-preview__list-row .dataviews-view-list__field {
+	min-width: 0;
+	color: $gray-700;
+}
+
+.cortext-row-drag-preview__list-row .dataviews-view-list__field-label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	border: 0;
+	clip: rect(0 0 0 0);
+	overflow: hidden;
+}
+
+.cortext-row-drag-preview__list-row .dataviews-view-list__field-value {
+	min-width: 0;
+}
+
+.cortext-row-drag-preview__list-row .cortext-relation-ref,
+.cortext-row-drag-preview__list-row .cortext-relation-ref-more,
+.cortext-row-drag-preview__list-row .cortext-chip {
+	box-shadow: none;
+}
+
+.cortext-row-drag-preview__list-row .cortext-chip--neutral {
+	background-color: $gray-100;
+	box-shadow: none;
+	color: $gray-700;
+}
+
+.cortext-row-drag-preview__list-row .cortext-chips {
+	flex-wrap: nowrap;
+	width: auto;
+	overflow: hidden;
+}
+
+.cortext-row-drag-preview__list-row .cortext-chip {
+	flex: 0 0 auto;
+}
+
+.cortext-row-drag-preview--grid-card {
+	display: block;
+	border-radius: var(--wpds-border-radius-md, 6px);
+	background: transparent;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.cortext-row-drag-preview__grid-card {
+	position: relative;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	border: $border-width solid $gray-200;
+	border-radius: var(--wpds-border-radius-md, 6px);
+	background: $white;
+	isolation: isolate;
+	overflow: hidden;
+}
+
+.cortext-row-drag-preview__grid-card .dataviews-view-grid__media {
+	position: relative;
+	flex: 0 0 auto;
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	border-radius:
+		var(--wpds-border-radius-md, 6px)
+		var(--wpds-border-radius-md, 6px) 0 0;
+	background-color: var(--wpds-color-background-surface-neutral-strong, $white);
+	overflow: hidden;
+}
+
+.cortext-row-drag-preview__grid-card
+.dataviews-view-grid__media.dataviews-view-grid__media--placeholder {
+	aspect-ratio: 3 / 1;
+}
+
+.cortext-row-drag-preview__grid-card .dataviews-view-grid__media img,
+.cortext-row-drag-preview__grid-card
+.dataviews-view-grid__media
+.cortext-data-view__cover-image {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.cortext-row-drag-preview__grid-card > .dataviews-view-grid__title-actions + * {
+	box-sizing: border-box;
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: $grid-unit-10 !important;
+	width: 100%;
+	min-width: 0;
+	padding: 0 0 $grid-unit-15;
+	background: #f8f8f8;
+}
+
+.cortext-row-drag-preview__grid-card .dataviews-view-grid__title-actions {
+	display: flex;
+	align-items: center;
+	gap: $grid-unit-10;
+	min-width: 0;
+	padding: $grid-unit-10 $grid-unit-20 $grid-unit-05;
+	background: #f8f8f8;
+}
+
+.cortext-row-drag-preview__grid-card > .dataviews-view-grid__title-actions + * > :not(.dataviews-view-grid__badge-fields, .dataviews-view-grid__fields) {
+	padding-right: $grid-unit-20;
+	padding-left: $grid-unit-20;
+}
+
+.cortext-row-drag-preview__grid-card .dataviews-view-grid__fields {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-20 !important;
+	padding: $grid-unit-10 $grid-unit-20 0;
+}
+
+.cortext-row-drag-preview__grid-card .dataviews-view-grid__badge-fields {
+	display: flex;
+	flex-flow: row wrap;
+	gap: $grid-unit-10 !important;
+	padding: $grid-unit-10 $grid-unit-20 0;
+}
+
+.cortext-row-drag-preview__grid-card
+:is(
+	.dataviews-view-grid__fields,
+	.dataviews-view-grid__badge-fields
+):last-child {
+	padding-bottom: $grid-unit-20;
+}
+
+.cortext-row-drag-preview__grid-card .cortext-relation-ref,
+.cortext-row-drag-preview__grid-card .cortext-relation-ref-more,
+.cortext-row-drag-preview__grid-card .cortext-chip {
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+	box-shadow:
+		inset 0 0 0 1px
+		color-mix(in oklch, currentcolor 20%, transparent);
+}
+
+.cortext-row-drag-preview__grid-card .cortext-chip--neutral {
+	background-color: $gray-100;
+	box-shadow: inset 0 0 0 1px $gray-300;
+	color: $gray-700;
 }
 
 body.cortext-row-dragging {
@@ -236,28 +527,28 @@ tr.is-hovered:not(.is-selected)
 .dataviews-view-table__actions-column--sticky,
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-div[role="row"]:not(.is-selected):hover,
+[role="row"]:not(.is-selected):hover,
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-div[role="row"]:not(.is-selected).is-hovered {
+[role="row"]:not(.is-selected).is-hovered {
 	background-color: transparent;
 }
 
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-div[role="row"]:not(.is-selected):hover
+[role="row"]:not(.is-selected):hover
 .dataviews-view-list__title-field,
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-div[role="row"]:not(.is-selected):hover
+[role="row"]:not(.is-selected):hover
 .dataviews-view-list__fields,
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-div[role="row"]:not(.is-selected).is-hovered
+[role="row"]:not(.is-selected).is-hovered
 .dataviews-view-list__title-field,
 body.cortext-row-reorder-suppress-hover
 .dataviews-view-list
-div[role="row"]:not(.is-selected).is-hovered
+[role="row"]:not(.is-selected).is-hovered
 .dataviews-view-list__fields {
 	color: inherit;
 }

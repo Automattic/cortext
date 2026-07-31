@@ -1,26 +1,35 @@
 import {
 	IMPORT_URI,
 	PUBLISHED_DOCUMENTS_URI,
+	SETTINGS_EXPERIMENTS_URI,
+	SETTINGS_IMPORT_URI,
+	SETTINGS_PUBLISHED_URI,
+	SETTINGS_URI,
 	parseIdFromUri,
 } from './useResolveEntity';
 
-// Possible targets:
-//   - `published`: singleton splat for the Published documents screen.
-//   - `import`:    singleton splat for the Import screen.
-//   - `empty`:     no splat (workspace home).
-//   - `document`:  anything else with an id. Collections, pages, and rows all
-//                  fall here; the resolver discovers each document's
-//                  capabilities via the locator endpoint.
 export function parseTarget( splat, options = {} ) {
 	const { publicWebAffordances = true } = options;
 	if ( splat === PUBLISHED_DOCUMENTS_URI ) {
-		if ( ! publicWebAffordances ) {
-			return { kind: 'empty', tail: '' };
-		}
-		return { kind: 'published', tail: '' };
+		return { kind: 'redirect', to: SETTINGS_PUBLISHED_URI, tail: '' };
 	}
 	if ( splat === IMPORT_URI ) {
+		return { kind: 'redirect', to: SETTINGS_IMPORT_URI, tail: '' };
+	}
+	if ( splat === SETTINGS_URI ) {
+		return { kind: 'redirect', to: SETTINGS_IMPORT_URI, tail: '' };
+	}
+	if ( splat === SETTINGS_IMPORT_URI ) {
 		return { kind: 'import', tail: '' };
+	}
+	if ( splat === SETTINGS_EXPERIMENTS_URI ) {
+		return { kind: 'experiments', tail: '' };
+	}
+	if ( splat === SETTINGS_PUBLISHED_URI ) {
+		if ( ! publicWebAffordances ) {
+			return { kind: 'redirect', to: SETTINGS_IMPORT_URI, tail: '' };
+		}
+		return { kind: 'published', tail: '' };
 	}
 	if ( ! splat ) {
 		return { kind: 'empty', tail: '' };
@@ -45,6 +54,8 @@ export function reducer( state, action ) {
 				active = { kind: 'empty' };
 			} else if ( target.kind === 'published' ) {
 				active = { kind: 'published' };
+			} else if ( target.kind === 'experiments' ) {
+				active = { kind: 'experiments' };
 			} else if ( target.kind === 'import' ) {
 				active = { kind: 'import' };
 			} else if ( target.kind === 'document' ) {
@@ -116,8 +127,12 @@ export function init( target ) {
 		active = { kind: 'empty' };
 	} else if ( target.kind === 'published' ) {
 		active = { kind: 'published' };
+	} else if ( target.kind === 'experiments' ) {
+		active = { kind: 'experiments' };
 	} else if ( target.kind === 'import' ) {
 		active = { kind: 'import' };
+	} else if ( target.kind === 'redirect' ) {
+		active = { kind: 'loading' };
 	} else if ( target.kind === 'document' && target.id === null ) {
 		active = { kind: 'document-not-found' };
 	} else {

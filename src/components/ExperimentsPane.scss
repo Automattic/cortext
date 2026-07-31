@@ -1,0 +1,71 @@
+@use "@wordpress/base-styles/colors" as *;
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-experiments-pane {
+	--cortext-experiments-surface: var(--cortext-canvas-surface);
+	--cortext-experiments-row-surface: #{$gray-100};
+	--cortext-experiments-border: var(--cortext-canvas-border);
+	--cortext-experiments-text: #{$gray-900};
+	--cortext-experiments-text-muted: #{$gray-700};
+	--wp-components-color-background: var(--cortext-experiments-surface);
+	--wp-components-color-foreground: var(--cortext-experiments-text);
+	--wp-components-color-gray-600: #{$gray-600};
+	--wp-components-color-gray-700: var(--cortext-experiments-text-muted);
+
+	/* prettier-ignore */
+	--wp-components-color-accent: var(--wp-admin-theme-color, var(--cortext-accent));
+
+	box-sizing: border-box;
+	flex: 1 1 auto;
+	min-height: 0;
+	height: 100%;
+	padding: $grid-unit-30 $grid-unit-40 $grid-unit-40;
+	overflow: auto;
+	color-scheme: light;
+	background: var(--cortext-experiments-surface);
+	color: var(--cortext-experiments-text);
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-40;
+
+	> * {
+		max-width: 720px;
+	}
+
+	&__description {
+		color: var(--cortext-experiments-text-muted);
+	}
+
+	&__loading {
+		display: flex;
+		align-items: center;
+		gap: $grid-unit-10;
+	}
+
+	&__group {
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-20;
+		min-width: 0;
+	}
+
+	&__toggles {
+		display: flex;
+		flex-direction: column;
+		border: $border-width solid var(--cortext-experiments-border);
+		background: var(--cortext-experiments-row-surface);
+	}
+
+	&__toggle {
+		padding: $grid-unit-20;
+
+		& + & {
+			border-top: $border-width solid var(--cortext-experiments-border);
+		}
+
+		.components-base-control,
+		.components-base-control__field {
+			margin-bottom: 0;
+		}
+	}
+}

@@ -3,7 +3,7 @@
 
 .cortext-column-drag-handle {
 	position: absolute;
-	inset: 0 8px 0 0;
+	inset: 0 10px 0 0;
 	padding: 0;
 	border: 0;
 	cursor: inherit;
@@ -14,11 +14,11 @@
 .cortext-column-resizer {
 	position: absolute;
 	top: 0;
-	right: 0;
-	width: 8px;
+	right: -8px;
+	width: 18px;
 	height: 100%;
 	cursor: col-resize;
-	z-index: 2;
+	z-index: 4;
 	touch-action: none;
 
 	// 3px line on hover and during resize. Sits flush against the right
@@ -27,7 +27,7 @@
 		content: "";
 		position: absolute;
 		top: 0;
-		right: 0;
+		right: 8px;
 		width: 3px;
 		height: 100%;
 		background: var(--cortext-accent);
@@ -84,9 +84,6 @@ body.cortext-column-dragging {
 // While a drag is active, the header reads as `grabbing` (overriding the
 // per-th `grab` set above). The header-button inherits its cursor from
 // the th (rule above), so this single override carries through.
-body.cortext-column-dragging
-.cortext-data-view
-.dataviews-view-table
-thead > tr > th {
+body.cortext-column-dragging .cortext-data-view .dataviews-view-table thead > tr > th {
 	cursor: grabbing;
 }

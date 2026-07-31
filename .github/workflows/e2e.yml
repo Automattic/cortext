@@ -39,7 +39,7 @@ jobs:
                     changed_files="$(git diff --name-only "$base" "$head")"
                   fi
 
-                  e2e_paths='^(\.github/workflows/e2e\.yml|composer\.(json|lock)|package\.json|pnpm-lock\.yaml|playwright\.config\.js|\.wp-env\.json|cortext\.php|includes/|templates/|src/|build/|tests/e2e/|assets/brand/|seed-assets/|scripts/wp-env-seed\.mjs)'
+                  e2e_paths='^(\.github/workflows/e2e\.yml|composer\.(json|lock)|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|playwright\.config\.js|webpack\.config\.js|\.wp-env\.json|cortext\.php|includes/|templates/|src/|build/|tests/e2e/|assets/brand/|seed-assets/|scripts/wp-env-seed\.mjs|scripts/strip-emoji-cdn-loader\.js)'
 
                   if [ -n "$changed_files" ] && grep -Eq "$e2e_paths" <<< "$changed_files"; then
                     echo "e2e_changed=true" >> "$GITHUB_OUTPUT"
@@ -62,7 +62,7 @@ jobs:
                   tools: composer:v2
                   coverage: none
 
-            - uses: actions/cache@v5.0.5
+            - uses: actions/cache@v6.1.0
               with:
                   path: ~/.composer/cache
                   key: composer-${{ hashFiles('composer.lock') }}
@@ -74,7 +74,7 @@ jobs:
                   version: 11.0.8
                   standalone: true
 
-            - uses: actions/setup-node@v6
+            - uses: actions/setup-node@v7
               with:
                   node-version: '24.15'
                   cache: 'pnpm'

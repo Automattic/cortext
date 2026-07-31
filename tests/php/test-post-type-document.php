@@ -178,6 +178,40 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertFalse( $callback( array( 'id' => $page_id ) ) );
 	}
 
+	public function test_tree_children_rest_field_marks_parents_with_visible_children(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		( new Document() )->register_rest_fields();
+
+		$fields = $GLOBALS['wp_rest_additional_fields'][ Document::POST_TYPE ] ?? array();
+		$this->assertArrayHasKey( 'cortext_has_tree_children', $fields );
+		$this->assertTrue( $fields['cortext_has_tree_children']['schema']['readonly'] );
+		$this->assertSame( 'boolean', $fields['cortext_has_tree_children']['schema']['type'] );
+
+		$callback = $fields['cortext_has_tree_children']['get_callback'];
+		$parent   = $this->create_document();
+		$child    = $this->create_document( array( 'post_parent' => $parent ) );
+		$leaf     = $this->create_document();
+
+		$this->assertTrue( $callback( array( 'id' => $parent ) ) );
+		$this->assertFalse( $callback( array( 'id' => $child ) ) );
+		$this->assertFalse( $callback( array( 'id' => $leaf ) ) );
+	}
+
+	public function test_tree_children_rest_field_does_not_count_rows(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		( new Document() )->register_rest_fields();
+
+		$fields     = $GLOBALS['wp_rest_additional_fields'][ Document::POST_TYPE ] ?? array();
+		$callback   = $fields['cortext_has_tree_children']['get_callback'];
+		$parent     = $this->create_document();
+		$collection = $this->create_collection();
+		$row        = $this->create_document( array( 'post_parent' => $parent ) );
+		$term       = TraitTaxonomy::term_id_for_trait( $collection );
+		wp_set_object_terms( $row, array( $term ), TraitTaxonomy::TAXONOMY );
+
+		$this->assertFalse( $callback( array( 'id' => $parent ) ) );
+	}
+
 	public function test_sanitize_detail_layout_accepts_array_with_visible_entries(): void {
 		$sanitized = Document::sanitize_detail_layout(
 			array(
@@ -953,7 +987,29 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( array(), $args );
 	}
 
-	public function test_expose_trait_filter_params_lists_the_four_filter_params(): void {
+	public function test_apply_trait_filters_sorts_tree_branches_stably(): void {
+		$request = new WP_REST_Request( 'GET', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'cortext_tree_order', '1' );
+
+		$args = ( new Document() )->apply_trait_filters(
+			array(
+				'orderby' => 'menu_order',
+				'order'   => 'asc',
+			),
+			$request
+		);
+
+		$this->assertSame(
+			array(
+				'menu_order' => 'ASC',
+				'ID'         => 'ASC',
+			),
+			$args['orderby']
+		);
+		$this->assertArrayNotHasKey( 'order', $args );
+	}
+
+	public function test_expose_trait_filter_params_lists_the_filter_params(): void {
 		$params = ( new Document() )->expose_trait_filter_params( array() );
 
 		$this->assertArrayHasKey( 'cortext_no_trait', $params );
@@ -967,6 +1023,9 @@ final class Test_Post_Type_Document extends BaseTestCase {
 
 		$this->assertArrayHasKey( 'cortext_collections', $params );
 		$this->assertSame( 'boolean', $params['cortext_collections']['type'] );
+
+		$this->assertArrayHasKey( 'cortext_tree_order', $params );
+		$this->assertSame( 'boolean', $params['cortext_tree_order']['type'] );
 	}
 
 	private function create_document( array $args = array() ): int {
@@ -988,6 +1047,16 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		add_post_meta( $id, 'cortext_fields', (string) $field_id );
 
 		return $id;
+	}
+
+	private function create_user( string $role ): int {
+		return (int) wp_insert_user(
+			array(
+				'user_login' => uniqid( 'cortext_', false ),
+				'user_pass'  => 'password',
+				'role'       => $role,
+			)
+		);
 	}
 
 	private function create_field( string $type ): int {

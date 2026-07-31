@@ -61,6 +61,13 @@ export function sanitizeLayoutForFields(
 			}
 			next.width = clamped;
 		}
+		if ( entry.maxWidth !== undefined ) {
+			const clamped = sanitizeWidth( entry.maxWidth, maxColumnWidth );
+			if ( clamped !== entry.maxWidth ) {
+				stylesChanged = true;
+			}
+			next.maxWidth = clamped;
+		}
 		nextStyles[ id ] = next;
 	}
 

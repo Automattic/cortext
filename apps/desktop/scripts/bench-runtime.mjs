@@ -1,12 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
-import {
-	existsSync,
-	mkdirSync,
-	rmSync,
-	writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -14,11 +10,12 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire( import.meta.url );
 const {
-	DEFAULT_PORT,
 	normalizeRuntime,
+	RUNTIME_AUTH_HEADER,
 	startRuntime,
 	stopRuntime,
 } = require( '../lib/runtime' );
+const { extractZip } = require( '../lib/archive' );
 
 const __dirname = dirname( fileURLToPath( import.meta.url ) );
 const DESKTOP_DIR = resolve( __dirname, '..' );
@@ -73,27 +70,24 @@ function readOptions() {
 
 	options.runtime = normalizeRuntime( options.runtime );
 	if ( options.label && ! /^[a-z0-9._-]+$/i.test( options.label ) ) {
-		throw new Error( '--label may only contain letters, numbers, dots, underscores, and dashes.' );
+		throw new Error(
+			'--label can only contain letters, numbers, dots, underscores, and dashes.'
+		);
 	}
 	return options;
 }
 
-function unzipSnapshot( workDir ) {
+async function extractSnapshot( workDir ) {
 	const siteRoot = resolve( workDir, 'site' );
 	const wordpressDir = resolve( siteRoot, 'wordpress' );
 	rmSync( workDir, { recursive: true, force: true } );
 	mkdirSync( siteRoot, { recursive: true } );
 
-	const result = spawnSync(
-		'unzip',
-		[ '-q', '-o', SNAPSHOT_ZIP, '-d', siteRoot ],
-		{ stdio: [ 'ignore', 'ignore', 'ignore' ] }
-	);
-	if (
-		result.status !== 0 &&
-		! existsSync( resolve( wordpressDir, 'index.php' ) )
-	) {
-		throw new Error( `Snapshot extraction failed from ${ SNAPSHOT_ZIP }.` );
+	await extractZip( SNAPSHOT_ZIP, siteRoot );
+	if ( ! existsSync( resolve( wordpressDir, 'index.php' ) ) ) {
+		throw new Error(
+			`Snapshot extraction failed: wordpress/index.php is missing from ${ SNAPSHOT_ZIP }.`
+		);
 	}
 	return wordpressDir;
 }
@@ -102,22 +96,33 @@ function parseServerTiming( header ) {
 	if ( ! header ) {
 		return null;
 	}
-	const value = Array.isArray( header ) ? header.join( ',' ) : String( header );
+	const value = Array.isArray( header )
+		? header.join( ',' )
+		: String( header );
 	const match = value.match( /(?:^|,\s*)cortext_wp;dur=([0-9.]+)/ );
-	return match ? Number.parseFloat( match[1] ) : null;
+	return match ? Number.parseFloat( match[ 1 ] ) : null;
 }
 
-function redirectedPath( location ) {
-	const url = new URL( location, `http://127.0.0.1:${ DEFAULT_PORT }` );
+function redirectedPath( location, runtimeOrigin ) {
+	const url = new URL( location, runtimeOrigin );
 	return `${ url.pathname }${ url.search }`;
 }
 
-function requestPath( endpoint, redirects = 0, startedAt = performance.now() ) {
+function requestPath(
+	endpoint,
+	authToken,
+	runtimeEndpoint,
+	redirects = 0,
+	startedAt = performance.now()
+) {
 	return new Promise( ( resolveRequest, rejectRequest ) => {
 		const req = http.get(
 			{
 				host: '127.0.0.1',
-				port: DEFAULT_PORT,
+				headers: {
+					[ RUNTIME_AUTH_HEADER ]: authToken,
+				},
+				port: runtimeEndpoint.port,
 				path: endpoint.path,
 				timeout: 30000,
 			},
@@ -128,15 +133,22 @@ function requestPath( endpoint, redirects = 0, startedAt = performance.now() ) {
 					const location = res.headers.location;
 					if (
 						res.statusCode &&
-						[ 301, 302, 303, 307, 308 ].includes( res.statusCode ) &&
+						[ 301, 302, 303, 307, 308 ].includes(
+							res.statusCode
+						) &&
 						location &&
 						redirects < 5
 					) {
 						requestPath(
 							{
 								...endpoint,
-								path: redirectedPath( location ),
+								path: redirectedPath(
+									location,
+									runtimeEndpoint.origin
+								),
 							},
+							authToken,
+							runtimeEndpoint,
 							redirects + 1,
 							startedAt
 						).then( resolveRequest, rejectRequest );
@@ -153,7 +165,7 @@ function requestPath( endpoint, redirects = 0, startedAt = performance.now() ) {
 					resolveRequest( {
 						totalMs: duration,
 						serverMs: parseServerTiming(
-							res.headers['server-timing']
+							res.headers[ 'server-timing' ]
 						),
 						status: res.statusCode,
 					} );
@@ -183,7 +195,9 @@ function summarize( samples ) {
 	const total = samples.map( ( sample ) => sample.totalMs );
 	const server = samples
 		.map( ( sample ) => sample.serverMs )
-		.filter( ( value ) => typeof value === 'number' && ! Number.isNaN( value ) );
+		.filter(
+			( value ) => typeof value === 'number' && ! Number.isNaN( value )
+		);
 	return {
 		status: samples[ samples.length - 1 ]?.status ?? null,
 		requests: samples.length,
@@ -194,33 +208,29 @@ function summarize( samples ) {
 	};
 }
 
-async function runEndpoint( endpoint, warmup, iterations ) {
+async function runEndpoint(
+	endpoint,
+	warmup,
+	iterations,
+	authToken,
+	runtimeEndpoint
+) {
 	for ( let index = 0; index < warmup; index++ ) {
-		await requestPath( endpoint );
+		await requestPath( endpoint, authToken, runtimeEndpoint );
 	}
 
 	const samples = [];
 	for ( let index = 0; index < iterations; index++ ) {
-		samples.push( await requestPath( endpoint ) );
+		samples.push(
+			await requestPath( endpoint, authToken, runtimeEndpoint )
+		);
 	}
 
 	return summarize( samples );
 }
 
 async function stopAndWait( handle ) {
-	stopRuntime( handle );
-	await Promise.all(
-		handle.processes.map(
-			( { child } ) =>
-				new Promise( ( resolveStop ) => {
-					if ( child.exitCode !== null || child.signalCode !== null ) {
-						resolveStop();
-						return;
-					}
-					child.once( 'exit', resolveStop );
-				} )
-		)
-	);
+	await stopRuntime( handle );
 }
 
 function commandVersion( command, args ) {
@@ -231,7 +241,7 @@ function commandVersion( command, args ) {
 	if ( result.status !== 0 ) {
 		return null;
 	}
-	return ( result.stdout || result.stderr ).split( '\n' )[0].trim();
+	return ( result.stdout || result.stderr ).split( '\n' )[ 0 ].trim();
 }
 
 function phpRuntimeBin() {
@@ -296,16 +306,19 @@ async function main() {
 	const options = readOptions();
 	if ( ! existsSync( SNAPSHOT_ZIP ) ) {
 		throw new Error(
-			`Missing ${ SNAPSHOT_ZIP }. Run 'npm --prefix apps/desktop run snapshot' first.`
+			`No snapshot was found at ${ SNAPSHOT_ZIP }. Run 'npm --prefix apps/desktop run snapshot' first.`
 		);
 	}
 
 	const workDir = resolve( DESKTOP_DIR, '.runtime-bench', options.runtime );
-	const wordpressDir = unzipSnapshot( workDir );
-	process.env.CORTEXT_RUNTIME_QUIET = process.env.CORTEXT_RUNTIME_QUIET || '1';
+	const wordpressDir = await extractSnapshot( workDir );
+	const authToken = randomBytes( 32 ).toString( 'hex' );
+	process.env.CORTEXT_RUNTIME_QUIET =
+		process.env.CORTEXT_RUNTIME_QUIET || '1';
 	let unexpectedExit = null;
 	const handle = startRuntime( {
 		appDir: DESKTOP_DIR,
+		authToken,
 		wordpressDir,
 		runtime: options.runtime,
 		runtimeStateDir: resolve( workDir, 'state' ),
@@ -321,12 +334,18 @@ async function main() {
 		if ( unexpectedExit ) {
 			throw unexpectedExit;
 		}
+		const runtimeEndpoint = {
+			origin: handle.origin,
+			port: handle.port,
+		};
 		const scenarios = {};
 		for ( const endpoint of ENDPOINTS ) {
 			scenarios[ endpoint.name ] = await runEndpoint(
 				endpoint,
 				options.warmup,
-				options.iterations
+				options.iterations,
+				authToken,
+				runtimeEndpoint
 			);
 		}
 
@@ -335,7 +354,7 @@ async function main() {
 			runtime: options.runtime,
 			iterations: options.iterations,
 			warmup: options.warmup,
-			port: DEFAULT_PORT,
+			port: runtimeEndpoint.port,
 			generated_at: new Date().toISOString(),
 			environment: environmentInfo( options.runtime ),
 			scenarios,

@@ -20,7 +20,8 @@
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
 		"electron": "^42.3.3",
-		"electron-builder": "^26.8.1"
+		"electron-builder": "^26.15.3",
+		"yazl": "^3.3.1"
 	},
 	"build": {
 		"appId": "com.automattic.cortext",
@@ -42,6 +43,14 @@
 				"to": "runtime/bin/php"
 			},
 			{
+				"from": "runtime/router.php",
+				"to": "runtime/router.php"
+			},
+			{
+				"from": "runtime/bootstrap.php",
+				"to": "runtime/bootstrap.php"
+			},
+			{
 				"from": "runtime/mu-plugins/cortext-update-lock.php",
 				"to": "runtime/mu-plugins/cortext-update-lock.php"
 			}
@@ -51,6 +60,10 @@
 			"target": [
 				{
 					"target": "dmg",
+					"arch": "arm64"
+				},
+				{
+					"target": "zip",
 					"arch": "arm64"
 				}
 			],
@@ -64,6 +77,18 @@
 				"Contents/Resources/runtime/bin/php"
 			],
 			"notarize": true
-		}
+		},
+		"publish": [
+			{
+				"provider": "github",
+				"owner": "Automattic",
+				"repo": "cortext"
+			}
+		]
+	},
+	"dependencies": {
+		"electron-updater": "^6.8.9",
+		"extract-zip": "^2.0.1",
+		"yauzl": "^2.10.0"
 	}
 }

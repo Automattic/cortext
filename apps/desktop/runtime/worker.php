@@ -7,6 +7,8 @@
  * for each request. It deliberately lives behind CORTEXT_RUNTIME=franken.
  */
 
+require_once __DIR__ . '/cortext-runtime-bootstrap.php';
+
 if ( ! function_exists( 'frankenphp_handle_request' ) ) {
 	require __DIR__ . '/index.php';
 	return;

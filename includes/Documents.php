@@ -546,11 +546,7 @@ final class Documents {
 		}
 
 		$trait = null;
-		$terms = wp_get_object_terms(
-			$document_id,
-			TraitTaxonomy::TAXONOMY,
-			array( 'fields' => 'all' )
-		);
+		$terms = get_the_terms( $document_id, TraitTaxonomy::TAXONOMY );
 		if ( is_array( $terms ) && count( $terms ) > 0 ) {
 			$trait_id = TraitTaxonomy::trait_id_from_slug( (string) $terms[0]->slug );
 			if ( $trait_id > 0 ) {

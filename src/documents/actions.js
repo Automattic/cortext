@@ -7,6 +7,7 @@ import { DOCUMENT_POST_TYPE } from '../collections';
 import { computeDocumentUri } from '../router/useResolveEntity';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import { cascadeFavorites } from './favorites';
 import { afterDocumentTrash, applyInvalidationPack } from './invalidation';
 
@@ -33,6 +34,9 @@ export async function createDocument( input, ctx ) {
 	);
 	if ( created?.id ) {
 		applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+		notifySidebarTreeChanged( {
+			parentId: Number( created.parent ?? payload.parent ?? 0 ),
+		} );
 	}
 	return created;
 }
@@ -67,7 +71,14 @@ export async function renameDocument( record, title, ctx ) {
 	if ( record.status === 'draft' ) {
 		payload.status = 'private';
 	}
-	await ctx.saveEntityRecord( 'postType', DOCUMENT_POST_TYPE, payload );
+	const updated = await ctx.saveEntityRecord(
+		'postType',
+		DOCUMENT_POST_TYPE,
+		payload
+	);
+	notifySidebarTreeChanged( {
+		parentId: Number( updated?.parent ?? record.parent ?? 0 ),
+	} );
 	await ctx.touchRecent( { id: record.id } );
 }
 
@@ -77,6 +88,9 @@ export async function duplicateDocument( record, ctx ) {
 		method: 'POST',
 	} );
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+	notifySidebarTreeChanged( {
+		parentId: Number( created?.parent ?? record.parent ?? 0 ),
+	} );
 	const skipped = Array.isArray( created?.skipped_fields )
 		? created.skipped_fields
 		: [];
@@ -119,6 +133,7 @@ export async function trashDocument( record, ctx ) {
 		ctx.receiveEntityRecords( 'postType', DOCUMENT_POST_TYPE, [ trashed ] );
 	}
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+	notifySidebarTreeChanged();
 	notifyDocumentTrashChanged();
 	const cascadeIds = collectCascadeIds( record, deleted?.cascade_deleted );
 	await cascadeFavorites(
@@ -138,6 +153,7 @@ export async function restoreDocument( record, ctx ) {
 		method: 'POST',
 	} );
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+	notifySidebarTreeChanged();
 	notifyDocumentTrashChanged();
 	notifyCollectionRowsChanged();
 }
@@ -148,6 +164,7 @@ export async function permanentlyDeleteDocument( record, ctx ) {
 		method: 'POST',
 	} );
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+	notifySidebarTreeChanged();
 	notifyDocumentTrashChanged();
 	notifyCollectionRowsChanged();
 	return response;

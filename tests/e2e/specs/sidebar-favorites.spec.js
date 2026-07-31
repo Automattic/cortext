@@ -88,6 +88,8 @@ async function dragFavoriteBefore(
 	const over = page.locator(
 		`.cortext-sidebar__favorite-row[data-favorite-key="${ overKey }"] .cortext-sidebar__row`
 	);
+	await active.scrollIntoViewIfNeeded();
+	await over.scrollIntoViewIfNeeded();
 	const activeBox = await active.boundingBox();
 	const overBox = await over.boundingBox();
 	expect( activeBox ).toBeTruthy();

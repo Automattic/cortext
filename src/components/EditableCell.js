@@ -42,7 +42,7 @@ function siteLocale() {
 	return wpLocale.replace( '_', '-' );
 }
 
-// tech-debt.md#td-dataviews-inline-editing: DataViews v6 has no inline cell editing in any layout,
+// tech-debt.md#td-dataviews-inline-editing: DataViews 17 has no inline cell editing in any layout,
 // so we mount this component from `field.render` (a display renderer in
 // the docs) and treat the click-to-edit + commit/cancel state as our own.
 // tech-debt.md#td-rows-not-in-core-data: the save callback comes through context because

@@ -74,6 +74,34 @@ const DEFAULT_HEADER_BLOCK_NAMES = new Set( [
 const PROTECTED_HEADER_LOCK = { move: true, remove: true };
 const COLLECTION_LEGACY_BLOCK_LOCK = { move: true, remove: true, edit: true };
 const CANVAS_READY_IMAGE_TIMEOUT = 8000;
+const CANVAS_DOCUMENT_EDITOR_CSS = `
+	.editor-styles-wrapper {
+		box-sizing: border-box;
+		display: flow-root;
+		margin: 0;
+		min-height: 100vh;
+	}
+
+	.editor-styles-wrapper .cortext-canvas__editor:not(.cortext-canvas__editor--owner) {
+		padding-bottom: 72px;
+	}
+`;
+const CANVAS_DOCUMENT_EXTRA_STYLES = [ { css: CANVAS_DOCUMENT_EDITOR_CSS } ];
+
+export function useEditorBodyStyles(
+	baseStyles,
+	extraStyles,
+	isDocumentCanvas = false
+) {
+	return useMemo(
+		() => [
+			...( baseStyles ?? [] ),
+			...( isDocumentCanvas ? CANVAS_DOCUMENT_EXTRA_STYLES : [] ),
+			...( extraStyles ?? [] ),
+		],
+		[ baseStyles, extraStyles, isDocumentCanvas ]
+	);
+}
 
 // Schema-bearing documents add an owner block to the reserved header/body
 // prefix. Plain documents do not, so the set collapses to defaults.
@@ -156,6 +184,34 @@ export function collectDuplicateHeaderClientIds(
 		} );
 	}
 	return duplicateIds;
+}
+
+// A foreign data view lands in both lists: duplicate owners and new body
+// blocks. The duplicate pass removes it first, so skip it here instead of
+// dispatching removeBlock twice.
+export function collectCollectionBodyClientIdsToRemove(
+	collectionBodyClientIds,
+	snapshotClientIds,
+	removedClientIds
+) {
+	return collectionBodyClientIds.filter(
+		( clientId ) =>
+			! removedClientIds.has( clientId ) &&
+			! snapshotClientIds.has( clientId )
+	);
+}
+
+export function getEditorBodyMutationPermissions( {
+	isLocked = false,
+	isRevisionsMode = false,
+	isTrashed = false,
+} ) {
+	const canMaintainBodyStructure = ! isTrashed && ! isRevisionsMode;
+
+	return {
+		canMaintainBodyStructure,
+		canRepairUnlockedStructure: canMaintainBodyStructure && ! isLocked,
+	};
 }
 
 export function areCanvasReadyRequirementsMet( {
@@ -556,7 +612,12 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 	);
 }
 
-function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
+function EnsureHeaderBlocks( {
+	isLocked = false,
+	isRevisionsMode = false,
+	postId,
+	postType,
+} ) {
 	const collectionBodySnapshotRef = useRef( {
 		key: null,
 		initialized: false,
@@ -744,6 +805,12 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		startTyping,
 		stopTyping,
 	} = useDispatch( blockEditorStore );
+	const { canMaintainBodyStructure, canRepairUnlockedStructure } =
+		getEditorBodyMutationPermissions( {
+			isLocked,
+			isRevisionsMode,
+			isTrashed,
+		} );
 
 	useLayoutEffect( () => {
 		collectionBodySnapshotRef.current = {
@@ -754,7 +821,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	}, [ postId, postType ] );
 
 	useLayoutEffect( () => {
-		if ( isTrashed || isLocked ) {
+		if ( ! canMaintainBodyStructure ) {
 			return;
 		}
 
@@ -782,13 +849,19 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		}
 
 		if ( ownerBlockName && hasOwner && snapshot.initialized ) {
-			collectionBodyClientIds
-				.filter( ( clientId ) => ! snapshot.clientIds.has( clientId ) )
-				.forEach( ( clientId ) => {
-					removedClientIds.add( clientId );
-					updateBlockAttributes( clientId, { lock: {} } );
-					removeBlock( clientId, false );
-				} );
+			collectCollectionBodyClientIdsToRemove(
+				collectionBodyClientIds,
+				snapshot.clientIds,
+				removedClientIds
+			).forEach( ( clientId ) => {
+				removedClientIds.add( clientId );
+				updateBlockAttributes( clientId, { lock: {} } );
+				removeBlock( clientId, false );
+			} );
+		}
+
+		if ( ! canRepairUnlockedStructure ) {
+			return;
 		}
 
 		protectedLockRepairs.forEach( ( { clientId, lock } ) => {
@@ -811,14 +884,14 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 			removeBlock( propertiesClientId, false );
 		}
 	}, [
+		canMaintainBodyStructure,
+		canRepairUnlockedStructure,
 		duplicateHeaderIds,
 		collectionBodyClientIds,
 		hasProperties,
 		hasSchema,
 		hasOwner,
 		hasTitle,
-		isLocked,
-		isTrashed,
 		lockedCollectionBodyClientIds,
 		ownerBlockName,
 		propertiesClientId,
@@ -831,20 +904,22 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	] );
 
 	useLayoutEffect( () => {
-		if ( isTrashed || isLocked || ! shouldHideHeaderInsertionPoint ) {
+		if (
+			! canRepairUnlockedStructure ||
+			! shouldHideHeaderInsertionPoint
+		) {
 			return;
 		}
 		hideInsertionPoint();
 	}, [
+		canRepairUnlockedStructure,
 		hideInsertionPoint,
-		isLocked,
-		isTrashed,
 		shouldHideHeaderInsertionPoint,
 	] );
 
 	useLayoutEffect( () => {
 		if (
-			isTrashed ||
+			! canMaintainBodyStructure ||
 			ownerBlockName ||
 			! shouldSeedEmptyBodyBlock ||
 			duplicateHeaderIds.length > 0 ||
@@ -863,6 +938,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 			false
 		);
 	}, [
+		canMaintainBodyStructure,
 		duplicateHeaderIds.length,
 		emptyBodyInsertionIndex,
 		featuredId,
@@ -873,7 +949,6 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		iconMeta,
 		insertBlocks,
-		isTrashed,
 		ownerBlockName,
 		shouldSeedEmptyBodyBlock,
 	] );
@@ -890,7 +965,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	// reads as "the icon is being inserted right now" when really the
 	// document is just hydrating.
 	useLayoutEffect( () => {
-		if ( isTrashed || isLocked ) {
+		if ( ! canRepairUnlockedStructure ) {
 			return;
 		}
 
@@ -989,6 +1064,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		const handle = window.requestAnimationFrame( () => stopTyping() );
 		return () => window.cancelAnimationFrame( handle );
 	}, [
+		canRepairUnlockedStructure,
 		coverIndex,
 		featuredId,
 		hasCover,
@@ -999,8 +1075,6 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		iconMeta,
 		insertBlocks,
-		isLocked,
-		isTrashed,
 		ownerBlockName,
 		postId,
 		record,
@@ -1011,8 +1085,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 
 	useLayoutEffect( () => {
 		if (
-			isTrashed ||
-			isLocked ||
+			! canRepairUnlockedStructure ||
 			! bodyBlockBeforeTitleId ||
 			headerEndIndex < 0 ||
 			duplicateHeaderIds.length > 0 ||
@@ -1036,6 +1109,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		return () => window.cancelAnimationFrame( handle );
 	}, [
 		bodyBlockBeforeTitleId,
+		canRepairUnlockedStructure,
 		duplicateHeaderIds.length,
 		featuredId,
 		hasCover,
@@ -1045,8 +1119,6 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		headerEndIndex,
 		iconMeta,
-		isLocked,
-		isTrashed,
 		moveBlocksToPosition,
 		startTyping,
 		stopTyping,
@@ -1566,6 +1638,7 @@ function CanvasReadyEffect( {
 export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
+	isDocumentCanvas = false,
 	isLocked = false,
 	postId,
 	postType,
@@ -1577,9 +1650,11 @@ export default function EditorBody( {
 		( select ) => select( editorStore ).getEditorSettings().styles,
 		[]
 	);
-	const styles = extraStyles
-		? [ ...( baseStyles ?? [] ), ...extraStyles ]
-		: baseStyles;
+	const styles = useEditorBodyStyles(
+		baseStyles,
+		extraStyles,
+		isDocumentCanvas
+	);
 	const { themeSupportsLayout, hasRootPaddingAwareAlignments } = useSelect(
 		( select ) => {
 			const settings = select( blockEditorStore ).getSettings();
@@ -1677,6 +1752,7 @@ export default function EditorBody( {
 					/>
 					<EnsureHeaderBlocks
 						isLocked={ isReadOnly }
+						isRevisionsMode={ isRevisionsMode }
 						postId={ postId }
 						postType={ postType }
 					/>

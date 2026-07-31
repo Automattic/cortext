@@ -3,13 +3,39 @@
 	auto_https off
 	persist_config off
 	storage file_system {$CORTEXT_CADDY_STORAGE}
+
+	frankenphp {
+		php_ini {
+			auto_prepend_file "{$CORTEXT_DESKTOP_RUNTIME_BOOTSTRAP}"
+		}
+	}
+
+	# Error events retain the original request, so redact the private header
+	# at the logger as well as removing it before PHP.
+	log default {
+		format filter {
+			fields {
+				request>headers>X-Cortext-Desktop-Token delete
+			}
+		}
+	}
 }
 
-http://127.0.0.1:{$CORTEXT_PORT} {
-	root * "{$CORTEXT_WORDPRESS_ROOT}"
-	encode zstd gzip
-	php_server {
+http://:{$CORTEXT_PORT} {
+	bind 127.0.0.1
+
+	# `route` preserves this literal order. Without it, Caddy sorts
+	# request_header ahead of respond and authentication always fails.
+	route {
+		@unauthorized `{env.CORTEXT_DESKTOP_AUTH_TOKEN} == "" || {env.CORTEXT_DESKTOP_RUNTIME_HOST} == "" || {env.CORTEXT_DESKTOP_RUNTIME_ORIGIN} == "" || {http.request.header.X-Cortext-Desktop-Token} != {env.CORTEXT_DESKTOP_AUTH_TOKEN} || {http.request.hostport} != {env.CORTEXT_DESKTOP_RUNTIME_HOST} || ({http.request.header.Origin} != "" && {http.request.header.Origin} != {env.CORTEXT_DESKTOP_RUNTIME_ORIGIN})`
+		respond @unauthorized "Forbidden" 403
+
+		request_header -X-Cortext-Desktop-Token
 		root "{$CORTEXT_WORDPRESS_ROOT}"
-		worker worker.php {$CORTEXT_FRANKEN_WORKERS}
+		encode zstd gzip
+		php_server {
+			root "{$CORTEXT_WORDPRESS_ROOT}"
+			worker worker.php {$CORTEXT_FRANKEN_WORKERS}
+		}
 	}
 }

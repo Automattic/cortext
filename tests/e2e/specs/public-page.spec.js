@@ -394,6 +394,76 @@ test.describe( 'Public page rendering', () => {
 		}
 	} );
 
+	test( 'keeps an unsized public title column within a mobile viewport', async ( {
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createPublishedCollectionWithRows( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: `Public mobile DataView ${ Date.now()
+						.toString( 36 )
+						.slice( -4 ) }`,
+					status: 'publish',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title' ],
+					} ),
+				},
+			} );
+
+			await page.setViewportSize( { width: 320, height: 800 } );
+			await clearWordPressAuthCookies( page.context() );
+			const response = await page.goto(
+				`/cortext/${ fixture.page.slug }/`
+			);
+
+			expect( response?.status() ).toBe( 200 );
+			const dataView = page.locator( '.wp-block-cortext-data-view' );
+			await expect( dataView ).toBeVisible();
+			await expect(
+				page.getByText( 'Alpha Public Manual', { exact: true } )
+			).toBeVisible();
+
+			const widths = await dataView.evaluate( ( element ) => ( {
+				clientWidth: element.clientWidth,
+				scrollWidth: element.scrollWidth,
+			} ) );
+			expect( widths.clientWidth ).toBeGreaterThan( 0 );
+			expect( widths.scrollWidth ).toBeLessThanOrEqual(
+				widths.clientWidth + 1
+			);
+		} finally {
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_documents/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'private page returns 404 for anonymous visitors', async ( {
 		page,
 		requestUtils,

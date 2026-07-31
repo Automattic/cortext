@@ -82,8 +82,12 @@ jest.mock( '../../../src/hooks/afterNextPaint', () => ( {
 
 const {
 	areCanvasReadyRequirementsMet,
+	collectCollectionBodyClientIdsToRemove,
 	collectDuplicateHeaderClientIds,
+	getEditorBodyMutationPermissions,
+	useEditorBodyStyles,
 } = require( '../../../src/components/EditorBody' );
+const { renderHook } = require( '@testing-library/react' );
 
 const COLLECTION_ID = 7;
 const OWNER = 'cortext/data-view';
@@ -180,6 +184,58 @@ describe( 'collectDuplicateHeaderClientIds', () => {
 	} );
 } );
 
+describe( 'collectCollectionBodyClientIdsToRemove', () => {
+	it( 'skips a data view already removed as a duplicate', () => {
+		const collectionBodyClientIds = [
+			'new-collection',
+			'new-paragraph',
+			'legacy-paragraph',
+		];
+		const snapshotClientIds = new Set( [ 'legacy-paragraph' ] );
+		const removedClientIds = new Set( [ 'new-collection' ] );
+
+		expect(
+			collectCollectionBodyClientIdsToRemove(
+				collectionBodyClientIds,
+				snapshotClientIds,
+				removedClientIds
+			)
+		).toEqual( [ 'new-paragraph' ] );
+	} );
+} );
+
+describe( 'getEditorBodyMutationPermissions', () => {
+	it( 'keeps lock-safe structural maintenance active during an external post lock', () => {
+		expect(
+			getEditorBodyMutationPermissions( { isLocked: true } )
+		).toEqual( {
+			canMaintainBodyStructure: true,
+			canRepairUnlockedStructure: false,
+		} );
+	} );
+
+	it( 'prevents every body mutation while previewing a revision', () => {
+		expect(
+			getEditorBodyMutationPermissions( {
+				isLocked: true,
+				isRevisionsMode: true,
+			} )
+		).toEqual( {
+			canMaintainBodyStructure: false,
+			canRepairUnlockedStructure: false,
+		} );
+	} );
+
+	it( 'prevents every body mutation for trashed documents', () => {
+		expect(
+			getEditorBodyMutationPermissions( { isTrashed: true } )
+		).toEqual( {
+			canMaintainBodyStructure: false,
+			canRepairUnlockedStructure: false,
+		} );
+	} );
+} );
+
 describe( 'areCanvasReadyRequirementsMet', () => {
 	it( 'waits for row properties when a schema-bearing row is rendering', () => {
 		expect(
@@ -226,5 +282,61 @@ describe( 'areCanvasReadyRequirementsMet', () => {
 				isPropertiesResolving: true,
 			} )
 		).toBe( false );
+	} );
+} );
+
+describe( 'useEditorBodyStyles', () => {
+	it( 'keeps the merged styles reference stable while its inputs are unchanged', () => {
+		const baseStyles = [ { css: '.base {}' } ];
+		const extraStyles = [ { css: '.extra {}' } ];
+		const { result, rerender } = renderHook(
+			( props ) =>
+				useEditorBodyStyles(
+					props.baseStyles,
+					props.extraStyles,
+					props.isDocumentCanvas
+				),
+			{
+				initialProps: {
+					baseStyles,
+					extraStyles,
+					isDocumentCanvas: true,
+				},
+			}
+		);
+		const firstResult = result.current;
+
+		rerender( { baseStyles, extraStyles, isDocumentCanvas: true } );
+
+		expect( result.current ).toBe( firstResult );
+	} );
+
+	it( 'rebuilds the merged styles when extra styles change', () => {
+		const baseStyles = [ { css: '.base {}' } ];
+		const extraStyles = [ { css: '.extra {}' } ];
+		const { result, rerender } = renderHook(
+			( props ) =>
+				useEditorBodyStyles(
+					props.baseStyles,
+					props.extraStyles,
+					props.isDocumentCanvas
+				),
+			{
+				initialProps: {
+					baseStyles,
+					extraStyles,
+					isDocumentCanvas: true,
+				},
+			}
+		);
+		const firstResult = result.current;
+
+		rerender( {
+			baseStyles,
+			extraStyles: [ { css: '.next-extra {}' } ],
+			isDocumentCanvas: true,
+		} );
+
+		expect( result.current ).not.toBe( firstResult );
 	} );
 } );

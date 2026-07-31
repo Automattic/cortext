@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import {
 	cpSync,
 	createWriteStream,
@@ -11,8 +11,15 @@ import {
 import https from 'node:https';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import archiveHelpers from '../lib/archive.js';
+import executableHelpers from '../lib/executable.js';
+import { snapshotSeedCommands } from './seed-commands.mjs';
 import { buildWpConfig, randomSalt } from './wp-config.mjs';
+import zipHelpers from './zip.js';
 
+const { extractZip } = archiveHelpers;
+const { findExecutable } = executableHelpers;
+const { zipDirectory } = zipHelpers;
 const __dirname = dirname( fileURLToPath( import.meta.url ) );
 const DESKTOP_DIR = resolve( __dirname, '..' );
 const REPO_ROOT = resolve( DESKTOP_DIR, '..', '..' );
@@ -23,7 +30,7 @@ const SITE_DIR = resolve( WORK_DIR, 'wordpress' );
 const RUNTIME_DIR = resolve( DESKTOP_DIR, 'runtime' );
 const OUTFILE = resolve( DESKTOP_DIR, 'snapshot.zip' );
 
-const WP_VERSION = '7.0';
+const WP_VERSION = '7.0.1';
 const WP_DOWNLOAD_URL = `https://wordpress.org/wordpress-${ WP_VERSION }.zip`;
 const SQLITE_PLUGIN_URL =
 	'https://downloads.wordpress.org/plugin/sqlite-database-integration.latest-stable.zip';
@@ -43,54 +50,48 @@ const PLUGIN_INCLUDES = [
 	'vendor',
 ];
 
-function run( cmd, opts = {} ) {
-	execSync( cmd, { stdio: 'inherit', ...opts } );
-}
-
-function shellQuote( value ) {
-	return `'${ String( value ).replace( /'/g, "'\\''" ) }'`;
-}
-
-function commandExists( command ) {
-	if ( command.includes( '/' ) ) {
-		return existsSync( command ) ? command : null;
-	}
-	const result = spawnSync( 'which', [ command ], {
-		stdio: [ 'ignore', 'pipe', 'ignore' ],
-		encoding: 'utf8',
+// Pass arguments directly so paths with spaces behave consistently on macOS
+// and Windows.
+function run( command, args, options = {} ) {
+	const result = spawnSync( command, args, {
+		stdio: 'inherit',
+		...options,
 	} );
-	return result.status === 0 ? result.stdout.trim() : null;
+	if ( result.error ) {
+		throw result.error;
+	}
+	if ( result.status !== 0 ) {
+		throw new Error(
+			`${ command } ${ args.join( ' ' ) } failed with ${
+				result.signal
+					? `signal ${ result.signal }`
+					: `exit code ${ result.status }`
+			}.`
+		);
+	}
 }
 
 function resolvePhpBin() {
 	const configured = process.env.CORTEXT_PHP_BIN;
 	if ( configured ) {
-		const resolved = commandExists( configured );
+		const resolved = findExecutable( configured );
 		if ( resolved ) {
 			return resolved;
 		}
-		throw new Error( `CORTEXT_PHP_BIN points to a missing executable: ${ configured }` );
+		throw new Error(
+			`CORTEXT_PHP_BIN does not point to an executable: ${ configured }`
+		);
 	}
 	const bundled = resolve( RUNTIME_DIR, 'bin/php' );
 	if ( existsSync( bundled ) ) {
 		return bundled;
 	}
-	const fromPath = commandExists( 'php' );
+	const fromPath = findExecutable( 'php' );
 	if ( fromPath ) {
 		return fromPath;
 	}
 	throw new Error(
-		'Missing php. Install PHP 8.1+, set CORTEXT_PHP_BIN, or bundle apps/desktop/runtime/bin/php.'
-	);
-}
-
-// macOS `unzip` can exit 1 for warnings, including archives with stored
-// absolute paths. Callers verify the files they need after extraction.
-function unzipQuiet( zipPath, dest ) {
-	spawnSync(
-		'unzip',
-		[ '-q', '-o', zipPath, '-d', dest ],
-		{ stdio: [ 'ignore', 'ignore', 'ignore' ] }
+		'PHP was not found. Install PHP 8.1+, set CORTEXT_PHP_BIN, or include apps/desktop/runtime/bin/php in the app bundle.'
 	);
 }
 
@@ -136,7 +137,9 @@ async function ensureCachedDownload( url, cachePath ) {
 }
 
 console.log( '[snapshot] Building plugin assets' );
-run( 'npm run build', { cwd: REPO_ROOT } );
+// npm is a shell script on POSIX and npm.cmd on Windows, so this command still
+// needs a shell.
+run( 'npm', [ 'run', 'build' ], { cwd: REPO_ROOT, shell: true } );
 
 console.log( '[snapshot] Staging plugin files' );
 rmSync( WORK_DIR, { recursive: true, force: true } );
@@ -154,23 +157,23 @@ for ( const entry of PLUGIN_INCLUDES ) {
 console.log( `[snapshot] Fetching WordPress ${ WP_VERSION }` );
 const wpZipPath = resolve( CACHE_DIR, `wordpress-${ WP_VERSION }.zip` );
 await ensureCachedDownload( WP_DOWNLOAD_URL, wpZipPath );
-unzipQuiet( wpZipPath, WORK_DIR );
+await extractZip( wpZipPath, WORK_DIR );
 if ( ! existsSync( resolve( SITE_DIR, 'index.php' ) ) ) {
-	throw new Error( `WordPress extraction failed: ${ SITE_DIR } missing index.php` );
+	throw new Error(
+		`WordPress extraction failed: index.php is missing from ${ SITE_DIR }.`
+	);
 }
 
 console.log( '[snapshot] Installing sqlite-database-integration plugin' );
 const sqliteZipPath = resolve( CACHE_DIR, 'sqlite-database-integration.zip' );
 await ensureCachedDownload( SQLITE_PLUGIN_URL, sqliteZipPath );
 const pluginsDir = resolve( SITE_DIR, 'wp-content/plugins' );
-unzipQuiet( sqliteZipPath, pluginsDir );
+await extractZip( sqliteZipPath, pluginsDir );
 if (
-	! existsSync(
-		resolve( pluginsDir, 'sqlite-database-integration/db.copy' )
-	)
+	! existsSync( resolve( pluginsDir, 'sqlite-database-integration/db.copy' ) )
 ) {
 	throw new Error(
-		'sqlite-database-integration plugin extraction failed: db.copy not found'
+		'sqlite-database-integration plugin extraction failed: db.copy is missing.'
 	);
 }
 cpSync(
@@ -182,11 +185,15 @@ console.log( '[snapshot] Installing Cortext plugin' );
 cpSync( STAGED_PLUGIN, resolve( pluginsDir, 'cortext' ), { recursive: true } );
 
 console.log(
-	'[snapshot] Adding runtime files (router + worker + preload + mu-plugins)'
+	'[snapshot] Adding runtime files (router + bootstrap + worker + preload + mu-plugins)'
 );
 cpSync(
 	resolve( RUNTIME_DIR, 'router.php' ),
 	resolve( SITE_DIR, 'router.php' )
+);
+cpSync(
+	resolve( RUNTIME_DIR, 'bootstrap.php' ),
+	resolve( SITE_DIR, 'cortext-runtime-bootstrap.php' )
 );
 cpSync(
 	resolve( RUNTIME_DIR, 'worker.php' ),
@@ -229,62 +236,44 @@ await ensureCachedDownload( WP_CLI_PHAR_URL, wpCliPhar );
 const PHP_BIN = resolvePhpBin();
 
 function wpCli( args ) {
-	run(
-		`${ shellQuote( PHP_BIN ) } ${ shellQuote( wpCliPhar ) } --path=${ shellQuote(
-			SITE_DIR
-		) } ${ args }`
-	);
-}
-
-function snapshotSeedCommands() {
-	const override = process.env.CORTEXT_DESKTOP_SEED_COMMANDS;
-	if ( override?.trim() ) {
-		return override
-			.split( /\r?\n/ )
-			.map( ( command ) => command.trim() )
-			.filter( Boolean );
-	}
-
-	const seedArgs = process.env.CORTEXT_DESKTOP_SEED_ARGS?.trim();
-	const commands = [ `cortext seed${ seedArgs ? ` ${ seedArgs }` : '' }` ];
-	const extra = process.env.CORTEXT_DESKTOP_EXTRA_SEED_COMMANDS;
-	if ( extra?.trim() ) {
-		commands.push(
-			...extra
-				.split( /\r?\n/ )
-				.map( ( command ) => command.trim() )
-				.filter( Boolean )
-		);
-	}
-
-	return commands;
+	run( PHP_BIN, [ wpCliPhar, `--path=${ SITE_DIR }`, ...args ], {
+		env: {
+			...process.env,
+			CORTEXT_DESKTOP_RUNTIME_ORIGIN: 'http://127.0.0.1:1',
+		},
+	} );
 }
 
 console.log( '[snapshot] Installing WordPress' );
-wpCli(
-	'core install ' +
-		'--url=http://127.0.0.1:9402 ' +
-		'--title=Cortext ' +
-		'--admin_user=admin ' +
-		`--admin_password=${ randomSalt().replace( /[^A-Za-z0-9]/g, '' ).slice( 0, 24 ) } ` +
-		'--admin_email=admin@example.com ' +
-		'--skip-email'
-);
+wpCli( [
+	'core',
+	'install',
+	'--url=http://127.0.0.1:1',
+	'--title=Cortext',
+	'--admin_user=admin',
+	`--admin_password=${ randomSalt()
+		.replace( /[^A-Za-z0-9]/g, '' )
+		.slice( 0, 24 ) }`,
+	'--admin_email=admin@example.com',
+	'--skip-email',
+] );
 
 console.log( '[snapshot] Activating Cortext' );
-wpCli( 'plugin activate cortext' );
+wpCli( [ 'plugin', 'activate', 'cortext' ] );
 
 console.log( '[snapshot] Seeding sample content' );
 for ( const seedCommand of snapshotSeedCommands() ) {
-	console.log( `[snapshot] Running seed command: wp ${ seedCommand }` );
+	console.log(
+		`[snapshot] Running seed command: wp ${ seedCommand.join( ' ' ) }`
+	);
 	wpCli( seedCommand );
 }
 
 console.log( '[snapshot] Zipping site' );
 rmSync( OUTFILE, { force: true } );
-run( `cd "${ WORK_DIR }" && zip -q -r "${ OUTFILE }" wordpress` );
+await zipDirectory( SITE_DIR, OUTFILE, 'wordpress' );
 if ( ! existsSync( OUTFILE ) ) {
-	throw new Error( `Snapshot zip was not written: ${ OUTFILE }` );
+	throw new Error( `Snapshot file was not created at ${ OUTFILE }.` );
 }
 
 console.log( '[snapshot] Cleaning staging dir' );
