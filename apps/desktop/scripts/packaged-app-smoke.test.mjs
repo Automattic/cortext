@@ -3,7 +3,11 @@ import http from 'node:http';
 import { once } from 'node:events';
 import test from 'node:test';
 
-import { appendErrorDetails, request } from './packaged-app-smoke.mjs';
+import {
+	appendErrorDetails,
+	request,
+	waitForCortextShell,
+} from './packaged-app-smoke.mjs';
 
 test( 'keeps packaged output in an already rendered error stack', () => {
 	const error = new Error( 'Canvas did not load.' );
@@ -13,6 +17,39 @@ test( 'keeps packaged output in an already rendered error stack', () => {
 
 	assert.match( error.message, /Packaged app output:\nPHP failed\./ );
 	assert.match( error.stack, /Packaged app output:\nPHP failed\./ );
+} );
+
+// Resolves the first `succeed` waits, then times out like Playwright would.
+function fakePage( succeed ) {
+	let calls = 0;
+	const step = async () => {
+		if ( calls++ >= succeed ) {
+			throw new Error( 'locator.waitFor: Timeout 120000ms exceeded.' );
+		}
+	};
+	return { waitForURL: step, locator: () => ( { waitFor: step } ) };
+}
+
+test( 'shell wait reports the milestones it reached before timing out', async () => {
+	await assert.rejects( waitForCortextShell( fakePage( 2 ) ), ( error ) => {
+		assert.match(
+			error.message,
+			/Shell milestones: url \d+ms, shell \d+ms\n/
+		);
+		assert.match( error.message, /Gave up after \d+ms\./ );
+		return true;
+	} );
+} );
+
+test( 'shell wait says so when the boot never reached the first milestone', async () => {
+	await assert.rejects( waitForCortextShell( fakePage( 0 ) ), ( error ) => {
+		assert.match( error.message, /Shell milestones: none reached/ );
+		return true;
+	} );
+} );
+
+test( 'shell wait resolves once the canvas is visible', async () => {
+	await waitForCortextShell( fakePage( 3 ) );
 } );
 
 async function listen( handler ) {
