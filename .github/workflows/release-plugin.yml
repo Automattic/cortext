@@ -123,6 +123,11 @@ jobs:
                     --version "$VERSION" \
                     --strict > release-notes.md
 
+            - name: Update WordPress.org changelog
+              env:
+                  VERSION: ${{ steps.milestone.outputs.version }}
+              run: node scripts/update-readme-changelog.mjs "$VERSION" release-notes.md
+
             - name: Append desktop install note
               run: |
                   cat >> release-notes.md <<'EOF'
@@ -149,6 +154,7 @@ jobs:
                   plugin_version="$(unzip -p dist/cortext.zip cortext/cortext.php | awk -F': *' '/^[[:space:]]+\* Version:/ { print $2; exit }')"
                   constant_version="$(unzip -p dist/cortext.zip cortext/cortext.php | sed -n "s/.*define( 'CORTEXT_VERSION', '\([^']*\)' ).*/\1/p")"
                   stable_tag="$(unzip -p dist/cortext.zip cortext/readme.txt | awk -F': *' '/^Stable tag:/ { print $2; exit }')"
+                  changelog_version="$(unzip -p dist/cortext.zip cortext/readme.txt | awk -v version="$VERSION" '$0 == "= " version " =" { print version; exit }')"
                   zip_size="$(du -h dist/cortext.zip | cut -f1)"
                   zip_entries="$(wc -l < release-zip-contents.txt | tr -d ' ')"
 
@@ -164,6 +170,11 @@ jobs:
 
                   if [ "$stable_tag" != "$VERSION" ]; then
                     echo "::error::Expected readme stable tag $VERSION, found $stable_tag"
+                    exit 1
+                  fi
+
+                  if [ "$changelog_version" != "$VERSION" ]; then
+                    echo "::error::Expected readme changelog entry for $VERSION"
                     exit 1
                   fi
 
@@ -207,6 +218,7 @@ jobs:
                     echo "- Plugin header version: \`$plugin_version\`"
                     echo "- \`CORTEXT_VERSION\`: \`$constant_version\`"
                     echo "- Stable tag: \`$stable_tag\`"
+                    echo "- Changelog entry: \`$changelog_version\`"
                     echo "- Required runtime files: present"
                     echo "- Source and development-only paths: absent"
                   } >> "$GITHUB_STEP_SUMMARY"

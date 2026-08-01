@@ -127,11 +127,14 @@ Release.
 
 "Prepare release" first updates the plugin header, `CORTEXT_VERSION`,
 `readme.txt` stable tag, root package version, and desktop package versions to
-the requested milestone version. On a real release, it commits those changes as
-`chore: bump release to <version>` before building. It then calls
-`release-plugin.yml` against the bumped commit to build the plugin ZIP, validate
-the milestone, write release notes, and create or update the draft GitHub
-Release.
+the requested milestone version. It also converts the public GitHub release
+notes into WordPress readme markup and inserts the new version at the top of
+`readme.txt`'s changelog. On a real release, it commits those changes as `chore:
+bump release to <version>` before building. It then calls `release-plugin.yml`
+against the bumped commit to build the plugin ZIP, validate the milestone,
+write release notes, and create or update the draft GitHub Release. The ZIP
+validation fails if either the stable tag or the versioned changelog entry is
+missing.
 
 The version-bump job authenticates with a write-enabled deploy key scoped to
 this repository so it can push the release commit through the `main` ruleset.
@@ -175,6 +178,12 @@ You can still run the same workflow from the Actions tab for reruns and one-off
 deploys. Pass a `version` and choose whether to set `commit`. Without `commit`,
 the workflow stops after the dry run.
 
+For a documentation-only correction after a version has already been published,
+set `readme_only` as well. This updates only `readme.txt` in SVN `trunk` and the
+existing `tags/<version>` directory; it does not replace plugin runtime files or
+create another release tag. Review the dry run and approve the `wordpress-org`
+environment as usual.
+
 The script downloads the GitHub Release ZIP, syncs it into `trunk/`, copies
 `assets/wordpress-org/` into the SVN assets directory, removes deleted SVN
 entries, creates `tags/<version>`, and checks that the plugin header,
@@ -195,6 +204,12 @@ To publish from your machine instead of GitHub Actions:
 
 ```bash
 pnpm run deploy:wporg -- --version <version> --commit --username <wporg-user>
+```
+
+To stage a readme-only correction for an existing release:
+
+```bash
+pnpm run deploy:wporg -- --version <version> --readme-only
 ```
 
 When we add another distribution channel, such as a desktop update feed, give it

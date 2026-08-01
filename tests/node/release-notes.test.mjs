@@ -111,6 +111,33 @@ describe( 'release notes', () => {
 		);
 	} );
 
+	it( 'uses product order for areas', () => {
+		const notes = buildReleaseNotes(
+			[
+				pullRequest( 24, 'feat: add desktop app', [
+					'type: enhancement',
+					'area: desktop',
+				] ),
+				pullRequest( 25, 'feat: add shell setting', [
+					'type: enhancement',
+					'area: shell',
+				] ),
+				pullRequest( 26, 'feat: improve collection speed', [
+					'type: enhancement',
+					'area: performance',
+				] ),
+			],
+			{ ...baseOptions, strict: true }
+		);
+
+		assert.ok(
+			notes.indexOf( '### Shell' ) < notes.indexOf( '### Desktop' )
+		);
+		assert.ok(
+			notes.indexOf( '### Desktop' ) < notes.indexOf( '### Performance' )
+		);
+	} );
+
 	it( 'groups full release notes by type and area', () => {
 		const notes = buildReleaseNotes(
 			[
