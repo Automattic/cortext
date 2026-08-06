@@ -3543,23 +3543,40 @@ test.describe( 'Collection view block', () => {
 			} );
 			await expect( yearLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await yearLabelButton.click();
-			await expect(
-				detailCanvas.getByRole( 'menuitem', {
-					name: 'Format',
-				} )
-			).toBeVisible();
-			await detailCanvas
-				.getByRole( 'menuitem', {
-					name: 'Format',
-				} )
-				.click();
+			const formatItem = detailCanvas.getByRole( 'menuitem', {
+				name: 'Format',
+			} );
+			await expect( formatItem ).toBeVisible();
+			const formatItemBox = await formatItem.boundingBox();
+			await formatItem.click();
 			const formatPanel = page.locator( '.cortext-format-submenu' );
 			await expect( formatPanel ).toBeVisible();
+			const formatPanelSurface = page.locator(
+				'.cortext-format-submenu__panel'
+			);
+			const formatPanelBox = await formatPanelSurface.boundingBox();
+			expect( formatItemBox ).not.toBeNull();
+			expect( formatPanelBox ).not.toBeNull();
+			// `boundingBox()` puts both rects in page coordinates. The detail
+			// panel sits at the right edge, so Format and its flyout should open
+			// to the left.
+			expect(
+				formatPanelBox.x + formatPanelBox.width
+			).toBeLessThanOrEqual( formatItemBox.x + 2 );
 			await formatPanel
 				.getByRole( 'button', { name: /Number format/ } )
 				.click();
-			await page
-				.locator( '.cortext-format-submenu__flyout' )
+			const numberFormatFlyout = page.locator(
+				'.cortext-format-submenu__flyout'
+			);
+			await expect( numberFormatFlyout ).toBeVisible();
+			const numberFormatFlyoutBox =
+				await numberFormatFlyout.boundingBox();
+			expect( numberFormatFlyoutBox ).not.toBeNull();
+			expect(
+				numberFormatFlyoutBox.x + numberFormatFlyoutBox.width
+			).toBeLessThanOrEqual( formatPanelBox.x + 2 );
+			await numberFormatFlyout
 				.getByRole( 'menuitemradio', {
 					name: 'Number with commas',
 				} )

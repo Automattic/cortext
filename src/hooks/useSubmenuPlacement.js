@@ -5,6 +5,54 @@ import {
 	useState,
 } from '@wordpress/element';
 
+// Rects use the viewport of their own document. Move the anchor's right edge
+// into the panel's document before comparing them.
+export function getElementRightInDocument( element, targetDocument ) {
+	let currentDocument = element?.ownerDocument;
+	let right = element?.getBoundingClientRect().right;
+
+	if ( ! currentDocument || ! Number.isFinite( right ) ) {
+		return null;
+	}
+
+	while ( currentDocument !== targetDocument ) {
+		let frameElement;
+		try {
+			frameElement = currentDocument.defaultView?.frameElement;
+		} catch {
+			return null;
+		}
+		if ( ! frameElement ) {
+			return null;
+		}
+
+		const frameRect = frameElement.getBoundingClientRect();
+		let cssWidth = 0;
+		let paddingLeft = 0;
+		try {
+			const style =
+				frameElement.ownerDocument.defaultView?.getComputedStyle(
+					frameElement
+				);
+			cssWidth = parseFloat( style?.width ) || 0;
+			paddingLeft = parseFloat( style?.paddingLeft ) || 0;
+		} catch {}
+		if ( Math.round( cssWidth ) !== frameElement.offsetWidth ) {
+			cssWidth = frameElement.offsetWidth;
+		}
+		let scaleX = frameRect.width / cssWidth;
+		if ( ! scaleX || ! Number.isFinite( scaleX ) ) {
+			scaleX = 1;
+		}
+		right =
+			frameRect.left +
+			( ( frameElement.clientLeft || 0 ) + paddingLeft + right ) * scaleX;
+		currentDocument = frameElement.ownerDocument;
+	}
+
+	return right;
+}
+
 // Picks a `Popover` placement for a row submenu inside a cascading menu,
 // adjusting after render if the chosen side overflows the viewport.
 // See docs/tech-debt.md#td-wp-menu-popover-limitations.
@@ -41,8 +89,12 @@ export function useSubmenuPlacement( outerAnchor, panelRef ) {
 			const panel = panelRef.current;
 			if ( panel && outerAnchor ) {
 				const panelLeft = panel.getBoundingClientRect().left;
-				const anchorRight = outerAnchor.getBoundingClientRect().right;
-				const outerFlipped = panelLeft + 1 < anchorRight;
+				const anchorRight = getElementRightInDocument(
+					outerAnchor,
+					panel.ownerDocument
+				);
+				const outerFlipped =
+					anchorRight !== null && panelLeft + 1 < anchorRight;
 				setPlacement( outerFlipped ? 'left-start' : 'right-start' );
 			}
 			setOpenKey( key );
@@ -59,7 +111,9 @@ export function useSubmenuPlacement( outerAnchor, panelRef ) {
 			return;
 		}
 		const rect = submenu.getBoundingClientRect();
-		if ( placement === 'right-start' && rect.right > window.innerWidth ) {
+		const viewportWidth =
+			submenu.ownerDocument.defaultView?.innerWidth ?? window.innerWidth;
+		if ( placement === 'right-start' && rect.right > viewportWidth ) {
 			setPlacement( 'left-start' );
 			return;
 		}
