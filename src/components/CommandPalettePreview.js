@@ -197,7 +197,11 @@ function PreviewBody( { content, postId, getEditorSettings } ) {
 	);
 }
 
+// `doc` is null while the highlight sits on a command rather than a document.
+// The pane stays mounted through that so moving between the two does not tear
+// down the editor provider and its iframe.
 export default function CommandPalettePreview( { doc } ) {
+	const docId = doc?.id ?? 0;
 	const { module: editorModule, error: editorError } = useEditorModule();
 	// The shell already subscribes to this query and it includes page and
 	// collection content, so most previews come straight from it with no
@@ -211,17 +215,16 @@ export default function CommandPalettePreview( { doc } ) {
 	);
 	const pooledRecord = useMemo(
 		() =>
-			( pooledDocuments ?? [] ).find(
-				( entry ) => entry.id === doc.id
-			) ?? null,
-		[ pooledDocuments, doc.id ]
+			( pooledDocuments ?? [] ).find( ( entry ) => entry.id === docId ) ??
+			null,
+		[ pooledDocuments, docId ]
 	);
 
 	const { record: fetchedRecord, hasResolved } = useEntityRecord(
 		'postType',
 		POST_TYPE,
-		doc.id,
-		{ enabled: ! pooledRecord }
+		docId,
+		{ enabled: docId > 0 && ! pooledRecord }
 	);
 	const currentRecord = pooledRecord ?? fetchedRecord;
 	const canRenderBody =
@@ -230,12 +233,16 @@ export default function CommandPalettePreview( { doc } ) {
 	const hasFailed =
 		Boolean( editorError ) ||
 		( ! currentRecord && hasResolved && ! fetchedRecord );
-	const isLoading = ! canRenderBody && ! hasFailed;
+	const isLoading = Boolean( doc ) && ! canRenderBody && ! hasFailed;
 	const showSkeleton = useDelayedFlag(
 		isLoading,
 		SKELETON_DELAY_MS,
 		SKELETON_MIN_VISIBLE_MS
 	);
+
+	if ( ! doc ) {
+		return null;
+	}
 
 	const hint = collectionHint( doc );
 	const edited = editedLabel( currentRecord );
