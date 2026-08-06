@@ -86,6 +86,28 @@ test.describe( 'Command palette search', () => {
 		}
 	} );
 
+	test( 'previews the first recent as soon as it opens', async ( {
+		admin,
+		page,
+	} ) => {
+		// Opening a document is what puts it in recents.
+		await admin.visitAdminPage( 'admin.php', 'page=cortext' );
+
+		await openPalette( page );
+
+		const firstRecent = page
+			.getByRole( 'option' )
+			.first()
+			.locator( '.commands-command-menu__item-label' );
+		await expect( firstRecent ).toBeVisible( { timeout: 5000 } );
+
+		const preview = page.locator( '.cortext-command-palette__preview' );
+		await expect( preview ).toBeVisible();
+		await expect(
+			preview.locator( '.cortext-command-palette__preview-title' )
+		).toHaveText( await firstRecent.innerText() );
+	} );
+
 	test( 'previews the highlighted result and follows the selection', async ( {
 		admin,
 		page,

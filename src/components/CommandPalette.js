@@ -34,7 +34,9 @@ import { collectionHint, listIconForRecord } from '../documents';
 
 const OPEN_COMMAND_PALETTE_EVENT = 'cortext:open-command-palette';
 const DEFAULT_COMMAND_CONTEXT = 'root';
+// cmdk item values, as CortextCommandMenu builds them from the command name.
 const DOCUMENT_COMMAND_VALUE_PREFIX = 'document-cortext/document/';
+const RECENT_COMMAND_VALUE_PREFIX = 'recent-cortext/recent/';
 const EMPTY_DOCUMENTS = [];
 
 export function openCommandPalette() {
@@ -190,6 +192,10 @@ function documentCommandValues( documents ) {
 	return documents.map( documentCommandValue );
 }
 
+function recentCommandValue( recent ) {
+	return `${ RECENT_COMMAND_VALUE_PREFIX }${ recent.id }`;
+}
+
 function DocumentResultsRegistration( {
 	canvasRef,
 	search,
@@ -308,11 +314,19 @@ function CommandPaletteContents( {
 	const isDocumentSearchPending =
 		Boolean( search ) && ( isDebouncing || isFetchingDocuments );
 
+	// cmdk only reports its pick through `onValueChange` while the value is
+	// controlled. Left to itself with an empty input it highlights the first
+	// recent without telling anyone, and the preview pane has nothing to show.
+	// Anchoring on that same first recent keeps the highlight where cmdk would
+	// have put it and makes it visible to the pane.
 	useEffect( () => {
-		if ( ! search ) {
-			setSelectedValue( undefined );
+		if ( search ) {
+			return;
 		}
-	}, [ search ] );
+		setSelectedValue(
+			recents.length ? recentCommandValue( recents[ 0 ] ) : undefined
+		);
+	}, [ search, recents ] );
 
 	// Reset the input and the controlled selection whenever the palette
 	// closes, regardless of how it closed. Picking a result calls
@@ -344,18 +358,25 @@ function CommandPaletteContents( {
 		} );
 	}, [] );
 
-	// Only search results get a preview. With an empty input the palette lists
-	// recents and commands, and stays a single column.
+	// Recents and search results are both documents, so both preview. Commands
+	// have nothing to show and leave the pane empty rather than closing it.
 	const previewDoc = useMemo( () => {
-		if ( ! search || ! selectedValue ) {
+		if ( ! selectedValue ) {
 			return null;
 		}
+		if ( search ) {
+			return (
+				resolvedDocuments.find(
+					( doc ) => documentCommandValue( doc ) === selectedValue
+				) ?? null
+			);
+		}
 		return (
-			resolvedDocuments.find(
-				( doc ) => documentCommandValue( doc ) === selectedValue
+			recents.find(
+				( recent ) => recentCommandValue( recent ) === selectedValue
 			) ?? null
 		);
-	}, [ search, selectedValue, resolvedDocuments ] );
+	}, [ search, selectedValue, resolvedDocuments, recents ] );
 
 	return (
 		<CommandDescriptionContext.Provider value={ documentDescriptions }>
