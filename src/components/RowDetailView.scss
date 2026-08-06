@@ -701,12 +701,6 @@
 		height: 18px;
 	}
 
-	&__property-label-icon-slot::before {
-		content: "";
-		position: absolute;
-		inset: -6px 0 -6px -32px;
-	}
-
 	&__property-label-actions {
 		display: inline-flex;
 		align-items: center;
@@ -769,35 +763,38 @@
 		--cortext-field-type-icon-size: 14px;
 
 		color: var(--cortext-row-detail-layout-affordance-color);
+		// Fading the icon gives it a stacking context, which lands it above the
+		// absolutely positioned chip they share a slot with. It is decorative,
+		// so take it out of hit testing rather than fight the paint order.
+		pointer-events: none;
 		transition: opacity 120ms ease;
 	}
 
+	// Sits on top of the type icon rather than out in the margin, so the handle
+	// stays inside the block's box. Same dots as the table's row handle in
+	// `DataViewRowReorder.scss`, at the same 2px size and 6/5px spacing, moved
+	// to 4/9/14 to centre them in a slot that is 18px rather than 24px.
 	&__property-layout-chip.components-button {
 		position: absolute;
-		inset: 50% calc(100% + #{$grid-unit-05}) auto auto;
+		inset: 0;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 24px;
-		min-width: 24px;
-		height: 24px;
-		min-height: 24px;
 		padding: 0;
 		border-radius: $grid-unit-30;
 		background-color: transparent;
 		background-image:
-			radial-gradient(circle at 6px 7px, currentcolor 1px, transparent 1.5px),
-			radial-gradient(circle at 12px 7px, currentcolor 1px, transparent 1.5px),
-			radial-gradient(circle at 6px 12px, currentcolor 1px, transparent 1.5px),
-			radial-gradient(circle at 12px 12px, currentcolor 1px, transparent 1.5px),
-			radial-gradient(circle at 6px 17px, currentcolor 1px, transparent 1.5px),
-			radial-gradient(circle at 12px 17px, currentcolor 1px, transparent 1.5px);
+			radial-gradient(circle at 6px 4px, currentcolor 1px, transparent 1.5px),
+			radial-gradient(circle at 12px 4px, currentcolor 1px, transparent 1.5px),
+			radial-gradient(circle at 6px 9px, currentcolor 1px, transparent 1.5px),
+			radial-gradient(circle at 12px 9px, currentcolor 1px, transparent 1.5px),
+			radial-gradient(circle at 6px 14px, currentcolor 1px, transparent 1.5px),
+			radial-gradient(circle at 12px 14px, currentcolor 1px, transparent 1.5px);
 		box-shadow: none;
 		color: var(--cortext-row-detail-layout-affordance-color);
 		cursor: grab;
 		opacity: 0;
 		pointer-events: none;
-		transform: translateY(-50%);
 		transition:
 			color 120ms ease,
 			opacity 120ms ease;
@@ -821,6 +818,18 @@
 		}
 	}
 
+	// `.components-button.is-small.has-icon:not(.has-text)` pins a 24px minimum,
+	// so the size needs a longer selector than the rest of the chip. Keep this
+	// rule to sizing alone: fold it back into the block above and its
+	// `opacity: 0` outranks the reveal rules, leaving the chip permanently
+	// invisible.
+	&__property-layout-chip.components-button.has-icon:not(.has-text) {
+		width: 18px;
+		min-width: 18px;
+		height: 18px;
+		min-height: 18px;
+	}
+
 	&__property--layout-editing &__property-layout-chip {
 		opacity: 1;
 		pointer-events: auto;
@@ -841,6 +850,17 @@
 	&__property-label-icon-slot:hover &__property-layout-chip {
 		opacity: 1;
 		pointer-events: auto;
+	}
+
+	// The chip and the type icon share one 18px slot, so the icon gets out of
+	// the way under the same conditions that reveal the chip. Chip hover and
+	// slot hover are subsets of these, so they do not need their own rules.
+	// Matching on the sibling keeps the icon put when the list cannot be
+	// reordered at all and no chip is rendered to take its place.
+	&__property--layout-editing &__property-layout-chip + &__property-type-icon,
+	&__property:hover &__property-layout-chip + &__property-type-icon,
+	&__property:focus-within &__property-layout-chip + &__property-type-icon {
+		opacity: 0;
 	}
 
 	&__property-label-text {
@@ -1390,6 +1410,22 @@
 		justify-content: center;
 		padding: $grid-unit-20 0;
 		opacity: 0.6;
+	}
+
+	// The canvas has no `__header` to align against. The post title is a
+	// sibling block at content width, so zero the inset and let the properties
+	// meet the same edge. Scoped to the block, not the token: the peek and
+	// modal toolbars still spend the inset on their own `__header`.
+	&.cortext-document-properties {
+		--cortext-row-detail-field-inset: 0;
+
+		// Negative margin cancels the row's own padding so labels land on the
+		// content edge. Without dropping the `100%` width the row would come
+		// up 4px short on the right.
+		.cortext-row-detail__property {
+			width: auto;
+			margin-inline: -#{$grid-unit-05};
+		}
 	}
 }
 
