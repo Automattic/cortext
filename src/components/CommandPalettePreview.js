@@ -16,7 +16,6 @@ import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 
 import { collectionHint, documentTitle, listIconForRecord } from '../documents';
-import useDebouncedValue from '../hooks/useDebouncedValue';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
@@ -29,10 +28,6 @@ import { SkeletonLine } from './Skeleton';
 // needs them to match the canvas.
 const { ExperimentalBlockEditorProvider } = unlock( blockEditorPrivateApis );
 
-// A held arrow key repeats about every 30ms, so this collapses a sweep
-// through the list into a single fetch while one deliberate press still feels
-// immediate. Shorter than the search debounce, which has to wait for typing.
-const PREVIEW_FETCH_DELAY_MS = 80;
 const PREVIEW_ICON_SIZE = 24;
 // The pane is narrower than this, so BlockPreview scales the page down a
 // little. Keeping it wide leaves multi-column and wide-aligned blocks with
@@ -207,9 +202,8 @@ export default function CommandPalettePreview( { doc } ) {
 	// The shell already subscribes to this query and it includes page and
 	// collection content, so most previews come straight from it with no
 	// request at all. Rows sit outside the query (see page-queries) and fall
-	// through to the fetch below.
-	// `usePooledEntityRecord` pools the same way but on a single id; here the
-	// pool is read on every keypress and only the fetch is debounced.
+	// through to the fetch below, which serves them from the core-data cache
+	// once they have been looked at.
 	const { records: pooledDocuments } = useEntityRecords(
 		'postType',
 		POST_TYPE,
@@ -223,23 +217,19 @@ export default function CommandPalettePreview( { doc } ) {
 		[ pooledDocuments, doc.id ]
 	);
 
-	const debouncedId = useDebouncedValue( doc.id, PREVIEW_FETCH_DELAY_MS );
-	const isSettled = debouncedId === doc.id;
 	const { record: fetchedRecord, hasResolved } = useEntityRecord(
 		'postType',
 		POST_TYPE,
-		debouncedId,
-		{ enabled: isSettled && ! pooledRecord }
+		doc.id,
+		{ enabled: ! pooledRecord }
 	);
-	// Until the debounce catches up, the fetched record still describes the
-	// previously highlighted document.
-	const currentRecord = pooledRecord ?? ( isSettled ? fetchedRecord : null );
+	const currentRecord = pooledRecord ?? fetchedRecord;
 	const canRenderBody =
 		Boolean( editorModule ) &&
 		typeof currentRecord?.content?.raw === 'string';
 	const hasFailed =
 		Boolean( editorError ) ||
-		( isSettled && ! pooledRecord && hasResolved && ! fetchedRecord );
+		( ! currentRecord && hasResolved && ! fetchedRecord );
 	const isLoading = ! canRenderBody && ! hasFailed;
 	const showSkeleton = useDelayedFlag(
 		isLoading,
