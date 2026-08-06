@@ -22,6 +22,7 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import CommandPalettePreview from './CommandPalettePreview';
 import CortextCommandMenu, {
 	CommandDescriptionContext,
 } from './CortextCommandMenu';
@@ -33,6 +34,8 @@ import { collectionHint, listIconForRecord } from '../documents';
 
 const OPEN_COMMAND_PALETTE_EVENT = 'cortext:open-command-palette';
 const DEFAULT_COMMAND_CONTEXT = 'root';
+const DOCUMENT_COMMAND_VALUE_PREFIX = 'document-cortext/document/';
+const EMPTY_DOCUMENTS = [];
 
 export function openCommandPalette() {
 	window.dispatchEvent( new Event( OPEN_COMMAND_PALETTE_EVENT ) );
@@ -179,8 +182,12 @@ function DocumentCommandRegistration( { canvasRef, document } ) {
 	return null;
 }
 
+function documentCommandValue( doc ) {
+	return `${ DOCUMENT_COMMAND_VALUE_PREFIX }${ doc.id }`;
+}
+
 function documentCommandValues( documents ) {
-	return documents.map( ( doc ) => `document-cortext/document/${ doc.id }` );
+	return documents.map( documentCommandValue );
 }
 
 function DocumentResultsRegistration( {
@@ -218,8 +225,21 @@ function DocumentResultsRegistration( {
 			return;
 		}
 		setHasEverResolved( true );
-		onDocumentsResolved( documentCommandValues( documents ) );
+		onDocumentsResolved( documents );
 	}, [ hasFreshDocuments, documents, onDocumentsResolved ] );
+
+	// The list drops its results on a failed fetch (below), and unmounts when
+	// the input goes empty. Report that too, so the preview pane cannot keep
+	// showing a document the list no longer offers.
+	useEffect( () => {
+		if ( error ) {
+			onDocumentsResolved( EMPTY_DOCUMENTS );
+		}
+	}, [ error, onDocumentsResolved ] );
+
+	useEffect( () => {
+		return () => onDocumentsResolved( EMPTY_DOCUMENTS );
+	}, [ onDocumentsResolved ] );
 
 	useEffect( () => {
 		if ( ! hasFreshDocuments ) {
@@ -257,6 +277,7 @@ function DocumentResultsRegistration( {
 }
 
 function CommandPaletteContents( {
+	appRegistry,
 	canvasRef,
 	homePath,
 	isResolvingHomePath,
@@ -268,6 +289,8 @@ function CommandPaletteContents( {
 	const [ documentDescriptions, setDocumentDescriptions ] = useState(
 		() => new Map()
 	);
+	const [ resolvedDocuments, setResolvedDocuments ] =
+		useState( EMPTY_DOCUMENTS );
 	// Controlled cmdk selection. When the first batch of documents arrives,
 	// anchor the selection on the first result so it doesn't sit on whatever
 	// recent/static command was selected before. After that cmdk owns the
@@ -303,10 +326,12 @@ function CommandPaletteContents( {
 		}
 	}, [ isPaletteOpen ] );
 
-	const handleDocumentsResolved = useCallback( ( values ) => {
-		if ( values.length === 0 ) {
+	const handleDocumentsResolved = useCallback( ( documents ) => {
+		setResolvedDocuments( documents );
+		if ( documents.length === 0 ) {
 			return;
 		}
+		const values = documentCommandValues( documents );
 		setSelectedValue( ( current ) => {
 			// If the user's current selection survived into the new
 			// result set, keep it. Otherwise jump to the first new doc so
@@ -318,6 +343,19 @@ function CommandPaletteContents( {
 			return values[ 0 ];
 		} );
 	}, [] );
+
+	// Only search results get a preview. With an empty input the palette lists
+	// recents and commands, and stays a single column.
+	const previewDoc = useMemo( () => {
+		if ( ! search || ! selectedValue ) {
+			return null;
+		}
+		return (
+			resolvedDocuments.find(
+				( doc ) => documentCommandValue( doc ) === selectedValue
+			) ?? null
+		);
+	}, [ search, selectedValue, resolvedDocuments ] );
 
 	return (
 		<CommandDescriptionContext.Provider value={ documentDescriptions }>
@@ -349,6 +387,16 @@ function CommandPaletteContents( {
 				isDocumentSearchPending={ isDocumentSearchPending }
 				selectedValue={ selectedValue }
 				onSelectedValueChange={ setSelectedValue }
+				previewPane={
+					previewDoc ? (
+						// Back on the app registry. The block editor store
+						// only lives there, and the preview's provider reads
+						// that store's private actions off its parent.
+						<RegistryProvider value={ appRegistry }>
+							<CommandPalettePreview doc={ previewDoc } />
+						</RegistryProvider>
+					) : null
+				}
 			/>
 		</CommandDescriptionContext.Provider>
 	);
@@ -356,15 +404,16 @@ function CommandPaletteContents( {
 
 export default function CommandPalette( { canvasRef } ) {
 	const { homePath, isResolvingHomePath } = useWorkspaceHomePath();
-	const parentRegistry = useRegistry();
+	const appRegistry = useRegistry();
 	const registry = useMemo(
-		() => createCommandPaletteRegistry( parentRegistry ),
-		[ parentRegistry ]
+		() => createCommandPaletteRegistry( appRegistry ),
+		[ appRegistry ]
 	);
 
 	return (
 		<RegistryProvider value={ registry }>
 			<CommandPaletteContents
+				appRegistry={ appRegistry }
 				canvasRef={ canvasRef }
 				homePath={ homePath }
 				isResolvingHomePath={ isResolvingHomePath }

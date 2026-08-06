@@ -86,6 +86,94 @@ test.describe( 'Command palette search', () => {
 		}
 	} );
 
+	test( 'previews the highlighted result and follows the selection', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const suffix = Date.now().toString( 36 ).slice( -4 );
+		const token = `palprev${ suffix }`;
+		const bodyText = `Preview body for ${ token }.`;
+		const seeded = [];
+
+		try {
+			for ( const name of [ 'alpha', 'beta' ] ) {
+				seeded.push(
+					await requestUtils.rest( {
+						method: 'POST',
+						path: '/wp/v2/crtxt_documents',
+						data: {
+							title: `${ token } ${ name }`,
+							status: 'private',
+							content: `<!-- wp:paragraph --><p>${ bodyText }</p><!-- /wp:paragraph -->`,
+						},
+					} )
+				);
+			}
+
+			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
+
+			// Pages come with their content in the query the shell already
+			// runs, so previewing one should cost no request of its own.
+			const recordRequests = [];
+			const seededIds = seeded.map( ( document ) => document.id );
+			page.on( 'request', ( request ) => {
+				const match = request
+					.url()
+					.match( /crtxt_documents\/(\d+)/ );
+				if ( match && seededIds.includes( Number( match[ 1 ] ) ) ) {
+					recordRequests.push( match[ 1 ] );
+				}
+			} );
+
+			await openPalette( page );
+			await page
+				.getByPlaceholder( 'Search or run a command' )
+				.fill( token );
+
+			const options = page.getByRole( 'option' );
+			await expect( options.first() ).toBeVisible( { timeout: 5000 } );
+
+			const preview = page.locator( '.cortext-command-palette__preview' );
+			const previewTitle = preview.locator(
+				'.cortext-command-palette__preview-title'
+			);
+			await expect( preview ).toBeVisible();
+
+			// The pane follows whatever the list anchored the highlight on.
+			const firstLabel = await options
+				.first()
+				.locator( '.commands-command-menu__item-label' )
+				.innerText();
+			await expect( previewTitle ).toHaveText( firstLabel );
+
+			// The body renders as real blocks, inside the preview iframe.
+			await expect(
+				preview.frameLocator( 'iframe' ).getByText( bodyText )
+			).toBeVisible( { timeout: 15000 } );
+
+			const secondLabel = await options
+				.nth( 1 )
+				.locator( '.commands-command-menu__item-label' )
+				.innerText();
+			await page.keyboard.press( 'ArrowDown' );
+
+			await expect( previewTitle ).toHaveText( secondLabel );
+			await expect(
+				preview.frameLocator( 'iframe' ).getByText( bodyText )
+			).toBeVisible( { timeout: 15000 } );
+
+			expect( recordRequests ).toEqual( [] );
+		} finally {
+			for ( const document of seeded ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_documents/${ document.id }`
+				);
+			}
+		}
+	} );
+
 	test( 'finds a row by title and navigates to the row itself', async ( {
 		admin,
 		page,
