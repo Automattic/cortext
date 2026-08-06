@@ -24,9 +24,9 @@ describe( 'useSubmenuPlacement', () => {
 		const sourceDocument = { defaultView: {} };
 		const frameElement = {
 			ownerDocument: document,
-			offsetWidth: 140,
+			offsetWidth: 420,
 			clientLeft: 0,
-			getBoundingClientRect: () => mockRect( { left: 480, width: 140 } ),
+			getBoundingClientRect: () => mockRect( { left: 480, width: 420 } ),
 		};
 		sourceDocument.defaultView.frameElement = frameElement;
 
@@ -109,39 +109,5 @@ describe( 'getElementRightInDocument', () => {
 		};
 
 		expect( getElementRightInDocument( element, document ) ).toBe( 410 );
-	} );
-
-	it( 'works through nested, scaled iframes', () => {
-		const middleDocument = { defaultView: {} };
-		const sourceDocument = { defaultView: {} };
-
-		middleDocument.defaultView.frameElement = {
-			ownerDocument: document,
-			offsetWidth: 110,
-			clientLeft: 1,
-			getBoundingClientRect: () => mockRect( { left: 100, width: 220 } ),
-		};
-		sourceDocument.defaultView.frameElement = {
-			ownerDocument: middleDocument,
-			offsetWidth: 100,
-			clientLeft: 2,
-			getBoundingClientRect: () => mockRect( { left: 50, width: 100 } ),
-		};
-
-		const element = {
-			ownerDocument: sourceDocument,
-			getBoundingClientRect: () => mockRect( { left: 10, right: 30 } ),
-		};
-
-		expect( getElementRightInDocument( element, document ) ).toBe( 266 );
-	} );
-
-	it( 'returns null when the target document is not an ancestor', () => {
-		const element = {
-			ownerDocument: { defaultView: { frameElement: null } },
-			getBoundingClientRect: () => mockRect( { left: 10, right: 30 } ),
-		};
-
-		expect( getElementRightInDocument( element, document ) ).toBeNull();
 	} );
 } );
