@@ -192,19 +192,12 @@ function CanvasMenuToolbarGuard() {
 				);
 				return false;
 			}
+			// The overlap class hides the toolbar through inherited visibility,
+			// but its box stays measurable. Keep it in the calculation to prevent
+			// a hide-and-show loop.
 			const toolbarRects = Array.from(
 				canvasRoot.querySelectorAll( CANVAS_TOOLBAR_SELECTOR )
 			)
-				.filter( ( toolbar ) => {
-					const style = parentWindow.getComputedStyle( toolbar );
-					// The overlap class hides the toolbar through inherited visibility,
-					// but its box is still measurable. Ignoring visibility here prevents
-					// a hide-and-show loop.
-					return (
-						style.display !== 'none' &&
-						Number.parseFloat( style.opacity ) !== 0
-					);
-				} )
 				.map( ( toolbar ) => toolbar.getBoundingClientRect() )
 				.filter(
 					( rect ) => rect.right > rect.left && rect.bottom > rect.top
