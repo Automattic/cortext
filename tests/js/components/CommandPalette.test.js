@@ -650,6 +650,31 @@ describe( 'CommandPalette preview pane', () => {
 		expect( previewDocId() ).toBeNull();
 	} );
 
+	it( 'previews the highlighted recent while the input is empty', () => {
+		mockIsPaletteOpen = true;
+		mockRecents = [
+			{ id: 7, title: 'Notes', path: 'notes-7' },
+			{ id: 12, title: 'People', path: 'people-12' },
+		];
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		// cmdk highlights the first item as soon as the list renders.
+		act( () => {
+			mockMenu.onSelectedValueChange( 'recent-cortext/recent/7' );
+		} );
+
+		expect( previewDocId() ).toBe( 7 );
+
+		// A command has nothing to preview, and the pane stays mounted.
+		act( () => {
+			mockMenu.onSelectedValueChange( 'Go to home' );
+		} );
+
+		expect( previewDocId() ).toBeNull();
+		expect( mockMenu.previewPane ).not.toBeNull();
+	} );
+
 	it( 'has nothing to preview until the first response arrives', () => {
 		mockIsPaletteOpen = true;
 		mockUseDocuments.mockReturnValue( {
