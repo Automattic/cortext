@@ -1,6 +1,14 @@
 @use "@wordpress/base-styles/colors" as *;
 @use "@wordpress/base-styles/variables" as *;
 
+// The preview needs more room than the single-column list. Both columns use
+// this same height so the modal does not resize while the user walks the
+// results.
+$palette-preview-height: min(560px, 70vh - 48px);
+// Below this the modal is nearly viewport-wide, and splitting it would leave
+// neither side readable.
+$palette-preview-min-width: 782px;
+
 .commands-command-menu__container {
 
 	// cmdk only sets max-height on the list. Give it the same min-height so the
@@ -36,4 +44,40 @@
 	.cortext-command-palette__group + .cortext-command-palette__group [cmdk-group-heading] {
 		border-top: var(--cortext-shell-border-width, 1px) solid var(--cortext-chrome-border, #e0e0e0);
 	}
+}
+
+// Preview mode: results on the left, the highlighted document on the right.
+// The list keeps its place as a direct child of the cmdk root so the upstream
+// sizing and scrolling rules still apply to it.
+@media (min-width: $palette-preview-min-width) {
+
+	.commands-command-menu.is-previewing .commands-command-menu__container {
+
+		[cmdk-root] {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) minmax(0, 58%);
+		}
+
+		.commands-command-menu__header {
+			grid-column: 1 / -1;
+		}
+
+		[cmdk-root] > [cmdk-list] {
+			height: $palette-preview-height;
+			max-height: none;
+		}
+
+		.cortext-command-palette__preview {
+			border-left: var(--cortext-shell-border-width, 1px) solid var(--cortext-chrome-border, #e0e0e0);
+			display: block;
+			height: $palette-preview-height;
+			overflow-y: auto;
+		}
+	}
+}
+
+// Off by default. The media query above turns it on together with the
+// two-column layout.
+.cortext-command-palette__preview {
+	display: none;
 }

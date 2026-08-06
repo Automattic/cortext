@@ -253,6 +253,7 @@ export default function CortextCommandMenu( {
 	isDocumentSearchPending = false,
 	selectedValue,
 	onSelectedValueChange = () => {},
+	previewPane = null,
 } = {} ) {
 	const { registerShortcut } = useDispatch( keyboardShortcutsStore );
 	const { open, close } = useDispatch( commandsStore );
@@ -301,11 +302,16 @@ export default function CortextCommandMenu( {
 
 	return (
 		<Modal
-			className="commands-command-menu"
+			className={ [
+				'commands-command-menu',
+				previewPane ? 'is-previewing' : null,
+			]
+				.filter( Boolean )
+				.join( ' ' ) }
 			overlayClassName="commands-command-menu__overlay"
 			onRequestClose={ closeAndReset }
 			__experimentalHideHeader
-			size="medium"
+			size={ previewPane ? 'large' : 'medium' }
 			contentLabel={ __( 'Command palette' ) }
 		>
 			<div className="commands-command-menu__container">
@@ -326,6 +332,9 @@ export default function CortextCommandMenu( {
 							setSearch={ setSearch }
 						/>
 					</div>
+					{ /* The list stays a direct child of the cmdk root: the
+					     upstream palette styles size and scroll it through
+					     child selectors. */ }
 					<Command.List label={ __( 'Command suggestions' ) }>
 						{ search && ! isDocumentSearchPending && (
 							<Command.Empty>
@@ -334,6 +343,15 @@ export default function CortextCommandMenu( {
 						) }
 						<PaletteGroups search={ search } />
 					</Command.List>
+					{ previewPane && (
+						<div
+							className="cortext-command-palette__preview"
+							aria-hidden="true"
+							inert="true"
+						>
+							{ previewPane }
+						</div>
+					) }
 				</Command>
 			</div>
 		</Modal>

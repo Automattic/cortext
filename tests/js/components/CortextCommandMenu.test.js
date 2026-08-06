@@ -207,6 +207,59 @@ describe( 'CortextCommandMenu', () => {
 		expect( screen.queryByText( 'Go to home' ) ).not.toBeInTheDocument();
 	} );
 
+	it( 'puts the preview pane beside the list and keeps it out of the keyboard flow', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		window.Element.prototype.scrollIntoView = jest.fn();
+		const registry = createCommandPaletteRegistry();
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/document/page-1',
+			label: 'Roadmap',
+			context: 'root',
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).open();
+
+		const { rerender } = render(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu search="road" setSearch={ () => {} } />
+			</RegistryProvider>
+		);
+
+		await screen.findByRole( 'option' );
+		expect(
+			document.querySelector( '.components-modal__frame' )
+		).toHaveClass( 'has-size-medium' );
+
+		rerender(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu
+					search="road"
+					setSearch={ () => {} }
+					previewPane={ <div>Preview body</div> }
+				/>
+			</RegistryProvider>
+		);
+
+		expect( screen.getByText( 'Preview body' ) ).toBeInTheDocument();
+
+		// The modal widens for the second column.
+		const frame = document.querySelector( '.components-modal__frame' );
+		expect( frame ).toHaveClass( 'is-previewing' );
+		expect( frame ).toHaveClass( 'has-size-large' );
+
+		// The pane sits next to the list inside the cmdk root, and stays out
+		// of both the listbox and the focus order.
+		const pane = document.querySelector(
+			'.cortext-command-palette__preview'
+		);
+		expect( pane.parentElement ).toBe(
+			document.querySelector( '[cmdk-root]' )
+		);
+		expect( pane ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( pane ).toHaveAttribute( 'inert' );
+		expect( screen.getAllByRole( 'option' ) ).toHaveLength( 1 );
+	} );
+
 	it( 'hides the recent group while the search input is non-empty', async () => {
 		global.ResizeObserver = ResizeObserverMock;
 		window.Element.prototype.scrollIntoView = jest.fn();
