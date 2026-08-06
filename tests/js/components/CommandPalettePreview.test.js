@@ -1,7 +1,6 @@
 /**
  * Covers the command palette preview pane: what it shows before the record
- * arrives, which blocks reach BlockPreview, and how many requests walking the
- * results costs.
+ * arrives, which blocks reach BlockPreview, and where its records come from.
  */
 
 import { act, render, screen } from '@testing-library/react';
@@ -234,9 +233,7 @@ describe( 'CommandPalettePreview', () => {
 			7
 		);
 		expect(
-			container.querySelector(
-				'.cortext-command-palette__preview-cover'
-			)
+			container.querySelector( '.cortext-command-palette__preview-cover' )
 		).toHaveAttribute( 'src', 'https://x/l.jpg' );
 	} );
 
@@ -251,7 +248,7 @@ describe( 'CommandPalettePreview', () => {
 		expect( screen.getByText( 'Quarterly themes.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'waits for a pause before asking for the newly highlighted record', async () => {
+	it( 'asks core-data for the highlighted document and lets it serve the cache', async () => {
 		mockUseEntityRecord.mockReturnValue( recordFor( 42 ) );
 
 		const { rerender } = await renderPreview();
@@ -260,29 +257,19 @@ describe( 'CommandPalettePreview', () => {
 			'postType',
 			'crtxt_document',
 			42,
-			expect.anything()
+			{ enabled: true }
 		);
 
-		// Walking past a result should not spend a request on it.
+		// Moving the highlight asks for the new document straight away. A
+		// document already in the store comes back in the same render, so the
+		// pane has nothing to wait for.
 		rerender( <CommandPalettePreview doc={ { id: 77, title: 'Bob' } } /> );
-		rerender( <CommandPalettePreview doc={ { id: 99, title: 'Cleo' } } /> );
 
 		expect( mockUseEntityRecord ).toHaveBeenLastCalledWith(
 			'postType',
 			'crtxt_document',
-			42,
-			expect.anything()
-		);
-
-		act( () => {
-			jest.advanceTimersByTime( 150 );
-		} );
-
-		expect( mockUseEntityRecord ).toHaveBeenLastCalledWith(
-			'postType',
-			'crtxt_document',
-			99,
-			expect.anything()
+			77,
+			{ enabled: true }
 		);
 	} );
 } );
