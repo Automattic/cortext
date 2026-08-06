@@ -68,7 +68,7 @@ const mockMenu = {
 // document reaches it.
 jest.mock( '../../../src/components/CommandPalettePreview', () => ( {
 	__esModule: true,
-	default: ( { doc } ) => <div data-testid="preview">{ doc.id }</div>,
+	default: ( { doc } ) => <div data-testid="preview">{ doc?.id ?? '' }</div>,
 } ) );
 
 jest.mock( '../../../src/components/CortextCommandMenu', () => {
@@ -118,7 +118,7 @@ beforeEach( () => {
 
 function previewDocId() {
 	const pane = screen.queryByTestId( 'preview' );
-	return pane ? Number( pane.textContent ) : null;
+	return pane?.textContent ? Number( pane.textContent ) : null;
 }
 
 afterEach( () => {

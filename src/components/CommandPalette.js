@@ -388,14 +388,12 @@ function CommandPaletteContents( {
 				selectedValue={ selectedValue }
 				onSelectedValueChange={ setSelectedValue }
 				previewPane={
-					previewDoc ? (
-						// Back on the app registry. The block editor store
-						// only lives there, and the preview's provider reads
-						// that store's private actions off its parent.
-						<RegistryProvider value={ appRegistry }>
-							<CommandPalettePreview doc={ previewDoc } />
-						</RegistryProvider>
-					) : null
+					// Back on the app registry. The block editor store only
+					// lives there, and the preview's provider reads that
+					// store's private actions off its parent.
+					<RegistryProvider value={ appRegistry }>
+						<CommandPalettePreview doc={ previewDoc } />
+					</RegistryProvider>
 				}
 			/>
 		</CommandDescriptionContext.Provider>
