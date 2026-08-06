@@ -79,6 +79,8 @@ const {
 	areCanvasReadyRequirementsMet,
 	collectCollectionBodyClientIdsToRemove,
 	collectDuplicateHeaderClientIds,
+	projectIframeRectToParent,
+	rectsOverlap,
 	useEditorBodyStyles,
 } = require( '../../../src/components/EditorBody' );
 const { renderHook } = require( '@testing-library/react' );
@@ -97,6 +99,75 @@ function ownerBlock( clientId, collectionId ) {
 function namedBlock( clientId, name, attributes = {} ) {
 	return { clientId, name, attributes };
 }
+
+describe( 'rectsOverlap', () => {
+	const toolbarRect = { left: 100, top: 100, right: 200, bottom: 150 };
+
+	it( 'detects an intersection with positive area', () => {
+		expect(
+			rectsOverlap( toolbarRect, {
+				left: 150,
+				top: 125,
+				right: 250,
+				bottom: 175,
+			} )
+		).toBe( true );
+	} );
+
+	it( 'does not treat touching edges as overlap', () => {
+		expect(
+			rectsOverlap( toolbarRect, {
+				left: 200,
+				top: 100,
+				right: 250,
+				bottom: 150,
+			} )
+		).toBe( false );
+	} );
+} );
+
+describe( 'projectIframeRectToParent', () => {
+	it( 'accounts for iframe borders and scaling and clips the result to the viewport', () => {
+		const frameElement = {
+			clientHeight: 50,
+			clientLeft: 5,
+			clientTop: 5,
+			clientWidth: 100,
+			getBoundingClientRect: () => ( {
+				left: 10,
+				top: 20,
+				width: 220,
+				height: 120,
+			} ),
+			offsetHeight: 60,
+			offsetWidth: 110,
+		};
+
+		expect(
+			projectIframeRectToParent(
+				{ left: -25, top: 10, right: 250, bottom: 120 },
+				frameElement,
+				{ innerWidth: 100, innerHeight: 50 }
+			)
+		).toEqual( { left: 20, top: 50, right: 220, bottom: 130 } );
+	} );
+
+	it( 'returns null while the frame has no layout box', () => {
+		const frameElement = {
+			getBoundingClientRect: () => ( { width: 0, height: 0 } ),
+			offsetHeight: 0,
+			offsetWidth: 0,
+		};
+
+		expect(
+			projectIframeRectToParent(
+				{ left: 0, top: 0, right: 10, bottom: 10 },
+				frameElement,
+				{}
+			)
+		).toBeNull();
+	} );
+} );
 
 describe( 'collectDuplicateHeaderClientIds', () => {
 	it( 'returns nothing when the only data-view is self-referencing', () => {
