@@ -61,6 +61,10 @@ const HEADER_BOUNDARY_MOVE_UP_SCOPE_SELECTOR = [
 	'.block-editor-block-contextual-toolbar',
 	'.block-editor-block-toolbar',
 ].join( ',' );
+const OPEN_CANVAS_MENU_SELECTOR = '[data-dialog][role="menu"][data-open]';
+const CANVAS_TOOLBAR_SELECTOR = '.block-editor-block-contextual-toolbar';
+const CANVAS_MENU_TOOLBAR_OVERLAP_CLASS =
+	'cortext-canvas__block-canvas--menu-toolbar-overlap';
 const activeHeaderBoundaryMoveUpGuards = new Set();
 const DEFAULT_HEADER_BLOCK_NAMES = new Set( [
 	DOCUMENT_COVER_BLOCK,
@@ -98,6 +102,205 @@ export function useEditorBodyStyles(
 		],
 		[ baseStyles, extraStyles, isDocumentCanvas ]
 	);
+}
+
+export function rectsOverlap( firstRect, secondRect ) {
+	return (
+		firstRect.left < secondRect.right &&
+		firstRect.right > secondRect.left &&
+		firstRect.top < secondRect.bottom &&
+		firstRect.bottom > secondRect.top
+	);
+}
+
+export function projectIframeRectToParent( rect, frameElement, iframeWindow ) {
+	const frameRect = frameElement.getBoundingClientRect();
+	const layoutWidth = frameElement.offsetWidth || frameRect.width;
+	const layoutHeight = frameElement.offsetHeight || frameRect.height;
+	if ( ! layoutWidth || ! layoutHeight ) {
+		return null;
+	}
+
+	const frameScaleX = frameRect.width / layoutWidth;
+	const frameScaleY = frameRect.height / layoutHeight;
+	const contentLeft = frameRect.left + frameElement.clientLeft * frameScaleX;
+	const contentTop = frameRect.top + frameElement.clientTop * frameScaleY;
+	const contentWidth = frameElement.clientWidth * frameScaleX;
+	const contentHeight = frameElement.clientHeight * frameScaleY;
+	const viewportWidth = iframeWindow.innerWidth || frameElement.clientWidth;
+	const viewportHeight =
+		iframeWindow.innerHeight || frameElement.clientHeight;
+	if (
+		! contentWidth ||
+		! contentHeight ||
+		! viewportWidth ||
+		! viewportHeight
+	) {
+		return null;
+	}
+
+	const scaleX = contentWidth / viewportWidth;
+	const scaleY = contentHeight / viewportHeight;
+	const left = Math.max( contentLeft, contentLeft + rect.left * scaleX );
+	const top = Math.max( contentTop, contentTop + rect.top * scaleY );
+	const right = Math.min(
+		contentLeft + contentWidth,
+		contentLeft + rect.right * scaleX
+	);
+	const bottom = Math.min(
+		contentTop + contentHeight,
+		contentTop + rect.bottom * scaleY
+	);
+
+	return { left, top, right, bottom };
+}
+
+// tech-debt.md#td-wp-menu-popover-limitations: an iframe menu's z-index cannot
+// place it above a toolbar in the parent document. Hide the toolbar only when
+// the two overlap.
+function CanvasMenuToolbarGuard() {
+	const anchorRef = useRef( null );
+
+	useEffect( () => {
+		const iframeDocument = anchorRef.current?.ownerDocument;
+		const iframeWindow = iframeDocument?.defaultView;
+		const frameElement = iframeWindow?.frameElement;
+		const canvasRoot = frameElement?.closest(
+			'.cortext-canvas__block-canvas'
+		);
+		const MutationObserverClass = iframeWindow?.MutationObserver;
+		const parentWindow = frameElement?.ownerDocument.defaultView;
+		const ParentMutationObserverClass = parentWindow?.MutationObserver;
+
+		if (
+			! iframeDocument?.body ||
+			! canvasRoot ||
+			! MutationObserverClass ||
+			! ParentMutationObserverClass
+		) {
+			return undefined;
+		}
+
+		let overlapFrame = null;
+		const updateToolbarOverlap = () => {
+			const openMenus = Array.from(
+				iframeDocument.querySelectorAll( OPEN_CANVAS_MENU_SELECTOR )
+			);
+			if ( openMenus.length === 0 ) {
+				canvasRoot.classList.remove(
+					CANVAS_MENU_TOOLBAR_OVERLAP_CLASS
+				);
+				return false;
+			}
+			const toolbarRects = Array.from(
+				canvasRoot.querySelectorAll( CANVAS_TOOLBAR_SELECTOR )
+			)
+				.filter( ( toolbar ) => {
+					const style = parentWindow.getComputedStyle( toolbar );
+					// The overlap class hides the toolbar through inherited visibility,
+					// but its box is still measurable. Ignoring visibility here prevents
+					// a hide-and-show loop.
+					return (
+						style.display !== 'none' &&
+						Number.parseFloat( style.opacity ) !== 0
+					);
+				} )
+				.map( ( toolbar ) => toolbar.getBoundingClientRect() )
+				.filter(
+					( rect ) => rect.right > rect.left && rect.bottom > rect.top
+				);
+
+			const hasOverlap = openMenus.some( ( menu ) => {
+				const style = iframeWindow.getComputedStyle( menu );
+				if (
+					style.display === 'none' ||
+					style.visibility === 'hidden' ||
+					Number.parseFloat( style.opacity ) === 0
+				) {
+					return false;
+				}
+				const menuRect = projectIframeRectToParent(
+					menu.getBoundingClientRect(),
+					frameElement,
+					iframeWindow
+				);
+				if (
+					! menuRect ||
+					menuRect.right <= menuRect.left ||
+					menuRect.bottom <= menuRect.top
+				) {
+					return false;
+				}
+				return toolbarRects.some( ( toolbarRect ) =>
+					rectsOverlap( menuRect, toolbarRect )
+				);
+			} );
+
+			canvasRoot.classList.toggle(
+				CANVAS_MENU_TOOLBAR_OVERLAP_CLASS,
+				hasOverlap
+			);
+			return true;
+		};
+
+		const monitorToolbarOverlap = () => {
+			overlapFrame = null;
+			if ( updateToolbarOverlap() ) {
+				overlapFrame = iframeWindow.requestAnimationFrame(
+					monitorToolbarOverlap
+				);
+			}
+		};
+		const syncToolbarOverlap = () => {
+			const hasOpenMenu = updateToolbarOverlap();
+			if ( hasOpenMenu && overlapFrame === null ) {
+				overlapFrame = iframeWindow.requestAnimationFrame(
+					monitorToolbarOverlap
+				);
+			} else if ( ! hasOpenMenu && overlapFrame !== null ) {
+				iframeWindow.cancelAnimationFrame( overlapFrame );
+				overlapFrame = null;
+			}
+		};
+
+		// Menu portals add a wrapper directly under the iframe body. Observe only
+		// direct children because the rest of the DataViews tree changes often.
+		const portalObserver = new MutationObserverClass( syncToolbarOverlap );
+		portalObserver.observe( iframeDocument.body, { childList: true } );
+
+		// The portal can mount before the menu gets `data-open`, and the
+		// attribute can disappear before the wrapper unmounts.
+		const stateObserver = new MutationObserverClass( syncToolbarOverlap );
+		stateObserver.observe( iframeDocument.body, {
+			attributes: true,
+			attributeFilter: [ 'data-open' ],
+			subtree: true,
+		} );
+		// Selecting a block can mount the toolbar after the menu. Measure as soon
+		// as that happens so the two are not painted on top of each other.
+		const toolbarObserver = new ParentMutationObserverClass(
+			syncToolbarOverlap
+		);
+		toolbarObserver.observe( canvasRoot, {
+			childList: true,
+			subtree: true,
+		} );
+
+		syncToolbarOverlap();
+
+		return () => {
+			portalObserver.disconnect();
+			stateObserver.disconnect();
+			toolbarObserver.disconnect();
+			if ( overlapFrame !== null ) {
+				iframeWindow.cancelAnimationFrame( overlapFrame );
+			}
+			canvasRoot.classList.remove( CANVAS_MENU_TOOLBAR_OVERLAP_CLASS );
+		};
+	}, [] );
+
+	// The hidden span gives the guard access to the iframe document.
+	return <span ref={ anchorRef } hidden />;
 }
 
 // Schema-bearing documents add an owner block to the reserved header/body
@@ -1707,6 +1910,7 @@ export default function EditorBody( {
 				ref={ blockCanvasRef }
 			>
 				<BlockCanvas height="100%" styles={ styles }>
+					<CanvasMenuToolbarGuard />
 					<DocumentIdentityActions
 						isLocked={ isReadOnly }
 						postId={ postId }
