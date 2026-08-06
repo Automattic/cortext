@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 const mockUseCommand = jest.fn();
 const mockCreateRegistry = jest.fn( () => ( { register: jest.fn() } ) );
@@ -61,7 +61,15 @@ const mockMenu = {
 	descriptions: new Map(),
 	selectedValue: undefined,
 	onSelectedValueChange: () => {},
+	previewPane: null,
 };
+
+// The preview mounts a block editor. This suite only cares about which
+// document reaches it.
+jest.mock( '../../../src/components/CommandPalettePreview', () => ( {
+	__esModule: true,
+	default: ( { doc } ) => <div data-testid="preview">{ doc.id }</div>,
+} ) );
 
 jest.mock( '../../../src/components/CortextCommandMenu', () => {
 	const { createContext, useContext } = require( '@wordpress/element' );
@@ -73,7 +81,8 @@ jest.mock( '../../../src/components/CortextCommandMenu', () => {
 		mockMenu.descriptions = useContext( CommandDescriptionContext );
 		mockMenu.selectedValue = props.selectedValue;
 		mockMenu.onSelectedValueChange = props.onSelectedValueChange;
-		return null;
+		mockMenu.previewPane = props.previewPane;
+		return props.previewPane ?? null;
 	};
 	return {
 		__esModule: true,
@@ -104,7 +113,13 @@ beforeEach( () => {
 	mockRecents = [];
 	mockIsPaletteOpen = false;
 	mockMenu.descriptions = new Map();
+	mockMenu.previewPane = null;
 } );
+
+function previewDocId() {
+	const pane = screen.queryByTestId( 'preview' );
+	return pane ? Number( pane.textContent ) : null;
+}
 
 afterEach( () => {
 	jest.useRealTimers();
@@ -584,5 +599,105 @@ describe( 'CommandPalette document search', () => {
 				.map( ( [ c ] ) => c )
 				.some( ( c ) => c.name === 'cortext/document/1' )
 		).toBe( false );
+	} );
+} );
+
+describe( 'CommandPalette preview pane', () => {
+	const results = [
+		{ id: 42, title: 'Alice', path: 'alice-42' },
+		{ id: 77, title: 'Bob', path: 'bob-77' },
+	];
+
+	function resolveWith( documents, error = null ) {
+		mockUseDocuments.mockReturnValue( {
+			documents,
+			total: documents.length,
+			isLoading: false,
+			hasResolved: true,
+			error,
+			refresh: jest.fn(),
+		} );
+	}
+
+	it( 'previews the anchored result and follows the selection', () => {
+		mockIsPaletteOpen = true;
+		resolveWith( results );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		// An empty input lists recents and commands, which have no preview.
+		expect( previewDocId() ).toBeNull();
+
+		act( () => {
+			mockMenu.setSearch( 'ali' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		expect( previewDocId() ).toBe( 42 );
+
+		act( () => {
+			mockMenu.onSelectedValueChange( 'document-cortext/document/77' );
+		} );
+
+		expect( previewDocId() ).toBe( 77 );
+
+		act( () => {
+			mockMenu.setSearch( '' );
+		} );
+
+		expect( previewDocId() ).toBeNull();
+	} );
+
+	it( 'has nothing to preview until the first response arrives', () => {
+		mockIsPaletteOpen = true;
+		mockUseDocuments.mockReturnValue( {
+			documents: [],
+			total: 0,
+			isLoading: true,
+			hasResolved: false,
+			error: null,
+			refresh: jest.fn(),
+		} );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		act( () => {
+			mockMenu.setSearch( 'ali' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		expect( previewDocId() ).toBeNull();
+	} );
+
+	it( 'drops the preview when the next query fails', () => {
+		mockIsPaletteOpen = true;
+		resolveWith( results );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		act( () => {
+			mockMenu.setSearch( 'first' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+		expect( previewDocId() ).toBe( 42 );
+
+		// The list hides the stale results on a failed fetch, so the pane
+		// must let go of the document it was showing.
+		resolveWith( results, new Error( 'network' ) );
+
+		act( () => {
+			mockMenu.setSearch( 'second' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		expect( previewDocId() ).toBeNull();
 	} );
 } );

@@ -81,3 +81,63 @@ $palette-preview-min-width: 782px;
 .cortext-command-palette__preview {
 	display: none;
 }
+
+.cortext-command-palette__preview-inner {
+	padding: $grid-unit-20;
+}
+
+.cortext-command-palette__preview-cover {
+	border-radius: $radius-medium;
+	display: block;
+	height: 96px;
+	margin-bottom: $grid-unit-15;
+	object-fit: cover;
+	width: 100%;
+}
+
+.cortext-command-palette__preview-header {
+	align-items: center;
+	display: flex;
+	gap: $grid-unit-10;
+	min-width: 0;
+}
+
+.cortext-command-palette__preview-title {
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.3;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cortext-command-palette__preview-meta {
+	color: var(--cortext-text-muted, #757575);
+	display: flex;
+	flex-wrap: wrap;
+	font-size: 12px;
+	gap: $grid-unit-05;
+	margin-top: $grid-unit-05;
+
+	span + span::before {
+		content: "·";
+		margin-right: $grid-unit-05;
+	}
+}
+
+.cortext-command-palette__preview-content {
+	margin-top: $grid-unit-15;
+}
+
+.cortext-command-palette__preview-skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-10;
+}
+
+.cortext-command-palette__preview-excerpt {
+	color: var(--cortext-text-muted, #757575);
+	font-size: 13px;
+	line-height: 1.5;
+	margin: 0;
+}
