@@ -367,20 +367,27 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 <a id="td-rows-not-in-core-data"></a>
 
-**Collection row queries bypass `core-data`.**
+**Row writes use `core-data`, but row lists do not.**
 
-**What.** Rows share the static `crtxt_document` post type with pages and collections, but collection views still fetch them through `/cortext/v1/rows`. That endpoint handles field-aware filters, sorting, calculations, relation hydration, and the fallback from paged server queries to bounded client-side queries. As a result, `useCollectionRows` also owns fetch state, race protection, and a manual `refresh()` counter. Mutations save the underlying document with `apiFetch`, then refresh open row queries. Trash and restore use row and document-trash events to refresh collection views and the sidebar. Relation chips add another read path through `useCollectionRowsByIds` so the picker can load selected labels without walking the collection.
+**What.** Field saves and row creation now use `saveEntityRecord`. Duplicate, trash, and restore responses also update `core-data` with the server's canonical REST record.
 
-**Where.** `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/useTrashedDocuments.js`, with call sites in `src/components/CollectionDataViews.js`, `src/components/RowProperties.js`, `src/components/EditableCell.js`, `src/components/SidebarTrash.js`, `src/router/EntityRoute.js`, `src/documents/actions.js`, and `src/components/relations/RelationEditor.js`.
+Reads have not moved. `useCollectionRows` still fetches full rows from `/cortext/v1/rows` and manages fetch state, its `requestId` race guard, the manual `refresh()` counter, and server/client mode. Relation chips have their own read path through `useCollectionRowsByIds` and `include[]`.
 
-**Solution.** Keep `/cortext/v1/rows` as the collection-query projection while it provides behavior the standard endpoint cannot express, but use `core-data` as the canonical store for individual `crtxt_document` records and writes. Row query results can prime that store or return document IDs alongside computed field data. `saveEntityRecord` can then update the shared record cache, while the collection-query cache only invalidates projections affected by that record. This would remove several local workarounds:
+Every mutation still triggers `refresh()` and the row and trash invalidation events. `RowProperties` keeps optimistic values because its REST row can be stale after `core-data` saves a change.
 
--   The `refresh()` handles and invalidation events exist only because rows aren't reactive.
--   Half of `RowMutationContext` (also driven by [td-dataviews-inline-editing](#td-dataviews-inline-editing)) exists because cells do not write through the shared `core-data` record.
--   `onCreated` still runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic for unconstrained views. With reactive pagination Cortext could watch `totalPages` instead of guessing.
--   Relation label lookup can use the shared document records instead of a one-off include query.
+The row editor mounts inside a subregistry, which makes it look like row saves are split across two stores. They are not. `withRegistryProvider` in `@wordpress/editor` builds that subregistry with only `core/block-editor` and `core/editor` and passes the root registry as its fallback, so `core` resolves to the root. Property saves, editor autosave, and inline grid saves all reach the same entity store and share its per-record lock, so they serialize against each other. This is worth stating because the subregistry suggests the opposite. There is also a WordPress upgrade risk: if the post-type pre-persist hook starts adding sync metadata, every partial cell save will include it.
 
-The query planner, field calculations, and hydrated relation data can remain behind the row endpoint. Document identity and mutations need one owner; product queries can keep the shape they need.
+**Where.** Writes are in `src/components/rowDocumentMutations.js`, `src/components/rowDocumentCreation.js`, and `src/documents/mutations.js`. Custom reads and manual cache synchronization remain in `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, `src/hooks/useTrashedDocuments.js`, `src/components/CollectionDataViews.js`, `src/components/RowProperties.js`, `src/components/relations/RelationEditor.js`, `src/components/SidebarTrash.js`, and `src/router/EntityRoute.js`.
+
+**Solution.** Fetch the ordered IDs with `/cortext/v1/rows?shape=ids`, load the shared `crtxt_document` records through `core-data` in stable `include` chunks, then put them back in ID order. Once the grid and relation picker use those records, `core-data` can handle record caching, race protection, and updates after a mutation. This removes:
+
+- The `refresh()` handles and invalidation events exist only because rows aren't reactive.
+- Half of `RowMutationContext` (also driven by [td-dataviews-inline-editing](#td-dataviews-inline-editing)) exists because cells can't reach a `core-data` store that isn't there.
+- `onCreated` still runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic for unconstrained views. With reactive pagination Cortext could watch `totalPages` instead of guessing.
+- The server/client planner only decides how to query IDs; it no longer doubles as a record cache.
+- Relation label lookup becomes a normal entity-record resolver instead of a one-off include query.
+
+The record query must request `draft`, `private`, and `publish` explicitly. WordPress otherwise returns only published rows. Cross-document views such as Trash can stay behind `/cortext/v1/documents/*` endpoints.
 
 <a id="td-modified-by-plugin-stored"></a>
 

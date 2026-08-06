@@ -1,5 +1,6 @@
-import apiFetch from '@wordpress/api-fetch';
 import { Notice } from '@wordpress/components';
+import { store as coreStore } from '@wordpress/core-data';
+import { useDispatch } from '@wordpress/data';
 import { DataViews } from '@wordpress/dataviews/wp';
 import {
 	useCallback,
@@ -84,6 +85,10 @@ import { toDataViewId, toRecordId } from '../hooks/fieldIds';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
 import { filterFavoritesByDeletedIds, useFavoriteToggle } from '../documents';
+import {
+	duplicateDocumentRecord,
+	trashDocumentRecord,
+} from '../documents/mutations';
 import { useFavorites } from '../hooks/useFavorites';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
@@ -109,6 +114,7 @@ export default function CollectionDataViews( {
 } ) {
 	const { fields, collection, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
+	const { receiveEntityRecords, saveEntityRecord } = useDispatch( coreStore );
 	const { touchRecent } = useRecents();
 	// Field IDs from the last schema sync. We use this to auto-show fields
 	// the user just created. `null` on first run means the saved view should
@@ -557,7 +563,12 @@ export default function CollectionDataViews( {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			const updated = await saveRowDocumentField( rowId, fieldId, value );
+			const updated = await saveRowDocumentField(
+				saveEntityRecord,
+				rowId,
+				fieldId,
+				value
+			);
 			touchRecent( {
 				kind: 'row',
 				id: updated?.id ?? rowId,
@@ -567,7 +578,7 @@ export default function CollectionDataViews( {
 			notifyCollectionRowsChanged( collectionId );
 			return updated;
 		},
-		[ collectionId, refresh, touchRecent ]
+		[ collectionId, refresh, saveEntityRecord, touchRecent ]
 	);
 
 	let dataViewLayoutType = 'table';
@@ -955,10 +966,10 @@ export default function CollectionDataViews( {
 			}
 			setRowActionError( null );
 			try {
-				const created = await apiFetch( {
-					path: `/cortext/v1/documents/${ row.id }/duplicate`,
-					method: 'POST',
-				} );
+				const created = await duplicateDocumentRecord(
+					row,
+					receiveEntityRecords
+				);
 				if ( created?.id ) {
 					touchRecent( {
 						kind: 'row',
@@ -974,7 +985,7 @@ export default function CollectionDataViews( {
 				);
 			}
 		},
-		[ collectionId, refresh, touchRecent ]
+		[ collectionId, receiveEntityRecords, refresh, touchRecent ]
 	);
 
 	const forgetDeletedRows = useCallback(
@@ -1014,11 +1025,7 @@ export default function CollectionDataViews( {
 			const results = await allSettledWithConcurrency(
 				nextRows,
 				BULK_DELETE_CONCURRENCY,
-				( row ) =>
-					apiFetch( {
-						path: `/wp/v2/crtxt_documents/${ row.id }`,
-						method: 'DELETE',
-					} )
+				( row ) => trashDocumentRecord( row, receiveEntityRecords )
 			);
 
 			const deletedIds = [];
@@ -1089,6 +1096,7 @@ export default function CollectionDataViews( {
 			forgetDeletedRows,
 			openRowId,
 			postType,
+			receiveEntityRecords,
 			refresh,
 			setFavorites,
 		]

@@ -9,7 +9,6 @@
  * `RowDetailView` for side peek and modal panes.
  */
 
-import apiFetch from '@wordpress/api-fetch';
 import {
 	BlockCanvas,
 	BlockList,
@@ -19,7 +18,11 @@ import {
 } from '@wordpress/block-editor';
 import { createBlock } from '@wordpress/blocks';
 import { Button, Disabled, Notice } from '@wordpress/components';
-import { useEntityProp, useEntityRecord } from '@wordpress/core-data';
+import {
+	store as coreStore,
+	useEntityProp,
+	useEntityRecord,
+} from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { __ } from '@wordpress/i18n';
@@ -44,6 +47,7 @@ import {
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import { parseDocumentIcon } from './DocumentIcon';
 import afterNextPaint from '../hooks/afterNextPaint';
+import { restoreDocumentRecord } from '../documents/mutations';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
@@ -1312,7 +1316,12 @@ function HeaderAwareRootAppender( { ownerBlockName, postId, record } ) {
 	);
 }
 
-function TrashedNotice( { postId, postType, onRestored } ) {
+function TrashedNotice( {
+	postId,
+	postType,
+	onRestored,
+	receiveEntityRecords,
+} ) {
 	const [ isRestoring, setIsRestoring ] = useState( false );
 	const [ error, setError ] = useState( null );
 
@@ -1320,10 +1329,10 @@ function TrashedNotice( { postId, postType, onRestored } ) {
 		setError( null );
 		setIsRestoring( true );
 		try {
-			const response = await apiFetch( {
-				path: `/cortext/v1/documents/${ postId }/restore`,
-				method: 'POST',
-			} );
+			const response = await restoreDocumentRecord(
+				{ id: postId },
+				receiveEntityRecords
+			);
 			onRestored?.( postId, postType, response );
 		} catch ( err ) {
 			setError(
@@ -1613,7 +1622,12 @@ export default function EditorBody( {
 	extraStyles,
 	onReady,
 	onRestored,
+	receiveEntityRecords,
 } ) {
+	const { receiveEntityRecords: registryReceiveEntityRecords } =
+		useDispatch( coreStore );
+	const receiveRestoredRecords =
+		receiveEntityRecords ?? registryReceiveEntityRecords;
 	const baseStyles = useSelect(
 		( select ) => select( editorStore ).getEditorSettings().styles,
 		[]
@@ -1769,6 +1783,7 @@ export default function EditorBody( {
 					postId={ postId }
 					postType={ postType }
 					onRestored={ onRestored }
+					receiveEntityRecords={ receiveRestoredRecords }
 				/>
 			) }
 			{ isReadOnly ? (

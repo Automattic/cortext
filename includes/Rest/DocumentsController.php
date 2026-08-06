@@ -346,6 +346,15 @@ final class DocumentsController {
 			return $result;
 		}
 
+		// Costs one internal REST request that runs the full row enrichment
+		// (relations, rollups, formula materialization) for the new row. That
+		// buys clients a canonical record they can cache instead of the
+		// envelope, so a null here still leaves the duplicate successful.
+		$post           = get_post( (int) $result['id'] );
+		$result['post'] = $post instanceof WP_Post
+			? $this->prepared_post( $post )
+			: null;
+
 		return new WP_REST_Response( $result, 201 );
 	}
 
@@ -580,9 +589,9 @@ final class DocumentsController {
 	}
 
 	/**
-	 * Runs the standard `WP_REST_Posts_Controller` against the given document
-	 * so the response payload matches what `useEntityRecord` already knows how
-	 * to consume. Lets clients drop a follow-up GET after a successful restore.
+	 * Returns the document in the REST post shape expected by `useEntityRecord`.
+	 * Restore and duplicate responses can include it instead of requiring
+	 * another GET.
 	 *
 	 * @param WP_Post $post Document post to render.
 	 *
