@@ -29,7 +29,7 @@ import useDebouncedValue from '../hooks/useDebouncedValue';
 import useDocuments from '../hooks/useDocuments';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
-import { listIconForRecord } from '../documents';
+import { collectionHint, listIconForRecord } from '../documents';
 
 const OPEN_COMMAND_PALETTE_EVENT = 'cortext:open-command-palette';
 const DEFAULT_COMMAND_CONTEXT = 'root';
@@ -74,18 +74,6 @@ function documentTitle( doc ) {
 		/* translators: 1: row title, 2: collection title */
 		__( '%1$s in %2$s', 'cortext' ),
 		title,
-		collectionTitle
-	);
-}
-
-function collectionHint( doc ) {
-	const collectionTitle = doc?.collection?.title?.trim?.();
-	if ( ! collectionTitle ) {
-		return '';
-	}
-	return sprintf(
-		/* translators: %s: parent collection title */
-		__( 'in %s', 'cortext' ),
 		collectionTitle
 	);
 }
