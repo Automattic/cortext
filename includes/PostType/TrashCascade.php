@@ -26,8 +26,8 @@ namespace Cortext\PostType;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\Relations;
-use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Post;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -51,6 +51,17 @@ final class TrashCascade {
 
 	private const ACTIVE_STATUSES = array( 'publish', 'private', 'draft', 'pending', 'future', 'auto-draft' );
 
+	private DocumentCascade $cascade;
+
+	public function __construct( ?DocumentCascade $cascade = null ) {
+		$this->cascade = $cascade ?? new DocumentCascade(
+			self::ACTIVE_STATUSES,
+			Documents::STATUS_TRASH,
+			self::PARENT_MARKER_META,
+			self::COLLECTION_MARKER_META
+		);
+	}
+
 	public function register(): void {
 		// Attach filters immediately so tests and admin flows see them right
 		// after register(). Marker meta still waits for init, matching
@@ -59,7 +70,7 @@ final class TrashCascade {
 		add_action( 'wp_trash_post', array( $this, 'on_trash' ), 10, 1 );
 		add_action( 'untrashed_post', array( $this, 'on_restore' ), 10, 1 );
 		// Runs before `TraitTaxonomy::sync_term_on_delete` (priority 10), so
-		// `all_row_ids()` still resolves the trait term and can collect the
+		// `row_ids_for_collection()` still resolves the trait term and can collect the
 		// collection's rows. Direct `wp_delete_post( $collection_id, true )`
 		// would otherwise orphan rows if the term were gone first.
 		add_action( 'before_delete_post', array( $this, 'on_delete' ), 5, 1 );
@@ -134,21 +145,12 @@ final class TrashCascade {
 	 * @param int $post_id Document id that was just moved to trash.
 	 */
 	public function on_trash( int $post_id ): void {
-		if ( Document::POST_TYPE !== get_post_type( $post_id ) ) {
-			return;
-		}
-
-		foreach ( $this->active_child_ids( $post_id ) as $child_id ) {
-			update_post_meta( $child_id, self::PARENT_MARKER_META, $post_id );
-			wp_trash_post( $child_id );
-		}
-
-		if ( Document::is_collection( $post_id ) ) {
-			foreach ( $this->active_row_ids( $post_id ) as $row_id ) {
-				update_post_meta( $row_id, self::COLLECTION_MARKER_META, $post_id );
-				wp_trash_post( $row_id );
+		$this->cascade->cascade(
+			$post_id,
+			static function ( int $child_id ): void {
+				wp_trash_post( $child_id );
 			}
-		}
+		);
 	}
 
 	/**
@@ -159,26 +161,12 @@ final class TrashCascade {
 	 * @param int $post_id Document id that was just restored.
 	 */
 	public function on_restore( int $post_id ): void {
-		if ( Document::POST_TYPE !== get_post_type( $post_id ) ) {
-			return;
-		}
-
-		// Clear the restored document's own markers so a later ancestor
-		// restore cannot pull it through the cascade again.
-		delete_post_meta( $post_id, self::PARENT_MARKER_META );
-		delete_post_meta( $post_id, self::COLLECTION_MARKER_META );
-
-		foreach ( $this->trashed_children_marked_by( $post_id ) as $child_id ) {
-			wp_untrash_post( $child_id );
-			delete_post_meta( $child_id, self::PARENT_MARKER_META );
-		}
-
-		if ( Document::is_collection( $post_id ) ) {
-			foreach ( $this->trashed_rows_marked_by( $post_id ) as $row_id ) {
-				wp_untrash_post( $row_id );
-				delete_post_meta( $row_id, self::COLLECTION_MARKER_META );
+		$this->cascade->restore(
+			$post_id,
+			static function ( int $child_id ): void {
+				wp_untrash_post( $child_id );
 			}
-		}
+		);
 	}
 
 	/**
@@ -206,7 +194,12 @@ final class TrashCascade {
 			return;
 		}
 
-		foreach ( $this->all_row_ids( $post_id ) as $row_id ) {
+		foreach (
+			$this->cascade->row_ids_for_collection(
+				$post_id,
+				array_merge( self::ACTIVE_STATUSES, array( Documents::STATUS_TRASH ) )
+			) as $row_id
+		) {
 			wp_delete_post( $row_id, true );
 		}
 	}
@@ -224,40 +217,7 @@ final class TrashCascade {
 	 * @return int[] Trashed descendant ids (root excluded), no guaranteed order.
 	 */
 	public function descendants_for_root( int $root_id ): array {
-		if ( Document::POST_TYPE !== get_post_type( $root_id ) ) {
-			return array();
-		}
-
-		$collected = array();
-		$seen      = array( $root_id => true );
-		$frontier  = array( $root_id );
-
-		while ( ! empty( $frontier ) ) {
-			$next = array();
-			foreach ( $frontier as $current ) {
-				foreach ( $this->trashed_children_marked_by( $current ) as $child_id ) {
-					if ( isset( $seen[ $child_id ] ) ) {
-						continue;
-					}
-					$seen[ $child_id ] = true;
-					$collected[]       = $child_id;
-					$next[]            = $child_id;
-				}
-				if ( Document::is_collection( $current ) ) {
-					foreach ( $this->trashed_rows_marked_by( $current ) as $row_id ) {
-						if ( isset( $seen[ $row_id ] ) ) {
-							continue;
-						}
-						$seen[ $row_id ] = true;
-						$collected[]     = $row_id;
-						$next[]          = $row_id;
-					}
-				}
-			}
-			$frontier = $next;
-		}
-
-		return $collected;
+		return $this->cascade->descendants_for_root( $root_id );
 	}
 
 	/**
@@ -297,135 +257,6 @@ final class TrashCascade {
 			return $new_status;
 		}
 		return '' !== $previous_status ? $previous_status : $new_status;
-	}
-
-	/**
-	 * Active children of `$parent_id` via `post_parent`.
-	 *
-	 * @param int $parent_id Document id.
-	 * @return int[]
-	 */
-	private function active_child_ids( int $parent_id ): array {
-		$ids = get_posts(
-			array(
-				'post_type'      => Document::POST_TYPE,
-				'post_parent'    => $parent_id,
-				'post_status'    => self::ACTIVE_STATUSES,
-				'posts_per_page' => -1,
-				'fields'         => 'ids',
-				'no_found_rows'  => true,
-				'orderby'        => 'ID',
-				'order'          => 'ASC',
-			)
-		);
-		return array_map( 'intval', $ids );
-	}
-
-	/**
-	 * Trashed children tagged with `$parent_id`'s parent marker.
-	 *
-	 * @param int $parent_id Document id whose marker tags the children.
-	 * @return int[]
-	 */
-	private function trashed_children_marked_by( int $parent_id ): array {
-		$ids = get_posts(
-			array(
-				'post_type'      => Document::POST_TYPE,
-				'post_status'    => 'trash',
-				'posts_per_page' => -1,
-				'fields'         => 'ids',
-				'no_found_rows'  => true,
-				'meta_key'       => self::PARENT_MARKER_META,  // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-				'meta_value'     => (string) $parent_id,       // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-			)
-		);
-		return array_map( 'intval', $ids );
-	}
-
-	/**
-	 * Active rows of the collection `$collection_id`.
-	 *
-	 * @param int $collection_id Collection document id.
-	 * @return int[]
-	 */
-	private function active_row_ids( int $collection_id ): array {
-		return $this->row_ids_for_collection( $collection_id, self::ACTIVE_STATUSES );
-	}
-
-	/**
-	 * Trashed rows tagged with `$collection_id`'s collection marker.
-	 *
-	 * @param int $collection_id Collection document id whose marker tags the rows.
-	 * @return int[]
-	 */
-	private function trashed_rows_marked_by( int $collection_id ): array {
-		$term_id = Relations::trait_term_id_for_collection( $collection_id );
-		if ( $term_id < 1 ) {
-			return array();
-		}
-		$ids = get_posts(
-			array(
-				'post_type'      => Document::POST_TYPE,
-				'post_status'    => 'trash',
-				'posts_per_page' => -1,
-				'fields'         => 'ids',
-				'no_found_rows'  => true,
-				'meta_key'       => self::COLLECTION_MARKER_META, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-				'meta_value'     => (string) $collection_id,      // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-				'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
-					array(
-						'taxonomy' => TraitTaxonomy::TAXONOMY,
-						'field'    => 'term_id',
-						'terms'    => array( $term_id ),
-					),
-				),
-			)
-		);
-		return array_map( 'intval', $ids );
-	}
-
-	/**
-	 * All rows of `$collection_id`, including trashed ones. Used on permanent
-	 * delete to clean up rows that the trait term still points at.
-	 *
-	 * @param int $collection_id Collection document id.
-	 * @return int[]
-	 */
-	private function all_row_ids( int $collection_id ): array {
-		return $this->row_ids_for_collection(
-			$collection_id,
-			array( 'publish', 'private', 'draft', 'pending', 'future', 'auto-draft', 'trash' )
-		);
-	}
-
-	/**
-	 * Rows of a collection in the given statuses.
-	 *
-	 * @param int      $collection_id Collection document id.
-	 * @param string[] $statuses      Post status filter.
-	 */
-	private function row_ids_for_collection( int $collection_id, array $statuses ): array {
-		$term_id = Relations::trait_term_id_for_collection( $collection_id );
-		if ( $term_id < 1 ) {
-			return array();
-		}
-		$ids = get_posts(
-			array(
-				'post_type'      => Document::POST_TYPE,
-				'post_status'    => $statuses,
-				'posts_per_page' => -1,
-				'fields'         => 'ids',
-				'no_found_rows'  => true,
-				'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
-					array(
-						'taxonomy' => TraitTaxonomy::TAXONOMY,
-						'field'    => 'term_id',
-						'terms'    => array( $term_id ),
-					),
-				),
-			)
-		);
-		return array_map( 'intval', $ids );
 	}
 
 	/**

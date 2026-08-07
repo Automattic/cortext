@@ -12,6 +12,7 @@ import { useNavigate } from '@tanstack/react-router';
 import DocumentIcon from './DocumentIcon';
 import { SidebarListSkeleton } from './Skeleton';
 import TypeToConfirmDialog from './TypeToConfirmDialog';
+import computeCascadeRoots from './computeCascadeRoots';
 import { POST_TYPE, TRASHED_PAGES_QUERY } from './page-queries';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
@@ -32,56 +33,13 @@ const EMPTY_TRASHED_DOCUMENTS_STATE = {
 // of a collection, but the value carries the same meaning ("trashed by this
 // document"), so the sidebar treats either marker as a pointer back to the
 // cascade root.
-const PARENT_MARKER_META = '_cortext_trashed_by_parent';
-const COLLECTION_MARKER_META = '_cortext_trashed_by_collection';
+const TRASH_MARKER_META_KEYS = [
+	'_cortext_trashed_by_parent',
+	'_cortext_trashed_by_collection',
+];
 
 export function computeSidebarTrashRoots( trashedDocuments = [] ) {
-	const all = Array.isArray( trashedDocuments ) ? trashedDocuments : [];
-	const trashedById = new Map(
-		all.map( ( document ) => [ document.id, document ] )
-	);
-	const childrenByMarker = new Map();
-
-	const markerOf = ( document ) => {
-		const meta = document.meta ?? {};
-		const parent = Number( meta[ PARENT_MARKER_META ] ?? 0 );
-		if ( parent > 0 ) {
-			return parent;
-		}
-		return Number( meta[ COLLECTION_MARKER_META ] ?? 0 );
-	};
-
-	all.forEach( ( document ) => {
-		const marker = markerOf( document );
-		if ( marker > 0 && trashedById.has( marker ) ) {
-			if ( ! childrenByMarker.has( marker ) ) {
-				childrenByMarker.set( marker, [] );
-			}
-			childrenByMarker.get( marker ).push( document );
-		}
-	} );
-
-	const roots = all.filter( ( document ) => {
-		const marker = markerOf( document );
-		return marker === 0 || ! trashedById.has( marker );
-	} );
-
-	const descendantCountById = new Map();
-	roots.forEach( ( root ) => {
-		const counts = { total: 0 };
-		const stack = [ ...( childrenByMarker.get( root.id ) ?? [] ) ];
-		while ( stack.length ) {
-			const node = stack.pop();
-			counts.total++;
-			const kids = childrenByMarker.get( node.id );
-			if ( kids ) {
-				stack.push( ...kids );
-			}
-		}
-		descendantCountById.set( root.id, counts );
-	} );
-
-	return { roots, descendantCountById };
+	return computeCascadeRoots( trashedDocuments, TRASH_MARKER_META_KEYS );
 }
 
 function optionalTitleText( title ) {
