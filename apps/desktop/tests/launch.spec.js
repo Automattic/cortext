@@ -13,6 +13,7 @@ const { test, expect, _electron: electron } = require( '@playwright/test' );
 const { spawn } = require( 'node:child_process' );
 const { once } = require( 'node:events' );
 const http = require( 'node:http' );
+const net = require( 'node:net' );
 const path = require( 'node:path' );
 const {
 	existsSync,
@@ -68,12 +69,67 @@ test.beforeAll( async () => {
 					onload="document.body.dataset.runtimeImage='loaded'"
 					onerror="document.body.dataset.runtimeImage='blocked'"
 				>
+				<button id="request-camera">Camera</button>
+				<button id="request-microphone">Microphone</button>
+				<button id="request-geolocation">Location</button>
+				<button id="request-notifications">Notifications</button>
+				<button id="request-clipboard-read">Clipboard</button>
+				<button id="request-fullscreen">Fullscreen</button>
 				<a
 					id="runtime-link"
 					target="_top"
 					href="${ runtimeOrigin }/wp-json/"
-					style="position:fixed;inset:0;display:block"
 				>Open runtime</a>
+				<script>
+					const recordMediaPermission = async ( name, constraints ) => {
+						try {
+							const stream = await navigator.mediaDevices.getUserMedia(
+								constraints
+							);
+							stream.getTracks().forEach( ( track ) => track.stop() );
+							document.body.dataset[ name ] = 'granted';
+						} catch {
+							document.body.dataset[ name ] = 'denied';
+						}
+					};
+					document.querySelector( '#request-camera' ).onclick = () =>
+						recordMediaPermission( 'camera', { video: true } );
+					document.querySelector( '#request-microphone' ).onclick = () =>
+						recordMediaPermission( 'microphone', { audio: true } );
+					document.querySelector( '#request-geolocation' ).onclick = () => {
+						navigator.geolocation.getCurrentPosition(
+							() => {
+								document.body.dataset.geolocation = 'granted';
+							},
+							() => {
+								document.body.dataset.geolocation = 'denied';
+							}
+						);
+					};
+					document.querySelector( '#request-notifications' ).onclick =
+						async () => {
+							document.body.dataset.notifications =
+								await Notification.requestPermission();
+						};
+					document.querySelector( '#request-clipboard-read' ).onclick =
+						async () => {
+							try {
+								await navigator.clipboard.readText();
+								document.body.dataset.clipboardRead = 'granted';
+							} catch {
+								document.body.dataset.clipboardRead = 'denied';
+							}
+						};
+					document.querySelector( '#request-fullscreen' ).onclick =
+						async () => {
+							try {
+								await document.documentElement.requestFullscreen();
+								document.body.dataset.fullscreen = 'entered';
+							} catch {
+								document.body.dataset.fullscreen = 'denied';
+							}
+						};
+				</script>
 			</body>`
 		);
 	} );
@@ -362,6 +418,9 @@ function waitForProcessExit( app, timeoutMs = 10000 ) {
 }
 
 async function expectSecondInstanceToExit( app, userDataPath ) {
+	const executablePath = await app.evaluate( ( { app } ) =>
+		app.getPath( 'exe' )
+	);
 	await app.evaluate( ( { app } ) => {
 		globalThis.__cortextE2ESecondInstanceSeen = false;
 		app.once( 'second-instance', () => {
@@ -378,13 +437,14 @@ async function expectSecondInstanceToExit( app, userDataPath ) {
 	if ( process.platform === 'linux' ) {
 		secondInstanceArgs.unshift( '--no-sandbox' );
 	}
-	const secondInstance = spawn( app.process().spawnfile, secondInstanceArgs, {
+	const secondInstance = spawn( executablePath, secondInstanceArgs, {
 		env: {
 			...process.env,
 			CORTEXT_DEVTOOLS: '0',
 			CORTEXT_E2E: '1',
 		},
 		stdio: 'ignore',
+		windowsHide: true,
 	} );
 	let timeoutId;
 	const timeout = new Promise( ( _resolve, reject ) => {
@@ -402,6 +462,46 @@ async function expectSecondInstanceToExit( app, userDataPath ) {
 				app.evaluate( () => globalThis.__cortextE2ESecondInstanceSeen ),
 			{ timeout: 10 * 1000 }
 		)
+		.toBe( true );
+}
+
+function canBindRuntimePort( origin ) {
+	const endpoint = new URL( origin );
+	return new Promise( ( resolve, reject ) => {
+		const server = net.createServer();
+		server.unref();
+		server.once( 'error', ( error ) => {
+			if ( [ 'EACCES', 'EADDRINUSE' ].includes( error.code ) ) {
+				resolve( false );
+				return;
+			}
+			reject( error );
+		} );
+		server.listen(
+			{
+				host: endpoint.hostname,
+				port: Number( endpoint.port ),
+				exclusive: true,
+			},
+			() => {
+				server.close( ( error ) => {
+					if ( error ) {
+						reject( error );
+						return;
+					}
+					resolve( true );
+				} );
+			}
+		);
+	} );
+}
+
+async function expectRuntimePortToBeFree( origin ) {
+	await expect
+		.poll( () => canBindRuntimePort( origin ), {
+			message: `Cortext closed, but ${ origin } is still in use.`,
+			timeout: 15 * 1000,
+		} )
 		.toBe( true );
 }
 
@@ -479,6 +579,12 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 			home: runtimeOrigin,
 			url: runtimeOrigin,
 		} );
+		const betaNoticeButton = window.getByRole( 'button', {
+			name: 'Got it',
+		} );
+		if ( await betaNoticeButton.isVisible() ) {
+			await betaNoticeButton.click();
+		}
 
 		const redirectedImageStatus = await window.evaluate( ( origin ) => {
 			return new Promise( ( resolve ) => {
@@ -505,6 +611,10 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 		await window.evaluate( ( url ) => {
 			const frame = document.createElement( 'iframe' );
 			frame.id = 'untrusted-frame';
+			frame.allow =
+				'camera; microphone; geolocation; clipboard-read; fullscreen';
+			frame.style.cssText =
+				'position:fixed;inset:0;width:640px;height:480px;z-index:2147483647;background:white';
 			frame.src = url;
 			document.body.append( frame );
 		}, untrustedOrigin );
@@ -516,6 +626,43 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 					.getAttribute( 'data-runtime-image' )
 			)
 			.toBe( 'blocked' );
+
+		for ( const permission of [
+			'camera',
+			'microphone',
+			'geolocation',
+			'notifications',
+			'clipboard-read',
+		] ) {
+			await untrustedFrame.locator( `#request-${ permission }` ).click();
+		}
+		await expect
+			.poll( async () => {
+				return untrustedFrame
+					.locator( 'body' )
+					.evaluate( ( body ) => ( {
+						camera: body.dataset.camera,
+						clipboardRead: body.dataset.clipboardRead,
+						geolocation: body.dataset.geolocation,
+						microphone: body.dataset.microphone,
+						notifications: body.dataset.notifications,
+					} ) );
+			} )
+			.toEqual( {
+				camera: 'denied',
+				clipboardRead: 'denied',
+				geolocation: 'denied',
+				microphone: 'denied',
+				notifications: 'denied',
+			} );
+		await untrustedFrame.locator( '#request-fullscreen' ).click();
+		await expect
+			.poll( () =>
+				untrustedFrame
+					.locator( 'body' )
+					.getAttribute( 'data-fullscreen' )
+			)
+			.toBe( 'entered' );
 
 		await window
 			.locator( '#untrusted-frame' )
@@ -645,6 +792,9 @@ test( 'opens Cortext and rejects untrusted runtime requests', async () => {
 		).toBe( true );
 	} finally {
 		await app.close();
+		if ( runtimeOrigin ) {
+			await expectRuntimePortToBeFree( runtimeOrigin );
+		}
 		await new Promise( ( resolve, reject ) => {
 			occupiedPortServer.close( ( error ) => {
 				if ( error ) {
@@ -688,6 +838,7 @@ test( 'reloads, preserves preferences, and exits with its window', async () => {
 		await window.close();
 		await exitPromise;
 		didExit = true;
+		await expectRuntimePortToBeFree( runtimeOrigin );
 
 		( { app: relaunchedApp } = await launchDesktopApp( userDataPath ) );
 		await expectTemporaryUserData( relaunchedApp, userDataPath );
@@ -710,6 +861,9 @@ test( 'reloads, preserves preferences, and exits with its window', async () => {
 		}
 		if ( relaunchedApp ) {
 			await relaunchedApp.close();
+		}
+		if ( runtimeOrigin ) {
+			await expectRuntimePortToBeFree( runtimeOrigin );
 		}
 	}
 } );

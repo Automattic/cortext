@@ -1391,6 +1391,16 @@
 		padding: $grid-unit-20 0;
 		opacity: 0.6;
 	}
+
+	// The canvas has no `__header` to align against, so the peek's inset has
+	// nothing to line up with and reads as an accidental indent. Keep only what
+	// the drag chip needs: 24px is exactly the chip's width, so it lands flush
+	// with the block's left edge rather than hanging outside it. Scoped to the
+	// block, not the token: the peek and modal toolbars still spend the inset on
+	// their own `__header`.
+	&.cortext-document-properties {
+		--cortext-row-detail-field-inset: #{$grid-unit-30};
+	}
 }
 
 @keyframes cortext-row-detail-pane-enter {

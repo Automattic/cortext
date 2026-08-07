@@ -119,6 +119,166 @@ function dataViewTableRow( canvas, title ) {
 	} );
 }
 
+function rectanglesOverlap( first, second ) {
+	return (
+		first.x < second.x + second.width &&
+		first.x + first.width > second.x &&
+		first.y < second.y + second.height &&
+		first.y + first.height > second.y
+	);
+}
+
+async function toolbarMenuGeometry( parentToolbar, openMenu ) {
+	// Floating UI may adjust the portal after it mounts. Wait until its box is
+	// unchanged for two frames before comparing positions.
+	await openMenu.evaluate(
+		( menu ) =>
+			new Promise( ( resolve ) => {
+				let previousBox;
+				let sampledFrames = 0;
+				const sample = () => {
+					const rect = menu.getBoundingClientRect();
+					const box = [ rect.x, rect.y, rect.width, rect.height ]
+						.map( ( value ) => value.toFixed( 2 ) )
+						.join( ':' );
+					sampledFrames += 1;
+					if ( box === previousBox || sampledFrames === 10 ) {
+						resolve();
+						return;
+					}
+					previousBox = box;
+					menu.ownerDocument.defaultView.requestAnimationFrame(
+						sample
+					);
+				};
+				menu.ownerDocument.defaultView.requestAnimationFrame( sample );
+			} )
+	);
+
+	const [ toolbarBox, menuBox ] = await Promise.all( [
+		parentToolbar.boundingBox(),
+		openMenu.boundingBox(),
+	] );
+	expect( toolbarBox ).toBeTruthy();
+	expect( menuBox ).toBeTruthy();
+
+	return {
+		menuBox,
+		overlaps: rectanglesOverlap( toolbarBox, menuBox ),
+		toolbarBox,
+	};
+}
+
+async function startParentToolbarOverlapFlashLog( page ) {
+	await page.evaluate( () => {
+		window.__cortextToolbarOverlapFlashCleanup?.();
+		window.__cortextToolbarOverlapFlashEvents = [];
+
+		const canvasRoot = document.querySelector(
+			'.cortext-canvas__block-canvas'
+		);
+		const iframe = canvasRoot?.querySelector(
+			'iframe[name="editor-canvas"]'
+		);
+		const iframeDocument = iframe?.contentDocument;
+		if ( ! canvasRoot || ! iframeDocument?.body ) {
+			throw new Error( 'Could not instrument the editor canvas.' );
+		}
+
+		let stopped = false;
+		let animationFrame;
+		let sampleTimer;
+		const isVisible = ( element, view ) => {
+			const style = view.getComputedStyle( element );
+			return (
+				style.display !== 'none' &&
+				style.visibility !== 'hidden' &&
+				Number.parseFloat( style.opacity ) !== 0 &&
+				element.getClientRects().length > 0
+			);
+		};
+		const overlaps = ( first, second ) =>
+			first.left < second.right &&
+			first.right > second.left &&
+			first.top < second.bottom &&
+			first.bottom > second.top;
+		const menuRectInParentViewport = ( menu ) => {
+			const frameRect = iframe.getBoundingClientRect();
+			const menuRect = menu.getBoundingClientRect();
+			const scaleX = iframe.offsetWidth
+				? frameRect.width / iframe.offsetWidth
+				: 1;
+			const scaleY = iframe.offsetHeight
+				? frameRect.height / iframe.offsetHeight
+				: 1;
+			const left =
+				frameRect.left + ( iframe.clientLeft + menuRect.left ) * scaleX;
+			const top =
+				frameRect.top + ( iframe.clientTop + menuRect.top ) * scaleY;
+			return {
+				bottom: top + menuRect.height * scaleY,
+				left,
+				right: left + menuRect.width * scaleX,
+				top,
+			};
+		};
+		const hasVisibleOverlap = () => {
+			const toolbars = Array.from(
+				canvasRoot.querySelectorAll(
+					'.block-editor-block-contextual-toolbar'
+				)
+			).filter( ( toolbar ) => isVisible( toolbar, window ) );
+			const menus = Array.from(
+				iframeDocument.querySelectorAll(
+					'[data-dialog][role="menu"][data-open]'
+				)
+			).filter( ( menu ) =>
+				isVisible( menu, iframeDocument.defaultView )
+			);
+
+			return toolbars.some( ( toolbar ) =>
+				menus.some( ( menu ) =>
+					overlaps(
+						toolbar.getBoundingClientRect(),
+						menuRectInParentViewport( menu )
+					)
+				)
+			);
+		};
+		const observePaint = () => {
+			animationFrame = window.requestAnimationFrame( () => {
+				// Sample from the next task, after the browser has painted. A toolbar
+				// hidden by a later callback in this frame was never visible to the user.
+				sampleTimer = window.setTimeout( () => {
+					if ( stopped ) {
+						return;
+					}
+					if ( hasVisibleOverlap() ) {
+						window.__cortextToolbarOverlapFlashEvents.push(
+							'post-paint'
+						);
+					}
+					observePaint();
+				}, 0 );
+			} );
+		};
+
+		observePaint();
+		window.__cortextToolbarOverlapFlashCleanup = () => {
+			stopped = true;
+			window.cancelAnimationFrame( animationFrame );
+			window.clearTimeout( sampleTimer );
+		};
+	} );
+}
+
+async function stopParentToolbarOverlapFlashLog( page ) {
+	return page.evaluate( () => {
+		window.__cortextToolbarOverlapFlashCleanup?.();
+		return window.__cortextToolbarOverlapFlashEvents ?? [];
+	} );
+}
+
 async function startSidePeekShellStabilityLog( page ) {
 	await page.evaluate( () => {
 		window.__cortextSidePeekShellEvents = [];
@@ -718,6 +878,168 @@ test.describe( 'Collection view block', () => {
 				canvas.getByText( 'Ursula K. Le Guin' )
 			).toBeVisible();
 		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'hides the parent toolbar only when it overlaps a DataViews menu in the iframe', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			await page.setViewportSize( { width: 1440, height: 1200 } );
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'DataView menu toolbar test page',
+					status: 'private',
+					content: [
+						createDataViewBlockMarkup( fixture.collection.id ),
+						createDataViewBlockMarkup( fixture.collection.id ),
+					].join( '\n' ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const dataViews = canvas.locator( '.cortext-data-view' );
+			await expect( dataViews ).toHaveCount( 2 );
+			await expect(
+				dataViews.nth( 1 ).getByText( 'The Left Hand of Darkness' )
+			).toBeVisible();
+			const parentToolbar = page.locator(
+				'.cortext-canvas__block-canvas .block-editor-block-contextual-toolbar'
+			);
+			const titleHeader = dataViews
+				.first()
+				.getByRole( 'columnheader', { name: /Title/ } );
+			const titleDragHandle = titleHeader.locator(
+				'.cortext-column-drag-handle'
+			);
+			const openMenu = canvas
+				.locator( '[data-dialog][role="menu"][data-open]' )
+				.first();
+
+			// Start with no selection. This real click selects the block and opens
+			// its native menu, matching the reported path.
+			await page.evaluate( () => {
+				window.wp.data
+					.dispatch( 'core/block-editor' )
+					.clearSelectedBlock();
+			} );
+			await expect( parentToolbar ).toBeHidden();
+			await startParentToolbarOverlapFlashLog( page );
+			await titleDragHandle.click();
+			await expect( openMenu ).toBeVisible();
+			await expect( parentToolbar ).toHaveCount( 1 );
+			expect(
+				await toolbarMenuGeometry( parentToolbar, openMenu )
+			).toMatchObject( { overlaps: false } );
+			await expect( parentToolbar ).toBeVisible();
+
+			// Keep the menu open and select the lower block. Its toolbar now overlaps
+			// the upper menu, matching the screenshot.
+			await page.evaluate( () => {
+				const dataViewBlocks = window.wp.data
+					.select( 'core/block-editor' )
+					.getBlocks()
+					.filter( ( block ) => block.name === 'cortext/data-view' );
+				if ( dataViewBlocks.length !== 2 ) {
+					throw new Error( 'Expected exactly two DataView blocks.' );
+				}
+				window.wp.data
+					.dispatch( 'core/block-editor' )
+					.selectBlock( dataViewBlocks[ 1 ].clientId );
+			} );
+			await expect( openMenu ).toBeVisible();
+			await expect( parentToolbar ).toHaveCount( 1 );
+			expect(
+				await toolbarMenuGeometry( parentToolbar, openMenu )
+			).toMatchObject( { overlaps: true } );
+			await expect( parentToolbar ).toBeHidden();
+			expect( await stopParentToolbarOverlapFlashLog( page ) ).toEqual(
+				[]
+			);
+
+			await openMenu.press( 'Escape' );
+			await expect( openMenu ).toHaveCount( 0 );
+			await expect( parentToolbar ).toBeVisible();
+
+			// Select the upper block and open the lower custom menu. They are far
+			// enough apart that the toolbar should stay visible.
+			await page.evaluate( () => {
+				const dataViewBlocks = window.wp.data
+					.select( 'core/block-editor' )
+					.getBlocks()
+					.filter( ( block ) => block.name === 'cortext/data-view' );
+				window.wp.data
+					.dispatch( 'core/block-editor' )
+					.selectBlock( dataViewBlocks[ 0 ].clientId );
+			} );
+			await expect( parentToolbar ).toBeVisible();
+
+			const authorTrigger = dataViews
+				.nth( 1 )
+				.getByRole( 'columnheader', { name: /Author/ } )
+				.locator( '.cortext-column-header-trigger' );
+			await expect( authorTrigger ).toBeVisible();
+			// Use a synthetic click so the upper block stays selected.
+			await authorTrigger.dispatchEvent( 'click' );
+
+			await expect( openMenu ).toBeVisible();
+			await expect(
+				openMenu.getByRole( 'menuitem', { name: 'Rename' } )
+			).toBeVisible();
+			expect(
+				await toolbarMenuGeometry( parentToolbar, openMenu )
+			).toMatchObject( { overlaps: false } );
+			await expect( parentToolbar ).toBeVisible();
+
+			await openMenu.press( 'Escape' );
+			await expect( openMenu ).toHaveCount( 0 );
+			await expect( parentToolbar ).toBeVisible();
+		} finally {
+			await page.evaluate( () => {
+				window.__cortextToolbarOverlapFlashCleanup?.();
+			} );
 			await deleteIfCreated(
 				requestUtils,
 				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
@@ -3543,23 +3865,40 @@ test.describe( 'Collection view block', () => {
 			} );
 			await expect( yearLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await yearLabelButton.click();
-			await expect(
-				detailCanvas.getByRole( 'menuitem', {
-					name: 'Format',
-				} )
-			).toBeVisible();
-			await detailCanvas
-				.getByRole( 'menuitem', {
-					name: 'Format',
-				} )
-				.click();
+			const formatItem = detailCanvas.getByRole( 'menuitem', {
+				name: 'Format',
+			} );
+			await expect( formatItem ).toBeVisible();
+			const formatItemBox = await formatItem.boundingBox();
+			await formatItem.click();
 			const formatPanel = page.locator( '.cortext-format-submenu' );
 			await expect( formatPanel ).toBeVisible();
+			const formatPanelSurface = page.locator(
+				'.cortext-format-submenu__panel'
+			);
+			const formatPanelBox = await formatPanelSurface.boundingBox();
+			expect( formatItemBox ).not.toBeNull();
+			expect( formatPanelBox ).not.toBeNull();
+			// `boundingBox()` puts both rects in page coordinates. The detail
+			// panel sits at the right edge, so Format and its flyout should open
+			// to the left.
+			expect(
+				formatPanelBox.x + formatPanelBox.width
+			).toBeLessThanOrEqual( formatItemBox.x + 2 );
 			await formatPanel
 				.getByRole( 'button', { name: /Number format/ } )
 				.click();
-			await page
-				.locator( '.cortext-format-submenu__flyout' )
+			const numberFormatFlyout = page.locator(
+				'.cortext-format-submenu__flyout'
+			);
+			await expect( numberFormatFlyout ).toBeVisible();
+			const numberFormatFlyoutBox =
+				await numberFormatFlyout.boundingBox();
+			expect( numberFormatFlyoutBox ).not.toBeNull();
+			expect(
+				numberFormatFlyoutBox.x + numberFormatFlyoutBox.width
+			).toBeLessThanOrEqual( formatPanelBox.x + 2 );
+			await numberFormatFlyout
 				.getByRole( 'menuitemradio', {
 					name: 'Number with commas',
 				} )

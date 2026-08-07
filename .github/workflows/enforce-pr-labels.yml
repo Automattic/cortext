@@ -23,13 +23,11 @@ jobs:
               with:
                   mode: exactly
                   count: 1
-                  labels: '^(type: enhancement|type: bug|type: docs|type: tooling|type: dependencies|type: code quality)$'
+                  labels: '^type:'
                   use_regex: true
                   add_comment: true
                   message: |
                       **Choose one PR type**
 
-                      Add exactly one `type:*` label before merging this PR.
-
-                      Use one of: `type: enhancement`, `type: bug`, `type: docs`, `type: tooling`, `type: dependencies`, `type: code quality`.
+                      Add exactly one label starting with `type:` before merging this PR.
                   exit_type: failure

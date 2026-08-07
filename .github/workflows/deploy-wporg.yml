@@ -13,6 +13,11 @@ on:
                 required: true
                 default: false
                 type: boolean
+            readme_only:
+                description: 'Update readme.txt in trunk and the existing version tag'
+                required: true
+                default: false
+                type: boolean
 
 permissions:
     contents: read
@@ -31,11 +36,12 @@ jobs:
         env:
             VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
         steps:
-            - uses: actions/checkout@v7.0.0
+            - uses: actions/checkout@v7.0.1
 
             - name: Check release is deployable
               env:
                   GH_TOKEN: ${{ github.token }}
+                  README_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.readme_only || false }}
               run: |
                   set -euo pipefail
 
@@ -56,6 +62,18 @@ jobs:
                     exit 1
                   fi
 
+                  if [ "$README_ONLY" = "true" ]; then
+                    stable_tag="$(awk -F': *' '/^Stable tag:/ { print $2; exit }' readme.txt)"
+                    if [ "$stable_tag" != "$VERSION" ]; then
+                      echo "::error::Expected readme stable tag $VERSION, found $stable_tag"
+                      exit 1
+                    fi
+                    if ! awk -v version="$VERSION" '$0 == "= " version " =" { found = 1 } END { exit !found }' readme.txt; then
+                      echo "::error::readme.txt has no changelog entry for $VERSION"
+                      exit 1
+                    fi
+                  fi
+
             - name: Install Subversion
               run: |
                   sudo apt-get update
@@ -64,7 +82,11 @@ jobs:
             - name: Preview WordPress.org SVN deploy
               env:
                   GH_TOKEN: ${{ github.token }}
-              run: ./scripts/deploy-wporg.sh --version "$VERSION"
+                  README_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.readme_only || false }}
+              run: |
+                  args=( --version "$VERSION" )
+                  [ "$README_ONLY" != "true" ] || args+=( --readme-only )
+                  ./scripts/deploy-wporg.sh "${args[@]}"
 
     publish:
         name: Publish
@@ -75,7 +97,7 @@ jobs:
         env:
             VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
         steps:
-            - uses: actions/checkout@v7.0.0
+            - uses: actions/checkout@v7.0.1
 
             - name: Install Subversion
               run: |
@@ -85,6 +107,7 @@ jobs:
             - name: Publish to WordPress.org SVN
               env:
                   GH_TOKEN: ${{ github.token }}
+                  README_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.readme_only || false }}
                   WPORG_USERNAME: ${{ secrets.WPORG_USERNAME }}
                   WPORG_PASSWORD: ${{ secrets.WPORG_PASSWORD }}
               run: |
@@ -95,4 +118,6 @@ jobs:
                     exit 1
                   fi
 
-                  ./scripts/deploy-wporg.sh --version "$VERSION" --commit
+                  args=( --version "$VERSION" --commit )
+                  [ "$README_ONLY" != "true" ] || args+=( --readme-only )
+                  ./scripts/deploy-wporg.sh "${args[@]}"

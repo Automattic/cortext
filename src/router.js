@@ -16,6 +16,7 @@ import BetaNoticeModal from './components/BetaNoticeModal';
 import { DocumentPeekProvider } from './components/DocumentPeekProvider';
 import DocumentPeekHost from './components/DocumentPeekHost';
 import { RowDetailSidebarSlot } from './components/RowDetailSidebarSlot';
+import { SurfaceFocusProvider } from './components/SurfaceFocusContext';
 import useSidebarLayout from './hooks/useSidebarLayout';
 import useBetaNotice from './hooks/useBetaNotice';
 import { FavoritesProvider } from './hooks/useFavorites';
@@ -69,39 +70,43 @@ function RootLayout() {
 	}, [ toggleCollapsed ] );
 
 	return (
-		<SlotFillProvider>
-			<WorkspaceHomeProvider>
-				<FavoritesProvider>
-					<RecentsProvider>
-						<DocumentPeekProvider>
-							<DocumentPeekHost />
-							<div className="cortext-shell">
-								<Sidebar
-									collapsed={ collapsed }
-									width={ width }
-									onToggleCollapsed={ toggleCollapsed }
-									onWidthChange={ setWidth }
-								/>
-								<main
-									ref={ canvasRef }
-									className="cortext-shell__canvas"
-									tabIndex={ -1 }
-								>
-									<EntityRoute history={ router.history } />
-								</main>
-								<RowDetailSidebarSlot />
-							</div>
-							<CommandPalette canvasRef={ canvasRef } />
-							{ betaNotice.isOpen && (
-								<BetaNoticeModal
-									onAcknowledge={ betaNotice.acknowledge }
-								/>
-							) }
-						</DocumentPeekProvider>
-					</RecentsProvider>
-				</FavoritesProvider>
-			</WorkspaceHomeProvider>
-		</SlotFillProvider>
+		<SurfaceFocusProvider>
+			<SlotFillProvider>
+				<WorkspaceHomeProvider>
+					<FavoritesProvider>
+						<RecentsProvider>
+							<DocumentPeekProvider>
+								<DocumentPeekHost />
+								<div className="cortext-shell">
+									<Sidebar
+										collapsed={ collapsed }
+										width={ width }
+										onToggleCollapsed={ toggleCollapsed }
+										onWidthChange={ setWidth }
+									/>
+									<main
+										ref={ canvasRef }
+										className="cortext-shell__canvas"
+										tabIndex={ -1 }
+									>
+										<EntityRoute
+											history={ router.history }
+										/>
+									</main>
+									<RowDetailSidebarSlot />
+								</div>
+								<CommandPalette canvasRef={ canvasRef } />
+								{ betaNotice.isOpen && (
+									<BetaNoticeModal
+										onAcknowledge={ betaNotice.acknowledge }
+									/>
+								) }
+							</DocumentPeekProvider>
+						</RecentsProvider>
+					</FavoritesProvider>
+				</WorkspaceHomeProvider>
+			</SlotFillProvider>
+		</SurfaceFocusProvider>
 	);
 }
 

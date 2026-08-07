@@ -32,6 +32,7 @@ jobs:
     bump-version:
         name: Bump release version
         runs-on: ubuntu-latest
+        environment: GitHub Releases
         outputs:
             ref: ${{ steps.release-ref.outputs.ref }}
             version: ${{ steps.milestone.outputs.version }}
@@ -45,9 +46,10 @@ jobs:
                   echo "::error::Release version commits can only be pushed from a branch ref."
                   exit 1
 
-            - uses: actions/checkout@v7.0.0
+            - uses: actions/checkout@v7.0.1
               with:
                   ref: ${{ github.ref_name }}
+                  ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
             - uses: actions/setup-node@v7
               with:
@@ -93,6 +95,23 @@ jobs:
               env:
                   VERSION: ${{ steps.milestone.outputs.version }}
               run: node scripts/bump-release-version.mjs "$VERSION"
+
+            - name: Update WordPress.org changelog
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  MILESTONE: ${{ steps.milestone.outputs.title }}
+                  REPOSITORY: ${{ github.repository }}
+                  VERSION: ${{ steps.milestone.outputs.version }}
+              run: |
+                  mkdir -p .context
+                  node scripts/release-notes.mjs \
+                    --repo "$REPOSITORY" \
+                    --milestone "$MILESTONE" \
+                    --version "$VERSION" \
+                    --strict > .context/release-notes.md
+                  node scripts/update-readme-changelog.mjs \
+                    "$VERSION" \
+                    .context/release-notes.md
 
             - name: Commit release metadata
               if: ${{ ! inputs.dry_run }}

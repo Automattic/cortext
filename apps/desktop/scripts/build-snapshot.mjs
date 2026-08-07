@@ -18,7 +18,7 @@ import { buildWpConfig, randomSalt } from './wp-config.mjs';
 import zipHelpers from './zip.js';
 
 const { extractZip } = archiveHelpers;
-const { findExecutable } = executableHelpers;
+const { bundledRuntimeExecutable, findExecutable } = executableHelpers;
 const { zipDirectory } = zipHelpers;
 const __dirname = dirname( fileURLToPath( import.meta.url ) );
 const DESKTOP_DIR = resolve( __dirname, '..' );
@@ -82,7 +82,7 @@ function resolvePhpBin() {
 			`CORTEXT_PHP_BIN does not point to an executable: ${ configured }`
 		);
 	}
-	const bundled = resolve( RUNTIME_DIR, 'bin/php' );
+	const bundled = bundledRuntimeExecutable( DESKTOP_DIR, 'php' );
 	if ( existsSync( bundled ) ) {
 		return bundled;
 	}
@@ -90,8 +90,9 @@ function resolvePhpBin() {
 	if ( fromPath ) {
 		return fromPath;
 	}
+	const bundledHint = bundledRuntimeExecutable( 'apps/desktop', 'php' );
 	throw new Error(
-		'PHP was not found. Install PHP 8.1+, set CORTEXT_PHP_BIN, or include apps/desktop/runtime/bin/php in the app bundle.'
+		`PHP was not found. Install PHP 8.1+, set CORTEXT_PHP_BIN, or include ${ bundledHint } in the app bundle.`
 	);
 }
 

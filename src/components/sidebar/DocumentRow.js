@@ -26,6 +26,7 @@ import {
 	INSPECTOR_SCOPE,
 	REVISION_HISTORY_PANEL,
 } from '../editorPanelConstants';
+import { useSurfaceFocusIntent } from '../SurfaceFocusContext';
 
 /**
  * Sidebar row shared by pages and collections. The document layer tells it
@@ -87,6 +88,7 @@ export default function DocumentRow( {
 	autoRenameId = null,
 	onAutoRenameConsumed,
 } ) {
+	const { requestFromActivation } = useSurfaceFocusIntent();
 	const { title, icon, features } = useDocumentRecord( record );
 	const { rename, duplicate, trash } = useDocumentActions();
 	const { enableComplementaryArea } = useDispatch( interfaceStore );
@@ -280,7 +282,18 @@ export default function DocumentRow( {
 						<Button
 							className="cortext-sidebar__title"
 							size="compact"
-							onClick={ () => onSelect( record ) }
+							onKeyDown={ ( event ) => {
+								if (
+									event.key === 'Enter' ||
+									event.key === ' '
+								) {
+									event.stopPropagation();
+								}
+							} }
+							onClick={ ( event ) => {
+								requestFromActivation( event, record.id );
+								onSelect( record );
+							} }
 							isPressed={ rowIsSelected }
 						>
 							{ title }

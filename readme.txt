@@ -4,7 +4,7 @@ Tags: knowledge-base, collections, custom-post-types, block-editor, publishing
 Requires at least: 7.0
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.1.1
+Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -74,6 +74,38 @@ Notion's Terms of Service (https://www.notion.so/28ffdd083dc3473e9c2da6ec011b58a
 1. The Cortext workspace showing a seeded Library page with a catalog table and detail panel.
 
 == Changelog ==
+
+= 0.2.0 =
+Enhancements:
+
+**Canvas**
+
+* Add inline document mentions. ([#376](https://github.com/Automattic/cortext/pull/376))
+* Add backlinks for document mentions. ([#379](https://github.com/Automattic/cortext/pull/379))
+
+**Collections**
+
+* Add formula fields to collections. ([#274](https://github.com/Automattic/cortext/pull/274))
+
+**Shell**
+
+* Add sidebar settings view mode. ([#385](https://github.com/Automattic/cortext/pull/385))
+* Add experiment controls to Cortext settings. ([#388](https://github.com/Automattic/cortext/pull/388))
+
+**Desktop**
+
+* Desktop: Add desktop auto-updates. ([#381](https://github.com/Automattic/cortext/pull/381))
+* Desktop: authenticate local runtime requests. ([#397](https://github.com/Automattic/cortext/pull/397))
+* Desktop: assign each profile a runtime origin. ([#403](https://github.com/Automattic/cortext/pull/403))
+* Desktop: Remove POSIX dependencies from snapshots and runtime. ([#404](https://github.com/Automattic/cortext/pull/404))
+* Desktop: Build the snapshot on Windows. ([#405](https://github.com/Automattic/cortext/pull/405))
+* Desktop: lock down and test the packaged app. ([#407](https://github.com/Automattic/cortext/pull/407))
+
+**Performance**
+
+* Performance: Calculate table footer totals on the server. ([#378](https://github.com/Automattic/cortext/pull/378))
+* Perf: Lazy-load and paginate the sidebar tree. ([#380](https://github.com/Automattic/cortext/pull/380))
+* Perf: Add an ID-only response for rows. ([#393](https://github.com/Automattic/cortext/pull/393))
 
 = 0.1.1 =
 Patch release for the 0.1 beta line. In this release:

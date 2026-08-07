@@ -390,6 +390,15 @@ body.cortext-hide-block-settings-menu .block-editor-block-mover {
 	display: none;
 }
 
+// tech-debt.md#td-wp-menu-popover-limitations: the menu is inside the editor
+// iframe while the toolbar is in the parent document, so z-index cannot order
+// them. Keep the toolbar mounted for stable measurements and hide it only when
+// the two overlap.
+.cortext-canvas__block-canvas--menu-toolbar-overlap
+.block-editor-block-list__block-popover {
+	visibility: hidden;
+}
+
 // tech-debt.md#td-row-detail-toolbar-isolation: while row peek/modal
 // owns the surface, keep the page
 // canvas toolbar out of sight so only row toolbar actions are reachable.

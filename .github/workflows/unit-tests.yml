@@ -17,7 +17,7 @@ jobs:
             php_changed: ${{ steps.changed_paths.outputs.php_changed }}
             js_changed: ${{ steps.changed_paths.outputs.js_changed }}
         steps:
-            - uses: actions/checkout@v7.0.0
+            - uses: actions/checkout@v7.0.1
               with:
                   fetch-depth: 0
 
@@ -41,7 +41,7 @@ jobs:
                   fi
 
                   php_paths='^(\.github/workflows/unit-tests\.yml|composer\.(json|lock)|phpunit\.xml\.dist|cortext\.php|includes/|templates/|tests/php/)'
-                  js_paths='^(\.github/workflows/unit-tests\.yml|package\.json|pnpm-lock\.yaml|jest\.config\.js|scripts/(bump-release-version|release-notes)\.mjs|src/|tests/js/|tests/node/)'
+                  js_paths='^(\.github/workflows/unit-tests\.yml|package\.json|pnpm-lock\.yaml|jest\.config\.js|scripts/(bump-release-version|release-notes|update-readme-changelog)\.mjs|src/|tests/js/|tests/node/)'
 
                   if [ -n "$changed_files" ] && grep -Eq "$php_paths" <<< "$changed_files"; then
                     echo "php_changed=true" >> "$GITHUB_OUTPUT"
@@ -61,7 +61,7 @@ jobs:
         needs: changes
         if: needs.changes.outputs.php_changed == 'true'
         steps:
-            - uses: actions/checkout@v7.0.0
+            - uses: actions/checkout@v7.0.1
 
             - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
               with:
@@ -84,7 +84,7 @@ jobs:
         needs: changes
         if: needs.changes.outputs.js_changed == 'true'
         steps:
-            - uses: actions/checkout@v7.0.0
+            - uses: actions/checkout@v7.0.1
 
             - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
               with:

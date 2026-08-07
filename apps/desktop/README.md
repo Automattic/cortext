@@ -90,6 +90,14 @@ nor a service worker or popup it opens can reach the runtime. External
 top-level links open in the system browser, an embedded frame cannot steer the
 app window, and internal popups stay in the protected session.
 
+The dedicated session denies Electron permissions by default. HTTP and HTTPS
+frames may use fullscreen, so video embeds keep working. Only the exact Cortext
+runtime origin may write sanitized clipboard data. That origin and HTTPS embeds
+may use DRM and third-party storage. Cortext blocks camera and microphone
+access, screen capture, location, notifications, clipboard reads, filesystem
+and device access, input locks, requests to open external apps, and any
+permission it does not recognize.
+
 The runtime rejects requests without the matching token before serving
 WordPress or static files. It also requires the request `Host` and any supplied
 `Origin` to match the selected runtime origin, and every server binds only to
@@ -110,8 +118,12 @@ Safari or another client; publishing remains available when Cortext runs as a
 WordPress plugin on a web site.
 
 In a dev run, DevTools open by default; set `CORTEXT_DEVTOOLS=0` to turn them
-off. The packaged build never opens them. Closing the window kills the PHP
-process.
+off. Packaged builds disable DevTools and remove "Toggle Developer Tools" from
+the View menu. Electron fuses also disable Node modes and inspector arguments,
+prevent application code from loading outside `app.asar`, and remove extra
+`file://` privileges. Cortext serves its loading and error pages through the
+private `cortext-shell://` scheme under a restrictive content security policy.
+Closing the window kills the PHP process.
 
 For runtime experiments, set `CORTEXT_RUNTIME` before launch:
 
@@ -180,6 +192,18 @@ load.
 Release builds are arm64-only, signed, and notarized on Buildkite. Local builds
 remain unsigned unless you provide a signing environment.
 
+Inspect an already built `.app` with:
+
+```sh
+npm --prefix apps/desktop run verify:app -- \
+  --app "$PWD/apps/desktop/dist/mac-arm64/Cortext.app"
+```
+
+The verifier reads the fuse settings directly from the packaged Electron
+executable. It requires `app.asar`, rejects an unpacked app directory or
+`app.asar.unpacked` payload, checks the bundled snapshot and runtime files, and
+confirms that the PHP binary is executable and arm64.
+
 ## Releasing
 
 `.github/workflows/release.yml` is the entry point; run it from the Actions tab.
@@ -187,7 +211,12 @@ It builds the plugin ZIP, validates the milestone, writes release notes, and
 creates or updates the draft GitHub Release. Buildkite owns the macOS desktop
 DMG: the release tag build builds the arm64 PHP runtime, builds the distribution
 snapshot, runs electron-builder, signs and notarizes the app, and uploads the
-DMG to the same Release.
+DMG to the same Release. Before uploading, Buildkite verifies the signature,
+notarization, fuses, bundled files, and PHP binary, then starts the same `.app`
+with a temporary profile. The packaged-app smoke test connects only to
+Chromium's renderer through CDP on loopback. It waits for the Cortext canvas,
+confirms that a request without the token gets `403` and a second launch exits,
+then quits the app and checks that Electron, PHP, and the runtime port are gone.
 
 ## Performance
 
@@ -221,11 +250,12 @@ npm --prefix apps/desktop run snapshot
 npm --prefix apps/desktop run test:e2e
 ```
 
-The test passes a temporary `--user-data-dir` to Electron, starts the app, and
-checks the protected session, external navigation boundary, embedded
-third-party frames, internal popups, real menu Reload behavior, direct
-unauthenticated requests, and the rendered Cortext canvas. It does not read or remove the developer's normal desktop
-profile.
+The test starts Electron with a temporary `--user-data-dir`, so it never reads
+or removes the developer's normal desktop profile. It exercises session
+authentication, external navigation, embedded third-party frames, and internal
+popups. It also checks the app menu's Reload command, blocked sensitive
+permissions, working embed fullscreen, rejection of unauthenticated requests,
+and canvas rendering.
 
 ## Runtime files
 

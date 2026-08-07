@@ -105,6 +105,7 @@ import useSidebarTree, { ROOT_PARENT_ID } from './sidebar/useSidebarTree';
 import DocumentRow from './sidebar/DocumentRow';
 import { useDocumentRecordInvalidation } from '../hooks/documentRecordInvalidation';
 import { isWordPressAffordancesEnabled } from '../settings';
+import { useSurfaceFocusIntent } from './SurfaceFocusContext';
 
 export default function Sidebar( {
 	collapsed = false,
@@ -191,6 +192,15 @@ export default function Sidebar( {
 	);
 	const { navigate, selectedId, selectedCollectionId, onSelect, goHome } =
 		useSidebarNavigation( { pages, homePath } );
+	const { requestFromActivation } = useSurfaceFocusIntent();
+	const homeDocumentId = home?.id ?? fallbackHomePage?.id ?? null;
+	const openHome = useCallback(
+		( event ) => {
+			requestFromActivation( event, homeDocumentId );
+			goHome();
+		},
+		[ goHome, homeDocumentId, requestFromActivation ]
+	);
 	const { isSelected: isRowSelected, selectRecord: onRowSelect } =
 		useDocumentSelection( { selectedId, selectedCollectionId } );
 	const adminUrl = window.cortextSettings?.adminUrl ?? '/wp-admin/';
@@ -541,7 +551,7 @@ export default function Sidebar( {
 							className="cortext-sidebar__quick-action cortext-sidebar__quick-action--home"
 							label={ __( 'Home', 'cortext' ) }
 							disabled={ ! homePath || isResolvingHomePath }
-							onClick={ goHome }
+							onClick={ openHome }
 						>
 							<Icon icon={ homeIcon } size={ 16 } />
 							{ ! collapsed && (

@@ -84,7 +84,11 @@ const {
 	areCanvasReadyRequirementsMet,
 	collectCollectionBodyClientIdsToRemove,
 	collectDuplicateHeaderClientIds,
+	getDocumentSurfaceFocusClientId,
 	getEditorBodyMutationPermissions,
+	projectIframeRectToParent,
+	rectsOverlap,
+	scheduleDocumentSurfaceFocus,
 	useEditorBodyStyles,
 } = require( '../../../src/components/EditorBody' );
 const { renderHook } = require( '@testing-library/react' );
@@ -103,6 +107,200 @@ function ownerBlock( clientId, collectionId ) {
 function namedBlock( clientId, name, attributes = {} ) {
 	return { clientId, name, attributes };
 }
+
+describe( 'getDocumentSurfaceFocusClientId', () => {
+	const headerBlocks = [
+		namedBlock( 'cover', 'cortext/document-cover' ),
+		namedBlock( 'icon', 'cortext/document-icon' ),
+		namedBlock( 'title', 'core/post-title' ),
+		namedBlock( 'properties', 'cortext/document-properties' ),
+	];
+
+	it.each( [ '', '   ', '\n\t' ] )(
+		'focuses the title when its content is %j',
+		( title ) => {
+			expect(
+				getDocumentSurfaceFocusClientId( {
+					blocks: [
+						...headerBlocks,
+						namedBlock( 'body', 'core/paragraph' ),
+					],
+					title,
+				} )
+			).toBe( 'title' );
+		}
+	);
+
+	it( 'skips document headers and focuses the first root body block', () => {
+		expect(
+			getDocumentSurfaceFocusClientId( {
+				blocks: [
+					...headerBlocks,
+					namedBlock( 'first-body', 'core/heading' ),
+					namedBlock( 'second-body', 'core/paragraph' ),
+				],
+				title: 'Titled document',
+			} )
+		).toBe( 'first-body' );
+	} );
+
+	it( 'falls back to the title when a titled document has no body block', () => {
+		expect(
+			getDocumentSurfaceFocusClientId( {
+				blocks: headerBlocks,
+				title: 'Titled document',
+			} )
+		).toBe( 'title' );
+	} );
+
+	it( 'returns no page target for collections', () => {
+		expect(
+			getDocumentSurfaceFocusClientId( {
+				blocks: headerBlocks,
+				title: '',
+				ownerBlockName: OWNER,
+			} )
+		).toBeNull();
+	} );
+} );
+
+describe( 'scheduleDocumentSurfaceFocus', () => {
+	function setup() {
+		let frameCallback;
+		const ownerWindow = {
+			requestAnimationFrame: jest.fn( ( callback ) => {
+				frameCallback = callback;
+				return 7;
+			} ),
+			cancelAnimationFrame: jest.fn(),
+		};
+		const selectBlock = jest.fn();
+		const completeSurfaceFocus = jest.fn( ( token, onConsume ) => {
+			onConsume();
+			return true;
+		} );
+
+		return {
+			completeSurfaceFocus,
+			ownerWindow,
+			runFrame: () => frameCallback(),
+			selectBlock,
+		};
+	}
+
+	it( 'clears the selection, then revalidates and places the caret on the next frame', () => {
+		const state = setup();
+		scheduleDocumentSurfaceFocus( {
+			clientId: 'body',
+			completeSurfaceFocus: state.completeSurfaceFocus,
+			originIsCurrent: () => true,
+			ownerWindow: state.ownerWindow,
+			requestIsCurrent: () => true,
+			selectBlock: state.selectBlock,
+			token: 9,
+		} );
+
+		expect( state.selectBlock ).toHaveBeenCalledWith( 'body', null );
+		expect( state.completeSurfaceFocus ).not.toHaveBeenCalled();
+
+		state.runFrame();
+
+		expect( state.completeSurfaceFocus ).toHaveBeenCalledWith(
+			9,
+			expect.any( Function )
+		);
+		expect( state.selectBlock ).toHaveBeenLastCalledWith( 'body', 0 );
+	} );
+
+	it( 'stops if the request is cancelled before the next frame', () => {
+		const state = setup();
+		let requestIsCurrent = true;
+		scheduleDocumentSurfaceFocus( {
+			clientId: 'body',
+			completeSurfaceFocus: state.completeSurfaceFocus,
+			originIsCurrent: () => true,
+			ownerWindow: state.ownerWindow,
+			requestIsCurrent: () => requestIsCurrent,
+			selectBlock: state.selectBlock,
+			token: 9,
+		} );
+		requestIsCurrent = false;
+
+		state.runFrame();
+
+		expect( state.completeSurfaceFocus ).not.toHaveBeenCalled();
+		expect( state.selectBlock ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'rectsOverlap', () => {
+	const toolbarRect = { left: 100, top: 100, right: 200, bottom: 150 };
+
+	it( 'detects an intersection with positive area', () => {
+		expect(
+			rectsOverlap( toolbarRect, {
+				left: 150,
+				top: 125,
+				right: 250,
+				bottom: 175,
+			} )
+		).toBe( true );
+	} );
+
+	it( 'does not treat touching edges as overlap', () => {
+		expect(
+			rectsOverlap( toolbarRect, {
+				left: 200,
+				top: 100,
+				right: 250,
+				bottom: 150,
+			} )
+		).toBe( false );
+	} );
+} );
+
+describe( 'projectIframeRectToParent', () => {
+	it( 'accounts for iframe borders and scaling and clips the result to the viewport', () => {
+		const frameElement = {
+			clientHeight: 50,
+			clientLeft: 5,
+			clientTop: 5,
+			clientWidth: 100,
+			getBoundingClientRect: () => ( {
+				left: 10,
+				top: 20,
+				width: 220,
+				height: 120,
+			} ),
+			offsetHeight: 60,
+			offsetWidth: 110,
+		};
+
+		expect(
+			projectIframeRectToParent(
+				{ left: -25, top: 10, right: 250, bottom: 120 },
+				frameElement,
+				{ innerWidth: 100, innerHeight: 50 }
+			)
+		).toEqual( { left: 20, top: 50, right: 220, bottom: 130 } );
+	} );
+
+	it( 'returns null while the frame has no layout box', () => {
+		const frameElement = {
+			getBoundingClientRect: () => ( { width: 0, height: 0 } ),
+			offsetHeight: 0,
+			offsetWidth: 0,
+		};
+
+		expect(
+			projectIframeRectToParent(
+				{ left: 0, top: 0, right: 10, bottom: 10 },
+				frameElement,
+				{}
+			)
+		).toBeNull();
+	} );
+} );
 
 describe( 'collectDuplicateHeaderClientIds', () => {
 	it( 'returns nothing when the only data-view is self-referencing', () => {

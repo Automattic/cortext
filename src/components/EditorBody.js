@@ -43,10 +43,12 @@ import {
 } from './CanvasOwnerInspector';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import { parseDocumentIcon } from './DocumentIcon';
+import { isSurfaceFocusOriginCurrent } from './collectionSurfaceFocus';
 import afterNextPaint from '../hooks/afterNextPaint';
 import RevisionDiffStyles from './RevisionDiffStyles';
 import { unlock } from '../lock-unlock';
 import { useRevisionedDocumentIdentity } from '../hooks/useRevisions';
+import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
@@ -64,6 +66,10 @@ const HEADER_BOUNDARY_MOVE_UP_SCOPE_SELECTOR = [
 	'.block-editor-block-contextual-toolbar',
 	'.block-editor-block-toolbar',
 ].join( ',' );
+const OPEN_CANVAS_MENU_SELECTOR = '[data-dialog][role="menu"][data-open]';
+const CANVAS_TOOLBAR_SELECTOR = '.block-editor-block-contextual-toolbar';
+const CANVAS_MENU_TOOLBAR_OVERLAP_CLASS =
+	'cortext-canvas__block-canvas--menu-toolbar-overlap';
 const activeHeaderBoundaryMoveUpGuards = new Set();
 const DEFAULT_HEADER_BLOCK_NAMES = new Set( [
 	DOCUMENT_COVER_BLOCK,
@@ -103,6 +109,198 @@ export function useEditorBodyStyles(
 	);
 }
 
+export function rectsOverlap( firstRect, secondRect ) {
+	return (
+		firstRect.left < secondRect.right &&
+		firstRect.right > secondRect.left &&
+		firstRect.top < secondRect.bottom &&
+		firstRect.bottom > secondRect.top
+	);
+}
+
+export function projectIframeRectToParent( rect, frameElement, iframeWindow ) {
+	const frameRect = frameElement.getBoundingClientRect();
+	const layoutWidth = frameElement.offsetWidth || frameRect.width;
+	const layoutHeight = frameElement.offsetHeight || frameRect.height;
+	if ( ! layoutWidth || ! layoutHeight ) {
+		return null;
+	}
+
+	const frameScaleX = frameRect.width / layoutWidth;
+	const frameScaleY = frameRect.height / layoutHeight;
+	const contentLeft = frameRect.left + frameElement.clientLeft * frameScaleX;
+	const contentTop = frameRect.top + frameElement.clientTop * frameScaleY;
+	const contentWidth = frameElement.clientWidth * frameScaleX;
+	const contentHeight = frameElement.clientHeight * frameScaleY;
+	const viewportWidth = iframeWindow.innerWidth || frameElement.clientWidth;
+	const viewportHeight =
+		iframeWindow.innerHeight || frameElement.clientHeight;
+	if (
+		! contentWidth ||
+		! contentHeight ||
+		! viewportWidth ||
+		! viewportHeight
+	) {
+		return null;
+	}
+
+	const scaleX = contentWidth / viewportWidth;
+	const scaleY = contentHeight / viewportHeight;
+	const left = Math.max( contentLeft, contentLeft + rect.left * scaleX );
+	const top = Math.max( contentTop, contentTop + rect.top * scaleY );
+	const right = Math.min(
+		contentLeft + contentWidth,
+		contentLeft + rect.right * scaleX
+	);
+	const bottom = Math.min(
+		contentTop + contentHeight,
+		contentTop + rect.bottom * scaleY
+	);
+
+	return { left, top, right, bottom };
+}
+
+// tech-debt.md#td-wp-menu-popover-limitations: an iframe menu's z-index cannot
+// place it above a toolbar in the parent document. Hide the toolbar only when
+// the two overlap.
+function CanvasMenuToolbarGuard() {
+	const anchorRef = useRef( null );
+
+	useEffect( () => {
+		const iframeDocument = anchorRef.current?.ownerDocument;
+		const iframeWindow = iframeDocument?.defaultView;
+		const frameElement = iframeWindow?.frameElement;
+		const canvasRoot = frameElement?.closest(
+			'.cortext-canvas__block-canvas'
+		);
+		const MutationObserverClass = iframeWindow?.MutationObserver;
+		const parentWindow = frameElement?.ownerDocument.defaultView;
+		const ParentMutationObserverClass = parentWindow?.MutationObserver;
+
+		if (
+			! iframeDocument?.body ||
+			! canvasRoot ||
+			! MutationObserverClass ||
+			! ParentMutationObserverClass
+		) {
+			return undefined;
+		}
+
+		let overlapFrame = null;
+		const updateToolbarOverlap = () => {
+			const openMenus = Array.from(
+				iframeDocument.querySelectorAll( OPEN_CANVAS_MENU_SELECTOR )
+			);
+			if ( openMenus.length === 0 ) {
+				canvasRoot.classList.remove(
+					CANVAS_MENU_TOOLBAR_OVERLAP_CLASS
+				);
+				return false;
+			}
+			// The overlap class hides the toolbar through inherited visibility,
+			// but its box stays measurable. Keep it in the calculation to prevent
+			// a hide-and-show loop.
+			const toolbarRects = Array.from(
+				canvasRoot.querySelectorAll( CANVAS_TOOLBAR_SELECTOR )
+			)
+				.map( ( toolbar ) => toolbar.getBoundingClientRect() )
+				.filter(
+					( rect ) => rect.right > rect.left && rect.bottom > rect.top
+				);
+
+			const hasOverlap = openMenus.some( ( menu ) => {
+				const style = iframeWindow.getComputedStyle( menu );
+				if (
+					style.display === 'none' ||
+					style.visibility === 'hidden' ||
+					Number.parseFloat( style.opacity ) === 0
+				) {
+					return false;
+				}
+				const menuRect = projectIframeRectToParent(
+					menu.getBoundingClientRect(),
+					frameElement,
+					iframeWindow
+				);
+				if (
+					! menuRect ||
+					menuRect.right <= menuRect.left ||
+					menuRect.bottom <= menuRect.top
+				) {
+					return false;
+				}
+				return toolbarRects.some( ( toolbarRect ) =>
+					rectsOverlap( menuRect, toolbarRect )
+				);
+			} );
+
+			canvasRoot.classList.toggle(
+				CANVAS_MENU_TOOLBAR_OVERLAP_CLASS,
+				hasOverlap
+			);
+			return true;
+		};
+
+		const monitorToolbarOverlap = () => {
+			overlapFrame = null;
+			if ( updateToolbarOverlap() ) {
+				overlapFrame = iframeWindow.requestAnimationFrame(
+					monitorToolbarOverlap
+				);
+			}
+		};
+		const syncToolbarOverlap = () => {
+			const hasOpenMenu = updateToolbarOverlap();
+			if ( hasOpenMenu && overlapFrame === null ) {
+				overlapFrame = iframeWindow.requestAnimationFrame(
+					monitorToolbarOverlap
+				);
+			} else if ( ! hasOpenMenu && overlapFrame !== null ) {
+				iframeWindow.cancelAnimationFrame( overlapFrame );
+				overlapFrame = null;
+			}
+		};
+
+		// Menu portals add a wrapper directly under the iframe body. Observe only
+		// direct children because the rest of the DataViews tree changes often.
+		const portalObserver = new MutationObserverClass( syncToolbarOverlap );
+		portalObserver.observe( iframeDocument.body, { childList: true } );
+
+		// The portal can mount before the menu gets `data-open`, and the
+		// attribute can disappear before the wrapper unmounts.
+		const stateObserver = new MutationObserverClass( syncToolbarOverlap );
+		stateObserver.observe( iframeDocument.body, {
+			attributes: true,
+			attributeFilter: [ 'data-open' ],
+			subtree: true,
+		} );
+		// Selecting a block can mount the toolbar after the menu. Measure as soon
+		// as that happens so the two are not painted on top of each other.
+		const toolbarObserver = new ParentMutationObserverClass(
+			syncToolbarOverlap
+		);
+		toolbarObserver.observe( canvasRoot, {
+			childList: true,
+			subtree: true,
+		} );
+
+		syncToolbarOverlap();
+
+		return () => {
+			portalObserver.disconnect();
+			stateObserver.disconnect();
+			toolbarObserver.disconnect();
+			if ( overlapFrame !== null ) {
+				iframeWindow.cancelAnimationFrame( overlapFrame );
+			}
+			canvasRoot.classList.remove( CANVAS_MENU_TOOLBAR_OVERLAP_CLASS );
+		};
+	}, [] );
+
+	// The hidden span gives the guard access to the iframe document.
+	return <span ref={ anchorRef } hidden />;
+}
+
 // Schema-bearing documents add an owner block to the reserved header/body
 // prefix. Plain documents do not, so the set collapses to defaults.
 function getHeaderBlockNames( ownerBlockName ) {
@@ -130,6 +328,64 @@ function isHeaderBlock( block, ownerBlockName, record = null, postId = null ) {
 		return true;
 	}
 	return isCanvasOwnerBlock( block, record, postId );
+}
+
+// Choose the block editor target for pages and full-page rows. Focus an empty
+// title; otherwise, focus the first body block. Collections use their own
+// DataViews focus rules.
+export function getDocumentSurfaceFocusClientId( {
+	blocks = [],
+	title = '',
+	ownerBlockName = null,
+	record = null,
+	postId = null,
+} ) {
+	if ( ownerBlockName ) {
+		return null;
+	}
+
+	const titleBlock = blocks.find(
+		( block ) => block?.name === POST_TITLE_BLOCK
+	);
+	if ( String( title ?? '' ).trim() === '' ) {
+		return titleBlock?.clientId ?? null;
+	}
+
+	const firstBodyBlock = blocks.find(
+		( block ) => ! isHeaderBlock( block, ownerBlockName, record, postId )
+	);
+	return firstBodyBlock?.clientId ?? titleBlock?.clientId ?? null;
+}
+
+export function scheduleDocumentSurfaceFocus( {
+	clientId,
+	completeSurfaceFocus,
+	originIsCurrent,
+	ownerWindow,
+	requestIsCurrent,
+	selectBlock,
+	token,
+} ) {
+	let cancelled = false;
+	let focusFrame = ownerWindow.requestAnimationFrame( () => {
+		focusFrame = null;
+		if ( cancelled || ! requestIsCurrent() || ! originIsCurrent() ) {
+			return;
+		}
+
+		completeSurfaceFocus?.( token, () => selectBlock( clientId, 0 ) );
+	} );
+
+	// Clear the rich-text position now. The next frame restores the caret and
+	// claims the request, which remains cancellable until then.
+	selectBlock( clientId, null );
+
+	return () => {
+		cancelled = true;
+		if ( focusFrame !== null ) {
+			ownerWindow.cancelAnimationFrame( focusFrame );
+		}
+	};
 }
 
 // Returns clientIds of header blocks that should be removed by the next
@@ -1512,6 +1768,125 @@ async function waitForCriticalImages(
 	await Promise.all( waits );
 }
 
+function DocumentSurfaceFocusEffect( {
+	isActive,
+	isEditorSurfaceDisplayed,
+	isReadOnly,
+	isSurfaceFocusPending,
+	postId,
+	ownerBlockName,
+	record,
+	canvasRootRef,
+	surfaceFocusRequest,
+	completeSurfaceFocus,
+} ) {
+	const requestRef = useRef( surfaceFocusRequest );
+	requestRef.current = surfaceFocusRequest;
+	const { blocks, title } = useSelect(
+		( select ) => ( {
+			blocks: select( blockEditorStore ).getBlocks(),
+			title: select( editorStore ).getEditedPostAttribute( 'title' ),
+		} ),
+		[]
+	);
+	const { selectBlock } = useDispatch( blockEditorStore );
+
+	useEffect( () => {
+		const request = surfaceFocusRequest;
+		if (
+			! request ||
+			! isActive ||
+			! isEditorSurfaceDisplayed ||
+			ownerBlockName ||
+			Number( request.documentId ) !== Number( postId )
+		) {
+			return undefined;
+		}
+
+		const token = request.token;
+		let cancelled = false;
+		let cancelScheduledFocus = null;
+		const ownerWindow =
+			canvasRootRef.current?.ownerDocument?.defaultView ?? window;
+		const requestIsCurrent = () => requestRef.current?.token === token;
+		const originIsCurrent = () =>
+			isSurfaceFocusOriginCurrent( requestRef.current?.originElement );
+
+		async function focusDocumentSurface() {
+			await whenViewTransitionsSettled( 0 );
+			// `DOCUMENT_DISPLAYED` may fire in the same commit that hydrates the
+			// editor registry. Wait for one paint before reading the block list so a
+			// transient empty list does not consume the request.
+			await afterNextPaint( ownerWindow );
+			if ( cancelled || ! requestIsCurrent() ) {
+				return;
+			}
+			if ( ! originIsCurrent() ) {
+				completeSurfaceFocus?.( token );
+				return;
+			}
+
+			if ( isSurfaceFocusPending ) {
+				return;
+			}
+			if ( isReadOnly ) {
+				completeSurfaceFocus?.( token );
+				return;
+			}
+
+			const clientId = getDocumentSurfaceFocusClientId( {
+				blocks,
+				title,
+				ownerBlockName,
+				record,
+				postId,
+			} );
+			if ( ! clientId ) {
+				// Header repair will update the block list and rerun this effect. Leave
+				// the request pending until a title or body block exists.
+				return;
+			}
+
+			// Reset the selection across a paint so the current document can receive
+			// focus again. Keep the token pending until focus returns so later input
+			// can still cancel it.
+			cancelScheduledFocus = scheduleDocumentSurfaceFocus( {
+				clientId,
+				completeSurfaceFocus,
+				originIsCurrent: () =>
+					Boolean( canvasRootRef.current?.isConnected ) &&
+					originIsCurrent(),
+				ownerWindow,
+				requestIsCurrent,
+				selectBlock,
+				token,
+			} );
+		}
+
+		focusDocumentSurface();
+		return () => {
+			cancelled = true;
+			cancelScheduledFocus?.();
+		};
+	}, [
+		blocks,
+		canvasRootRef,
+		completeSurfaceFocus,
+		isActive,
+		isEditorSurfaceDisplayed,
+		isReadOnly,
+		isSurfaceFocusPending,
+		ownerBlockName,
+		postId,
+		record,
+		selectBlock,
+		surfaceFocusRequest,
+		title,
+	] );
+
+	return null;
+}
+
 function CanvasReadyEffect( {
 	featuredMedia,
 	postId,
@@ -1638,11 +2013,15 @@ function CanvasReadyEffect( {
 export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
+	isEditorSurfaceDisplayed = false,
 	isDocumentCanvas = false,
 	isLocked = false,
+	isSurfaceFocusPending = false,
 	postId,
 	postType,
 	extraStyles,
+	surfaceFocusRequest = null,
+	completeSurfaceFocus = null,
 	onReady,
 	onRestored,
 } ) {
@@ -1694,6 +2073,11 @@ export default function EditorBody( {
 			unlock( select( editorStore ) ).isRevisionsMode?.() ?? false,
 		[]
 	);
+	// A revision is a preview, so header repairs and surface focus treat it as
+	// read-only. The canvas skips the Disabled wrapper because the editor
+	// already renders the block list in preview mode.
+	const isReadOnly = isTrashed || isLocked || isRevisionsMode;
+	const isCanvasDisabled = isTrashed || isLocked;
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const ownerKey = ownerBlockName ? `${ postType }:${ postId }` : null;
@@ -1707,8 +2091,22 @@ export default function EditorBody( {
 		[ ownerKey, postId ]
 	);
 	const canvasReadySignals = useMemo(
-		() => ( { signalCollectionReady } ),
-		[ signalCollectionReady ]
+		() => ( {
+			signalCollectionReady,
+			surfaceFocusRequest,
+			isEditorSurfaceDisplayed,
+			isSurfaceFocusPending,
+			isSurfaceFocusReadOnly: isReadOnly,
+			completeSurfaceFocus,
+		} ),
+		[
+			completeSurfaceFocus,
+			isEditorSurfaceDisplayed,
+			isReadOnly,
+			isSurfaceFocusPending,
+			signalCollectionReady,
+			surfaceFocusRequest,
+		]
 	);
 	const shouldUseHeaderAwareAppender = useSelect(
 		( select ) => {
@@ -1725,8 +2123,6 @@ export default function EditorBody( {
 		},
 		[ ownerBlockName, postId, record ]
 	);
-	const isReadOnly = isTrashed || isLocked || isRevisionsMode;
-	const isCanvasDisabled = isTrashed || isLocked;
 	const renderAppender =
 		shouldUseHeaderAwareAppender && ! isReadOnly
 			? () => (
@@ -1746,6 +2142,8 @@ export default function EditorBody( {
 			>
 				<BlockCanvas height="100%" styles={ styles }>
 					<RevisionDiffStyles />
+					<CanvasMenuToolbarGuard />
+
 					<DocumentIdentityActions
 						isLocked={ isReadOnly }
 						postId={ postId }
@@ -1789,6 +2187,18 @@ export default function EditorBody( {
 							renderAppender={ renderAppender }
 						/>
 					</div>
+					<DocumentSurfaceFocusEffect
+						isActive={ isActive }
+						isEditorSurfaceDisplayed={ isEditorSurfaceDisplayed }
+						isReadOnly={ isReadOnly }
+						isSurfaceFocusPending={ isSurfaceFocusPending }
+						postId={ postId }
+						ownerBlockName={ ownerBlockName }
+						record={ record }
+						canvasRootRef={ blockCanvasRef }
+						surfaceFocusRequest={ surfaceFocusRequest }
+						completeSurfaceFocus={ completeSurfaceFocus }
+					/>
 					<CanvasReadyEffect
 						featuredMedia={ featuredMedia }
 						postId={ postId }
