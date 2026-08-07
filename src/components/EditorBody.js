@@ -43,7 +43,9 @@ import {
 } from './CanvasOwnerInspector';
 import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import { parseDocumentIcon } from './DocumentIcon';
+import { isSurfaceFocusOriginCurrent } from './collectionSurfaceFocus';
 import afterNextPaint from '../hooks/afterNextPaint';
+import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
@@ -323,6 +325,64 @@ function isHeaderBlock( block, ownerBlockName, record = null, postId = null ) {
 		return true;
 	}
 	return isCanvasOwnerBlock( block, record, postId );
+}
+
+// Choose the block editor target for pages and full-page rows. Focus an empty
+// title; otherwise, focus the first body block. Collections use their own
+// DataViews focus rules.
+export function getDocumentSurfaceFocusClientId( {
+	blocks = [],
+	title = '',
+	ownerBlockName = null,
+	record = null,
+	postId = null,
+} ) {
+	if ( ownerBlockName ) {
+		return null;
+	}
+
+	const titleBlock = blocks.find(
+		( block ) => block?.name === POST_TITLE_BLOCK
+	);
+	if ( String( title ?? '' ).trim() === '' ) {
+		return titleBlock?.clientId ?? null;
+	}
+
+	const firstBodyBlock = blocks.find(
+		( block ) => ! isHeaderBlock( block, ownerBlockName, record, postId )
+	);
+	return firstBodyBlock?.clientId ?? titleBlock?.clientId ?? null;
+}
+
+export function scheduleDocumentSurfaceFocus( {
+	clientId,
+	completeSurfaceFocus,
+	originIsCurrent,
+	ownerWindow,
+	requestIsCurrent,
+	selectBlock,
+	token,
+} ) {
+	let cancelled = false;
+	let focusFrame = ownerWindow.requestAnimationFrame( () => {
+		focusFrame = null;
+		if ( cancelled || ! requestIsCurrent() || ! originIsCurrent() ) {
+			return;
+		}
+
+		completeSurfaceFocus?.( token, () => selectBlock( clientId, 0 ) );
+	} );
+
+	// Clear the rich-text position now. The next frame restores the caret and
+	// claims the request, which remains cancellable until then.
+	selectBlock( clientId, null );
+
+	return () => {
+		cancelled = true;
+		if ( focusFrame !== null ) {
+			ownerWindow.cancelAnimationFrame( focusFrame );
+		}
+	};
 }
 
 // Returns clientIds of header blocks that should be removed by the next
@@ -1682,6 +1742,125 @@ async function waitForCriticalImages(
 	await Promise.all( waits );
 }
 
+function DocumentSurfaceFocusEffect( {
+	isActive,
+	isEditorSurfaceDisplayed,
+	isReadOnly,
+	isSurfaceFocusPending,
+	postId,
+	ownerBlockName,
+	record,
+	canvasRootRef,
+	surfaceFocusRequest,
+	completeSurfaceFocus,
+} ) {
+	const requestRef = useRef( surfaceFocusRequest );
+	requestRef.current = surfaceFocusRequest;
+	const { blocks, title } = useSelect(
+		( select ) => ( {
+			blocks: select( blockEditorStore ).getBlocks(),
+			title: select( editorStore ).getEditedPostAttribute( 'title' ),
+		} ),
+		[]
+	);
+	const { selectBlock } = useDispatch( blockEditorStore );
+
+	useEffect( () => {
+		const request = surfaceFocusRequest;
+		if (
+			! request ||
+			! isActive ||
+			! isEditorSurfaceDisplayed ||
+			ownerBlockName ||
+			Number( request.documentId ) !== Number( postId )
+		) {
+			return undefined;
+		}
+
+		const token = request.token;
+		let cancelled = false;
+		let cancelScheduledFocus = null;
+		const ownerWindow =
+			canvasRootRef.current?.ownerDocument?.defaultView ?? window;
+		const requestIsCurrent = () => requestRef.current?.token === token;
+		const originIsCurrent = () =>
+			isSurfaceFocusOriginCurrent( requestRef.current?.originElement );
+
+		async function focusDocumentSurface() {
+			await whenViewTransitionsSettled( 0 );
+			// `DOCUMENT_DISPLAYED` may fire in the same commit that hydrates the
+			// editor registry. Wait for one paint before reading the block list so a
+			// transient empty list does not consume the request.
+			await afterNextPaint( ownerWindow );
+			if ( cancelled || ! requestIsCurrent() ) {
+				return;
+			}
+			if ( ! originIsCurrent() ) {
+				completeSurfaceFocus?.( token );
+				return;
+			}
+
+			if ( isSurfaceFocusPending ) {
+				return;
+			}
+			if ( isReadOnly ) {
+				completeSurfaceFocus?.( token );
+				return;
+			}
+
+			const clientId = getDocumentSurfaceFocusClientId( {
+				blocks,
+				title,
+				ownerBlockName,
+				record,
+				postId,
+			} );
+			if ( ! clientId ) {
+				// Header repair will update the block list and rerun this effect. Leave
+				// the request pending until a title or body block exists.
+				return;
+			}
+
+			// Reset the selection across a paint so the current document can receive
+			// focus again. Keep the token pending until focus returns so later input
+			// can still cancel it.
+			cancelScheduledFocus = scheduleDocumentSurfaceFocus( {
+				clientId,
+				completeSurfaceFocus,
+				originIsCurrent: () =>
+					Boolean( canvasRootRef.current?.isConnected ) &&
+					originIsCurrent(),
+				ownerWindow,
+				requestIsCurrent,
+				selectBlock,
+				token,
+			} );
+		}
+
+		focusDocumentSurface();
+		return () => {
+			cancelled = true;
+			cancelScheduledFocus?.();
+		};
+	}, [
+		blocks,
+		canvasRootRef,
+		completeSurfaceFocus,
+		isActive,
+		isEditorSurfaceDisplayed,
+		isReadOnly,
+		isSurfaceFocusPending,
+		ownerBlockName,
+		postId,
+		record,
+		selectBlock,
+		surfaceFocusRequest,
+		title,
+	] );
+
+	return null;
+}
+
 function CanvasReadyEffect( {
 	featuredMedia,
 	postId,
@@ -1802,11 +1981,15 @@ function CanvasReadyEffect( {
 export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
+	isEditorSurfaceDisplayed = false,
 	isDocumentCanvas = false,
 	isLocked = false,
+	isSurfaceFocusPending = false,
 	postId,
 	postType,
 	extraStyles,
+	surfaceFocusRequest = null,
+	completeSurfaceFocus = null,
 	onReady,
 	onRestored,
 } ) {
@@ -1853,6 +2036,7 @@ export default function EditorBody( {
 			'trash',
 		[]
 	);
+	const isReadOnly = isTrashed || isLocked;
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const ownerKey = ownerBlockName ? `${ postType }:${ postId }` : null;
@@ -1866,8 +2050,22 @@ export default function EditorBody( {
 		[ ownerKey, postId ]
 	);
 	const canvasReadySignals = useMemo(
-		() => ( { signalCollectionReady } ),
-		[ signalCollectionReady ]
+		() => ( {
+			signalCollectionReady,
+			surfaceFocusRequest,
+			isEditorSurfaceDisplayed,
+			isSurfaceFocusPending,
+			isSurfaceFocusReadOnly: isReadOnly,
+			completeSurfaceFocus,
+		} ),
+		[
+			completeSurfaceFocus,
+			isEditorSurfaceDisplayed,
+			isReadOnly,
+			isSurfaceFocusPending,
+			signalCollectionReady,
+			surfaceFocusRequest,
+		]
 	);
 	const shouldUseHeaderAwareAppender = useSelect(
 		( select ) => {
@@ -1884,7 +2082,6 @@ export default function EditorBody( {
 		},
 		[ ownerBlockName, postId, record ]
 	);
-	const isReadOnly = isTrashed || isLocked;
 	const renderAppender =
 		shouldUseHeaderAwareAppender && ! isReadOnly
 			? () => (
@@ -1946,6 +2143,18 @@ export default function EditorBody( {
 							renderAppender={ renderAppender }
 						/>
 					</div>
+					<DocumentSurfaceFocusEffect
+						isActive={ isActive }
+						isEditorSurfaceDisplayed={ isEditorSurfaceDisplayed }
+						isReadOnly={ isReadOnly }
+						isSurfaceFocusPending={ isSurfaceFocusPending }
+						postId={ postId }
+						ownerBlockName={ ownerBlockName }
+						record={ record }
+						canvasRootRef={ blockCanvasRef }
+						surfaceFocusRequest={ surfaceFocusRequest }
+						completeSurfaceFocus={ completeSurfaceFocus }
+					/>
 					<CanvasReadyEffect
 						featuredMedia={ featuredMedia }
 						postId={ postId }

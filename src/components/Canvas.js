@@ -182,9 +182,13 @@ function DocumentActions( {
 function VisualCanvas( {
 	featuredMedia,
 	isActive,
+	isEditorSurfaceDisplayed,
 	isLocked = false,
+	isSurfaceFocusPending = false,
 	postId,
 	postType,
+	surfaceFocusRequest,
+	completeSurfaceFocus,
 	onReady,
 	onRestored,
 } ) {
@@ -192,10 +196,14 @@ function VisualCanvas( {
 		<EditorBody
 			featuredMedia={ featuredMedia }
 			isActive={ isActive }
+			isEditorSurfaceDisplayed={ isEditorSurfaceDisplayed }
 			isDocumentCanvas
 			isLocked={ isLocked }
+			isSurfaceFocusPending={ isSurfaceFocusPending }
 			postId={ postId }
 			postType={ postType }
+			surfaceFocusRequest={ surfaceFocusRequest }
+			completeSurfaceFocus={ completeSurfaceFocus }
 			onReady={ onReady }
 			onRestored={ onRestored }
 		/>
@@ -387,6 +395,9 @@ function CanvasEditor( {
 	onSwitchPost,
 	onDisplayedPost,
 	isActive,
+	isEditorSurfaceDisplayed,
+	surfaceFocusRequest,
+	completeSurfaceFocus,
 	topBarActions,
 	notice,
 	onApi,
@@ -549,9 +560,19 @@ function CanvasEditor( {
 						<VisualCanvas
 							featuredMedia={ post.featured_media }
 							isActive={ isActive }
+							isEditorSurfaceDisplayed={
+								isEditorSurfaceDisplayed
+							}
 							isLocked={ postLock.isReadOnly }
+							isSurfaceFocusPending={
+								postLock.isReadOnly &&
+								! postLock.isFailed &&
+								! postLock.isLocked
+							}
 							postId={ post.id }
 							postType={ post.type ?? postType }
+							surfaceFocusRequest={ surfaceFocusRequest }
+							completeSurfaceFocus={ completeSurfaceFocus }
 							onReady={ onDisplayedPost }
 							onRestored={ onRestored }
 						/>
@@ -591,6 +612,9 @@ export default function Canvas( {
 	propertiesResolving = false,
 	onDisplayedPost,
 	isActive,
+	isEditorSurfaceDisplayed = false,
+	surfaceFocusRequest = null,
+	completeSurfaceFocus = null,
 	topBarActions = null,
 	notice = null,
 	onApi,
@@ -783,6 +807,9 @@ export default function Canvas( {
 					onSwitchPost={ switchDisplayedPost }
 					onDisplayedPost={ handleDisplayedPost }
 					isActive={ isActive }
+					isEditorSurfaceDisplayed={ isEditorSurfaceDisplayed }
+					surfaceFocusRequest={ surfaceFocusRequest }
+					completeSurfaceFocus={ completeSurfaceFocus }
 					topBarActions={ topBarActions }
 					notice={ notice }
 					onApi={ onApi }
