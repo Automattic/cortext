@@ -12,6 +12,7 @@ import { useRecents } from '../hooks/useRecents';
 import { useDocumentRecord } from '../documents';
 import { DOCUMENT_POST_TYPE } from '../collections';
 import { definesTrait } from '../documents/capabilities';
+import { useSurfaceFocusIntent } from './SurfaceFocusContext';
 
 const RECENT_REPOSITION_OPTIONS = {
 	duration: 180,
@@ -86,6 +87,7 @@ function SidebarRecentsRow( {
 	setNodeRef,
 	onSelect,
 } ) {
+	const { requestFromActivation } = useSurfaceFocusIntent();
 	// Recents wire shape only carries id/title/path/icon (and optional row
 	// context). Capability checks need `meta.cortext_fields` / `crtxt_trait`,
 	// so we load the document record at render time and merge it with the
@@ -132,7 +134,10 @@ function SidebarRecentsRow( {
 					size="compact"
 					variant="tertiary"
 					onClick={ ( event ) => {
-						event.currentTarget.blur();
+						requestFromActivation( event, recent.id );
+						if ( event.detail > 0 ) {
+							event.currentTarget.blur();
+						}
 						onSelect( recent );
 					} }
 					aria-label={ ariaLabel }

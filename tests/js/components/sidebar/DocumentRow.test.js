@@ -16,6 +16,13 @@ import { DndContext } from '@dnd-kit/core';
 const mockRename = jest.fn();
 const mockDuplicate = jest.fn();
 const mockTrash = jest.fn();
+const mockRequestFromActivation = jest.fn();
+
+jest.mock( '../../../../src/components/SurfaceFocusContext', () => ( {
+	useSurfaceFocusIntent: () => ( {
+		requestFromActivation: mockRequestFromActivation,
+	} ),
+} ) );
 
 jest.mock( '../../../../src/documents', () => {
 	const ReactLib = require( 'react' );
@@ -108,11 +115,11 @@ function baseProps( overrides = {} ) {
 	};
 }
 
-function renderRow( overrides = {} ) {
+function renderRow( overrides = {}, wrapperProps = {} ) {
 	const props = baseProps( overrides );
 	const utils = render(
 		<DndContext>
-			<ul>
+			<ul { ...wrapperProps }>
 				<DocumentRow { ...props } />
 			</ul>
 		</DndContext>
@@ -123,11 +130,13 @@ function renderRow( overrides = {} ) {
 // Popover positioning can finish after a test has already unmounted. Jest
 // then sees React's act warning during the next test and fails the suite.
 // Ignore only that warning; every other console.error should still fail.
+// eslint-disable-next-line no-console
 const originalError = console.error;
 beforeEach( () => {
 	mockRename.mockReset();
 	mockDuplicate.mockReset();
 	mockTrash.mockReset();
+	mockRequestFromActivation.mockReset();
 	jest.spyOn( console, 'error' ).mockImplementation( ( ...args ) => {
 		const first = args[ 0 ];
 		if (
@@ -141,6 +150,7 @@ beforeEach( () => {
 } );
 
 afterEach( () => {
+	// eslint-disable-next-line no-console
 	console.error.mockRestore?.();
 } );
 
@@ -273,8 +283,39 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 
 	it( 'calls onSelect with the record when the title is clicked', () => {
 		const { container, props } = renderRow();
-		fireEvent.click( container.querySelector( '.cortext-sidebar__title' ) );
+		fireEvent.click( container.querySelector( '.cortext-sidebar__title' ), {
+			detail: 0,
+		} );
+		expect( mockRequestFromActivation ).toHaveBeenCalledWith(
+			expect.objectContaining( { detail: 0 } ),
+			props.record.id
+		);
 		expect( props.onSelect ).toHaveBeenCalledWith( props.record );
+	} );
+
+	it( 'forwards pointer clicks to cancel a pending focus request', () => {
+		const { container, props } = renderRow();
+		fireEvent.click( container.querySelector( '.cortext-sidebar__title' ), {
+			detail: 1,
+		} );
+
+		expect( mockRequestFromActivation ).toHaveBeenCalledWith(
+			expect.objectContaining( { detail: 1 } ),
+			props.record.id
+		);
+		expect( props.onSelect ).toHaveBeenCalledWith( props.record );
+	} );
+
+	it( 'stops activation keys at the title but lets other shortcuts bubble', () => {
+		const keyDown = jest.fn();
+		const { container } = renderRow( {}, { onKeyDown: keyDown } );
+		const title = container.querySelector( '.cortext-sidebar__title' );
+
+		fireEvent.keyDown( title, { key: 'Enter' } );
+		expect( keyDown ).not.toHaveBeenCalled();
+
+		fireEvent.keyDown( title, { key: '\\', metaKey: true } );
+		expect( keyDown ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'adds is-selected when the predicate matches', () => {

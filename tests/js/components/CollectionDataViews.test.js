@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { DataViews as mockDataViews } from '@wordpress/dataviews/wp';
 
 const mockDataViewRowReorder = jest.fn( () => null );
@@ -10,10 +10,10 @@ jest.mock( '@wordpress/dataviews/wp', () => {
 			{ children }
 		</div>
 	) );
-	MockDataViews.Search = () => null;
+	MockDataViews.Search = () => <input type="search" aria-label="Search" />;
 	MockDataViews.FiltersToggle = () => null;
-	MockDataViews.LayoutSwitcher = () => null;
-	MockDataViews.ViewConfig = () => null;
+	MockDataViews.LayoutSwitcher = () => <button>Layout</button>;
+	MockDataViews.ViewConfig = () => <button>View options</button>;
 	MockDataViews.FiltersToggled = () => null;
 	MockDataViews.Layout = () => (
 		<div className="dataviews-layout__container" />
@@ -82,13 +82,18 @@ jest.mock(
 	'../../../src/components/fields/ColumnHeaderActions',
 	() => () => null
 );
-jest.mock( '../../../src/components/DataViewNewRowButton', () => () => null );
+jest.mock( '../../../src/components/DataViewNewRowButton', () => () => (
+	<button className="cortext-data-view__new-row">New</button>
+) );
 jest.mock( '../../../src/components/Skeleton', () => ( {
 	CollectionRowsSkeleton: () => <div data-testid="rows-skeleton" />,
 } ) );
 jest.mock( '../../../src/hooks/afterNextPaint', () => ( {
 	__esModule: true,
 	default: jest.fn( () => Promise.resolve() ),
+} ) );
+jest.mock( '../../../src/hooks/viewTransition', () => ( {
+	whenViewTransitionsSettled: jest.fn( () => Promise.resolve() ),
 } ) );
 jest.mock( '../../../src/components/dataViewScroll', () => {
 	const actual = jest.requireActual(
@@ -103,6 +108,7 @@ jest.mock( '../../../src/components/dataViewScroll', () => {
 import { useCollectionFieldsContext } from '../../../src/components/CollectionFieldsContext';
 import CollectionDataViews from '../../../src/components/CollectionDataViews';
 import { scrollToEndQuickly } from '../../../src/components/dataViewScroll';
+import { whenViewTransitionsSettled } from '../../../src/hooks/viewTransition';
 import useCollectionRows from '../../../src/hooks/useCollectionRows';
 
 const tableView = {
@@ -168,6 +174,9 @@ describe( 'CollectionDataViews loading state', () => {
 	beforeEach( () => {
 		mockDataViews.mockClear();
 		mockDataViewRowReorder.mockClear();
+		whenViewTransitionsSettled.mockImplementation( () =>
+			Promise.resolve()
+		);
 		useCollectionFieldsContext.mockReturnValue( collectionFieldState );
 	} );
 
@@ -218,6 +227,277 @@ describe( 'CollectionDataViews loading state', () => {
 
 		expect( mockDataViews ).toHaveBeenCalled();
 		expect( mockDataViews.mock.calls.at( -1 )[ 0 ].isLoading ).toBe( true );
+	} );
+} );
+
+describe( 'CollectionDataViews surface focus', () => {
+	beforeEach( () => {
+		mockDataViews.mockClear();
+		mockDataViewRowReorder.mockClear();
+		useCollectionFieldsContext.mockReturnValue( collectionFieldState );
+	} );
+
+	function focusOrigin() {
+		const originElement = document.createElement( 'button' );
+		document.body.appendChild( originElement );
+		originElement.focus();
+		return originElement;
+	}
+
+	function createFulfillingCompletion() {
+		return jest.fn( ( token, onConsume ) => {
+			onConsume?.();
+			return true;
+		} );
+	}
+
+	it( 'focuses Search when the collection has rows', async () => {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ { id: 1, title: { raw: 'First row' } } ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		const originElement = focusOrigin();
+		const completeSurfaceFocus = createFulfillingCompletion();
+		const { container } = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+				surfaceFocusRequest={ {
+					token: 11,
+					documentId: '7',
+					originElement,
+				} }
+				isEditorSurfaceDisplayed
+				completeSurfaceFocus={ completeSurfaceFocus }
+			/>
+		);
+
+		await waitFor( () => {
+			expect( completeSurfaceFocus ).toHaveBeenCalledWith(
+				11,
+				expect.any( Function )
+			);
+			expect(
+				container.querySelector( 'input[type="search"]' )
+			).toHaveFocus();
+		} );
+		originElement.remove();
+	} );
+
+	it( 'focuses New when the collection is empty and unfiltered', async () => {
+		useCollectionRows.mockReturnValue( collectionRowsState() );
+		const originElement = focusOrigin();
+		const completeSurfaceFocus = createFulfillingCompletion();
+		const { container } = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+				surfaceFocusRequest={ {
+					token: 12,
+					documentId: 7,
+					originElement,
+				} }
+				isEditorSurfaceDisplayed
+				completeSurfaceFocus={ completeSurfaceFocus }
+			/>
+		);
+
+		await waitFor( () => {
+			expect( completeSurfaceFocus ).toHaveBeenCalledWith(
+				12,
+				expect.any( Function )
+			);
+			expect(
+				container.querySelector( '.cortext-data-view__new-row' )
+			).toHaveFocus();
+		} );
+		originElement.remove();
+	} );
+
+	it( 'waits until the requested collection is visible', async () => {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ { id: 1, title: { raw: 'First row' } } ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		const originElement = focusOrigin();
+		const completeSurfaceFocus = createFulfillingCompletion();
+		const request = { token: 13, documentId: 7, originElement };
+		const props = {
+			collectionId: 7,
+			view: tableView,
+			onChangeView: jest.fn(),
+			surfaceFocusRequest: request,
+			completeSurfaceFocus,
+		};
+		const { rerender } = render(
+			<CollectionDataViews
+				{ ...props }
+				isEditorSurfaceDisplayed={ false }
+			/>
+		);
+
+		expect( completeSurfaceFocus ).not.toHaveBeenCalled();
+		expect( originElement ).toHaveFocus();
+
+		rerender(
+			<CollectionDataViews { ...props } isEditorSurfaceDisplayed />
+		);
+		await waitFor( () =>
+			expect( completeSurfaceFocus ).toHaveBeenCalledWith(
+				13,
+				expect.any( Function )
+			)
+		);
+		originElement.remove();
+	} );
+
+	it( 'consumes the request without moving focus when rows fail', () => {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( { error: new Error( 'Rows failed' ) } )
+		);
+		const originElement = focusOrigin();
+		const completeSurfaceFocus = jest.fn( () => true );
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+				surfaceFocusRequest={ {
+					token: 14,
+					documentId: 7,
+					originElement,
+				} }
+				isEditorSurfaceDisplayed
+				completeSurfaceFocus={ completeSurfaceFocus }
+			/>
+		);
+
+		expect( completeSurfaceFocus ).toHaveBeenCalledWith( 14 );
+		expect( originElement ).toHaveFocus();
+		originElement.remove();
+	} );
+
+	it( 'waits for the editor lock, then consumes without moving focus if the surface is read-only', async () => {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ { id: 1, title: { raw: 'First row' } } ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		const originElement = focusOrigin();
+		const completeSurfaceFocus = jest.fn( () => true );
+		const request = { token: 17, documentId: 7, originElement };
+		const props = {
+			collectionId: 7,
+			view: tableView,
+			onChangeView: jest.fn(),
+			surfaceFocusRequest: request,
+			isEditorSurfaceDisplayed: true,
+			completeSurfaceFocus,
+		};
+		const { rerender } = render(
+			<CollectionDataViews { ...props } isSurfaceFocusPending />
+		);
+
+		expect( completeSurfaceFocus ).not.toHaveBeenCalled();
+		expect( originElement ).toHaveFocus();
+
+		rerender( <CollectionDataViews { ...props } isSurfaceFocusReadOnly /> );
+		await waitFor( () =>
+			expect( completeSurfaceFocus ).toHaveBeenCalledWith( 17 )
+		);
+		expect( originElement ).toHaveFocus();
+		originElement.remove();
+	} );
+
+	it( "keeps the user's new focus while the view transition finishes", async () => {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ { id: 1, title: { raw: 'First row' } } ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		let settleTransition;
+		whenViewTransitionsSettled.mockImplementationOnce(
+			() =>
+				new Promise( ( resolve ) => {
+					settleTransition = resolve;
+				} )
+		);
+		const originElement = focusOrigin();
+		const newTarget = document.createElement( 'button' );
+		document.body.appendChild( newTarget );
+		const completeSurfaceFocus = jest.fn( () => true );
+		const { container } = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+				surfaceFocusRequest={ {
+					token: 15,
+					documentId: 7,
+					originElement,
+				} }
+				isEditorSurfaceDisplayed
+				completeSurfaceFocus={ completeSurfaceFocus }
+			/>
+		);
+
+		newTarget.focus();
+		settleTransition();
+		await waitFor( () =>
+			expect( completeSurfaceFocus ).toHaveBeenCalledWith( 15 )
+		);
+		expect( newTarget ).toHaveFocus();
+		expect(
+			container.querySelector( 'input[type="search"]' )
+		).not.toHaveFocus();
+		originElement.remove();
+		newTarget.remove();
+	} );
+
+	it( 'leaves focus alone when another consumer has claimed the request', async () => {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ { id: 1, title: { raw: 'First row' } } ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		const originElement = focusOrigin();
+		const completeSurfaceFocus = jest.fn( () => false );
+		const { container } = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+				surfaceFocusRequest={ {
+					token: 16,
+					documentId: 7,
+					originElement,
+				} }
+				isEditorSurfaceDisplayed
+				completeSurfaceFocus={ completeSurfaceFocus }
+			/>
+		);
+
+		await waitFor( () =>
+			expect( completeSurfaceFocus ).toHaveBeenCalledWith(
+				16,
+				expect.any( Function )
+			)
+		);
+		expect( originElement ).toHaveFocus();
+		expect(
+			container.querySelector( 'input[type="search"]' )
+		).not.toHaveFocus();
+		originElement.remove();
 	} );
 } );
 

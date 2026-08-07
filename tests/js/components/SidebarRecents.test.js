@@ -4,6 +4,13 @@ let mockRecents = [];
 let mockIsResolving = false;
 let mockRecordsById = new Map();
 const mockNavigate = jest.fn();
+const mockRequestFromActivation = jest.fn();
+
+jest.mock( '../../../src/components/SurfaceFocusContext', () => ( {
+	useSurfaceFocusIntent: () => ( {
+		requestFromActivation: mockRequestFromActivation,
+	} ),
+} ) );
 
 jest.mock( '@tanstack/react-router', () => ( {
 	useNavigate: () => mockNavigate,
@@ -85,6 +92,7 @@ const rectForIndex = ( index ) => ( {
 
 beforeEach( () => {
 	mockNavigate.mockReset();
+	mockRequestFromActivation.mockReset();
 	mockRecents = [];
 	mockIsResolving = false;
 	mockRecordsById = new Map();
@@ -130,7 +138,30 @@ describe( 'SidebarRecents animation', () => {
 		);
 	} );
 
-	it( 'blurs the clicked recent before navigating', () => {
+	it( 'keeps focus on a recent activated from the keyboard', () => {
+		const blurSpy = jest
+			.spyOn( window.HTMLElement.prototype, 'blur' )
+			.mockImplementation( () => {} );
+		mockRecents = [ pageRecent( 1, 'Alpha' ) ];
+
+		render( <SidebarRecents /> );
+		const button = screen.getByRole( 'button', { name: 'Recent: Alpha' } );
+		button.focus();
+		button.click();
+
+		expect( mockRequestFromActivation ).toHaveBeenCalledWith(
+			expect.objectContaining( { detail: 0 } ),
+			1
+		);
+		expect( blurSpy ).not.toHaveBeenCalled();
+		expect( mockNavigate ).toHaveBeenCalledWith( {
+			to: '/$',
+			params: { _splat: 'alpha-1' },
+		} );
+		blurSpy.mockRestore();
+	} );
+
+	it( 'blurs a pointer-activated recent before navigating', () => {
 		const blurSpy = jest
 			.spyOn( window.HTMLElement.prototype, 'blur' )
 			.mockImplementation( () => {} );
@@ -138,9 +169,16 @@ describe( 'SidebarRecents animation', () => {
 
 		render( <SidebarRecents /> );
 		fireEvent.click(
-			screen.getByRole( 'button', { name: 'Recent: Alpha' } )
+			screen.getByRole( 'button', { name: 'Recent: Alpha' } ),
+			{
+				detail: 1,
+			}
 		);
 
+		expect( mockRequestFromActivation ).toHaveBeenCalledWith(
+			expect.objectContaining( { detail: 1 } ),
+			1
+		);
 		expect( blurSpy ).toHaveBeenCalled();
 		expect( mockNavigate ).toHaveBeenCalledWith( {
 			to: '/$',

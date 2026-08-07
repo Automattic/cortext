@@ -42,6 +42,7 @@ import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
 import afterNextPaint from '../hooks/afterNextPaint';
+import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 import allSettledWithConcurrency from './allSettledWithConcurrency';
 import {
 	DEFAULT_LAYOUTS,
@@ -88,6 +89,11 @@ import { useFavorites } from '../hooks/useFavorites';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import {
+	getCollectionSurfaceFocusTarget,
+	isCollectionTrulyEmpty,
+	isSurfaceFocusOriginCurrent,
+} from './collectionSurfaceFocus';
 
 const BULK_DELETE_CONCURRENCY = 4;
 // tech-debt.md#td-dataviews-list-row-hooks: DataViews ties list focus to its own selection. Cortext
@@ -106,6 +112,11 @@ export default function CollectionDataViews( {
 	onReady,
 	revealFieldId = null,
 	onFieldRevealed,
+	surfaceFocusRequest = null,
+	isEditorSurfaceDisplayed = false,
+	isSurfaceFocusPending = false,
+	isSurfaceFocusReadOnly = false,
+	completeSurfaceFocus,
 } ) {
 	const { fields, collection, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
@@ -210,6 +221,9 @@ export default function CollectionDataViews( {
 	const showLoadingShell = isShellLoading || holdLoadingShell;
 
 	const tableWrapperRef = useRef( null );
+	const surfaceFocusRequestRef = useRef( surfaceFocusRequest );
+	surfaceFocusRequestRef.current = surfaceFocusRequest;
+	const claimedSurfaceFocusTokenRef = useRef( null );
 	const [ localRevealFieldId, setLocalRevealFieldId ] = useState( null );
 	const pendingRevealFieldId = revealFieldId ?? localRevealFieldId;
 	const requestRevealCreatedField = useCallback( ( created ) => {
@@ -1363,6 +1377,125 @@ export default function CollectionDataViews( {
 		isTableLayout,
 		showLoadingShell,
 		view?.fields,
+	] );
+
+	useEffect( () => {
+		const request = surfaceFocusRequest;
+		const token = request?.token;
+		const isMatchingCollection =
+			request?.documentId !== undefined &&
+			request?.documentId !== null &&
+			String( request.documentId ) === String( collectionId );
+
+		if (
+			! isMatchingCollection ||
+			! isEditorSurfaceDisplayed ||
+			token === undefined ||
+			token === null ||
+			typeof completeSurfaceFocus !== 'function' ||
+			claimedSurfaceFocusTokenRef.current === token
+		) {
+			return undefined;
+		}
+
+		const claimRequest = ( onConsume ) => {
+			claimedSurfaceFocusTokenRef.current = token;
+			return onConsume
+				? completeSurfaceFocus( token, onConsume )
+				: completeSurfaceFocus( token );
+		};
+
+		if ( isSurfaceFocusPending ) {
+			return undefined;
+		}
+
+		if ( isSurfaceFocusReadOnly ) {
+			claimRequest();
+			return undefined;
+		}
+
+		// These states have no primary action, so consume the request without
+		// moving focus to a notice.
+		if (
+			( ! isResolving && collectionId && ! collection ) ||
+			( ! isResolving && rowError )
+		) {
+			claimRequest();
+			return undefined;
+		}
+
+		if (
+			isResolving ||
+			! fieldsResolved ||
+			! rowsResolved ||
+			showLoadingShell
+		) {
+			return undefined;
+		}
+
+		let cancelled = false;
+		async function focusCollectionSurface() {
+			const root = tableWrapperRef.current;
+			const ownerWindow = root?.ownerDocument?.defaultView;
+			await whenViewTransitionsSettled( 0 );
+			await afterNextPaint( ownerWindow );
+
+			if ( cancelled ) {
+				return;
+			}
+
+			const currentRequest = surfaceFocusRequestRef.current;
+			if ( currentRequest?.token !== token ) {
+				return;
+			}
+
+			// If focus moves while rows or the transition settle, consume the stale
+			// request without moving it again.
+			if (
+				! isSurfaceFocusOriginCurrent( currentRequest.originElement )
+			) {
+				claimRequest();
+				return;
+			}
+
+			const currentRoot = tableWrapperRef.current;
+			const target = getCollectionSurfaceFocusTarget( currentRoot, {
+				isTrulyEmpty: isCollectionTrulyEmpty( {
+					rowsResolved,
+					totalItems: activePaginationInfo?.totalItems,
+					view,
+				} ),
+				layoutType: view?.type,
+			} );
+
+			// Claim the request before focusing the target. Otherwise, its `focusin`
+			// event would cancel the request while it is still pending.
+			claimRequest( () => {
+				if ( target && currentRoot?.contains( target ) ) {
+					target.focus();
+				}
+			} );
+		}
+
+		focusCollectionSurface();
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		activePaginationInfo?.totalItems,
+		collection,
+		collectionId,
+		completeSurfaceFocus,
+		fieldsResolved,
+		isEditorSurfaceDisplayed,
+		isResolving,
+		isSurfaceFocusPending,
+		isSurfaceFocusReadOnly,
+		rowError,
+		rowsResolved,
+		showLoadingShell,
+		surfaceFocusRequest,
+		view,
 	] );
 
 	useEffect( () => {

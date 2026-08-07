@@ -1,4 +1,12 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+
+const mockRequestFromActivation = jest.fn();
+
+jest.mock( '../../../src/components/SurfaceFocusContext', () => ( {
+	useSurfaceFocusIntent: () => ( {
+		requestFromActivation: mockRequestFromActivation,
+	} ),
+} ) );
 
 jest.mock( '@wordpress/core-data', () => ( {
 	__esModule: true,
@@ -31,6 +39,10 @@ function renderFavorites( props = {} ) {
 
 afterEach( () => {
 	jest.useRealTimers();
+} );
+
+beforeEach( () => {
+	mockRequestFromActivation.mockReset();
 } );
 
 describe( 'SidebarFavorites helpers', () => {
@@ -349,5 +361,88 @@ describe( 'SidebarFavorites helpers', () => {
 		expect(
 			container.querySelector( '.cortext-sidebar__loading' )
 		).toBeNull();
+	} );
+
+	it( 'requests canvas focus without blurring the selected favorite', () => {
+		const onSelect = jest.fn( () => false );
+		const blurSpy = jest.spyOn( window.HTMLElement.prototype, 'blur' );
+		const { container } = renderFavorites( {
+			favorites: [ { id: 1 } ],
+			pages: [
+				{
+					id: 1,
+					slug: 'notes',
+					title: { rendered: 'Notes', raw: 'Notes' },
+				},
+			],
+			onSelect,
+		} );
+		const button = container.querySelector(
+			'.cortext-sidebar__favorite-title'
+		);
+
+		button.focus();
+		fireEvent.click( button, { detail: 0 } );
+
+		expect( mockRequestFromActivation ).toHaveBeenCalledWith(
+			expect.objectContaining( { detail: 0 } ),
+			1
+		);
+		expect( onSelect ).toHaveBeenCalled();
+		expect( blurSpy ).not.toHaveBeenCalled();
+		blurSpy.mockRestore();
+	} );
+
+	it( 'lets unrelated shortcuts bubble from a favorite title', () => {
+		const { container } = renderFavorites( {
+			favorites: [ { id: 1 } ],
+			pages: [
+				{
+					id: 1,
+					slug: 'notes',
+					title: { rendered: 'Notes', raw: 'Notes' },
+				},
+			],
+		} );
+		const keyDown = jest.fn();
+		container.addEventListener( 'keydown', keyDown );
+
+		fireEvent.keyDown(
+			container.querySelector( '.cortext-sidebar__favorite-title' ),
+			{ key: '\\', metaKey: true }
+		);
+
+		expect( keyDown ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'still blurs a favorite after pointer activation', () => {
+		const onSelect = jest.fn( () => false );
+		const blurSpy = jest
+			.spyOn( window.HTMLElement.prototype, 'blur' )
+			.mockImplementation( () => {} );
+		const { container } = renderFavorites( {
+			favorites: [ { id: 1 } ],
+			pages: [
+				{
+					id: 1,
+					slug: 'notes',
+					title: { rendered: 'Notes', raw: 'Notes' },
+				},
+			],
+			onSelect,
+		} );
+
+		const button = container.querySelector(
+			'.cortext-sidebar__favorite-title'
+		);
+		fireEvent.click( button, { detail: 1 } );
+
+		expect( mockRequestFromActivation ).toHaveBeenCalledWith(
+			expect.objectContaining( { detail: 1 } ),
+			1
+		);
+		expect( onSelect ).toHaveBeenCalled();
+		expect( blurSpy ).toHaveBeenCalled();
+		blurSpy.mockRestore();
 	} );
 } );

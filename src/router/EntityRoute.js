@@ -35,6 +35,8 @@ import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import CortextSnackbars from '../components/CortextSnackbars';
+import { useSurfaceFocusIntent } from '../components/SurfaceFocusContext';
+import { isSurfaceFocusOriginCurrent } from '../components/collectionSurfaceFocus';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
 import {
 	ACTIVE_PAGES_QUERY,
@@ -43,7 +45,11 @@ import {
 } from '../components/page-queries';
 import { firstDocumentInTree } from '../components/document-tree';
 import { isPublicWebAffordancesEnabled } from '../settings';
-import { withViewTransition } from '../hooks/viewTransition';
+import afterNextPaint from '../hooks/afterNextPaint';
+import {
+	whenViewTransitionsSettled,
+	withViewTransition,
+} from '../hooks/viewTransition';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import useCollectionFields from '../hooks/useCollectionFields';
@@ -77,9 +83,15 @@ function NotFoundPane() {
 	);
 }
 
-function WorkspacePane( { active, preservePaint = false, children } ) {
+function WorkspacePane( {
+	active,
+	preservePaint = false,
+	paneRef = null,
+	children,
+} ) {
 	return (
 		<div
+			ref={ paneRef }
 			className="cortext-workspace__pane"
 			data-active={ active ? 'true' : 'false' }
 			data-preserve-paint={ preservePaint ? 'true' : 'false' }
@@ -89,6 +101,57 @@ function WorkspacePane( { active, preservePaint = false, children } ) {
 			{ children }
 		</div>
 	);
+}
+
+function useTerminalSurfaceFocus( {
+	isActive,
+	containerRef,
+	request,
+	documentId = null,
+	complete,
+} ) {
+	const requestRef = useRef( request );
+	requestRef.current = request;
+
+	useEffect( () => {
+		if (
+			! isActive ||
+			! request ||
+			( documentId !== null &&
+				Number( request.documentId ) !== Number( documentId ) )
+		) {
+			return undefined;
+		}
+
+		const token = request.token;
+		let cancelled = false;
+		async function focusTerminalAction() {
+			await whenViewTransitionsSettled( 0 );
+			await afterNextPaint(
+				containerRef.current?.ownerDocument?.defaultView
+			);
+			if ( cancelled || requestRef.current?.token !== token ) {
+				return;
+			}
+			if (
+				! isSurfaceFocusOriginCurrent(
+					requestRef.current?.originElement
+				)
+			) {
+				complete?.( token );
+				return;
+			}
+
+			const primaryAction = containerRef.current?.querySelector(
+				'.components-button.is-primary:not(:disabled):not([aria-disabled="true"]), [data-cortext-primary-action]:not(:disabled):not([aria-disabled="true"])'
+			);
+			complete?.( token, () => primaryAction?.focus() );
+		}
+		focusTerminalAction();
+		return () => {
+			cancelled = true;
+		};
+	}, [ complete, containerRef, documentId, isActive, request ] );
 }
 
 // Default mutation context for documents reached by deep link or direct
@@ -132,6 +195,20 @@ export default function EntityRoute( { history } ) {
 
 	const [ state, rawDispatch ] = useReducer( reducer, target, init );
 	const { active, mountedDocumentId, displayedDocumentId } = state;
+	const { request: surfaceFocusRequest, consume: consumeSurfaceFocus } =
+		useSurfaceFocusIntent();
+	const completeSurfaceFocus = useCallback(
+		( token, onConsume ) => consumeSurfaceFocus?.( token, onConsume ),
+		[ consumeSurfaceFocus ]
+	);
+	const notFoundPaneRef = useRef( null );
+	useTerminalSurfaceFocus( {
+		isActive: active.kind === 'document-not-found',
+		containerRef: notFoundPaneRef,
+		request: surfaceFocusRequest,
+		documentId: target.kind === 'document' ? target.id : null,
+		complete: completeSurfaceFocus,
+	} );
 
 	// Keep the old pane up until the next Canvas has painted.
 	const isWorkspaceNavigating =
@@ -383,6 +460,18 @@ export default function EntityRoute( { history } ) {
 	// `DOCUMENT_DISPLAYED` until it renders, and `active` can't flip to
 	// `document` until that dispatch arrives.
 	const editorPostId = mountedDocumentId;
+	const isEditorSurfaceDisplayed = Boolean(
+		isDocumentActive &&
+			editorPostId !== null &&
+			displayedDocumentId === editorPostId &&
+			active.id === editorPostId
+	);
+	const editorSurfaceFocusRequest =
+		isEditorSurfaceDisplayed &&
+		surfaceFocusRequest &&
+		Number( surfaceFocusRequest.documentId ) === Number( editorPostId )
+			? surfaceFocusRequest
+			: null;
 	const editorRowContext = rowDocumentContextForEditorPost(
 		rowContextCacheRef.current,
 		editorPostId,
@@ -453,6 +542,9 @@ export default function EntityRoute( { history } ) {
 					}
 					onDisplayedPost={ handleDocumentDisplayed }
 					isActive={ isDocumentActive }
+					isEditorSurfaceDisplayed={ isEditorSurfaceDisplayed }
+					surfaceFocusRequest={ editorSurfaceFocusRequest }
+					completeSurfaceFocus={ completeSurfaceFocus }
 					onRestored={ onRestoreDocument }
 					recentTarget={ editorRecentTarget }
 				/>
@@ -494,7 +586,10 @@ export default function EntityRoute( { history } ) {
 				<WorkspacePane active={ active.kind === 'empty' }>
 					<EmptyState isWorkspaceEmpty={ isWorkspaceEmpty } />
 				</WorkspacePane>
-				<WorkspacePane active={ active.kind === 'document-not-found' }>
+				<WorkspacePane
+					active={ active.kind === 'document-not-found' }
+					paneRef={ notFoundPaneRef }
+				>
 					<NotFoundPane />
 				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'loading' }>

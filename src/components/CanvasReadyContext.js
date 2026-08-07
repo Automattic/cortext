@@ -2,6 +2,11 @@ import { createContext, useContext } from '@wordpress/element';
 
 const EMPTY_SIGNALS = {
 	signalCollectionReady: null,
+	surfaceFocusRequest: null,
+	isEditorSurfaceDisplayed: false,
+	isSurfaceFocusPending: false,
+	isSurfaceFocusReadOnly: false,
+	completeSurfaceFocus: null,
 };
 
 const CanvasReadyContext = createContext( EMPTY_SIGNALS );
