@@ -9,6 +9,8 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import { useDocumentArchiveInvalidation } from './documentArchiveInvalidation';
+
 const RecentsContext = createContext( null );
 
 function recentFingerprint( recent ) {
@@ -49,17 +51,20 @@ export function RecentsProvider( { children } ) {
 	const [ isUpdating, setIsUpdating ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const latestTouchRequest = useRef( 0 );
+	const latestReadRequest = useRef( 0 );
 	const pendingTouchCount = useRef( 0 );
 	const touchQueue = useRef( Promise.resolve() );
 
 	useEffect( () => {
 		let cancelled = false;
+		const readRequest = latestReadRequest.current + 1;
+		latestReadRequest.current = readRequest;
 		setIsResolving( true );
 		setError( null );
 
 		apiFetch( { path: '/cortext/v1/recents' } )
 			.then( ( response ) => {
-				if ( cancelled ) {
+				if ( cancelled || readRequest !== latestReadRequest.current ) {
 					return;
 				}
 				if ( latestTouchRequest.current > 0 ) {
@@ -70,7 +75,7 @@ export function RecentsProvider( { children } ) {
 				setIsResolving( false );
 			} )
 			.catch( ( nextError ) => {
-				if ( cancelled ) {
+				if ( cancelled || readRequest !== latestReadRequest.current ) {
 					return;
 				}
 				if ( latestTouchRequest.current > 0 ) {
@@ -132,6 +137,38 @@ export function RecentsProvider( { children } ) {
 		touchQueue.current = queuedTouch.catch( () => null );
 		return queuedTouch;
 	}, [] );
+
+	const refreshRecents = useCallback( () => {
+		const refresh = async () => {
+			const readRequest = latestReadRequest.current + 1;
+			latestReadRequest.current = readRequest;
+			const touchRequest = latestTouchRequest.current;
+			setError( null );
+			try {
+				const response = await apiFetch( {
+					path: '/cortext/v1/recents',
+				} );
+				if (
+					readRequest === latestReadRequest.current &&
+					touchRequest === latestTouchRequest.current
+				) {
+					applyRecents( setRecents, recentsFromResponse( response ) );
+					setIsResolving( false );
+				}
+				return response;
+			} catch ( nextError ) {
+				if ( readRequest === latestReadRequest.current ) {
+					setError( nextError );
+					setIsResolving( false );
+				}
+				return null;
+			}
+		};
+
+		const queuedRefresh = touchQueue.current.then( refresh, refresh );
+		touchQueue.current = queuedRefresh.catch( () => null );
+	}, [] );
+	useDocumentArchiveInvalidation( refreshRecents );
 
 	const value = useMemo(
 		() => ( { recents, isResolving, isUpdating, error, touchRecent } ),

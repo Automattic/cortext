@@ -20,6 +20,7 @@ jest.mock( '@wordpress/components', () => ( {
 jest.mock( '@wordpress/data', () => ( {
 	__esModule: true,
 	useDispatch: jest.fn(),
+	useRegistry: jest.fn(),
 	useSelect: jest.fn(),
 } ) );
 
@@ -59,9 +60,10 @@ jest.mock( '../../../src/hooks/useCollectionDependentPages', () => ( {
 
 jest.mock( '../../../src/components/PublishToggle', () => ( {
 	__esModule: true,
-	default: ( { isPublic, onToggle, onRequestUnpublish } ) => (
+	default: ( { disabled, isPublic, onToggle, onRequestUnpublish } ) => (
 		<button
 			type="button"
+			disabled={ disabled }
 			onClick={ isPublic ? onRequestUnpublish : onToggle }
 		>
 			{ isPublic ? 'Unpublish' : 'Publish' }
@@ -69,7 +71,7 @@ jest.mock( '../../../src/components/PublishToggle', () => ( {
 	),
 } ) );
 
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useDispatch, useRegistry, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { store as coreStore } from '@wordpress/core-data';
@@ -87,6 +89,12 @@ const coreDispatch = {
 const noticesDispatch = {
 	createErrorNotice: jest.fn(),
 	removeNotice: jest.fn(),
+};
+const coreResolve = {
+	getEntityRecord: jest.fn(),
+};
+const registry = {
+	resolveSelect: jest.fn(),
 };
 
 let editorState;
@@ -106,6 +114,19 @@ beforeEach( () => {
 	record = { id: 7, cortext_defines_trait: false };
 
 	coreDispatch.saveEntityRecord.mockResolvedValue( { id: 44 } );
+	coreResolve.getEntityRecord.mockImplementation(
+		async ( kind, name, id ) => ( {
+			id,
+			status: 'private',
+		} )
+	);
+	registry.resolveSelect.mockImplementation( ( store ) => {
+		if ( store === coreStore ) {
+			return coreResolve;
+		}
+		return {};
+	} );
+	useRegistry.mockReturnValue( registry );
 
 	useDispatch.mockImplementation( ( store ) => {
 		if ( store === editorStore ) {
@@ -173,10 +194,102 @@ describe( 'DocumentPublishToggle', () => {
 				{ throwOnError: true }
 			)
 		);
+		expect( registry.resolveSelect ).toHaveBeenCalledWith( coreStore );
+		expect( coreResolve.getEntityRecord ).toHaveBeenCalledWith(
+			'postType',
+			'crtxt_document',
+			44,
+			{ context: 'edit' }
+		);
 		expect( editorDispatch.editPost ).toHaveBeenCalledWith( {
 			status: 'publish',
 		} );
 		expect( editorDispatch.savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'does not publish any referenced collection when one is archived', async () => {
+		blocks = [
+			{
+				name: 'cortext/data-view',
+				attributes: { collectionId: 43 },
+				innerBlocks: [],
+			},
+			{
+				name: 'cortext/data-view',
+				attributes: { collectionId: 44 },
+				innerBlocks: [],
+			},
+		];
+		coreResolve.getEntityRecord.mockImplementation(
+			async ( kind, name, id ) => ( {
+				id,
+				status: id === 44 ? 'crtxt_archived' : 'private',
+			} )
+		);
+
+		render( <DocumentPublishToggle postId={ 7 } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Publish' } ) );
+
+		await waitFor( () =>
+			expect( noticesDispatch.createErrorNotice ).toHaveBeenCalledWith(
+				"Couldn't publish this document because it references an archived collection. Restore the collection first.",
+				{
+					id: 'cortext-document-publish-error',
+					type: 'snackbar',
+				}
+			)
+		);
+		expect( coreResolve.getEntityRecord ).toHaveBeenCalledTimes( 2 );
+		expect( coreDispatch.saveEntityRecord ).not.toHaveBeenCalled();
+		expect( editorDispatch.editPost ).not.toHaveBeenCalled();
+		expect( editorDispatch.savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not publish when a referenced collection cannot be resolved', async () => {
+		blocks = [
+			{
+				name: 'cortext/data-view',
+				attributes: { collectionId: 44 },
+				innerBlocks: [],
+			},
+		];
+		coreResolve.getEntityRecord.mockResolvedValue( null );
+
+		render( <DocumentPublishToggle postId={ 7 } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Publish' } ) );
+
+		await waitFor( () =>
+			expect( noticesDispatch.createErrorNotice ).toHaveBeenCalled()
+		);
+		expect( coreDispatch.saveEntityRecord ).not.toHaveBeenCalled();
+		expect( editorDispatch.editPost ).not.toHaveBeenCalled();
+		expect( editorDispatch.savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not publish when resolving a referenced collection fails', async () => {
+		blocks = [
+			{
+				name: 'cortext/data-view',
+				attributes: { collectionId: 44 },
+				innerBlocks: [],
+			},
+		];
+		coreResolve.getEntityRecord.mockRejectedValue(
+			new Error( 'Could not load collection' )
+		);
+
+		render( <DocumentPublishToggle postId={ 7 } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Publish' } ) );
+
+		await waitFor( () =>
+			expect( noticesDispatch.createErrorNotice ).toHaveBeenCalled()
+		);
+		expect( coreDispatch.saveEntityRecord ).not.toHaveBeenCalled();
+		expect( editorDispatch.editPost ).not.toHaveBeenCalled();
+		expect( editorDispatch.savePost ).not.toHaveBeenCalled();
 	} );
 
 	it( 'hides publishing for an unpublished row (carries a trait, does not define one)', () => {
@@ -220,5 +333,17 @@ describe( 'DocumentPublishToggle', () => {
 		expect(
 			screen.getByRole( 'button', { name: 'Publish' } )
 		).toBeTruthy();
+	} );
+
+	it( 'disables publishing while a document is archived', () => {
+		editorState.status = 'crtxt_archived';
+
+		render( <DocumentPublishToggle postId={ 7 } /> );
+
+		const publish = screen.getByRole( 'button', { name: 'Publish' } );
+		expect( publish ).toBeDisabled();
+		fireEvent.click( publish );
+		expect( editorDispatch.editPost ).not.toHaveBeenCalled();
+		expect( editorDispatch.savePost ).not.toHaveBeenCalled();
 	} );
 } );

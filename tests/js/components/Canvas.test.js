@@ -86,7 +86,9 @@ jest.mock( '../../../src/documents/capabilities', () => ( {
 jest.mock( '../../../src/components/page-queries', () => ( {
 	POST_TYPE: 'crtxt_document',
 } ) );
-jest.mock( '../../../src/components/CortextInserterSidebar', () => () => null );
+jest.mock( '../../../src/components/CortextInserterSidebar', () =>
+	jest.fn( () => null )
+);
 jest.mock( '../../../src/components/CortextLinkSuggestions', () => () => null );
 jest.mock( '../../../src/components/mention', () => ( {
 	CortextMentions: () => null,
@@ -94,8 +96,10 @@ jest.mock( '../../../src/components/mention', () => ( {
 jest.mock( '../../../src/components/DocumentPropertiesContext', () => ( {
 	DocumentPropertiesProvider: ( { children } ) => children,
 } ) );
-jest.mock( '../../../src/components/DocumentPublishToggle', () => () => null );
-jest.mock( '../../../src/components/EditorBody', () => () => null );
+jest.mock( '../../../src/components/DocumentPublishToggle', () =>
+	jest.fn( () => null )
+);
+jest.mock( '../../../src/components/EditorBody', () => jest.fn( () => null ) );
 jest.mock( '../../../src/components/PostLockControls', () => ( {
 	PostLockFailureNotice: () => null,
 	PostLockModal: () => null,
@@ -108,7 +112,7 @@ jest.mock( '../../../src/components/WorkspaceTopBar', () => ( {
 } ) );
 jest.mock( '../../../src/components/DocumentInspectorSidebar', () => ( {
 	__esModule: true,
-	default: () => null,
+	default: jest.fn( () => null ),
 	DOCUMENT_INSPECTOR: 'cortext/document-inspector',
 	INSPECTOR_SCOPE: 'cortext',
 	InspectorSidebarSlot: () => null,
@@ -123,8 +127,17 @@ jest.mock( '../../../src/router/rowContextCache', () => ( {
 
 import {
 	AnimatedSecondarySidebar,
+	CanvasEditor,
 	CanvasInterfaceSkeleton,
 } from '../../../src/components/Canvas';
+import { useDispatch, useSelect } from '@wordpress/data';
+import { definesTrait } from '../../../src/documents/capabilities';
+import useAutosave from '../../../src/hooks/useAutosave';
+import usePostLock from '../../../src/hooks/usePostLock';
+import DocumentPublishToggle from '../../../src/components/DocumentPublishToggle';
+import EditorBody from '../../../src/components/EditorBody';
+import DocumentInspectorSidebar from '../../../src/components/DocumentInspectorSidebar';
+import CortextInserterSidebar from '../../../src/components/CortextInserterSidebar';
 
 function installMatchMedia() {
 	window.matchMedia = jest.fn( ( query ) => {
@@ -266,5 +279,116 @@ describe( 'Canvas secondary sidebar', () => {
 			screen.getByTestId( 'secondary-sidebar-presence' )
 		).toBeInTheDocument();
 		expect( screen.queryByText( 'Library' ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'Canvas archived lifecycle lock', () => {
+	const unlockedPostLock = {
+		error: null,
+		isAcquiring: false,
+		isLocked: false,
+		isReadOnly: false,
+		isTakeover: false,
+		isTakingOver: false,
+		retry: jest.fn(),
+		takeOver: jest.fn(),
+		user: null,
+	};
+	const editorProps = {
+		allFields: [],
+		fields: [],
+		isActive: true,
+		onDisplayedPost: jest.fn(),
+		onSwitchPost: jest.fn(),
+		postType: 'crtxt_document',
+	};
+
+	beforeEach( () => {
+		useDispatch.mockReturnValue( {
+			disableComplementaryArea: jest.fn(),
+			enableComplementaryArea: jest.fn(),
+			resetPost: jest.fn(),
+			setIsInserterOpened: jest.fn(),
+		} );
+		useSelect.mockReturnValue( false );
+		useAutosave.mockReturnValue( {
+			flushNow: jest.fn(),
+			isDirty: false,
+			isSaving: false,
+			lastSavedAt: null,
+			status: 'idle',
+		} );
+		usePostLock.mockReturnValue( unlockedPostLock );
+		definesTrait.mockReturnValue( false );
+		DocumentPublishToggle.mockClear();
+		EditorBody.mockClear();
+		DocumentInspectorSidebar.mockClear();
+		CortextInserterSidebar.mockClear();
+	} );
+
+	it( 'skips locking while archived and reacquires after restore', () => {
+		const archivedPost = {
+			id: 7,
+			status: 'crtxt_archived',
+			type: 'crtxt_document',
+		};
+		const { rerender } = render(
+			<CanvasEditor { ...editorProps } post={ archivedPost } />
+		);
+
+		expect( usePostLock ).toHaveBeenLastCalledWith( {
+			postId: 7,
+			postType: 'crtxt_document',
+			enabled: false,
+		} );
+		expect( DocumentPublishToggle.mock.calls.at( -1 )[ 0 ].disabled ).toBe(
+			true
+		);
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( true );
+		expect(
+			DocumentInspectorSidebar.mock.calls.at( -1 )[ 0 ].isLocked
+		).toBe( true );
+
+		rerender(
+			<CanvasEditor
+				{ ...editorProps }
+				post={ { ...archivedPost, status: 'publish' } }
+			/>
+		);
+
+		expect( usePostLock ).toHaveBeenLastCalledWith( {
+			postId: 7,
+			postType: 'crtxt_document',
+			enabled: true,
+		} );
+		expect( DocumentPublishToggle.mock.calls.at( -1 )[ 0 ].disabled ).toBe(
+			false
+		);
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( false );
+	} );
+
+	it( 'closes an already-open inserter when the document is archived', () => {
+		const setIsInserterOpened = jest.fn();
+		useSelect.mockReturnValue( true );
+		useDispatch.mockReturnValue( {
+			disableComplementaryArea: jest.fn(),
+			enableComplementaryArea: jest.fn(),
+			resetPost: jest.fn(),
+			setIsInserterOpened,
+		} );
+
+		render(
+			<CanvasEditor
+				{ ...editorProps }
+				post={ {
+					id: 7,
+					status: 'crtxt_archived',
+					type: 'crtxt_document',
+				} }
+			/>
+		);
+
+		expect( setIsInserterOpened ).toHaveBeenCalledWith( false );
+		expect( CortextInserterSidebar ).not.toHaveBeenCalled();
 	} );
 } );

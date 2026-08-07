@@ -397,6 +397,30 @@
 		padding: 0;
 	}
 
+	&__trash-panel-tabs {
+		display: flex;
+		gap: $grid-unit-05;
+		padding: $grid-unit-10 $grid-unit-05 $grid-unit-05;
+	}
+
+	&__trash-panel-tab.components-button {
+		height: $grid-unit-30;
+		padding: 0 $grid-unit-10;
+		gap: $grid-unit-05;
+		font-size: 12px;
+		font-weight: 500;
+
+		&[aria-selected="true"] {
+			background: var(--cortext-state-selected);
+			color: var(--cortext-text);
+		}
+
+		span {
+			color: var(--cortext-text-muted);
+			font-size: 10px;
+		}
+	}
+
 	/* stylelint-disable-next-line no-descending-specificity */
 	&__section-title {
 		font-size: 11px;

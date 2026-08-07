@@ -11,6 +11,7 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 
 import apiFetch from '@wordpress/api-fetch';
 import { RecentsProvider, useRecents } from '../../src/hooks/useRecents';
+import { DOCUMENT_ARCHIVE_CHANGED_EVENT } from '../../src/hooks/documentArchiveInvalidation';
 
 function wrapper( { children } ) {
 	return <RecentsProvider>{ children }</RecentsProvider>;
@@ -238,5 +239,46 @@ describe( 'useRecents', () => {
 		} );
 
 		expect( result.current.recents ).toBe( recentsBeforeTouch );
+	} );
+
+	it( 'refetches recents across archive and unarchive changes', async () => {
+		const recent = {
+			id: 7,
+			title: 'Notes',
+			path: 'notes-7',
+			updatedAt: '2026-05-07T12:00:00+00:00',
+		};
+		apiFetch
+			.mockResolvedValueOnce( { recents: [ recent ] } )
+			.mockResolvedValueOnce( { recents: [] } )
+			.mockResolvedValueOnce( { recents: [ recent ] } );
+
+		const { result } = renderHook( () => useRecents(), { wrapper } );
+		await waitFor( () => {
+			expect( result.current.recents ).toEqual( [ recent ] );
+		} );
+
+		act( () => {
+			window.dispatchEvent(
+				new CustomEvent( DOCUMENT_ARCHIVE_CHANGED_EVENT, {
+					detail: { action: 'archive' },
+				} )
+			);
+		} );
+		await waitFor( () => {
+			expect( result.current.recents ).toEqual( [] );
+		} );
+
+		act( () => {
+			window.dispatchEvent(
+				new CustomEvent( DOCUMENT_ARCHIVE_CHANGED_EVENT, {
+					detail: { action: 'unarchive' },
+				} )
+			);
+		} );
+		await waitFor( () => {
+			expect( result.current.recents ).toEqual( [ recent ] );
+		} );
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
 	} );
 } );

@@ -118,6 +118,21 @@ describe( 'SidebarRecents animation', () => {
 		expect( window.Element.prototype.animate ).not.toHaveBeenCalled();
 	} );
 
+	it( 'hides archived recents without removing them from the source list', () => {
+		mockRecents = [ pageRecent( 1, 'Alpha' ), pageRecent( 2, 'Beta' ) ];
+		const { rerender } = render(
+			<SidebarRecents hiddenDocumentIds={ new Set( [ 1 ] ) } />
+		);
+
+		expect( screen.queryByText( 'Alpha' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Beta' ) ).toBeInTheDocument();
+		expect( mockRecents ).toHaveLength( 2 );
+
+		rerender( <SidebarRecents hiddenDocumentIds={ new Set() } /> );
+
+		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
+	} );
+
 	it( 'animates rows that reposition after initial load', () => {
 		mockRecents = [ pageRecent( 1, 'Alpha' ), pageRecent( 2, 'Beta' ) ];
 		const { rerender } = render( <SidebarRecents /> );

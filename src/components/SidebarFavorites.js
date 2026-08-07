@@ -35,7 +35,6 @@ import useDelayedFlag, {
 } from '../hooks/useDelayedFlag';
 import { useSurfaceFocusIntent } from './SurfaceFocusContext';
 import { DOCUMENT_POST_TYPE } from '../collections';
-import { collectDescendants } from './document-tree';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 
 const FAVORITE_ADD_ANIMATION_MS = 220;
@@ -68,33 +67,13 @@ export function moveFavorite( favorites, activeId, overId ) {
 	return arrayMove( favorites, from, to );
 }
 
-export function filterFavoritesForTrashedPage(
-	favorites,
-	pageId,
-	pages,
-	collections = []
-) {
-	const trashedIds = new Set( [
-		Number( pageId ),
-		...collectDescendants( Number( pageId ), pages ),
-	] );
-
-	// The cascade trashes nested collections too. Add their ids so favorites
-	// pointing at them get filtered out.
-	( collections ?? [] ).forEach( ( collection ) => {
-		if ( trashedIds.has( Number( collection.parent ?? 0 ) ) ) {
-			trashedIds.add( Number( collection.id ) );
-		}
-	} );
-
-	return favorites.filter( ( favorite ) => {
-		// Rows fall with their parent collection. The favorite carries the
-		// owner inline (`collection.id`), set by `format_target` on read.
-		if ( favorite.collection?.id ) {
-			return ! trashedIds.has( Number( favorite.collection.id ) );
-		}
-		return ! trashedIds.has( Number( favorite.id ) );
-	} );
+export function filterFavoritesByHiddenIds( favorites, hiddenDocumentIds ) {
+	if ( ! hiddenDocumentIds?.size ) {
+		return favorites;
+	}
+	return favorites.filter(
+		( favorite ) => ! hiddenDocumentIds.has( Number( favorite.id ) )
+	);
 }
 
 export function resolveFavoriteItems( favorites, pages, collections ) {
@@ -290,6 +269,7 @@ function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
 
 export default function SidebarFavorites( {
 	favorites,
+	hiddenDocumentIds,
 	pages,
 	collections,
 	isResolving,
@@ -299,26 +279,31 @@ export default function SidebarFavorites( {
 	onRemove,
 	onReorder,
 } ) {
-	const [ displayFavorites, setDisplayFavorites ] = useState( favorites );
+	const visibleFavorites = useMemo(
+		() => filterFavoritesByHiddenIds( favorites, hiddenDocumentIds ),
+		[ favorites, hiddenDocumentIds ]
+	);
+	const [ displayFavorites, setDisplayFavorites ] =
+		useState( visibleFavorites );
 	const [ addedKeys, setAddedKeys ] = useState( () => new Set() );
 	const [ removingKeys, setRemovingKeys ] = useState( () => new Set() );
 	const previousKeysRef = useRef( null );
-	const latestFavoritesRef = useRef( favorites );
+	const latestFavoritesRef = useRef( visibleFavorites );
 	const removingKeysRef = useRef( new Set() );
 	const hasCompletedInitialLoadRef = useRef( ! isResolving );
 	const timersRef = useRef( [] );
 
 	useEffect( () => {
-		latestFavoritesRef.current = favorites;
+		latestFavoritesRef.current = visibleFavorites;
 		const currentKeys = new Set(
-			favorites.map( ( favorite ) => favoriteKey( favorite ) )
+			visibleFavorites.map( ( favorite ) => favoriteKey( favorite ) )
 		);
 		const previousKeys = previousKeysRef.current;
 		previousKeysRef.current = currentKeys;
 		const canAnimateChanges = hasCompletedInitialLoadRef.current;
 
 		if ( ! previousKeys ) {
-			setDisplayFavorites( favorites );
+			setDisplayFavorites( visibleFavorites );
 			if ( ! isResolving ) {
 				hasCompletedInitialLoadRef.current = true;
 			}
@@ -351,10 +336,14 @@ export default function SidebarFavorites( {
 			removingKeysRef.current = nextRemovingKeys;
 			setRemovingKeys( nextRemovingKeys );
 			setDisplayFavorites( ( current ) =>
-				mergeDisplayFavorites( current, favorites, nextRemovingKeys )
+				mergeDisplayFavorites(
+					current,
+					visibleFavorites,
+					nextRemovingKeys
+				)
 			);
 		} else {
-			setDisplayFavorites( favorites );
+			setDisplayFavorites( visibleFavorites );
 		}
 
 		if ( nextRemoved.size > 0 ) {
@@ -377,7 +366,7 @@ export default function SidebarFavorites( {
 		if ( ! isResolving ) {
 			hasCompletedInitialLoadRef.current = true;
 		}
-	}, [ favorites, isResolving ] );
+	}, [ isResolving, visibleFavorites ] );
 
 	const items = useMemo(
 		() => resolveFavoriteItems( displayFavorites, pages, collections ),
@@ -419,7 +408,7 @@ export default function SidebarFavorites( {
 		}
 		onRemove( item );
 	};
-	const hasFavorites = favorites.length > 0;
+	const hasFavorites = visibleFavorites.length > 0;
 	const isLoading =
 		isResolving ||
 		( hasFavorites && isResolvingItems && items.length === 0 );
@@ -433,7 +422,9 @@ export default function SidebarFavorites( {
 	return (
 		<div className="cortext-sidebar__favorites">
 			{ isLoading && showSkeleton ? (
-				<SidebarListSkeleton itemCount={ favorites.length || 3 } />
+				<SidebarListSkeleton
+					itemCount={ visibleFavorites.length || 3 }
+				/>
 			) : null }
 			{ isEmpty ? (
 				<p className="cortext-sidebar__empty cortext-sidebar__empty--inline">

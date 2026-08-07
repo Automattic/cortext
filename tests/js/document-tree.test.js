@@ -1,13 +1,12 @@
 /**
  * Pure-function tests for `src/components/document-tree.js`: flat-to-tree
- * building, descendant collection, cycle detection, drag-drop reorder math,
- * and next-child menu_order allocation.
+ * building, cycle detection, drag-drop reorder math, and next-child
+ * menu_order allocation.
  */
 
 import {
 	buildTree,
 	collectAncestorIds,
-	collectDescendants,
 	firstDocumentInTree,
 	isDescendantOf,
 	computeDropTarget,
@@ -63,26 +62,6 @@ describe( 'firstDocumentInTree', () => {
 		];
 
 		expect( firstDocumentInTree( pages ).id ).toBe( 2 );
-	} );
-} );
-
-describe( 'collectDescendants', () => {
-	it( 'collects descendants of a root but not the root itself', () => {
-		const pages = [
-			makePage( 1 ),
-			makePage( 2, 1 ),
-			makePage( 3, 2 ),
-			makePage( 4, 1 ),
-			makePage( 99 ), // unrelated
-		];
-
-		const ids = collectDescendants( 1, pages ).sort();
-		expect( ids ).toEqual( [ 2, 3, 4 ] );
-	} );
-
-	it( 'returns empty for a leaf', () => {
-		const pages = [ makePage( 1 ), makePage( 2, 1 ) ];
-		expect( collectDescendants( 2, pages ) ).toEqual( [] );
 	} );
 } );
 

@@ -1,7 +1,13 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
-import { useState, useMemo, useCallback, useEffect } from '@wordpress/element';
+import {
+	useState,
+	useMemo,
+	useCallback,
+	useEffect,
+	useRef,
+} from '@wordpress/element';
 import { useParams } from '@tanstack/react-router';
 import {
 	Button,
@@ -13,13 +19,13 @@ import {
 } from '@wordpress/components';
 import { displayShortcut } from '@wordpress/keycodes';
 import {
+	archive as archiveIcon,
 	chevronDown,
 	cog,
 	home as homeIcon,
 	page,
 	plus,
 	search,
-	trash as trashIcon,
 	wordpress,
 } from '@wordpress/icons';
 
@@ -68,6 +74,7 @@ import SidebarRecents from './SidebarRecents';
 import SidebarSection from './SidebarSection';
 import SidebarSettingsNav from './SidebarSettingsNav';
 import { SidebarListSkeleton } from './Skeleton';
+import SidebarArchive, { computeSidebarArchiveRoots } from './SidebarArchive';
 import SidebarTrash, { computeSidebarTrashRoots } from './SidebarTrash';
 import ThemeToggle from './ThemeToggle';
 import {
@@ -83,6 +90,7 @@ import useDelayedFlag, {
 } from '../hooks/useDelayedFlag';
 import { useFavorites } from '../hooks/useFavorites';
 import useSidebarSections from '../hooks/useSidebarSections';
+import useArchivedDocuments from '../hooks/useArchivedDocuments';
 import useTrashedDocuments from '../hooks/useTrashedDocuments';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import {
@@ -101,6 +109,7 @@ import useSidebarTree, { ROOT_PARENT_ID } from './sidebar/useSidebarTree';
 import DocumentRow from './sidebar/DocumentRow';
 import { isWordPressAffordancesEnabled } from '../settings';
 import { useSurfaceFocusIntent } from './SurfaceFocusContext';
+import useLifecycleTabFocusIntent from './useLifecycleTabFocusIntent';
 
 export default function Sidebar( {
 	collapsed = false,
@@ -117,6 +126,16 @@ export default function Sidebar( {
 			FULL_PAGE_COLLECTION_QUERY
 		);
 	const trashedDocumentsState = useTrashedDocuments();
+	const archivedDocumentsState = useArchivedDocuments();
+	const archivedDocumentIds = useMemo(
+		() =>
+			new Set(
+				( archivedDocumentsState.documents ?? [] )
+					.map( ( document ) => Number( document.id ) )
+					.filter( Boolean )
+			),
+		[ archivedDocumentsState.documents ]
+	);
 	const params = useParams( { strict: false } );
 	const routeUri = params._splat ?? '';
 	const { prefix: routePrefix, tail: routeTail } = useMemo(
@@ -284,6 +303,77 @@ export default function Sidebar( {
 
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
 	const [ isTrashPanelOpen, setIsTrashPanelOpen ] = useState( false );
+	const [ lifecycleTab, setLifecycleTab ] = useState( 'archived' );
+	const archiveTabRef = useRef( null );
+	const trashTabRef = useRef( null );
+	const pendingLifecycleTabFocusRef = useRef( null );
+	const [ lifecycleTabFocusRequest, setLifecycleTabFocusRequest ] =
+		useState( 0 );
+	const {
+		capture: captureLifecycleFocusIntent,
+		consume: consumeLifecycleFocusIntent,
+		cancel: cancelLifecycleFocusIntent,
+	} = useLifecycleTabFocusIntent();
+	const openAndFocusLifecycleTab = useCallback( ( nextTab, focusIntent ) => {
+		pendingLifecycleTabFocusRef.current = focusIntent
+			? { tab: nextTab, focusIntent }
+			: null;
+		setLifecycleTab( nextTab );
+		setIsTrashPanelOpen( true );
+		if ( focusIntent ) {
+			setLifecycleTabFocusRequest( ( current ) => current + 1 );
+		}
+	}, [] );
+	useEffect( () => {
+		const pendingRequest = pendingLifecycleTabFocusRef.current;
+		if ( ! isTrashPanelOpen || pendingRequest?.tab !== lifecycleTab ) {
+			return;
+		}
+		const tabRef =
+			pendingRequest.tab === 'archived' ? archiveTabRef : trashTabRef;
+		if ( ! tabRef.current ) {
+			return;
+		}
+		pendingLifecycleTabFocusRef.current = null;
+		if ( ! consumeLifecycleFocusIntent( pendingRequest.focusIntent ) ) {
+			return;
+		}
+		tabRef.current.focus();
+	}, [
+		consumeLifecycleFocusIntent,
+		isTrashPanelOpen,
+		lifecycleTab,
+		lifecycleTabFocusRequest,
+	] );
+	const onLifecycleTabKeyDown = useCallback(
+		( event ) => {
+			let nextTab = null;
+			if ( event.key === 'ArrowLeft' || event.key === 'ArrowRight' ) {
+				nextTab = lifecycleTab === 'archived' ? 'trash' : 'archived';
+			} else if ( event.key === 'Home' ) {
+				nextTab = 'archived';
+			} else if ( event.key === 'End' ) {
+				nextTab = 'trash';
+			}
+			if ( ! nextTab ) {
+				return;
+			}
+			event.preventDefault();
+			setLifecycleTab( nextTab );
+			const nextRef =
+				nextTab === 'archived' ? archiveTabRef : trashTabRef;
+			nextRef.current?.focus();
+		},
+		[ lifecycleTab ]
+	);
+	const archiveCount = useMemo( () => {
+		if ( Array.isArray( archivedDocumentsState.documents ) ) {
+			return computeSidebarArchiveRoots(
+				archivedDocumentsState.documents
+			).roots.length;
+		}
+		return archivedDocumentsState.total;
+	}, [ archivedDocumentsState.documents, archivedDocumentsState.total ] );
 	const trashCount = useMemo( () => {
 		if ( Array.isArray( trashedDocumentsState.documents ) ) {
 			return computeSidebarTrashRoots( trashedDocumentsState.documents )
@@ -291,19 +381,20 @@ export default function Sidebar( {
 		}
 		return trashedDocumentsState.total;
 	}, [ trashedDocumentsState.documents, trashedDocumentsState.total ] );
-	let trashButtonLabel = __( 'Open Trash', 'cortext' );
+	const lifecycleCount = archiveCount + trashCount;
+	let trashButtonLabel = __( 'Open Archived and Trash', 'cortext' );
 	if ( isTrashPanelOpen ) {
-		trashButtonLabel = __( 'Close Trash', 'cortext' );
-	} else if ( trashCount > 0 ) {
+		trashButtonLabel = __( 'Close Archived and Trash', 'cortext' );
+	} else if ( lifecycleCount > 0 ) {
 		trashButtonLabel = sprintf(
-			/* translators: %d: number of trashed pages and rows */
+			/* translators: %d: number of archived and trashed documents */
 			_n(
-				'Open Trash, %d item',
-				'Open Trash, %d items',
-				trashCount,
+				'Open Archived and Trash, %d item',
+				'Open Archived and Trash, %d items',
+				lifecycleCount,
 				'cortext'
 			),
-			trashCount
+			lifecycleCount
 		);
 	}
 
@@ -367,8 +458,8 @@ export default function Sidebar( {
 		[ home ]
 	);
 
-	// Wire callbacks that `useDocumentActions` needs (rename, trash, duplicate)
-	// from DocumentRow / SidebarTrash. Create goes through `useCreateDocument`
+	// Wire callbacks that `useDocumentActions` needs from document rows and
+	// lifecycle panels. Create goes through `useCreateDocument`
 	// at the top of Sidebar and bypasses the provider.
 	const documentsHandlers = useMemo(
 		() => ( {
@@ -376,11 +467,23 @@ export default function Sidebar( {
 			expand,
 			onSelect,
 			onAutoRename: ( target ) => setAutoRenameId( target?.id ?? null ),
-			onAfterTrash: () => setIsTrashPanelOpen( true ),
+			captureLifecycleFocusIntent,
+			cancelLifecycleFocusIntent,
+			onAfterTrash: ( { lifecycleFocusIntent } = {} ) =>
+				openAndFocusLifecycleTab( 'trash', lifecycleFocusIntent ),
+			onAfterArchive: ( { lifecycleFocusIntent } = {} ) =>
+				openAndFocusLifecycleTab( 'archived', lifecycleFocusIntent ),
 			onDuplicateNotice: setDuplicateNotice,
 			onFavoritesError: setFavoritesError,
 		} ),
-		[ selectedCollectionId, expand, onSelect ]
+		[
+			selectedCollectionId,
+			expand,
+			onSelect,
+			captureLifecycleFocusIntent,
+			cancelLifecycleFocusIntent,
+			openAndFocusLifecycleTab,
+		]
 	);
 
 	const create = useCreateDocument();
@@ -576,7 +679,11 @@ export default function Sidebar( {
 										toggleSection( 'recents' )
 									}
 								>
-									<SidebarRecents />
+									<SidebarRecents
+										hiddenDocumentIds={
+											archivedDocumentIds
+										}
+									/>
 								</SidebarSection>
 
 								<SidebarSection
@@ -591,6 +698,9 @@ export default function Sidebar( {
 								>
 									<SidebarFavorites
 										favorites={ favorites }
+										hiddenDocumentIds={
+											archivedDocumentIds
+										}
 										pages={ pages }
 										collections={ collections ?? [] }
 										isResolving={ isResolvingFavorites }
@@ -786,24 +896,107 @@ export default function Sidebar( {
 								<section
 									id="cortext-sidebar-trash-panel"
 									className="cortext-sidebar__trash-panel"
-									aria-label={ __( 'Trash', 'cortext' ) }
+									aria-label={ __(
+										'Archived and Trash',
+										'cortext'
+									) }
 								>
-									<div className="cortext-sidebar__trash-panel-header">
-										<h2 className="cortext-sidebar__section-title">
+									<div
+										className="cortext-sidebar__trash-panel-tabs"
+										role="tablist"
+										aria-label={ __(
+											'Document lifecycle',
+											'cortext'
+										) }
+									>
+										<Button
+											ref={ archiveTabRef }
+											id="cortext-sidebar-archived-tab"
+											className="cortext-sidebar__trash-panel-tab"
+											role="tab"
+											aria-selected={
+												lifecycleTab === 'archived'
+											}
+											aria-controls="cortext-sidebar-archived-tabpanel"
+											tabIndex={
+												lifecycleTab === 'archived'
+													? 0
+													: -1
+											}
+											onKeyDown={ onLifecycleTabKeyDown }
+											onClick={ () =>
+												setLifecycleTab( 'archived' )
+											}
+										>
+											{ __( 'Archived', 'cortext' ) }
+											{ archiveCount > 0 && (
+												<span aria-hidden="true">
+													{ archiveCount }
+												</span>
+											) }
+										</Button>
+										<Button
+											ref={ trashTabRef }
+											id="cortext-sidebar-trash-tab"
+											className="cortext-sidebar__trash-panel-tab"
+											role="tab"
+											aria-selected={
+												lifecycleTab === 'trash'
+											}
+											aria-controls="cortext-sidebar-trash-tabpanel"
+											tabIndex={
+												lifecycleTab === 'trash'
+													? 0
+													: -1
+											}
+											onKeyDown={ onLifecycleTabKeyDown }
+											onClick={ () =>
+												setLifecycleTab( 'trash' )
+											}
+										>
 											{ __( 'Trash', 'cortext' ) }
-										</h2>
+											{ trashCount > 0 && (
+												<span aria-hidden="true">
+													{ trashCount }
+												</span>
+											) }
+										</Button>
 									</div>
-									<SidebarTrash
-										activePages={ pages }
-										selectedId={ selectedId }
-										selectedCollectionId={
-											selectedCollectionId
-										}
-										onSelect={ onSelect }
-										trashedDocumentsState={
-											trashedDocumentsState
-										}
-									/>
+									<div
+										id="cortext-sidebar-archived-tabpanel"
+										role="tabpanel"
+										aria-labelledby="cortext-sidebar-archived-tab"
+										hidden={ lifecycleTab !== 'archived' }
+									>
+										<SidebarArchive
+											activePages={ pages }
+											selectedId={ selectedId }
+											selectedCollectionId={
+												selectedCollectionId
+											}
+											archivedDocumentsState={
+												archivedDocumentsState
+											}
+										/>
+									</div>
+									<div
+										id="cortext-sidebar-trash-tabpanel"
+										role="tabpanel"
+										aria-labelledby="cortext-sidebar-trash-tab"
+										hidden={ lifecycleTab !== 'trash' }
+									>
+										<SidebarTrash
+											activePages={ pages }
+											selectedId={ selectedId }
+											selectedCollectionId={
+												selectedCollectionId
+											}
+											onSelect={ onSelect }
+											trashedDocumentsState={
+												trashedDocumentsState
+											}
+										/>
+									</div>
 								</section>
 							) }
 						</DocumentsProvider>
@@ -820,13 +1013,15 @@ export default function Sidebar( {
 								isPressed={ ! collapsed && isTrashPanelOpen }
 								onClick={ toggleTrashPanel }
 							>
-								<Icon icon={ trashIcon } size={ 20 } />
-								{ trashCount > 0 && (
+								<Icon icon={ archiveIcon } size={ 20 } />
+								{ lifecycleCount > 0 && (
 									<span
 										className="cortext-sidebar__footer-count"
 										aria-hidden="true"
 									>
-										{ trashCount > 99 ? '99+' : trashCount }
+										{ lifecycleCount > 99
+											? '99+'
+											: lifecycleCount }
 									</span>
 								) }
 							</Button>

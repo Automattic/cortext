@@ -5,6 +5,7 @@ import { useDispatch } from '@wordpress/data';
 
 import { DOCUMENT_POST_TYPE } from '../collections';
 import { computeDocumentUri } from '../router/useResolveEntity';
+import { notifyDocumentArchiveChanged } from '../hooks/documentArchiveInvalidation';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
@@ -17,6 +18,76 @@ function collectCascadeIds( record, cascade ) {
 		cascade.forEach( ( id ) => ids.add( Number( id ) ) );
 	}
 	return ids;
+}
+
+function lifecyclePostFromResponse( response ) {
+	if ( response?.post?.id ) {
+		return response.post;
+	}
+	if ( response?.previous?.id ) {
+		return response.previous;
+	}
+	return response?.id ? response : null;
+}
+
+function receiveLifecyclePost( response, ctx ) {
+	const post = lifecyclePostFromResponse( response );
+	if ( post?.id ) {
+		ctx.receiveEntityRecords?.( 'postType', DOCUMENT_POST_TYPE, [ post ] );
+	}
+	return post;
+}
+
+export function syncLifecycleEntityRecords( response, ctx, cascadeKey ) {
+	const post = receiveLifecyclePost( response, ctx );
+	const rootId = Number( post?.id ?? 0 );
+	const cascadeIds = Array.isArray( response?.[ cascadeKey ] )
+		? response[ cascadeKey ]
+		: [];
+	cascadeIds.forEach( ( id ) => {
+		const documentId = Number( id );
+		if ( ! documentId || documentId === rootId ) {
+			return;
+		}
+		ctx.invalidateResolution?.( 'getEntityRecord', [
+			'postType',
+			DOCUMENT_POST_TYPE,
+			documentId,
+		] );
+	} );
+}
+
+function invalidateDocumentLifecycle( ctx ) {
+	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+	notifySidebarTreeChanged();
+	notifyCollectionRowsChanged();
+}
+
+export function restoredDocumentStatusMessage( status ) {
+	if ( status === 'publish' ) {
+		return __(
+			'Document restored as published and is public again.',
+			'cortext'
+		);
+	}
+
+	let label;
+	switch ( status ) {
+		case 'private':
+			label = __( 'private', 'cortext' );
+			break;
+		case 'draft':
+			label = __( 'draft', 'cortext' );
+			break;
+		default:
+			label = status || __( 'its previous status', 'cortext' );
+	}
+
+	return sprintf(
+		/* translators: %s: restored document status, such as published or private */
+		__( 'Document restored as %s.', 'cortext' ),
+		label
+	);
 }
 
 // Pure create: saves the new document and refreshes the lists. Post-create
@@ -124,38 +195,91 @@ export async function duplicateDocument( record, ctx ) {
 // core-data does not drop the open record before the editor finishes its
 // block selection writes.
 export async function trashDocument( record, ctx ) {
-	const deleted = await apiFetch( {
-		path: `/wp/v2/crtxt_documents/${ record.id }`,
-		method: 'DELETE',
-	} );
-	const trashed = deleted?.previous ?? deleted;
-	if ( trashed?.id ) {
-		ctx.receiveEntityRecords( 'postType', DOCUMENT_POST_TYPE, [ trashed ] );
+	const lifecycleFocusIntent =
+		ctx.captureLifecycleFocusIntent?.( record ) ?? null;
+	try {
+		const deleted = await apiFetch( {
+			path: `/wp/v2/crtxt_documents/${ record.id }`,
+			method: 'DELETE',
+		} );
+		syncLifecycleEntityRecords( deleted, ctx, 'cascade_deleted' );
+		applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+		notifySidebarTreeChanged();
+		notifyDocumentTrashChanged();
+		notifyDocumentArchiveChanged( { action: 'trash' } );
+		const cascadeIds = collectCascadeIds(
+			record,
+			deleted?.cascade_deleted
+		);
+		await cascadeFavorites(
+			ctx,
+			cascadeIds,
+			__(
+				'Document moved to Trash, but Favorites could not be updated.',
+				'cortext'
+			)
+		);
+		ctx.onAfterTrash?.( { record, lifecycleFocusIntent } );
+	} catch ( error ) {
+		ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
+		throw error;
 	}
-	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
-	notifySidebarTreeChanged();
-	notifyDocumentTrashChanged();
-	const cascadeIds = collectCascadeIds( record, deleted?.cascade_deleted );
-	await cascadeFavorites(
-		ctx,
-		cascadeIds,
-		__(
-			'Document moved to Trash, but Favorites could not be updated.',
-			'cortext'
-		)
-	);
-	ctx.onAfterTrash?.( { record } );
 }
 
 export async function restoreDocument( record, ctx ) {
-	await apiFetch( {
+	const response = await apiFetch( {
 		path: `/cortext/v1/documents/${ record.id }/restore`,
 		method: 'POST',
 	} );
+	syncLifecycleEntityRecords( response, ctx, 'restored' );
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
 	notifySidebarTreeChanged();
 	notifyDocumentTrashChanged();
+	notifyDocumentArchiveChanged( { action: 'restore' } );
 	notifyCollectionRowsChanged();
+	return response;
+}
+
+export async function archiveDocument( record, ctx ) {
+	const lifecycleFocusIntent =
+		ctx.captureLifecycleFocusIntent?.( record ) ?? null;
+	try {
+		const didFlush = await ctx.flushActiveEditor?.();
+		if ( didFlush === false ) {
+			ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
+			return null;
+		}
+		const response = await apiFetch( {
+			path: `/cortext/v1/documents/${ record.id }/archive`,
+			method: 'POST',
+		} );
+		syncLifecycleEntityRecords( response, ctx, 'archived' );
+		invalidateDocumentLifecycle( ctx );
+		notifyDocumentArchiveChanged( { action: 'archive' } );
+		ctx.onAfterArchive?.( { record, response, lifecycleFocusIntent } );
+		return response;
+	} catch ( error ) {
+		ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
+		throw error;
+	}
+}
+
+export async function unarchiveDocument( record, ctx ) {
+	const response = await apiFetch( {
+		path: `/cortext/v1/documents/${ record.id }/unarchive`,
+		method: 'POST',
+	} );
+	syncLifecycleEntityRecords( response, ctx, 'restored' );
+	invalidateDocumentLifecycle( ctx );
+	notifyDocumentArchiveChanged( { action: 'unarchive' } );
+	ctx.createSuccessNotice?.(
+		restoredDocumentStatusMessage( response?.post?.status ),
+		{
+			id: 'cortext-document-unarchive-success',
+			type: 'snackbar',
+		}
+	);
+	return response;
 }
 
 export async function permanentlyDeleteDocument( record, ctx ) {

@@ -3,7 +3,7 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalConfirmDialog as ConfirmDialog,
 } from '@wordpress/components';
-import { useSelect, useDispatch } from '@wordpress/data';
+import { useDispatch, useRegistry, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { store as coreStore } from '@wordpress/core-data';
@@ -37,6 +37,7 @@ function referencedCollectionIds( blocks ) {
 
 export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	const publicWebAffordances = isPublicWebAffordancesEnabled();
+	const registry = useRegistry();
 	const { editPost, savePost } = useDispatch( editorStore );
 	const { saveEntityRecord } = useDispatch( coreStore );
 	const { createErrorNotice, removeNotice } = useDispatch( noticesStore );
@@ -73,7 +74,8 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	);
 
 	const isPublic = status === 'publish';
-	const isDisabled = disabled || isLocked;
+	const isArchived = status === 'crtxt_archived';
+	const isDisabled = disabled || isLocked || isArchived;
 	// A collection can be embedded in other documents through a data-view block,
 	// so unpublishing it may strand public dependents. Identity is the mirror
 	// term (`cortext_defines_trait`), true even for a collection with no custom
@@ -90,6 +92,30 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 		postId,
 		{ enabled: isConfirming && isReferenceable }
 	);
+	const showCascadePublishError = useCallback( () => {
+		createErrorNotice(
+			__(
+				"Couldn't publish referenced documents that contain rows. The document was not published.",
+				'cortext'
+			),
+			{
+				id: CASCADE_PUBLISH_ERROR_NOTICE_ID,
+				type: 'snackbar',
+			}
+		);
+	}, [ createErrorNotice ] );
+	const showArchivedReferenceError = useCallback( () => {
+		createErrorNotice(
+			__(
+				"Couldn't publish this document because it references an archived collection. Restore the collection first.",
+				'cortext'
+			),
+			{
+				id: CASCADE_PUBLISH_ERROR_NOTICE_ID,
+				type: 'snackbar',
+			}
+		);
+	}, [ createErrorNotice ] );
 
 	const togglePublishStatus = useCallback( async () => {
 		if ( isDisabled ) {
@@ -98,6 +124,43 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 		if ( ! isPublic ) {
 			const collectionIds = referencedCollectionIds( blocks );
 			if ( collectionIds.length > 0 ) {
+				let referencedCollections;
+				try {
+					const core = registry.resolveSelect( coreStore );
+					referencedCollections = await Promise.all(
+						collectionIds.map( ( id ) =>
+							core.getEntityRecord(
+								'postType',
+								'crtxt_document',
+								id,
+								{ context: 'edit' }
+							)
+						)
+					);
+				} catch {
+					showCascadePublishError();
+					return;
+				}
+
+				if (
+					referencedCollections.some(
+						( collection ) =>
+							collection?.status === 'crtxt_archived'
+					)
+				) {
+					showArchivedReferenceError();
+					return;
+				}
+
+				if (
+					referencedCollections.some(
+						( collection ) => ! collection?.status
+					)
+				) {
+					showCascadePublishError();
+					return;
+				}
+
 				const results = await Promise.allSettled(
 					collectionIds.map( ( id ) =>
 						saveEntityRecord(
@@ -109,16 +172,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 					)
 				);
 				if ( results.some( ( r ) => r.status === 'rejected' ) ) {
-					createErrorNotice(
-						__(
-							"Couldn't publish referenced documents that contain rows. The document was not published.",
-							'cortext'
-						),
-						{
-							id: CASCADE_PUBLISH_ERROR_NOTICE_ID,
-							type: 'snackbar',
-						}
-					);
+					showCascadePublishError();
 					return;
 				}
 				removeNotice( CASCADE_PUBLISH_ERROR_NOTICE_ID );
@@ -130,8 +184,10 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 		editPost,
 		savePost,
 		saveEntityRecord,
-		createErrorNotice,
+		showCascadePublishError,
+		showArchivedReferenceError,
 		removeNotice,
+		registry,
 		isPublic,
 		isDisabled,
 		blocks,

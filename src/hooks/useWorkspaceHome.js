@@ -5,8 +5,11 @@ import {
 	useContext,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from '@wordpress/element';
+
+import { useDocumentArchiveInvalidation } from './documentArchiveInvalidation';
 
 const WorkspaceHomeContext = createContext( null );
 
@@ -15,35 +18,52 @@ export function WorkspaceHomeProvider( { children } ) {
 	const [ isResolving, setIsResolving ] = useState( true );
 	const [ isUpdating, setIsUpdating ] = useState( false );
 	const [ error, setError ] = useState( null );
+	const requestIdRef = useRef( 0 );
+	const updateRequestIdRef = useRef( 0 );
 
-	useEffect( () => {
-		let cancelled = false;
+	const refreshHome = useCallback( async () => {
+		const requestId = requestIdRef.current + 1;
+		requestIdRef.current = requestId;
 		setIsResolving( true );
 		setError( null );
 
-		apiFetch( { path: '/cortext/v1/workspace-home' } )
-			.then( ( response ) => {
-				if ( cancelled ) {
-					return;
-				}
-				setHomeState( response?.home ?? null );
-				setIsResolving( false );
-			} )
-			.catch( ( nextError ) => {
-				if ( cancelled ) {
-					return;
-				}
-				setHomeState( null );
-				setError( nextError );
-				setIsResolving( false );
+		try {
+			const response = await apiFetch( {
+				path: '/cortext/v1/workspace-home',
 			} );
-
-		return () => {
-			cancelled = true;
-		};
+			if ( requestId !== requestIdRef.current ) {
+				return null;
+			}
+			const nextHome = response?.home ?? null;
+			setHomeState( nextHome );
+			setIsResolving( false );
+			return nextHome;
+		} catch ( nextError ) {
+			if ( requestId !== requestIdRef.current ) {
+				return null;
+			}
+			setHomeState( null );
+			setError( nextError );
+			setIsResolving( false );
+			return null;
+		}
 	}, [] );
 
+	useEffect( () => {
+		refreshHome();
+
+		return () => {
+			requestIdRef.current += 1;
+		};
+	}, [ refreshHome ] );
+	useDocumentArchiveInvalidation( refreshHome );
+
 	const setHome = useCallback( async ( target ) => {
+		const requestId = requestIdRef.current + 1;
+		requestIdRef.current = requestId;
+		const updateRequestId = updateRequestIdRef.current + 1;
+		updateRequestIdRef.current = updateRequestId;
+		setIsResolving( false );
 		setIsUpdating( true );
 		setError( null );
 		try {
@@ -52,13 +72,19 @@ export function WorkspaceHomeProvider( { children } ) {
 				method: 'PUT',
 				data: target,
 			} );
-			setHomeState( response?.home ?? null );
+			if ( requestId === requestIdRef.current ) {
+				setHomeState( response?.home ?? null );
+			}
 			return response?.home ?? null;
 		} catch ( nextError ) {
-			setError( nextError );
+			if ( requestId === requestIdRef.current ) {
+				setError( nextError );
+			}
 			throw nextError;
 		} finally {
-			setIsUpdating( false );
+			if ( updateRequestId === updateRequestIdRef.current ) {
+				setIsUpdating( false );
+			}
 		}
 	}, [] );
 

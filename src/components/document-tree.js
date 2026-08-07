@@ -56,35 +56,6 @@ export function firstDocumentInTree( pages ) {
 }
 
 /**
- * Collect all descendant page IDs of a root page (root not included).
- * Used by the cascading delete path.
- *
- * @param {number} rootId Root page ID.
- * @param {Array}  pages  Flat page list.
- * @return {number[]} Descendant IDs in no guaranteed order.
- */
-export function collectDescendants( rootId, pages ) {
-	const childrenByParent = new Map();
-	pages.forEach( ( p ) => {
-		const arr = childrenByParent.get( p.parent ) || [];
-		arr.push( p.id );
-		childrenByParent.set( p.parent, arr );
-	} );
-
-	const out = [];
-	const stack = [ ...( childrenByParent.get( rootId ) || [] ) ];
-	while ( stack.length ) {
-		const id = stack.pop();
-		out.push( id );
-		const kids = childrenByParent.get( id );
-		if ( kids ) {
-			stack.push( ...kids );
-		}
-	}
-	return out;
-}
-
-/**
  * Collect ancestor page IDs for a page, nearest parent first.
  * Used to expand the sidebar path for the active page after a reload.
  *

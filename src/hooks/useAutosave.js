@@ -11,6 +11,10 @@ const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
 const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
 
+function isReadOnlyLifecycleStatus( status ) {
+	return status === 'trash' || status === 'crtxt_archived';
+}
+
 export default function useAutosave( options = {} ) {
 	const debounceMs = options.debounceMs ?? DEBOUNCE_MS;
 	const minSaveIntervalMs = options.minSaveIntervalMs ?? MIN_SAVE_INTERVAL_MS;
@@ -161,7 +165,7 @@ export default function useAutosave( options = {} ) {
 			isPostLocked: locked,
 			postStatus: ps,
 		} = stateRef.current;
-		if ( ! d || ! s || locked || ps === 'trash' ) {
+		if ( ! d || ! s || locked || isReadOnlyLifecycleStatus( ps ) ) {
 			return true;
 		}
 		if ( saving ) {
@@ -184,10 +188,10 @@ export default function useAutosave( options = {} ) {
 		if ( ! isDirty || ! isSaveable || isPostLocked ) {
 			return undefined;
 		}
-		// Trashed pages are read-only in the canvas; never autosave them.
+		// Trashed and archived documents are read-only in the canvas.
 		// The UI is locked via `<Disabled>`, but a stray edit through any
 		// other path (drag-drop, programmatic) shouldn't persist either.
-		if ( postStatus === 'trash' ) {
+		if ( isReadOnlyLifecycleStatus( postStatus ) ) {
 			return undefined;
 		}
 		if ( failedEditsReferenceRef.current === editsReference ) {
@@ -214,7 +218,7 @@ export default function useAutosave( options = {} ) {
 				s &&
 				! saving &&
 				! locked &&
-				ps !== 'trash' &&
+				! isReadOnlyLifecycleStatus( ps ) &&
 				failedEditsReferenceRef.current !== editsRef
 			) {
 				saveCurrentPost();

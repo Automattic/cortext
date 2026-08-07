@@ -8,6 +8,7 @@ import {
 } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import {
+	archive as archiveIcon,
 	chevronRight,
 	home as homeIcon,
 	moreVertical,
@@ -83,7 +84,7 @@ export default function DocumentRow( {
 } ) {
 	const { requestFromActivation } = useSurfaceFocusIntent();
 	const { title, icon, features } = useDocumentRecord( record );
-	const { rename, duplicate, trash } = useDocumentActions();
+	const { rename, duplicate, archive, trash } = useDocumentActions();
 
 	const recordId = record.id;
 	const hasLoadedChildren = features.hierarchy && childNodes.length > 0;
@@ -204,7 +205,10 @@ export default function DocumentRow( {
 	}
 
 	return (
-		<li className="cortext-sidebar__node">
+		<li
+			className="cortext-sidebar__node"
+			data-cortext-document-id={ recordId }
+		>
 			<div
 				className="cortext-sidebar__row-wrapper"
 				style={ { '--cortext-depth': depth } }
@@ -400,6 +404,15 @@ export default function DocumentRow( {
 										} }
 									>
 										{ __( 'Duplicate', 'cortext' ) }
+									</MenuItem>
+									<MenuItem
+										icon={ archiveIcon }
+										onClick={ () => {
+											archive( record );
+											onClose();
+										} }
+									>
+										{ __( 'Archive', 'cortext' ) }
 									</MenuItem>
 									<MenuItem
 										icon="trash"

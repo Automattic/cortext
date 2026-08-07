@@ -391,6 +391,43 @@ it( 'keeps the document read-only when the lock check fails', async () => {
 	expect( result.current.isReadOnly ).toBe( true );
 } );
 
+it( 'clears a lock error while disabled and reacquires when enabled again', async () => {
+	apiFetch.mockRejectedValueOnce(
+		new Error( 'Archived documents cannot lock' )
+	);
+
+	const { result, rerender } = renderHook(
+		( { enabled } ) =>
+			usePostLock( {
+				enabled,
+				postId: 7,
+				postType: 'crtxt_document',
+			} ),
+		{ initialProps: { enabled: true } }
+	);
+
+	await waitFor( () =>
+		expect( result.current.error ).toBe( 'Archived documents cannot lock' )
+	);
+
+	act( () => rerender( { enabled: false } ) );
+	await waitFor( () => expect( result.current.error ).toBeNull() );
+
+	apiFetch.mockResolvedValueOnce( {
+		postLock: { isLocked: false, activePostLock: '120:1' },
+		postLockUtils,
+	} );
+	act( () => rerender( { enabled: true } ) );
+
+	await waitFor( () =>
+		expect( mockUpdatePostLock ).toHaveBeenLastCalledWith( {
+			isLocked: false,
+			activePostLock: '120:1',
+		} )
+	);
+	expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+} );
+
 it( 'takes over in-app and reloads the fresh post', async () => {
 	apiFetch
 		.mockResolvedValueOnce( {

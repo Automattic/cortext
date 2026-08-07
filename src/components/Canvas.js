@@ -382,7 +382,7 @@ function documentKey( postType, postId ) {
 	return `${ postType }:${ postId }`;
 }
 
-function CanvasEditor( {
+export function CanvasEditor( {
 	post,
 	postType,
 	collectionId,
@@ -406,6 +406,8 @@ function CanvasEditor( {
 	recentTarget,
 } ) {
 	const isCollection = definesTrait( post );
+	const isLifecycleReadOnly =
+		post?.status === 'trash' || post?.status === 'crtxt_archived';
 	const hasTrait =
 		Array.isArray( post?.crtxt_trait ) && post.crtxt_trait.length > 0;
 	const autosaveRecentTarget =
@@ -417,8 +419,9 @@ function CanvasEditor( {
 	const postLock = usePostLock( {
 		postId: post.id,
 		postType: post.type ?? postType,
-		enabled: isActive,
+		enabled: isActive && ! isLifecycleReadOnly,
 	} );
+	const isReadOnly = isLifecycleReadOnly || postLock.isReadOnly;
 	const { resetPost, setIsInserterOpened } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const lastNotifiedBacklinkSaveRef = useRef( null );
@@ -490,13 +493,19 @@ function CanvasEditor( {
 		[]
 	);
 
-	// A collection's data view owns the whole body. Clear the editor flag too,
-	// or the inserter will pop open again when the user returns to a page.
+	// A collection's data view owns the whole body. Lifecycle-hidden documents
+	// are read only, so close the inserter there too before it can dispatch a
+	// block edit outside EditorBody's Disabled wrapper.
 	useEffect( () => {
-		if ( isCollection && isInserterOpened ) {
+		if ( ( isCollection || isLifecycleReadOnly ) && isInserterOpened ) {
 			setIsInserterOpened( false );
 		}
-	}, [ isCollection, isInserterOpened, setIsInserterOpened ] );
+	}, [
+		isCollection,
+		isInserterOpened,
+		isLifecycleReadOnly,
+		setIsInserterOpened,
+	] );
 
 	const hasProperties = Array.isArray( fields ) && fields.length > 0;
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
@@ -536,7 +545,7 @@ function CanvasEditor( {
 		>
 			<CortextMentions />
 			<DocumentActions
-				disabled={ postLock.isReadOnly }
+				disabled={ isReadOnly }
 				canInsertBlocks={ ! isCollection }
 				isActive={ isActive }
 				postId={ post.id }
@@ -553,7 +562,9 @@ function CanvasEditor( {
 					<>
 						{ notice }
 						<PostLockFailureNotice
-							error={ postLock.error }
+							error={
+								isLifecycleReadOnly ? null : postLock.error
+							}
 							isRetrying={ postLock.isAcquiring }
 							onRetry={ postLock.retry }
 						/>
@@ -563,8 +574,9 @@ function CanvasEditor( {
 							isEditorSurfaceDisplayed={
 								isEditorSurfaceDisplayed
 							}
-							isLocked={ postLock.isReadOnly }
+							isLocked={ isReadOnly }
 							isSurfaceFocusPending={
+								! isLifecycleReadOnly &&
 								postLock.isReadOnly &&
 								! postLock.isFailed &&
 								! postLock.isLocked
@@ -579,21 +591,21 @@ function CanvasEditor( {
 					</>
 				}
 				secondarySidebar={
-					! isCollection && isInserterOpened ? (
+					! isCollection && ! isReadOnly && isInserterOpened ? (
 						<CortextInserterSidebar />
 					) : null
 				}
 				sidebar={ <InspectorSidebarSlot /> }
 			/>
 			<PostLockModal
-				isOpen={ postLock.isLocked }
+				isOpen={ ! isLifecycleReadOnly && postLock.isLocked }
 				isTakeover={ postLock.isTakeover }
 				isTakingOver={ postLock.isTakingOver }
 				onTakeOver={ postLock.takeOver }
 				user={ postLock.user }
 			/>
 			<DocumentInspectorSidebar
-				isLocked={ postLock.isReadOnly }
+				isLocked={ isReadOnly }
 				postId={ post.id }
 				postType={ postType }
 			/>

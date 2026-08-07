@@ -1,7 +1,12 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Button } from '@wordpress/components';
 import { useEntityRecord } from '@wordpress/core-data';
-import { useCallback, useLayoutEffect, useRef } from '@wordpress/element';
+import {
+	useCallback,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+} from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 
 import { SidebarListSkeleton } from './Skeleton';
@@ -149,14 +154,22 @@ function SidebarRecentsRow( {
 	);
 }
 
-export default function SidebarRecents() {
+export default function SidebarRecents( { hiddenDocumentIds } ) {
 	const navigate = useNavigate();
 	const { recents, isResolving } = useRecents();
+	const visibleRecents = useMemo( () => {
+		if ( ! hiddenDocumentIds?.size ) {
+			return recents;
+		}
+		return recents.filter(
+			( recent ) => ! hiddenDocumentIds.has( Number( recent.id ) )
+		);
+	}, [ hiddenDocumentIds, recents ] );
 	const recentNodes = useRef( new Map() );
 	const previousRects = useRef( new Map() );
 	const hasCompletedInitialLoad = useRef( false );
 	const labelCounts = new Map();
-	recents.forEach( ( recent ) => {
+	visibleRecents.forEach( ( recent ) => {
 		const label = recentDisplayTitle( recent );
 		labelCounts.set( label, ( labelCounts.get( label ) ?? 0 ) + 1 );
 	} );
@@ -225,27 +238,27 @@ export default function SidebarRecents() {
 		if ( ! isResolving ) {
 			hasCompletedInitialLoad.current = true;
 		}
-	}, [ isResolving, recents ] );
+	}, [ isResolving, visibleRecents ] );
 
 	const showSkeleton = useDelayedFlag(
-		isResolving && recents.length === 0,
+		isResolving && visibleRecents.length === 0,
 		120,
 		SKELETON_MIN_VISIBLE_MS
 	);
 
 	return (
 		<>
-			{ isResolving && recents.length === 0 && showSkeleton && (
+			{ isResolving && visibleRecents.length === 0 && showSkeleton && (
 				<SidebarListSkeleton itemCount={ 3 } />
 			) }
-			{ ! isResolving && recents.length === 0 && (
+			{ ! isResolving && visibleRecents.length === 0 && (
 				<p className="cortext-sidebar__empty">
 					{ __( 'No recent activity yet.', 'cortext' ) }
 				</p>
 			) }
-			{ recents.length > 0 && (
+			{ visibleRecents.length > 0 && (
 				<ul className="cortext-sidebar__list cortext-sidebar__recents-list">
-					{ recents.map( ( recent ) => {
+					{ visibleRecents.map( ( recent ) => {
 						const key = recentKey( recent );
 						return (
 							<SidebarRecentsRow

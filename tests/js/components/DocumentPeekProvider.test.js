@@ -19,9 +19,17 @@ import {
 	useDocumentPeekState,
 	useDocumentPeekSurface,
 } from '../../../src/components/DocumentPeekProvider';
+import {
+	ActiveEditorProvider,
+	useActiveEditor,
+} from '../../../src/components/ActiveEditorContext';
 
 function wrapper( { children } ) {
-	return <DocumentPeekProvider>{ children }</DocumentPeekProvider>;
+	return (
+		<ActiveEditorProvider>
+			<DocumentPeekProvider>{ children }</DocumentPeekProvider>
+		</ActiveEditorProvider>
+	);
 }
 
 function useBoth() {
@@ -36,6 +44,7 @@ function useHarness() {
 		state: useDocumentPeekState(),
 		actions: useDocumentPeekActions(),
 		surface: useDocumentPeekSurface(),
+		activeEditor: useActiveEditor(),
 	};
 }
 
@@ -271,5 +280,19 @@ describe( 'DocumentPeekProvider', () => {
 
 		expect( flushNow ).toHaveBeenCalled();
 		expect( refresh ).toHaveBeenCalled();
+	} );
+
+	it( 'registers the open peek for archive preflight flushes', async () => {
+		const flushNow = jest.fn().mockResolvedValue( true );
+		const { result } = renderHook( useHarness, { wrapper } );
+
+		act( () => {
+			result.current.surface.setDetailApi( { flushNow } );
+		} );
+		await expect(
+			result.current.activeEditor.flushActiveEditor()
+		).resolves.toBe( true );
+
+		expect( flushNow ).toHaveBeenCalledTimes( 1 );
 	} );
 } );

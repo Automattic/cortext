@@ -15,6 +15,7 @@ import { DndContext } from '@dnd-kit/core';
 
 const mockRename = jest.fn();
 const mockDuplicate = jest.fn();
+const mockArchive = jest.fn();
 const mockTrash = jest.fn();
 const mockRequestFromActivation = jest.fn();
 
@@ -31,6 +32,7 @@ jest.mock( '../../../../src/documents', () => {
 		useDocumentActions: () => ( {
 			rename: mockRename,
 			duplicate: mockDuplicate,
+			archive: mockArchive,
 			trash: mockTrash,
 		} ),
 		useDocumentRecord: ( record ) => {
@@ -135,6 +137,7 @@ const originalError = console.error;
 beforeEach( () => {
 	mockRename.mockReset();
 	mockDuplicate.mockReset();
+	mockArchive.mockReset();
 	mockTrash.mockReset();
 	mockRequestFromActivation.mockReset();
 	jest.spyOn( console, 'error' ).mockImplementation( ( ...args ) => {
@@ -389,11 +392,30 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 
 	it( 'invokes the document layer trash action from the menu', () => {
 		const { container, props } = renderRow();
+		expect(
+			container.querySelector( '[data-cortext-document-id="1"]' )
+		).toBeInTheDocument();
 		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
 		fireEvent.click(
 			screen.getByRole( 'menuitem', { name: 'Move to Trash' } )
 		);
 		expect( mockTrash ).toHaveBeenCalledWith( props.record );
+	} );
+
+	it( 'invokes the document layer archive action before Trash', () => {
+		const { container, props } = renderRow();
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		const items = screen.getAllByRole( 'menuitem' );
+		const archiveItem = screen.getByRole( 'menuitem', { name: 'Archive' } );
+		const trashItem = screen.getByRole( 'menuitem', {
+			name: 'Move to Trash',
+		} );
+
+		expect( items.indexOf( archiveItem ) ).toBeLessThan(
+			items.indexOf( trashItem )
+		);
+		fireEvent.click( archiveItem );
+		expect( mockArchive ).toHaveBeenCalledWith( props.record );
 	} );
 
 	it( 'invokes the document layer rename action when the inline editor commits', () => {

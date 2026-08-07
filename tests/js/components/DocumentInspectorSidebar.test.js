@@ -64,6 +64,7 @@ jest.mock( '@wordpress/data', () => ( {
 jest.mock( '@wordpress/editor', () => ( { store: {} } ) );
 jest.mock( '@wordpress/i18n', () => ( { __: ( value ) => value } ) );
 jest.mock( '@wordpress/icons', () => ( {
+	archive: 'archive',
 	home: 'home',
 	starEmpty: 'star-empty',
 	starFilled: 'star-filled',
@@ -109,9 +110,6 @@ jest.mock( '../../../src/hooks/useDelayedFlag', () => ( {
 	default: () => false,
 	SKELETON_MIN_VISIBLE_MS: 0,
 } ) );
-jest.mock( '../../../src/components/SidebarFavorites', () => ( {
-	filterFavoritesForTrashedPage: jest.fn(),
-} ) );
 jest.mock( '../../../src/components/page-queries', () => ( {
 	ACTIVE_PAGES_QUERY: {},
 	POST_TYPE: 'page',
@@ -138,6 +136,7 @@ jest.mock( '../../../src/hooks/useWorkspaceHome', () => ( {
 } ) );
 
 import {
+	collectTrashCascadeIds,
 	DOCUMENT_INSPECTOR,
 	InspectorComplementaryArea,
 } from '../../../src/components/DocumentInspectorSidebar';
@@ -148,6 +147,16 @@ const defaultProps = {
 	tabs: [ { id: DOCUMENT_INSPECTOR, label: 'Document' } ],
 	title: 'Document',
 };
+
+describe( 'collectTrashCascadeIds', () => {
+	it( 'includes the root and archived descendants returned by Trash', () => {
+		expect(
+			Array.from(
+				collectTrashCascadeIds( 7, { cascade_deleted: [ 8, 9 ] } )
+			)
+		).toEqual( [ 7, 8, 9 ] );
+	} );
+} );
 
 describe( 'InspectorComplementaryArea', () => {
 	beforeEach( () => {

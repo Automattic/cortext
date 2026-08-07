@@ -37,6 +37,11 @@ jest.mock( '@wordpress/editor', () => ( {
 	store: {},
 } ) );
 
+jest.mock( '@wordpress/notices', () => ( {
+	__esModule: true,
+	store: {},
+} ) );
+
 jest.mock( '@wordpress/blocks', () => ( {
 	__esModule: true,
 	createBlock: () => null,

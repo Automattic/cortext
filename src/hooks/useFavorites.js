@@ -9,6 +9,8 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import { useDocumentArchiveInvalidation } from './documentArchiveInvalidation';
+
 const FavoritesContext = createContext( null );
 
 function normalizeFavorite( favorite ) {
@@ -151,6 +153,52 @@ export function FavoritesProvider( { children } ) {
 		},
 		[ applyFavorites ]
 	);
+
+	const refreshAfterLifecycleChange = useCallback(
+		( detail ) => {
+			if (
+				detail?.action !== 'trash' &&
+				detail?.action !== 'unarchive'
+			) {
+				return;
+			}
+
+			setIsResolving( true );
+			setError( null );
+			const refresh = async () => {
+				if (
+					! hasResolvedInitialLoadRef.current &&
+					initialLoadPromiseRef.current
+				) {
+					await initialLoadPromiseRef.current.catch( () => null );
+				}
+				try {
+					const response = await apiFetch( {
+						path: '/cortext/v1/favorites',
+					} );
+					const loaded = normalizeFavorites( response?.favorites );
+					serverFavoritesRef.current = loaded;
+					applyFavorites( loaded );
+					initialLoadErrorRef.current = null;
+					hasResolvedInitialLoadRef.current = true;
+					return loaded;
+				} catch ( nextError ) {
+					setError( nextError );
+					return null;
+				} finally {
+					setIsResolving( false );
+				}
+			};
+
+			const queuedRefresh = writeChainRef.current.then(
+				refresh,
+				refresh
+			);
+			writeChainRef.current = queuedRefresh.catch( () => null );
+		},
+		[ applyFavorites ]
+	);
+	useDocumentArchiveInvalidation( refreshAfterLifecycleChange );
 
 	const value = useMemo(
 		() => ( { favorites, isResolving, isUpdating, error, setFavorites } ),

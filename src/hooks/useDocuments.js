@@ -39,11 +39,11 @@ function readNumber( value, fallback ) {
 /**
  * Fetches Cortext documents from the shared document endpoint.
  *
- * @param {Object}     [options]
- * @param {string}     [options.search]  Free-text search string.
- * @param {'trash'|''} [options.status]  Pass `'trash'` for the sidebar Trash view.
- * @param {number}     [options.page]    1-based page number.
- * @param {number}     [options.perPage] Page size, clamped server-side to 100.
+ * @param {Object} [options]
+ * @param {string} [options.search]  Free-text search string.
+ * @param {string} [options.status]  Lifecycle status filter.
+ * @param {number} [options.page]    1-based page number.
+ * @param {number} [options.perPage] Page size, clamped server-side to 100.
  *
  * @return {{
  *   documents: CortextDocument[],

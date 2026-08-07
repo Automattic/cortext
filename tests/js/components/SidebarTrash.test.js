@@ -85,6 +85,11 @@ jest.mock( '@wordpress/data', () => ( {
 	useDispatch: jest.fn(),
 } ) );
 
+jest.mock( '@wordpress/notices', () => ( {
+	__esModule: true,
+	store: { name: 'core/notices' },
+} ) );
+
 jest.mock( '@wordpress/api-fetch', () => ( {
 	__esModule: true,
 	default: jest.fn(),

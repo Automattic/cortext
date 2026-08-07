@@ -204,6 +204,22 @@ describe( 'useAutosave: debounce', () => {
 		expect( savePost ).not.toHaveBeenCalled();
 	} );
 
+	it( 'does not autosave an archived document', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( {
+			isDirty: true,
+			postStatus: 'crtxt_archived',
+		} );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
 	it( 'does not retry the same failed edits until they change', () => {
 		const savePost = jest.fn();
 		useDispatch.mockReturnValue( {
@@ -392,6 +408,22 @@ describe( 'useAutosave: flush triggers', () => {
 		} );
 
 		expect( didFlush ).toBe( true );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not flush an archived document', async () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( {
+			isDirty: true,
+			postStatus: 'crtxt_archived',
+		} );
+
+		const { result } = renderHook( () => useAutosave() );
+
+		await act( async () => {
+			await expect( result.current.flushNow() ).resolves.toBe( true );
+		} );
 		expect( savePost ).not.toHaveBeenCalled();
 	} );
 
