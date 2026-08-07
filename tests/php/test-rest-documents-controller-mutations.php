@@ -13,6 +13,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -43,15 +45,22 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 		remove_all_actions( 'wp_trash_post' );
 		remove_all_actions( 'untrashed_post' );
+		remove_all_actions( 'transition_post_status' );
 		remove_all_filters( 'wp_untrash_post_status' );
 
 		$this->install_in_memory_term_store();
 		$this->install_in_memory_posts_query();
 
-		( new TrashCascade() )->register();
+		$archive_cascade = new ArchiveCascade();
+		$archive_cascade->register_status();
+		$archive_cascade->register_meta();
+		$archive_cascade->register();
+
+		$trash_cascade = new TrashCascade();
+		$trash_cascade->register();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
-		( new DocumentsController() )->register();
+		( new DocumentsController( null, $trash_cascade, $archive_cascade ) )->register();
 		do_action( 'rest_api_init' );
 	}
 
@@ -65,8 +74,112 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 	public function test_routes_are_registered(): void {
 		$routes = rest_get_server()->get_routes();
 
+		$this->assertArrayHasKey( '/cortext/v1/documents/(?P<id>\d+)/archive', $routes );
+		$this->assertArrayHasKey( '/cortext/v1/documents/(?P<id>\d+)/unarchive', $routes );
 		$this->assertArrayHasKey( '/cortext/v1/documents/(?P<id>\d+)/restore', $routes );
 		$this->assertArrayHasKey( '/cortext/v1/documents/(?P<id>\d+)/permanent-delete', $routes );
+	}
+
+	public function test_archive_and_unarchive_return_affected_ids_and_updated_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id = $this->create_page( array( 'post_status' => 'private' ) );
+		$child_id  = $this->create_page(
+			array(
+				'post_parent' => $parent_id,
+				'post_status' => 'publish',
+			)
+		);
+
+		$response = $this->archive( $parent_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEqualsCanonicalizing( array( $parent_id, $child_id ), $data['archived'] );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $parent_id ) );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $child_id ) );
+		$this->assertSame( $parent_id, $data['post']['id'] );
+		$this->assertSame( Documents::STATUS_ARCHIVED, $data['post']['status'] );
+
+		$response = $this->unarchive( $parent_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEqualsCanonicalizing( array( $parent_id, $child_id ), $data['restored'] );
+		$this->assertSame( 'private', get_post_status( $parent_id ) );
+		$this->assertSame( 'publish', get_post_status( $child_id ) );
+		$this->assertSame( 'private', $data['post']['status'] );
+	}
+
+	public function test_updating_status_through_core_rest_archives_document_tree(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id = $this->create_page();
+		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$request   = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $parent_id );
+		$request->set_param( 'status', Documents::STATUS_ARCHIVED );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( Documents::STATUS_ARCHIVED, $response->get_data()['status'] );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $child_id ) );
+
+		$list = new WP_REST_Request( 'GET', '/wp/v2/crtxt_documents' );
+		$list->set_param( 'context', 'edit' );
+		$list->set_param( 'status', Documents::STATUS_ARCHIVED );
+		$listed_ids = array_column( rest_do_request( $list )->get_data(), 'id' );
+		$this->assertContains( $parent_id, $listed_ids );
+		$this->assertContains( $child_id, $listed_ids );
+	}
+
+	public function test_core_rest_rejects_archiving_a_trashed_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$post_id = $this->create_page();
+		wp_trash_post( $post_id );
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $post_id );
+		$request->set_param( 'status', Documents::STATUS_ARCHIVED );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_document_in_trash', $response->get_data()['code'] );
+		$this->assertSame( Documents::STATUS_TRASH, get_post_status( $post_id ) );
+		$this->assertSame( '', (string) get_post_meta( $post_id, ArchiveCascade::STATUS_META, true ) );
+	}
+
+	public function test_archive_rejects_archived_and_trashed_documents(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$archived_id = $this->create_page();
+		$this->archive( $archived_id );
+		$response = $this->archive( $archived_id );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_document_already_archived', $response->get_data()['code'] );
+
+		$trashed_id = $this->create_page();
+		wp_trash_post( $trashed_id );
+		$response = $this->archive( $trashed_id );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_document_in_trash', $response->get_data()['code'] );
+	}
+
+	public function test_unarchive_rejects_document_that_is_not_archived(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$response = $this->unarchive( $this->create_page() );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_document_not_archived', $response->get_data()['code'] );
+	}
+
+	public function test_archive_requires_edit_post_capability(): void {
+		wp_set_current_user( $this->create_user( 'subscriber' ) );
+
+		$response = $this->archive( $this->create_page() );
+
+		$this->assertSame( 403, $response->get_status() );
 	}
 
 	public function test_restores_a_trashed_page_and_returns_its_id(): void {
@@ -367,6 +480,16 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 	private function restore( int $id ) {
 		$request = new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $id . '/restore' );
+		return rest_do_request( $request );
+	}
+
+	private function archive( int $id ) {
+		$request = new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $id . '/archive' );
+		return rest_do_request( $request );
+	}
+
+	private function unarchive( int $id ) {
+		$request = new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $id . '/unarchive' );
 		return rest_do_request( $request );
 	}
 

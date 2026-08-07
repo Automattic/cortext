@@ -12,6 +12,7 @@ namespace Cortext\CLI;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\CLI\Dev\SeedImageFetcher;
+use Cortext\Documents;
 use Cortext\Media\CortextMedia;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
@@ -21,10 +22,16 @@ use Cortext\Taxonomy\TraitTaxonomy;
 
 final class SeedDummyCollections {
 
-	private const WORKSPACE_HOME_META_KEY = 'cortext_workspace_home';
-	private const FAVORITES_META_KEY      = 'cortext_favorites';
-	private const PAGE_CONTENT_VERSION    = 'public-beta-page-seed-2026-06-02-humanized';
-	private const ENTRY_CONTENT_VERSION   = 'public-beta-row-seed-2026-06-02-humanized';
+	private const WORKSPACE_HOME_META_KEY   = 'cortext_workspace_home';
+	private const FAVORITES_META_KEY        = 'cortext_favorites';
+	private const PAGE_CONTENT_VERSION      = 'public-beta-page-seed-2026-06-02-humanized';
+	private const ENTRY_CONTENT_VERSION     = 'public-beta-row-seed-2026-06-02-humanized';
+	private const SEED_LOOKUP_POST_STATUSES = array(
+		'draft',
+		'private',
+		'publish',
+		Documents::STATUS_ARCHIVED,
+	);
 
 	private bool $seed_full_dataset = false;
 	private bool $fetch_real_images = false;
@@ -3820,7 +3827,7 @@ final class SeedDummyCollections {
 			$ids = get_posts(
 				array(
 					'post_type'   => Document::POST_TYPE,
-					'post_status' => array( 'draft', 'private', 'publish' ),
+					'post_status' => self::SEED_LOOKUP_POST_STATUSES,
 					'post_parent' => $parent_id,
 					'title'       => (string) $candidate_title,
 					'numberposts' => 1,
@@ -3836,7 +3843,7 @@ final class SeedDummyCollections {
 			$ids = get_posts(
 				array(
 					'post_type'   => Document::POST_TYPE,
-					'post_status' => array( 'draft', 'private', 'publish' ),
+					'post_status' => self::SEED_LOOKUP_POST_STATUSES,
 					'title'       => (string) $candidate_title,
 					'numberposts' => 1,
 					'fields'      => 'ids',
@@ -4039,7 +4046,7 @@ final class SeedDummyCollections {
 		$pages = get_posts(
 			array(
 				'post_type'   => Document::POST_TYPE,
-				'post_status' => array( 'draft', 'private', 'publish' ),
+				'post_status' => self::SEED_LOOKUP_POST_STATUSES,
 				'title'       => $title,
 				'numberposts' => 1,
 				'fields'      => 'ids',
@@ -4758,7 +4765,7 @@ final class SeedDummyCollections {
 		$existing = get_posts(
 			array(
 				'post_type'   => Document::POST_TYPE,
-				'post_status' => array( 'draft', 'private', 'publish' ),
+				'post_status' => self::SEED_LOOKUP_POST_STATUSES,
 				// phpcs:ignore WordPress.DB.SlowDBQuery
 				'meta_key'    => 'cortext_seed_slug',
 				// phpcs:ignore WordPress.DB.SlowDBQuery
@@ -6089,7 +6096,7 @@ final class SeedDummyCollections {
 		$collections = get_posts(
 			array(
 				'post_type'   => Document::POST_TYPE,
-				'post_status' => array( 'draft', 'private', 'publish' ),
+				'post_status' => self::SEED_LOOKUP_POST_STATUSES,
 				// phpcs:ignore WordPress.DB.SlowDBQuery
 				'meta_key'    => 'cortext_seed_slug',
 				// phpcs:ignore WordPress.DB.SlowDBQuery
@@ -6109,7 +6116,7 @@ final class SeedDummyCollections {
 		$entries = get_posts(
 			array(
 				'post_type'   => Document::POST_TYPE,
-				'post_status' => array( 'draft', 'private', 'publish' ),
+				'post_status' => self::SEED_LOOKUP_POST_STATUSES,
 				'title'       => $title,
 				'numberposts' => 1,
 				'fields'      => 'ids',
@@ -6207,7 +6214,7 @@ final class SeedDummyCollections {
 		$pages = get_posts(
 			array(
 				'post_type'   => Document::POST_TYPE,
-				'post_status' => array( 'draft', 'private', 'publish', 'pending', 'future', 'trash' ),
+				'post_status' => array( 'draft', 'private', 'publish', 'pending', 'future', 'trash', Documents::STATUS_ARCHIVED ),
 				'numberposts' => -1,
 				'fields'      => 'ids',
 			)

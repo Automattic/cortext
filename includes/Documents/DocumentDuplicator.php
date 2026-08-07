@@ -73,7 +73,7 @@ final class DocumentDuplicator {
 		$new_id = wp_insert_post(
 			array(
 				'post_type'    => Document::POST_TYPE,
-				'post_status'  => 'auto-draft' === $source->post_status ? 'private' : $source->post_status,
+				'post_status'  => in_array( $source->post_status, array( 'auto-draft', Documents::STATUS_ARCHIVED ), true ) ? 'private' : $source->post_status,
 				'post_title'   => $this->copy_title( $source ),
 				'post_content' => $source->post_content,
 				'post_excerpt' => $source->post_excerpt,

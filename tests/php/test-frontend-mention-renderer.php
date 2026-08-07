@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
 use Cortext\Frontend\MentionRenderer;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
@@ -103,6 +104,28 @@ final class Test_Frontend_Mention_Renderer extends BaseTestCase {
 	public function test_trashed_target_renders_saved_label_as_missing_mention(): void {
 		$target = $this->create_document( 'Trashed' );
 		wp_trash_post( $target );
+		$html = sprintf(
+			'<p><a class="cortext-mention" data-crtxt-mention="%d" href="old">Snapshot</a></p>',
+			$target
+		);
+
+		$rendered = $this->renderer->refresh_mentions( $html );
+
+		$this->assertStringContainsString(
+			'<span class="cortext-mention cortext-mention--missing">Snapshot</span>',
+			$rendered
+		);
+		$this->assertStringNotContainsString( '<a class="cortext-mention"', $rendered );
+	}
+
+	public function test_archived_target_renders_saved_label_as_missing_mention(): void {
+		$target = $this->create_document( 'Archived' );
+		wp_update_post(
+			array(
+				'ID'          => $target,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
 		$html = sprintf(
 			'<p><a class="cortext-mention" data-crtxt-mention="%d" href="old">Snapshot</a></p>',
 			$target

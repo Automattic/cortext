@@ -137,6 +137,21 @@ final class Test_Document_Duplicator extends BaseTestCase {
 		$this->assertSame( $parent_id, (int) $document->post_parent );
 	}
 
+	public function test_duplicate_archived_page_is_private(): void {
+		$source_id = $this->create_page( 'Archived source' );
+		wp_update_post(
+			array(
+				'ID'          => $source_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$result = $this->duplicator->duplicate( get_post( $source_id ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'private', $result['document']->post_status );
+	}
+
 	public function test_duplicate_collection_clones_schema_with_new_field_posts(): void {
 		$collection_id = $this->create_collection_with_fields(
 			array(

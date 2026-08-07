@@ -15,6 +15,7 @@ namespace Cortext\Rest;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\PostType\Document;
 use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
@@ -333,7 +334,7 @@ final class RowsManualOrder {
 
 		$args = array(
 			'post_type'      => Document::POST_TYPE,
-			'post_status'    => array( 'draft', 'private', 'publish' ),
+			'post_status'    => array( 'draft', 'private', 'publish', Documents::STATUS_ARCHIVED ),
 			'posts_per_page' => -1,
 			'no_found_rows'  => true,
 			'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
@@ -398,7 +399,7 @@ final class RowsManualOrder {
 				$store->posts,
 				static fn( $post ) =>
 					Document::POST_TYPE === $post->post_type &&
-					in_array( $post->post_status, array( 'draft', 'private', 'publish' ), true ) &&
+					in_array( $post->post_status, array( 'draft', 'private', 'publish', Documents::STATUS_ARCHIVED ), true ) &&
 					has_term( $trait_term_id, TraitTaxonomy::TAXONOMY, (int) $post->ID )
 			)
 		);

@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -39,6 +41,9 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 
 		$this->install_in_memory_term_store();
 		$this->install_in_memory_posts_query();
+		$archive_cascade = new ArchiveCascade();
+		$archive_cascade->register_status();
+		$archive_cascade->register_meta();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new DocumentsController() )->register();
@@ -118,7 +123,7 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 				'post_title'  => 'Trashed page',
 				'post_parent' => 123,
 				'meta_input'  => array(
-					DocumentIdentity::META_KEY => '{"type":"emoji","value":"P"}',
+					DocumentIdentity::META_KEY       => '{"type":"emoji","value":"P"}',
 					TrashCascade::PARENT_MARKER_META => '99',
 				),
 			)
@@ -195,6 +200,53 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		// document lists.
 		$this->assertArrayHasKey( 'meta', $by_id[ $page_id ] );
 		$this->assertArrayNotHasKey( 'excerpt', $by_id[ $page_id ] );
+	}
+
+	public function test_archived_listing_is_unpaginated_and_includes_archive_metadata(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$root_id    = $this->create_page(
+			array(
+				'post_status' => Documents::STATUS_ARCHIVED,
+				'post_title'  => 'Archived root',
+			)
+		);
+		$child_id   = $this->create_page(
+			array(
+				'post_status' => Documents::STATUS_ARCHIVED,
+				'post_parent' => $root_id,
+				'post_title'  => 'Archived child',
+				'meta_input'  => array(
+					ArchiveCascade::PARENT_MARKER_META => $root_id,
+				),
+			)
+		);
+		$visible_id = $this->create_page( array( 'post_title' => 'Visible page' ) );
+
+		$response = $this->query(
+			array(
+				'status'   => Documents::STATUS_ARCHIVED,
+				'per_page' => 1,
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$data  = $response->get_data();
+		$by_id = array_column( $data['documents'], null, 'id' );
+		$this->assertSame( 2, $data['total'] );
+		$this->assertCount( 2, $data['documents'], 'Archived listings ignore per_page.' );
+		$this->assertArrayHasKey( $root_id, $by_id );
+		$this->assertArrayHasKey( $child_id, $by_id );
+		$this->assertArrayNotHasKey( $visible_id, $by_id );
+		$this->assertSame( $root_id, $by_id[ $child_id ]['meta'][ ArchiveCascade::PARENT_MARKER_META ] );
+		$this->assertArrayHasKey( ArchiveCascade::COLLECTION_MARKER_META, $by_id[ $child_id ]['meta'] );
+		$this->assertArrayHasKey( 'cortext_defines_trait', $by_id[ $child_id ] );
+		$this->assertArrayNotHasKey( 'excerpt', $by_id[ $child_id ] );
+
+		$default_ids = array_column( $this->query()->get_data()['documents'], 'id' );
+		$this->assertContains( $visible_id, $default_ids );
+		$this->assertNotContains( $root_id, $default_ids );
+		$this->assertNotContains( $child_id, $default_ids );
 	}
 
 	public function test_default_listing_excludes_trashed_documents(): void {

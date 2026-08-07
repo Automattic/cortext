@@ -41,6 +41,7 @@ namespace Cortext\Taxonomy;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\PostType\Document;
 use WP_Post;
 
@@ -392,9 +393,10 @@ final class TraitTaxonomy {
 				FROM {$wpdb->term_relationships} tr
 				INNER JOIN {$wpdb->posts} p ON p.ID = tr.object_id
 				WHERE tr.term_taxonomy_id = %d
-				AND p.post_status IN ('draft', 'private', 'publish')
+				AND p.post_status IN ('draft', 'private', 'publish', %s)
 				AND p.ID != %d",
 				$term_taxonomy_id,
+				Documents::STATUS_ARCHIVED,
 				$exclude_post_id
 			)
 		);

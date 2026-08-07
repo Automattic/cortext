@@ -24,6 +24,7 @@ defined( 'ABSPATH' ) || exit;
 use Cortext\Documents\DocumentDuplicator;
 use Cortext\Relations;
 use Cortext\Fields\FieldTypeRegistry;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\TrashCascade;
@@ -39,7 +40,8 @@ final class Documents {
 	public const KIND_ROW        = 'row';
 	public const KIND_COLLECTION = 'collection';
 
-	public const STATUS_TRASH = 'trash';
+	public const STATUS_ARCHIVED = 'crtxt_archived';
+	public const STATUS_TRASH    = 'trash';
 
 	private const DEFAULT_STATUSES = array( 'publish', 'draft', 'private' );
 	private const DEFAULT_PER_PAGE = 20;
@@ -276,8 +278,8 @@ final class Documents {
 	 * Arguments:
 	 *   - `search` (string): split-term match across title, excerpt, content.
 	 *   - `status` (string|string[]): post status filter. Defaults to
-	 *     `publish, draft, private`. Pass `'trash'` to list every trashed
-	 *     document.
+	 *     `publish, draft, private`. Use `'trash'` or `'crtxt_archived'` to list
+	 *     trashed or archived documents.
 	 *   - `page`   (int):    1-based page number.
 	 *   - `per_page` (int):  page size, clamped to MAX_PER_PAGE.
 	 *   - `include_excerpt` (bool): include excerpt in formatted documents.
@@ -286,14 +288,16 @@ final class Documents {
 	 * @return array{documents: array<int,array<string,mixed>>, total: int}
 	 */
 	public function list( array $args = array() ): array {
-		$statuses = $this->normalize_statuses( $args['status'] ?? null );
-		$is_trash = array( self::STATUS_TRASH ) === $statuses;
-		$page     = max( 1, (int) ( $args['page'] ?? 1 ) );
-		$per_page = min(
+		$statuses             = $this->normalize_statuses( $args['status'] ?? null );
+		$is_trash             = array( self::STATUS_TRASH ) === $statuses;
+		$is_archived          = array( self::STATUS_ARCHIVED ) === $statuses;
+		$is_lifecycle_listing = $is_trash || $is_archived;
+		$page                 = max( 1, (int) ( $args['page'] ?? 1 ) );
+		$per_page             = min(
 			self::MAX_PER_PAGE,
 			max( 1, (int) ( $args['per_page'] ?? self::DEFAULT_PER_PAGE ) )
 		);
-		$search   = isset( $args['search'] ) ? trim( (string) $args['search'] ) : '';
+		$search               = isset( $args['search'] ) ? trim( (string) $args['search'] ) : '';
 
 		$query_args = array(
 			'post_type'           => Document::POST_TYPE,
@@ -341,13 +345,14 @@ final class Documents {
 			)
 		);
 		$total        = count( $editable_ids );
-		$page_ids     = $is_trash
+		$page_ids     = $is_lifecycle_listing
 			? $editable_ids
 			: array_slice( $editable_ids, ( $page - 1 ) * $per_page, $per_page );
 
 		$opts      = array(
-			'include_excerpt'    => ! empty( $args['include_excerpt'] ),
-			'include_trash_meta' => $is_trash,
+			'include_excerpt'      => ! empty( $args['include_excerpt'] ),
+			'include_trash_meta'   => $is_trash,
+			'include_archive_meta' => $is_archived,
 		);
 		$documents = array();
 		foreach ( $page_ids as $post_id ) {
@@ -392,7 +397,7 @@ final class Documents {
 			return self::DEFAULT_STATUSES;
 		}
 
-		$allowed = array_merge( self::DEFAULT_STATUSES, array( self::STATUS_TRASH ) );
+		$allowed = array_merge( self::DEFAULT_STATUSES, array( self::STATUS_ARCHIVED, self::STATUS_TRASH ) );
 		$valid   = array_values( array_intersect( $candidates, $allowed ) );
 
 		return empty( $valid ) ? self::DEFAULT_STATUSES : $valid;
@@ -447,26 +452,36 @@ final class Documents {
 			);
 		}
 
-		if ( ! empty( $opts['include_trait_flags'] ) || ! empty( $opts['include_trash_meta'] ) ) {
-			// Mirror the `cortext_defines_trait` (collection) and `crtxt_trait`
-			// (row) fields that `/wp/v2/crtxt_documents` exposes, so list icons
-			// and the Trash panel can tell collections and rows apart from pages.
-			// The Trash panel also uses them for the cascade-count copy and the
-			// type-to-confirm guard on collection deletes.
+		$include_trash_meta     = ! empty( $opts['include_trash_meta'] );
+		$include_archive_meta   = ! empty( $opts['include_archive_meta'] );
+		$include_lifecycle_meta = $include_trash_meta || $include_archive_meta;
+
+		if ( ! empty( $opts['include_trait_flags'] ) || $include_lifecycle_meta ) {
+			// Mirror the `cortext_defines_trait` and `crtxt_trait` fields exposed by
+			// `/wp/v2/crtxt_documents`, so callers can tell pages, collections, and
+			// rows apart. Trash and archived listings also use these fields for
+			// cascade details and collection actions.
 			$document['cortext_defines_trait'] = Document::is_collection_post( $post );
 			$document['crtxt_trait']           = array_values(
 				array_map( 'intval', wp_get_object_terms( $post->ID, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) ) )
 			);
 		}
 
-		if ( ! empty( $opts['include_trash_meta'] ) ) {
+		if ( $include_lifecycle_meta ) {
 			$document['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
-			$document['meta']        = array(
-				'cortext_document_icon'              => $icon,
-				'cortext_fields'                     => Document::collection_field_ids( (int) $post->ID ),
-				TrashCascade::PARENT_MARKER_META     => (int) get_post_meta( $post->ID, TrashCascade::PARENT_MARKER_META, true ),
-				TrashCascade::COLLECTION_MARKER_META => (int) get_post_meta( $post->ID, TrashCascade::COLLECTION_MARKER_META, true ),
+			$meta                    = array(
+				'cortext_document_icon' => $icon,
+				'cortext_fields'        => Document::collection_field_ids( (int) $post->ID ),
 			);
+			if ( $include_trash_meta ) {
+				$meta[ TrashCascade::PARENT_MARKER_META ]     = (int) get_post_meta( $post->ID, TrashCascade::PARENT_MARKER_META, true );
+				$meta[ TrashCascade::COLLECTION_MARKER_META ] = (int) get_post_meta( $post->ID, TrashCascade::COLLECTION_MARKER_META, true );
+			}
+			if ( $include_archive_meta ) {
+				$meta[ ArchiveCascade::PARENT_MARKER_META ]     = (int) get_post_meta( $post->ID, ArchiveCascade::PARENT_MARKER_META, true );
+				$meta[ ArchiveCascade::COLLECTION_MARKER_META ] = (int) get_post_meta( $post->ID, ArchiveCascade::COLLECTION_MARKER_META, true );
+			}
+			$document['meta'] = $meta;
 		}
 
 		return $document;
@@ -595,6 +610,9 @@ final class Documents {
 		if ( null === $kind ) {
 			return $this->target_not_found_error();
 		}
+		if ( self::STATUS_ARCHIVED === $post->post_status ) {
+			return $this->target_hidden_error();
+		}
 
 		if ( self::KIND_ROW === $kind ) {
 			$row_check = $this->validate_row_target( $post, $require_edit );
@@ -633,11 +651,11 @@ final class Documents {
 	 */
 	private function validate_row_target( WP_Post $row, bool $require_edit ): ?WP_Error {
 		$trait = $this->find_trait_for_document( $row );
-		if (
-			! $trait instanceof WP_Post
-			|| self::STATUS_TRASH === $trait->post_status
-		) {
+		if ( ! $trait instanceof WP_Post || self::STATUS_TRASH === $trait->post_status ) {
 			return $this->target_not_found_error();
+		}
+		if ( self::STATUS_ARCHIVED === $trait->post_status ) {
+			return $this->target_hidden_error();
 		}
 
 		if ( $require_edit
@@ -662,6 +680,14 @@ final class Documents {
 		return new WP_Error(
 			'cortext_document_target_not_found',
 			__( 'Target document was not found.', 'cortext' ),
+			array( 'status' => 404 )
+		);
+	}
+
+	private function target_hidden_error(): WP_Error {
+		return new WP_Error(
+			'cortext_document_target_hidden',
+			__( 'Target document is hidden.', 'cortext' ),
 			array( 'status' => 404 )
 		);
 	}

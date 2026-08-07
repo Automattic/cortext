@@ -11,6 +11,7 @@ namespace Cortext\FieldValues;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
@@ -50,8 +51,7 @@ final class FieldValueIndex {
 		add_action( 'added_post_meta', array( $this, 'sync_meta_change' ), 10, 4 );
 		add_action( 'updated_post_meta', array( $this, 'sync_meta_change' ), 10, 4 );
 		add_action( 'deleted_post_meta', array( $this, 'sync_meta_change' ), 10, 4 );
-		add_action( 'wp_trash_post', array( $this, 'sync_row_status' ), 20, 1 );
-		add_action( 'untrashed_post', array( $this, 'sync_row_status' ), 20, 1 );
+		add_action( 'transition_post_status', array( $this, 'sync_row_status' ), 20, 3 );
 		add_action( 'before_delete_post', array( $this, 'cleanup_deleted_post' ), 20, 2 );
 		// Invalidate the row->collection cache when a document's trait
 		// membership changes, so the next meta sync resolves the new trait.
@@ -300,7 +300,7 @@ final class FieldValueIndex {
 			$query = new WP_Query(
 				array(
 					'post_type'      => Document::POST_TYPE,
-					'post_status'    => array( 'draft', 'private', 'publish', 'trash' ),
+					'post_status'    => array( 'draft', 'private', 'publish', 'trash', Documents::STATUS_ARCHIVED ),
 					'fields'         => 'ids',
 					'posts_per_page' => self::PAGE_SIZE,
 					'paged'          => $page,
@@ -362,7 +362,7 @@ final class FieldValueIndex {
 			$query = new WP_Query(
 				array(
 					'post_type'      => Document::POST_TYPE,
-					'post_status'    => array( 'draft', 'private', 'publish', 'trash' ),
+					'post_status'    => array( 'draft', 'private', 'publish', 'trash', Documents::STATUS_ARCHIVED ),
 					'fields'         => 'ids',
 					'posts_per_page' => self::PAGE_SIZE,
 					'paged'          => $page,
@@ -556,8 +556,13 @@ final class FieldValueIndex {
 		);
 	}
 
-	public function sync_row_status( int $post_id ): void {
-		if ( ! $this->can_write() || $this->collection_id_for_row( $post_id ) < 1 ) {
+	public function sync_row_status( string $new_status, string $old_status, WP_Post $post ): void {
+		if (
+			$new_status === $old_status
+			|| Document::POST_TYPE !== $post->post_type
+			|| ! $this->can_write()
+			|| $this->collection_id_for_row( (int) $post->ID ) < 1
+		) {
 			return;
 		}
 
@@ -566,8 +571,8 @@ final class FieldValueIndex {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Keeps row status in the derived index current.
 		$result = $wpdb->update(
 			$this->table_name(),
-			array( 'post_status' => (string) get_post_status( $post_id ) ),
-			array( 'row_id' => $post_id ),
+			array( 'post_status' => $new_status ),
+			array( 'row_id' => (int) $post->ID ),
 			array( '%s' ),
 			array( '%d' )
 		);
@@ -1022,7 +1027,7 @@ final class FieldValueIndex {
 			get_posts(
 				array(
 					'post_type'      => Document::POST_TYPE,
-					'post_status'    => array( 'draft', 'private', 'publish' ),
+					'post_status'    => array( 'draft', 'private', 'publish', Documents::STATUS_ARCHIVED ),
 					'fields'         => 'ids',
 					'posts_per_page' => -1,
 					'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query

@@ -73,6 +73,10 @@ trait InMemoryPostsQuery {
 		$wants_post_type_query = ! empty( $vars['post_type'] ) && 'any' !== $vars['post_type'];
 		$wants_search          = isset( $vars['s'] ) && '' !== (string) $vars['s'];
 		$statuses              = (array) ( $vars['post_status'] ?? array() );
+		$any_status            = in_array( 'any', $statuses, true );
+		$excluded_statuses     = $any_status
+			? get_post_stati( array( 'exclude_from_search' => true ) )
+			: array();
 		$wants_trash_query     = in_array( 'trash', $statuses, true );
 
 		if (
@@ -108,7 +112,9 @@ trait InMemoryPostsQuery {
 		if ( ! empty( $statuses ) ) {
 			$candidates = array_filter(
 				$candidates,
-				static fn( WP_Post $post ): bool => in_array( $post->post_status, $statuses, true )
+				static fn( WP_Post $post ): bool => $any_status
+					? ! in_array( $post->post_status, $excluded_statuses, true )
+					: in_array( $post->post_status, $statuses, true )
 			);
 		}
 
@@ -210,8 +216,8 @@ trait InMemoryPostsQuery {
 		self::$in_memory_found_posts[ $query ] = $total;
 		$query->found_posts                    = $total;
 
-		$per_page = (int) ( $vars['posts_per_page'] ?? 0 );
-		$page     = max( 1, (int) ( $vars['paged'] ?? 1 ) );
+		$per_page             = (int) ( $vars['posts_per_page'] ?? 0 );
+		$page                 = max( 1, (int) ( $vars['paged'] ?? 1 ) );
 		$query->max_num_pages = $per_page > 0 ? (int) ceil( $total / $per_page ) : 0;
 		if ( $per_page > 0 ) {
 			$candidates = array_slice( $candidates, ( $page - 1 ) * $per_page, $per_page );
@@ -255,6 +261,9 @@ trait InMemoryPostsQuery {
 	 * Returns the tier (1-best, 5-worst) for a post against a search
 	 * needle. Matches the CASE expression `Documents::list()` registers via
 	 * the `posts_search_orderby` filter.
+	 *
+	 * @param WP_Post $post   Post being ranked.
+	 * @param string  $needle Normalized search needle.
 	 */
 	private function search_relevance_tier( WP_Post $post, string $needle ): int {
 		if ( '' === $needle ) {
