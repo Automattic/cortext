@@ -33,6 +33,7 @@ import {
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
+import { useSurfaceFocusIntent } from './SurfaceFocusContext';
 import { DOCUMENT_POST_TYPE } from '../collections';
 import { collectDescendants } from './document-tree';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
@@ -162,6 +163,7 @@ function mergeDisplayFavorites( currentDisplay, nextFavorites, removingKeys ) {
 }
 
 function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
+	const { requestFromActivation } = useSurfaceFocusIntent();
 	// Favorites wire shape only carries id/title/path/icon. Capability checks
 	// need `meta.cortext_fields` / `crtxt_trait`, so we load the document
 	// record at render time when the sidebar lists did not already supply
@@ -240,6 +242,7 @@ function SortableFavoriteRow( { item, isDisabled, onSelect, onRemove } ) {
 					type="button"
 					className="cortext-sidebar__favorite-title"
 					onClick={ ( event ) => {
+						requestFromActivation( event, item.id );
 						const isMouseClick = event.detail > 0;
 						if ( ! isMouseClick ) {
 							onSelect( item );
