@@ -17,6 +17,10 @@ const LEGACY_PORT = 9402;
 const RUNTIME_PORT_FIRST = 9403;
 const RUNTIME_PORT_LAST = 9498;
 const DEFAULT_READY_PATH = '/wp-includes/images/blank.gif';
+// The Library hydrates several DataViews at once and opening a row fans out into
+// more requests. A single-worker built-in server serializes that burst, so the
+// desktop runtime forks a small pool. Override with the env vars read below.
+const DEFAULT_PHP_CLI_SERVER_WORKERS = '4';
 const RUNTIME_AUTH_HEADER = 'X-Cortext-Desktop-Token';
 const RUNTIME_AUTH_ENV = 'CORTEXT_DESKTOP_AUTH_TOKEN';
 const WINDOWS_DIRECT_EXECUTABLE_EXTENSIONS = [ '.COM', '.EXE' ];
@@ -313,9 +317,11 @@ function phpCliWorkerConfig( env = process.env, platform = process.platform ) {
 		};
 	}
 
+	const workers = configured || DEFAULT_PHP_CLI_SERVER_WORKERS;
+
 	return {
-		workers: configured,
-		detached: Number.parseInt( configured || '1', 10 ) > 1,
+		workers,
+		detached: Number.parseInt( workers, 10 ) > 1,
 		ignoredWorkers: null,
 	};
 }
