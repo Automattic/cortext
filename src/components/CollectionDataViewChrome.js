@@ -22,6 +22,7 @@ export function DataViewsChrome( { footer } ) {
 					justify="start"
 					expanded={ false }
 					className="dataviews__search"
+					data-cortext-focus-region="search"
 				>
 					<DataViews.Search />
 					<DataViews.FiltersToggle />
@@ -30,6 +31,7 @@ export function DataViewsChrome( { footer } ) {
 					spacing={ 1 }
 					expanded={ false }
 					style={ { flexShrink: 0 } }
+					data-cortext-focus-region="view-controls"
 				>
 					<DataViews.LayoutSwitcher />
 					<DataViews.ViewConfig />

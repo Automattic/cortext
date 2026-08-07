@@ -604,7 +604,14 @@ export default function Edit( {
 		context?.postType,
 		context?.postId
 	);
-	const { signalCollectionReady } = useCanvasReadySignals();
+	const {
+		signalCollectionReady,
+		surfaceFocusRequest,
+		isEditorSurfaceDisplayed,
+		isSurfaceFocusPending,
+		isSurfaceFocusReadOnly,
+		completeSurfaceFocus,
+	} = useCanvasReadySignals();
 	const blockProps = useBlockProps( {
 		className: isOwner ? 'is-document-owner' : undefined,
 	} );
@@ -728,6 +735,15 @@ export default function Edit( {
 					view={ view }
 					onChangeView={ setView }
 					onReady={ isOwner ? onCollectionReady : undefined }
+					surfaceFocusRequest={ isOwner ? surfaceFocusRequest : null }
+					isEditorSurfaceDisplayed={
+						isOwner && isEditorSurfaceDisplayed
+					}
+					isSurfaceFocusPending={ isOwner && isSurfaceFocusPending }
+					isSurfaceFocusReadOnly={ isOwner && isSurfaceFocusReadOnly }
+					completeSurfaceFocus={
+						isOwner ? completeSurfaceFocus : undefined
+					}
 					revealFieldId={ revealFieldId }
 					onFieldRevealed={ onFieldRevealed }
 					invalid={
