@@ -3643,7 +3643,7 @@ final class SeedDummyCollections {
 			array(
 				'title'   => 'Library',
 				'icon'    => '📚',
-				'cover'   => CORTEXT_PATH . 'seed-assets/covers/page-library.jpg',
+				'cover'   => CORTEXT_PATH . 'seed-assets/covers/library-interior.jpg',
 				'content' => $this->page_content(
 					array(
 						$this->paragraph( 'Library keeps books connected to authors and publishers. There are enough records here for filters, search, relation chips, and rollups to feel useful.' ),
