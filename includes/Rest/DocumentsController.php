@@ -100,7 +100,7 @@ final class DocumentsController {
 				array(
 					'methods'             => 'POST',
 					'callback'            => array( $this, 'archive' ),
-					'permission_callback' => array( $this, 'check_editable_document' ),
+					'permission_callback' => array( $this, 'check_archive_permission' ),
 					'args'                => $id_arg,
 				),
 			)
@@ -113,7 +113,7 @@ final class DocumentsController {
 				array(
 					'methods'             => 'POST',
 					'callback'            => array( $this, 'unarchive' ),
-					'permission_callback' => array( $this, 'check_editable_document' ),
+					'permission_callback' => array( $this, 'check_unarchive_permission' ),
 					'args'                => $id_arg,
 				),
 			)
@@ -255,15 +255,15 @@ final class DocumentsController {
 	}
 
 	/**
-	 * Checks permission for archive and unarchive requests.
+	 * Checks permission to archive a document and its active descendants.
 	 *
-	 * Neither action deletes the document, so these routes require edit
-	 * permission rather than the delete permission used by Trash.
+	 * Archive does not delete the document, so it requires edit permission
+	 * rather than the delete permission used by Trash.
 	 *
 	 * @param WP_REST_Request $request Incoming REST request.
 	 * @return bool|WP_Error
 	 */
-	public function check_editable_document( WP_REST_Request $request ) {
+	public function check_archive_permission( WP_REST_Request $request ) {
 		$id   = (int) $request->get_param( 'id' );
 		$post = get_post( $id );
 
@@ -275,7 +275,28 @@ final class DocumentsController {
 			);
 		}
 
-		return current_user_can( 'edit_post', $id );
+		return $this->archive_cascade->current_user_can_archive( $id );
+	}
+
+	/**
+	 * Checks permission to restore an archived document and its descendants.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return bool|WP_Error
+	 */
+	public function check_unarchive_permission( WP_REST_Request $request ) {
+		$id   = (int) $request->get_param( 'id' );
+		$post = get_post( $id );
+
+		if ( ! $post instanceof WP_Post || ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return $this->archive_cascade->current_user_can_unarchive( $id );
 	}
 
 	public function archive( WP_REST_Request $request ): WP_REST_Response|WP_Error {

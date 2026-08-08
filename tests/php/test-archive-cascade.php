@@ -180,6 +180,83 @@ final class Test_Archive_Cascade extends BaseTestCase {
 		$this->assertSame( 'publish', get_post_status( $row_id ) );
 	}
 
+	public function test_archived_published_document_keeps_published_capabilities_in_archive_and_trash(): void {
+		$author_id = $this->create_user( 'contributor' );
+		$post_id   = $this->create_page(
+			array(
+				'post_author' => $author_id,
+				'post_status' => 'publish',
+			)
+		);
+
+		$this->archive_cascade->archive( $post_id );
+		wp_set_current_user( $author_id );
+
+		$this->assertFalse( current_user_can( 'edit_post', $post_id ) );
+		$this->assertFalse( current_user_can( 'delete_post', $post_id ) );
+
+		wp_trash_post( $post_id );
+
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_meta( $post_id, '_wp_trash_meta_status', true ) );
+		$this->assertFalse( current_user_can( 'edit_post', $post_id ) );
+		$this->assertFalse( current_user_can( 'delete_post', $post_id ) );
+
+		wp_untrash_post( $post_id );
+
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $post_id ) );
+		$this->assertFalse( current_user_can( 'edit_post', $post_id ) );
+		$this->assertFalse( current_user_can( 'delete_post', $post_id ) );
+	}
+
+	public function test_archived_draft_keeps_its_authors_normal_capabilities(): void {
+		$author_id = $this->create_user( 'contributor' );
+		$post_id   = $this->create_page(
+			array(
+				'post_author' => $author_id,
+				'post_status' => 'draft',
+			)
+		);
+
+		$this->archive_cascade->archive( $post_id );
+		wp_set_current_user( $author_id );
+
+		$this->assertTrue( current_user_can( 'edit_post', $post_id ) );
+		$this->assertTrue( current_user_can( 'delete_post', $post_id ) );
+
+		wp_trash_post( $post_id );
+
+		$this->assertTrue( current_user_can( 'edit_post', $post_id ) );
+		$this->assertTrue( current_user_can( 'delete_post', $post_id ) );
+	}
+
+	public function test_archived_private_document_keeps_private_caps_for_other_users(): void {
+		$owner_id = $this->create_user( 'subscriber' );
+		$user_id  = $this->create_user( 'editor' );
+		$post_id  = $this->create_page(
+			array(
+				'post_author' => $owner_id,
+				'post_status' => 'private',
+			)
+		);
+		$this->archive_cascade->archive( $post_id );
+
+		$edit_caps = $this->archive_cascade->preserve_original_status_capabilities(
+			array( 'edit_others_posts' ),
+			'edit_post',
+			$user_id,
+			array( $post_id )
+		);
+		$delete_caps = $this->archive_cascade->preserve_original_status_capabilities(
+			array( 'delete_others_posts' ),
+			'delete_post',
+			$user_id,
+			array( $post_id )
+		);
+
+		$this->assertContains( 'edit_private_posts', $edit_caps );
+		$this->assertContains( 'delete_private_posts', $delete_caps );
+	}
+
 	public function test_updating_status_cannot_archive_a_trashed_document(): void {
 		$post_id = $this->create_page();
 		wp_trash_post( $post_id );
@@ -312,5 +389,15 @@ final class Test_Archive_Cascade extends BaseTestCase {
 		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
 
 		return $field_id;
+	}
+
+	private function create_user( string $role ): int {
+		return (int) wp_insert_user(
+			array(
+				'user_login' => uniqid( 'cortext_archive_', false ),
+				'user_pass'  => 'password',
+				'role'       => $role,
+			)
+		);
 	}
 }

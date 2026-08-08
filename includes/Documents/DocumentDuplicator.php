@@ -70,6 +70,19 @@ final class DocumentDuplicator {
 			);
 		}
 
+		$parent          = (int) $source->post_parent > 0 ? get_post( (int) $source->post_parent ) : null;
+		$collection_post = $this->documents->find_trait_for_document( $source );
+		if (
+			( $parent instanceof WP_Post && Documents::STATUS_ARCHIVED === $parent->post_status )
+			|| ( $collection_post instanceof WP_Post && Documents::STATUS_ARCHIVED === $collection_post->post_status )
+		) {
+			return new WP_Error(
+				'cortext_duplicate_archived_container',
+				__( 'Restore the archived parent or collection before making a copy.', 'cortext' ),
+				array( 'status' => 409 )
+			);
+		}
+
 		$new_id = wp_insert_post(
 			array(
 				'post_type'    => Document::POST_TYPE,
@@ -98,8 +111,7 @@ final class DocumentDuplicator {
 			( new TraitTaxonomy() )->ensure_mirror_term( $new_id );
 		}
 
-		$collection_id   = 0;
-		$collection_post = $this->documents->find_trait_for_document( $source );
+		$collection_id = 0;
 		if ( $collection_post instanceof WP_Post ) {
 			$collection_id = (int) $collection_post->ID;
 			$result        = $this->copy_membership_and_values( $source, $new_id, $collection_id );

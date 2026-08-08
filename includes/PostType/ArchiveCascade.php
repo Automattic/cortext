@@ -68,6 +68,8 @@ final class ArchiveCascade {
 		add_action( 'init', array( $this, 'register_meta' ) );
 		add_action( 'transition_post_status', array( $this, 'on_transition' ), 10, 3 );
 		add_filter( 'rest_pre_insert_' . Document::POST_TYPE, array( $this, 'validate_rest_archive_transition' ), 5, 2 );
+		add_filter( 'rest_dispatch_request', array( $this, 'block_archived_autosave' ), 10, 4 );
+		add_filter( 'map_meta_cap', array( $this, 'preserve_original_status_capabilities' ), 10, 4 );
 		add_filter( 'wp_untrash_post_status', array( $this, 'allow_archived_untrash_status' ), PHP_INT_MAX, 3 );
 		add_filter( 'wp_insert_post_parent', array( $this, 'capture_trash_archive_slug_state' ), 5, 4 );
 		add_filter( 'wp_insert_post_data', array( $this, 'prevent_trash_archive_transition' ), 5, 4 );
@@ -205,14 +207,14 @@ final class ArchiveCascade {
 	}
 
 	/**
-	 * Checks core REST status changes against the archive rules.
+	 * Checks core REST writes against the archive rules.
 	 *
 	 * @param mixed           $prepared_post Post data prepared by core REST.
 	 * @param WP_REST_Request $request       Incoming core REST request.
 	 * @return mixed|WP_Error
 	 */
 	public function validate_rest_archive_transition( $prepared_post, WP_REST_Request $request ) {
-		if ( is_wp_error( $prepared_post ) || Documents::STATUS_ARCHIVED !== $request->get_param( 'status' ) ) {
+		if ( is_wp_error( $prepared_post ) ) {
 			return $prepared_post;
 		}
 
@@ -226,7 +228,115 @@ final class ArchiveCascade {
 			return $prepared_post;
 		}
 
-		return $this->archive_transition_error( $post ) ?? $prepared_post;
+		if ( Documents::STATUS_ARCHIVED === $post->post_status ) {
+			return $this->archived_write_error();
+		}
+
+		if ( Documents::STATUS_ARCHIVED !== $request->get_param( 'status' ) ) {
+			return $prepared_post;
+		}
+
+		$transition_error = $this->archive_transition_error( $post );
+		if ( $transition_error instanceof WP_Error ) {
+			return $transition_error;
+		}
+
+		if ( ! $this->current_user_can_archive( $post_id ) ) {
+			return new WP_Error(
+				'cortext_document_archive_forbidden',
+				__( 'You are not allowed to archive this document.', 'cortext' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
+
+		return $prepared_post;
+	}
+
+	/**
+	 * Stops core's autosave controller before it can create a revision for an
+	 * archived document.
+	 *
+	 * The autosave controller ignores errors returned by its parent post
+	 * controller's prepare method, so the regular pre-insert guard is not enough
+	 * for this route.
+	 *
+	 * @param mixed           $dispatch_result Result supplied by an earlier filter.
+	 * @param WP_REST_Request $request         Incoming REST request.
+	 * @param string          $route           Matched route pattern.
+	 * @param array           $handler         Matched route handler.
+	 * @return mixed|WP_Error
+	 */
+	public function block_archived_autosave( $dispatch_result, WP_REST_Request $request, string $route, array $handler ) {
+		unset( $route );
+
+		$callback = $handler['callback'] ?? null;
+		if (
+			null !== $dispatch_result
+			|| 'POST' !== $request->get_method()
+			|| ! is_array( $callback )
+			|| ! isset( $callback[0], $callback[1] )
+			|| ! $callback[0] instanceof \WP_REST_Autosaves_Controller
+			|| 'create_item' !== $callback[1]
+		) {
+			return $dispatch_result;
+		}
+
+		$post = get_post( (int) $request->get_param( 'id' ) );
+		if (
+			$post instanceof WP_Post
+			&& Document::POST_TYPE === $post->post_type
+			&& Documents::STATUS_ARCHIVED === $post->post_status
+		) {
+			return $this->archived_write_error();
+		}
+
+		return $dispatch_result;
+	}
+
+	/**
+	 * Keeps edit and delete checks tied to the status held before Archive.
+	 *
+	 * WordPress treats custom statuses like drafts when it maps these
+	 * capabilities. Use the saved status for the checks core would otherwise
+	 * drop, including while the archived document is in Trash.
+	 *
+	 * @param string[] $caps    Primitive capabilities from WordPress.
+	 * @param string   $cap     Requested meta capability.
+	 * @param int      $user_id User ID being checked.
+	 * @param mixed[]  $args    Arguments passed to the capability check.
+	 * @return string[]
+	 */
+	public function preserve_original_status_capabilities( array $caps, string $cap, int $user_id, array $args ): array {
+		if ( ! in_array( $cap, array( 'edit_post', 'delete_post' ), true ) || empty( $args[0] ) ) {
+			return $caps;
+		}
+
+		$post = get_post( (int) $args[0] );
+		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+			return $caps;
+		}
+
+		$is_archived = Documents::STATUS_ARCHIVED === $post->post_status;
+		$is_in_trash = Documents::STATUS_TRASH === $post->post_status
+			&& Documents::STATUS_ARCHIVED === (string) get_post_meta( (int) $post->ID, '_wp_trash_meta_status', true );
+		if ( ! $is_archived && ! $is_in_trash ) {
+			return $caps;
+		}
+
+		$post_type = get_post_type_object( Document::POST_TYPE );
+		if ( null === $post_type ) {
+			return $caps;
+		}
+
+		$original_status = $this->restore_status_for( (int) $post->ID );
+		$prefix          = 'edit_post' === $cap ? 'edit' : 'delete';
+		if ( in_array( $original_status, array( 'publish', 'future' ), true ) ) {
+			$caps[] = $post_type->cap->{"{$prefix}_published_posts"};
+		} elseif ( 'private' === $original_status && $user_id !== (int) $post->post_author ) {
+			$caps[] = $post_type->cap->{"{$prefix}_private_posts"};
+		}
+
+		return array_values( array_unique( $caps ) );
 	}
 
 	/**
@@ -432,9 +542,62 @@ final class ArchiveCascade {
 		return $this->cascade->descendants_for_root( $root_id );
 	}
 
+	/**
+	 * Checks edit permission for every document an Archive request would move.
+	 *
+	 * @param int $root_id Root document ID.
+	 */
+	public function current_user_can_archive( int $root_id ): bool {
+		$ids = array_merge( array( $root_id ), $this->cascade->candidates_for_cascade( $root_id ) );
+		foreach ( array_unique( $ids ) as $post_id ) {
+			if ( ! current_user_can( 'edit_post', $post_id ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Checks edit and publication permission for every document restored by an
+	 * Unarchive request.
+	 *
+	 * @param int $root_id Root document ID.
+	 */
+	public function current_user_can_unarchive( int $root_id ): bool {
+		$post_type = get_post_type_object( Document::POST_TYPE );
+		if ( null === $post_type ) {
+			return false;
+		}
+
+		$ids = array_merge( array( $root_id ), $this->descendants_for_root( $root_id ) );
+		foreach ( array_unique( $ids ) as $post_id ) {
+			if ( ! current_user_can( 'edit_post', $post_id ) ) {
+				return false;
+			}
+
+			if (
+				in_array( $this->restore_status_for( $post_id ), array( 'private', 'publish', 'future' ), true )
+				&& ! current_user_can( $post_type->cap->publish_posts )
+			) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	private function restore_status_for( int $post_id ): string {
 		$status = (string) get_post_meta( $post_id, self::STATUS_META, true );
 		return in_array( $status, self::ACTIVE_STATUSES, true ) ? $status : 'draft';
+	}
+
+	private function archived_write_error(): WP_Error {
+		return new WP_Error(
+			'cortext_document_archived',
+			__( 'Restore this document before editing it.', 'cortext' ),
+			array( 'status' => 409 )
+		);
 	}
 
 	private function archive_transition_error( WP_Post $post ): ?WP_Error {

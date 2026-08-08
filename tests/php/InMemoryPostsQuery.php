@@ -72,6 +72,7 @@ trait InMemoryPostsQuery {
 		$wants_tax_query       = ! empty( $vars['tax_query'] ) && is_array( $vars['tax_query'] );
 		$wants_post_type_query = ! empty( $vars['post_type'] ) && 'any' !== $vars['post_type'];
 		$wants_search          = isset( $vars['s'] ) && '' !== (string) $vars['s'];
+		$wants_title           = isset( $vars['title'] ) && '' !== (string) $vars['title'];
 		$statuses              = (array) ( $vars['post_status'] ?? array() );
 		$any_status            = in_array( 'any', $statuses, true );
 		$excluded_statuses     = $any_status
@@ -86,6 +87,7 @@ trait InMemoryPostsQuery {
 			! $wants_tax_query &&
 			! $wants_post_type_query &&
 			! $wants_search &&
+			! $wants_title &&
 			! $wants_trash_query
 		) {
 			return $pre;
@@ -161,6 +163,14 @@ trait InMemoryPostsQuery {
 					}
 					return true;
 				}
+			);
+		}
+
+		if ( $wants_title ) {
+			$title      = (string) $vars['title'];
+			$candidates = array_filter(
+				$candidates,
+				static fn( WP_Post $post ): bool => (string) $post->post_title === $title
 			);
 		}
 

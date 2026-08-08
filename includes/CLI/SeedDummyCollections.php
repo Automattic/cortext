@@ -14,6 +14,7 @@ defined( 'ABSPATH' ) || exit;
 use Cortext\CLI\Dev\SeedImageFetcher;
 use Cortext\Documents;
 use Cortext\Media\CortextMedia;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -333,14 +334,21 @@ final class SeedDummyCollections {
 				continue;
 			}
 			$collection = get_post( $collection_id );
-			if ( ! $collection instanceof \WP_Post || (int) $collection->post_parent === $parent_id ) {
+			if ( ! $collection instanceof \WP_Post ) {
 				continue;
 			}
-			wp_update_post(
-				array(
-					'ID'          => $collection_id,
-					'post_parent' => $parent_id,
-				)
+			if ( (int) $collection->post_parent !== $parent_id ) {
+				wp_update_post(
+					array(
+						'ID'          => $collection_id,
+						'post_parent' => $parent_id,
+					)
+				);
+			}
+			$this->archive_seeded_descendant_if_needed(
+				$collection_id,
+				$parent_id,
+				ArchiveCascade::PARENT_MARKER_META
 			);
 		}
 	}
@@ -3808,6 +3816,11 @@ final class SeedDummyCollections {
 		if ( isset( $node['content'] ) ) {
 			update_post_meta( $page_id, '_cortext_seed_content_version', self::PAGE_CONTENT_VERSION );
 		}
+		$this->archive_seeded_descendant_if_needed(
+			(int) $page_id,
+			$parent_id,
+			ArchiveCascade::PARENT_MARKER_META
+		);
 
 		foreach ( $node['children'] ?? array() as $child ) {
 			$this->seed_page_tree( $child, (int) $page_id );
@@ -3937,13 +3950,12 @@ final class SeedDummyCollections {
 	}
 
 	private function seed_workspace_home( int $user_id, int $page_id ): void {
-		if ( $page_id <= 0 ) {
+		$current = get_user_meta( $user_id, self::WORKSPACE_HOME_META_KEY, true );
+		if ( $this->workspace_home_exists( $current ) ) {
+			$this->log( 'Workspace home already exists. Skipping.' );
 			return;
 		}
-
-		$current = get_user_meta( $user_id, self::WORKSPACE_HOME_META_KEY, true );
-		if ( is_string( $current ) && '' !== $current && $this->workspace_home_exists( $current ) ) {
-			$this->log( 'Workspace home already exists. Skipping.' );
+		if ( $page_id <= 0 || ! $this->active_seed_preference_target_exists( "page:{$page_id}" ) ) {
 			return;
 		}
 
@@ -3952,13 +3964,8 @@ final class SeedDummyCollections {
 		$this->log( "Set workspace home to page '{$page_title}' (ID {$page_id})." );
 	}
 
-	private function workspace_home_exists( string $raw ): bool {
-		$parts = explode( ':', $raw, 2 );
-		if ( 2 !== count( $parts ) ) {
-			return false;
-		}
-
-		$id = (int) $parts[1];
+	private function workspace_home_exists( mixed $raw ): bool {
+		$id = $this->stored_preference_target_id( $raw );
 		if ( $id <= 0 ) {
 			return false;
 		}
@@ -3968,6 +3975,11 @@ final class SeedDummyCollections {
 			return false;
 		}
 
+		if ( is_int( $raw ) || ( is_string( $raw ) && ctype_digit( $raw ) ) ) {
+			return Document::POST_TYPE === $post->post_type;
+		}
+
+		$parts = explode( ':', (string) $raw, 2 );
 		if ( 'page' === $parts[0] ) {
 			return Document::POST_TYPE === $post->post_type && ! Document::is_collection( $id );
 		}
@@ -4003,7 +4015,7 @@ final class SeedDummyCollections {
 			$kind = $candidate[0];
 			$id   = (int) $candidate[1];
 			$key  = "{$kind}:{$id}";
-			if ( $id < 1 || isset( $seen[ $key ] ) || ! $this->workspace_home_exists( $key ) ) {
+			if ( $id < 1 || isset( $seen[ $key ] ) || ! $this->active_seed_preference_target_exists( $key ) ) {
 				continue;
 			}
 
@@ -4034,12 +4046,46 @@ final class SeedDummyCollections {
 		}
 
 		foreach ( $raw as $favorite ) {
-			if ( is_string( $favorite ) && $this->workspace_home_exists( $favorite ) ) {
+			if ( $this->workspace_home_exists( $favorite ) ) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * Checks a new seeded preference without invalidating an archived value
+	 * the user already saved.
+	 *
+	 * @param string $raw Preference key in `kind:id` form.
+	 */
+	private function active_seed_preference_target_exists( string $raw ): bool {
+		if ( ! $this->workspace_home_exists( $raw ) ) {
+			return false;
+		}
+
+		return Documents::STATUS_ARCHIVED !== get_post_status( $this->stored_preference_target_id( $raw ) );
+	}
+
+	/**
+	 * Reads canonical integer IDs and the old `kind:id` preference format.
+	 *
+	 * @param mixed $raw Stored preference value.
+	 */
+	private function stored_preference_target_id( mixed $raw ): int {
+		if ( is_int( $raw ) ) {
+			return $raw;
+		}
+		if ( ! is_string( $raw ) || '' === $raw ) {
+			return 0;
+		}
+		if ( ctype_digit( $raw ) ) {
+			return (int) $raw;
+		}
+
+		$parts = explode( ':', $raw, 2 );
+		return 2 === count( $parts ) ? (int) $parts[1] : 0;
 	}
 
 	private function find_seeded_page_id( string $title ): int {
@@ -4927,6 +4973,11 @@ final class SeedDummyCollections {
 				$this->update_entry_content( $existing_entry_id, $entry_content );
 				$this->maybe_apply_row_icon( $existing_entry_id, $spec['slug'], $entry_title );
 				$this->maybe_apply_row_cover( $existing_entry_id, $spec['slug'], $entry_title );
+				$this->archive_seeded_descendant_if_needed(
+					$existing_entry_id,
+					(int) $collection_id,
+					ArchiveCascade::COLLECTION_MARKER_META
+				);
 				$this->log( "Entry '{$entry_title}' already exists. Skipping." );
 				continue;
 			}
@@ -4972,11 +5023,50 @@ final class SeedDummyCollections {
 
 				update_post_meta( $entry_id, "field-{$field_id}", $value );
 			}
+			$this->archive_seeded_descendant_if_needed(
+				(int) $entry_id,
+				(int) $collection_id,
+				ArchiveCascade::COLLECTION_MARKER_META
+			);
 
 			$this->log( "Created entry '{$entry_title}' (ID {$entry_id})." );
 		}
 
 		return (int) $collection_id;
+	}
+
+	/**
+	 * Keeps a seeded document in the same lifecycle state as its container.
+	 *
+	 * The marker is written before the status change so restoring the container
+	 * brings this document back with the rest of its cascade.
+	 *
+	 * @param int    $document_id Document being seeded.
+	 * @param int    $container_id Parent page or collection ID.
+	 * @param string $marker_key Archive marker for this relationship.
+	 */
+	private function archive_seeded_descendant_if_needed( int $document_id, int $container_id, string $marker_key ): void {
+		if (
+			$document_id < 1
+			|| $container_id < 1
+			|| Documents::STATUS_ARCHIVED !== get_post_status( $container_id )
+			|| Documents::STATUS_ARCHIVED === get_post_status( $document_id )
+		) {
+			return;
+		}
+
+		update_post_meta( $document_id, $marker_key, $container_id );
+		$result = wp_update_post(
+			array(
+				'ID'          => $document_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			),
+			true
+		);
+		if ( $result instanceof \WP_Error || 0 === $result ) {
+			delete_post_meta( $document_id, $marker_key );
+			$this->error( "Could not archive seeded document {$document_id} with its container." );
+		}
 	}
 
 	/**
