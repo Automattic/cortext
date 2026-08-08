@@ -16,6 +16,7 @@ use Cortext\Block\DataView;
 use Cortext\Editor\DocumentCoverBlock;
 use Cortext\Editor\DocumentIconBlock;
 use Cortext\Editor\DocumentPropertiesBlock;
+use Cortext\Editor\RevisionMetaFormat;
 use Cortext\Editor\RevisionThrottle;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Frontend\AdminBar;
@@ -37,6 +38,7 @@ use Cortext\Notion\Importer as NotionImporter;
 use Cortext\Rest\NotionController;
 use Cortext\Rest\PostLocksController;
 use Cortext\Rest\RecentsController;
+use Cortext\Rest\RestoreRevisionController;
 use Cortext\Rest\RowsController;
 use Cortext\Rest\SampleContentController;
 use Cortext\Rest\SidebarTreePreferencesController;
@@ -70,6 +72,7 @@ final class Plugin {
 		$trash_cascade = new TrashCascade();
 		$trash_cascade->register();
 
+		( new RevisionMetaFormat() )->register();
 		( new RevisionThrottle() )->register();
 		( new DocumentIconBlock() )->register();
 		( new DocumentCoverBlock() )->register();
@@ -79,6 +82,7 @@ final class Plugin {
 		( new BacklinksController() )->register();
 		( new DocumentLocatorController() )->register();
 		( new DocumentsController( null, $trash_cascade ) )->register();
+		( new RestoreRevisionController() )->register();
 		( new ExperimentsController() )->register();
 		( new PostLocksController() )->register();
 		( new RecentsController() )->register();

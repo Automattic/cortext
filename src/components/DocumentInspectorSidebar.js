@@ -49,6 +49,13 @@ import MediaPicker, { MediaUploadCheck } from './MediaPicker';
 import DocumentIcon from './DocumentIcon';
 import DocumentIdentityControls from './DocumentIdentityControls';
 import { SkeletonBlock } from './Skeleton';
+import RevisionPropertiesDiff from './RevisionPropertiesDiff';
+import {
+	BLOCK_INSPECTOR,
+	DOCUMENT_INSPECTOR,
+	INSPECTOR_SCOPE,
+	isInspectorArea,
+} from './editorPanelConstants';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
@@ -65,16 +72,19 @@ import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
+import {
+	useRevisionControls,
+	useRevisionedDocumentIdentity,
+} from '../hooks/useRevisions';
 
 const { Tabs } = unlock( componentsPrivateApis );
 
-export const INSPECTOR_SCOPE = 'cortext';
-export const DOCUMENT_INSPECTOR = 'cortext/document-inspector';
-export const BLOCK_INSPECTOR = 'cortext/block-inspector';
-
-export function isInspectorArea( area ) {
-	return area === DOCUMENT_INSPECTOR || area === BLOCK_INSPECTOR;
-}
+export {
+	BLOCK_INSPECTOR,
+	DOCUMENT_INSPECTOR,
+	INSPECTOR_SCOPE,
+	isInspectorArea,
+} from './editorPanelConstants';
 
 export function getActiveInspectorArea( select ) {
 	try {
@@ -203,7 +213,11 @@ function InspectorToolGroup( { label, children } ) {
 
 function DocumentIconInspectorControls( { postId, postType } ) {
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const iconMeta = meta?.cortext_document_icon ?? '';
+	const { iconMeta } = useRevisionedDocumentIdentity( {
+		postId,
+		postType,
+		meta,
+	} );
 	const { coverIndex, hasCoverBlock, iconBlockId } = useSelect(
 		( select ) => {
 			const blocks = select( blockEditorStore ).getBlocks();
@@ -334,10 +348,15 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 		'featured_media',
 		postId
 	);
+	const { featuredId: displayFeaturedId } = useRevisionedDocumentIdentity( {
+		postId,
+		postType,
+		featuredId,
+	} );
 	const { record: media, isResolving: isResolvingMedia } = useEntityRecord(
 		'root',
 		'media',
-		featuredId || 0
+		displayFeaturedId || 0
 	);
 	const coverBlockId = useSelect(
 		( select ) =>
@@ -442,7 +461,7 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 
 	return (
 		<InspectorToolGroup label={ __( 'Featured image', 'cortext' ) }>
-			{ featuredId > 0 ? (
+			{ displayFeaturedId > 0 ? (
 				<div className="cortext-document-inspector__featured-image-preview">
 					{ featuredImagePreview }
 				</div>
@@ -452,7 +471,7 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 					<MediaPicker
 						allowedTypes={ [ 'image' ] }
 						postId={ postId }
-						value={ featuredId }
+						value={ displayFeaturedId }
 						onSelect={ setFeaturedImage }
 						render={ ( { open } ) => (
 							<Button
@@ -462,14 +481,14 @@ function PageFeaturedImageInspectorControls( { postId, postType } ) {
 								disabled={ isSaving }
 								__next40pxDefaultSize
 							>
-								{ featuredId > 0
+								{ displayFeaturedId > 0
 									? __( 'Change', 'cortext' )
 									: __( 'Add', 'cortext' ) }
 							</Button>
 						) }
 					/>
 				</MediaUploadCheck>
-				{ featuredId > 0 ? (
+				{ displayFeaturedId > 0 ? (
 					<Button
 						variant="tertiary"
 						isDestructive
@@ -711,6 +730,22 @@ function CollectionInspectorContent( { postId, postType } ) {
 	);
 }
 
+// Revision inspector: the identity the revision carried, then the properties
+// that changed against the previous revision. Documents without property
+// fields still get the identity panel, so the tab is never empty.
+function RevisionInspectorContent( { postId, postType } ) {
+	return (
+		<div className="cortext-document-inspector">
+			<PageIdentityInspectorPanel
+				postId={ postId }
+				postType={ postType }
+				title={ __( 'Identity', 'cortext' ) }
+			/>
+			<RevisionPropertiesDiff />
+		</div>
+	);
+}
+
 // Row inspector for property actions. Values stay in the document block; the
 // sidebar handles visibility and field creation.
 function RowInspectorContent( { postId } ) {
@@ -740,7 +775,10 @@ export default function DocumentInspectorSidebar( {
 	const hasTrait =
 		Array.isArray( currentRecord?.crtxt_trait ) &&
 		currentRecord.crtxt_trait.length > 0;
-	const documentTabLabel = __( 'Document', 'cortext' );
+	const { isRevisionsMode } = useRevisionControls( { postId, postType } );
+	const documentTabLabel = isRevisionsMode
+		? __( 'Revision', 'cortext' )
+		: __( 'Document', 'cortext' );
 	const isTrashed = useSelect(
 		( select ) =>
 			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
@@ -751,7 +789,8 @@ export default function DocumentInspectorSidebar( {
 		( select ) => select( editorStore ).isPostLocked?.() ?? false,
 		[]
 	);
-	const isReadOnly = isTrashed || isLocked || isStoreLocked;
+	const isReadOnly =
+		isTrashed || isLocked || isStoreLocked || isRevisionsMode;
 	const activeArea = useSelect(
 		( select ) => getActiveInspectorArea( select ),
 		[]
@@ -762,6 +801,9 @@ export default function DocumentInspectorSidebar( {
 	const isCanvasOwnerSelected = useIsCanvasOwnerSelected( postType, postId );
 	const showBlockTab = useSelect(
 		( select ) => {
+			if ( isRevisionsMode ) {
+				return false;
+			}
 			const store = select( blockEditorStore );
 			const clientId = store.getSelectedBlockClientId();
 			if ( ! clientId ) {
@@ -774,7 +816,7 @@ export default function DocumentInspectorSidebar( {
 				store.getBlockName( clientId ) !== 'cortext/document-properties'
 			);
 		},
-		[ isCanvasOwnerSelected ]
+		[ isCanvasOwnerSelected, isRevisionsMode ]
 	);
 	const selectedTabId =
 		isInspectorArea( activeArea ) &&
@@ -816,17 +858,26 @@ export default function DocumentInspectorSidebar( {
 				tabs={ tabs }
 			>
 				<InspectorFrame isLocked={ isReadOnly }>
-					{ isCollection && (
-						<CollectionInspectorContent
+					{ isRevisionsMode ? (
+						<RevisionInspectorContent
 							postId={ postId }
 							postType={ postType }
 						/>
-					) }
-					{ ! isCollection && hasTrait && (
-						<RowInspectorContent postId={ postId } />
-					) }
-					{ ! isCollection && ! hasTrait && (
-						<DocumentInspectorContent postId={ postId } />
+					) : (
+						<>
+							{ isCollection && (
+								<CollectionInspectorContent
+									postId={ postId }
+									postType={ postType }
+								/>
+							) }
+							{ ! isCollection && hasTrait && (
+								<RowInspectorContent postId={ postId } />
+							) }
+							{ ! isCollection && ! hasTrait && (
+								<DocumentInspectorContent postId={ postId } />
+							) }
+						</>
 					) }
 				</InspectorFrame>
 			</InspectorComplementaryArea>
