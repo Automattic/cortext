@@ -26,6 +26,7 @@ use Cortext\Media\CortextMedia;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
+use Cortext\PostType\Template as TemplatePostType;
 use Cortext\PostType\TrashCascade;
 use Cortext\Rest\BacklinksController;
 use Cortext\Rest\DocumentLocatorController;
@@ -40,6 +41,7 @@ use Cortext\Rest\RecentsController;
 use Cortext\Rest\RowsController;
 use Cortext\Rest\SampleContentController;
 use Cortext\Rest\SidebarTreePreferencesController;
+use Cortext\Rest\TemplatesController;
 use Cortext\Rest\WorkspaceHomeController;
 use Cortext\Taxonomy\MentionTaxonomy;
 use Cortext\Taxonomy\TraitTaxonomy;
@@ -57,12 +59,15 @@ final class Plugin {
 	}
 
 	public function boot(): void {
+		add_filter( 'cortext_experiments', array( $this, 'register_experiments' ) );
+
 		( new Screen() )->register();
 		( new Document() )->register();
 		( new DocumentIdentity() )->register();
 		( new TraitTaxonomy() )->register();
 		( new MentionTaxonomy() )->register();
 		( new Field() )->register();
+		( new TemplatePostType() )->register();
 		( new FieldValueIndex() )->register();
 
 		// Single instance owns every trash cascade hook and also answers
@@ -85,6 +90,7 @@ final class Plugin {
 		( new RowsController() )->register();
 		( new SampleContentController() )->register();
 		( new SidebarTreePreferencesController() )->register();
+		( new TemplatesController() )->register();
 		( new WorkspaceHomeController() )->register();
 		( new NotionController() )->register();
 		( new NotionImporter() )->register();
@@ -95,6 +101,18 @@ final class Plugin {
 		( new DataView() )->register();
 		( new CortextMedia() )->register();
 		( new Preferences() )->register();
+	}
+
+	public function register_experiments( array $experiments ): array {
+		$experiments[] = array(
+			'id'          => Templates::EXPERIMENT_ID,
+			'label'       => __( 'Templates', 'cortext' ),
+			'description' => __( 'Start documents and collection rows from saved templates.', 'cortext' ),
+			'group'       => __( 'Content', 'cortext' ),
+			'default'     => false,
+		);
+
+		return $experiments;
 	}
 
 	private function __construct() {}
