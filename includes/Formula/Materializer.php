@@ -12,6 +12,7 @@ namespace Cortext\Formula;
 // phpcs:disable Generic.Commenting.DocComment.MissingShort
 // phpcs:disable Squiz.Commenting.FunctionComment.MissingParamTag,Squiz.Commenting.FunctionComment.ParamNameNoMatch,Squiz.Commenting.FunctionComment.IncorrectTypeHint,Squiz.Commenting.FunctionCommentThrowTag.Missing,Squiz.Commenting.FunctionComment.SpacingAfterParamType
 
+use Cortext\Documents;
 use Cortext\PostType\Document;
 use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
@@ -148,7 +149,7 @@ final class Materializer {
 				if (
 					is_object( $post ) &&
 					Document::POST_TYPE === $post->post_type &&
-					in_array( $post->post_status, array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ), true )
+					in_array( $post->post_status, array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit', Documents::STATUS_ARCHIVED ), true )
 				) {
 					$term_ids = wp_get_object_terms( (int) $post->ID, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) );
 					if ( is_array( $term_ids ) && in_array( $term_id, array_map( 'intval', $term_ids ), true ) ) {
@@ -163,7 +164,7 @@ final class Materializer {
 			get_posts(
 				array(
 					'post_type'      => Document::POST_TYPE,
-					'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
+					'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit', Documents::STATUS_ARCHIVED ),
 					'posts_per_page' => -1,
 					'fields'         => 'ids',
 					'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query

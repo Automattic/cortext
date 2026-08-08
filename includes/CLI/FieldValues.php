@@ -11,6 +11,7 @@ namespace Cortext\CLI;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
@@ -169,7 +170,7 @@ final class FieldValues {
 			get_posts(
 				array(
 					'post_type'      => Document::POST_TYPE,
-					'post_status'    => array( 'draft', 'private', 'publish' ),
+					'post_status'    => array( 'draft', 'private', 'publish', Documents::STATUS_ARCHIVED ),
 					'fields'         => 'ids',
 					'posts_per_page' => -1,
 					// A document is a collection when its mirror term exists. An

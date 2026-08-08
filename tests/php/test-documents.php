@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\Documents;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -39,6 +40,7 @@ final class Test_Documents extends BaseTestCase {
 		add_action( 'deleted_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
 		add_action( 'before_delete_post', array( $trait_taxonomy, 'sync_term_on_delete' ), 10, 2 );
 		( new Field() )->register_post_type();
+		( new ArchiveCascade() )->register_status();
 
 		$this->install_in_memory_term_store();
 		$this->install_in_memory_posts_query();
@@ -378,6 +380,34 @@ final class Test_Documents extends BaseTestCase {
 		$by_id = array_column( $result['documents'], null, 'id' );
 		$this->assertArrayHasKey( 'meta', $by_id[ $trashed ] );
 		$this->assertArrayHasKey( TrashCascade::PARENT_MARKER_META, $by_id[ $trashed ]['meta'] );
+	}
+
+	public function test_format_target_hides_archived_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id = $this->create_page( array( 'post_status' => Documents::STATUS_ARCHIVED ) );
+
+		$result = $this->documents->format_target( $page_id );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_document_target_hidden', $result->get_error_code() );
+		$this->assertSame( 404, $result->get_error_data()['status'] );
+	}
+
+	public function test_format_target_hides_row_when_its_collection_is_archived(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'archived-projects', 'Archived projects' );
+		$row_id        = $this->create_row( $collection_id, 'Still active' );
+		wp_update_post(
+			array(
+				'ID'          => $collection_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$result = $this->documents->format_target( $row_id );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_document_target_hidden', $result->get_error_code() );
 	}
 
 	public function test_list_excludes_trashed_documents(): void {

@@ -19,10 +19,12 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Formula\Compiler as FormulaCompiler;
 use Cortext\Formula\Functions as FormulaFunctions;
 use Cortext\Formula\Materializer as FormulaMaterializer;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -604,6 +606,26 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 20.0, $data['rows'][0]['meta'][ "field-{$formula_id}" ] );
+		$this->assertSame( 20.0, (float) get_post_meta( $row_id, "field-{$formula_id}", true ) );
+	}
+
+	public function test_recomputing_collection_formulas_includes_archived_rows(): void {
+		( new ArchiveCascade() )->register_status();
+
+		$fixture    = $this->create_collection_fixture( 'formula-archived', 'number' );
+		$row_id     = $this->create_row_fixture(
+			$fixture['collection_id'],
+			'Archived invoice',
+			Documents::STATUS_ARCHIVED,
+			array( "field-{$fixture['field_id']}" => '10' )
+		);
+		$formula_id = $this->create_formula_field(
+			$fixture['collection_id'],
+			'Total',
+			'field("Score") * 2'
+		);
+
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $row_id ) );
 		$this->assertSame( 20.0, (float) get_post_meta( $row_id, "field-{$formula_id}", true ) );
 	}
 

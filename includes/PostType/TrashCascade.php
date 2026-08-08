@@ -49,7 +49,7 @@ final class TrashCascade {
 	 */
 	public const COLLECTION_MARKER_META = '_cortext_trashed_by_collection';
 
-	private const ACTIVE_STATUSES = array( 'publish', 'private', 'draft', 'pending', 'future', 'auto-draft' );
+	private const ACTIVE_STATUSES = array( 'publish', 'private', 'draft', 'pending', 'future', 'auto-draft', Documents::STATUS_ARCHIVED );
 
 	private DocumentCascade $cascade;
 

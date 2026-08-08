@@ -119,6 +119,9 @@ final class RecentsController {
 		foreach ( $items as $item ) {
 			$target = $this->documents->format_target( $item['id'] );
 			if ( is_wp_error( $target ) ) {
+				if ( 'cortext_document_target_hidden' === $target->get_error_code() ) {
+					$valid[] = $item;
+				}
 				continue;
 			}
 

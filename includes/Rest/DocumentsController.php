@@ -2,8 +2,8 @@
 /**
  * REST endpoints for Cortext documents.
  *
- * Handles listing, restore, permanent delete, duplicate, and collection
- * create through the `Documents` service.
+ * Handles listing, archive, restore, permanent delete, duplicate, and
+ * collection create through the `Documents` service.
  *
  * Restore and permanent-delete walk descendants via `TrashCascade` so the
  * subtree moves with its root. Single-resource reads still go through
@@ -19,6 +19,7 @@ namespace Cortext\Rest;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Documents;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\TrashCascade;
 use Cortext\Rest\RowsManualOrder;
@@ -35,9 +36,16 @@ final class DocumentsController {
 
 	private TrashCascade $cascade;
 
-	public function __construct( ?Documents $documents = null, ?TrashCascade $cascade = null ) {
-		$this->documents = $documents ?? new Documents();
-		$this->cascade   = $cascade ?? new TrashCascade();
+	private ArchiveCascade $archive_cascade;
+
+	public function __construct(
+		?Documents $documents = null,
+		?TrashCascade $cascade = null,
+		?ArchiveCascade $archive_cascade = null
+	) {
+		$this->documents       = $documents ?? new Documents();
+		$this->cascade         = $cascade ?? new TrashCascade();
+		$this->archive_cascade = $archive_cascade ?? new ArchiveCascade();
 	}
 
 	public function register(): void {
@@ -61,7 +69,7 @@ final class DocumentsController {
 						'status'   => array(
 							'type'    => 'string',
 							'default' => '',
-							'enum'    => array( '', Documents::STATUS_TRASH ),
+							'enum'    => array( '', Documents::STATUS_ARCHIVED, Documents::STATUS_TRASH ),
 						),
 						'page'     => array(
 							'type'    => 'integer',
@@ -83,6 +91,32 @@ final class DocumentsController {
 				'type'     => 'integer',
 				'required' => true,
 			),
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/documents/(?P<id>\d+)/archive',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'archive' ),
+					'permission_callback' => array( $this, 'check_archive_permission' ),
+					'args'                => $id_arg,
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/documents/(?P<id>\d+)/unarchive',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'unarchive' ),
+					'permission_callback' => array( $this, 'check_unarchive_permission' ),
+					'args'                => $id_arg,
+				),
+			)
 		);
 
 		register_rest_route(
@@ -181,7 +215,7 @@ final class DocumentsController {
 				'status'          => '' === $status ? null : $status,
 				'page'            => (int) $request->get_param( 'page' ),
 				'per_page'        => (int) $request->get_param( 'per_page' ),
-				'include_excerpt' => Documents::STATUS_TRASH !== $status,
+				'include_excerpt' => ! in_array( $status, array( Documents::STATUS_ARCHIVED, Documents::STATUS_TRASH ), true ),
 			)
 		);
 
@@ -218,6 +252,85 @@ final class DocumentsController {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Checks permission to archive a document and its active descendants.
+	 *
+	 * Archive does not delete the document, so it requires edit permission
+	 * rather than the delete permission used by Trash.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return bool|WP_Error
+	 */
+	public function check_archive_permission( WP_REST_Request $request ) {
+		$id   = (int) $request->get_param( 'id' );
+		$post = get_post( $id );
+
+		if ( ! $post instanceof WP_Post || ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return $this->archive_cascade->current_user_can_archive( $id );
+	}
+
+	/**
+	 * Checks permission to restore an archived document and its descendants.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return bool|WP_Error
+	 */
+	public function check_unarchive_permission( WP_REST_Request $request ) {
+		$id   = (int) $request->get_param( 'id' );
+		$post = get_post( $id );
+
+		if ( ! $post instanceof WP_Post || ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return $this->archive_cascade->current_user_can_unarchive( $id );
+	}
+
+	public function archive( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$id       = (int) $request->get_param( 'id' );
+		$archived = $this->archive_cascade->archive( $id );
+		if ( $archived instanceof WP_Error ) {
+			return $archived;
+		}
+
+		$post = get_post( $id );
+		return new WP_REST_Response(
+			array(
+				'archived' => $archived,
+				'post'     => $post instanceof WP_Post ? $this->prepared_post( $post ) : null,
+			),
+			200
+		);
+	}
+
+	public function unarchive( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$id       = (int) $request->get_param( 'id' );
+		$restored = $this->archive_cascade->unarchive( $id );
+		if ( $restored instanceof WP_Error ) {
+			return $restored;
+		}
+
+		$post = get_post( $id );
+		return new WP_REST_Response(
+			array(
+				'restored' => $restored,
+				'post'     => $post instanceof WP_Post ? $this->prepared_post( $post ) : null,
+			),
+			200
+		);
 	}
 
 	public function restore( WP_REST_Request $request ) {

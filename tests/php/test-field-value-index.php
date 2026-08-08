@@ -9,10 +9,13 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\FieldValues\FieldValueStore;
+use Cortext\PostType\Document;
 use Cortext\Relations;
 use WorDBless\BaseTestCase;
+use WP_Post;
 
 final class Test_Field_Value_Index extends BaseTestCase {
 
@@ -131,6 +134,72 @@ final class Test_Field_Value_Index extends BaseTestCase {
 				'field_id' => 202,
 			),
 			$pending['101:202']
+		);
+	}
+
+	public function test_registers_status_sync_for_every_post_status_transition(): void {
+		$index = new FieldValueIndex();
+
+		$index->register();
+
+		$this->assertSame( 20, has_action( 'transition_post_status', array( $index, 'sync_row_status' ) ) );
+		$this->assertFalse( has_action( 'wp_trash_post', array( $index, 'sync_row_status' ) ) );
+		$this->assertFalse( has_action( 'untrashed_post', array( $index, 'sync_row_status' ) ) );
+		remove_action( 'transition_post_status', array( $index, 'sync_row_status' ), 20 );
+	}
+
+	public function test_status_transition_updates_indexed_row_status(): void {
+		$index      = new FieldValueIndex();
+		$reflection = new \ReflectionClass( FieldValueIndex::class );
+
+		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
+		update_option( 'cortext_field_values_schema_version', 2, false );
+
+		$table_cache = $reflection->getProperty( 'table_exists_cache' );
+		$table_cache->setAccessible( true );
+		$table_cache->setValue( null, array( $index->table_name() => true ) );
+
+		$collection_cache = $reflection->getProperty( 'collection_id_by_row_cache' );
+		$collection_cache->setAccessible( true );
+		$collection_cache->setValue( null, array( 101 => 202 ) );
+
+		$updates = array();
+		$capture = static function ( $result, $table, $data, $where ) use ( &$updates, $index ) {
+			if ( $index->table_name() === $table ) {
+				$updates[] = array(
+					'data'  => $data,
+					'where' => $where,
+				);
+				return 1;
+			}
+			return $result;
+		};
+		add_filter( 'wordbless_wpdb_update', $capture, 10, 4 );
+
+		$index->register();
+		do_action(
+			'transition_post_status',
+			Documents::STATUS_ARCHIVED,
+			'private',
+			new WP_Post(
+				(object) array(
+					'ID'          => 101,
+					'post_type'   => Document::POST_TYPE,
+					'post_status' => Documents::STATUS_ARCHIVED,
+				)
+			)
+		);
+		remove_action( 'transition_post_status', array( $index, 'sync_row_status' ), 20 );
+		remove_filter( 'wordbless_wpdb_update', $capture, 10 );
+
+		$this->assertSame(
+			array(
+				array(
+					'data'  => array( 'post_status' => Documents::STATUS_ARCHIVED ),
+					'where' => array( 'row_id' => 101 ),
+				),
+			),
+			$updates
 		);
 	}
 

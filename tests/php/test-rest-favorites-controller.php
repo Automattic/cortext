@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -271,6 +272,129 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 			array( $kept_row ),
 			get_user_meta( $user_id, self::META_KEY, true )
 		);
+	}
+
+	public function test_get_hides_archived_favorite_without_pruning_it(): void {
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		$page_id = $this->create_page();
+		$this->set_favorites( array( array( 'id' => $page_id ) ) );
+
+		wp_update_post(
+			array(
+				'ID'          => $page_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = $this->get_favorites();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $response->get_data()['favorites'] );
+		$this->assertSame( array( $page_id ), get_user_meta( $user_id, self::META_KEY, true ) );
+
+		wp_update_post(
+			array(
+				'ID'          => $page_id,
+				'post_status' => 'private',
+			)
+		);
+
+		$this->assertSame(
+			array( $page_id ),
+			array_column( $this->get_favorites()->get_data()['favorites'], 'id' )
+		);
+	}
+
+	public function test_update_keeps_an_archived_favorite_in_its_original_position(): void {
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		$page_a = $this->create_page( array( 'post_name' => 'a' ) );
+		$page_b = $this->create_page( array( 'post_name' => 'b' ) );
+		$page_c = $this->create_page( array( 'post_name' => 'c' ) );
+		$page_d = $this->create_page( array( 'post_name' => 'd' ) );
+		$this->set_favorites(
+			array(
+				array( 'id' => $page_b ),
+				array( 'id' => $page_a ),
+				array( 'id' => $page_c ),
+			)
+		);
+
+		wp_update_post(
+			array(
+				'ID'          => $page_a,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = $this->set_favorites(
+			array(
+				array( 'id' => $page_c ),
+				array( 'id' => $page_b ),
+				array( 'id' => $page_d ),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array( $page_c, $page_b, $page_d ),
+			array_column( $response->get_data()['favorites'], 'id' )
+		);
+		$this->assertSame(
+			array( $page_c, $page_a, $page_b, $page_d ),
+			get_user_meta( $user_id, self::META_KEY, true )
+		);
+
+		wp_update_post(
+			array(
+				'ID'          => $page_a,
+				'post_status' => 'private',
+			)
+		);
+
+		$this->assertSame(
+			array( $page_c, $page_a, $page_b, $page_d ),
+			array_column( $this->get_favorites()->get_data()['favorites'], 'id' )
+		);
+	}
+
+	public function test_update_accepts_an_archived_favorite_from_a_stale_client(): void {
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		$page_id = $this->create_page();
+		$this->set_favorites( array( array( 'id' => $page_id ) ) );
+		wp_update_post(
+			array(
+				'ID'          => $page_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = $this->set_favorites( array( array( 'id' => $page_id ) ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $response->get_data()['favorites'] );
+		$this->assertSame( array( $page_id ), get_user_meta( $user_id, self::META_KEY, true ) );
+	}
+
+	public function test_update_rejects_a_new_archived_favorite_owned_by_another_user(): void {
+		$owner_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $owner_id );
+		$page_id = $this->create_page(
+			array(
+				'post_author' => $owner_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$user_id = $this->create_user( 'contributor' );
+		wp_set_current_user( $user_id );
+		$response = $this->set_favorites( array( array( 'id' => $page_id ) ) );
+
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'cortext_document_target_hidden', $response->get_data()['code'] );
+		$this->assertSame( '', get_user_meta( $user_id, self::META_KEY, true ) );
 	}
 
 	public function test_get_migrates_legacy_kind_id_string_shape(): void {
