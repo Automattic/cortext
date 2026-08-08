@@ -2,7 +2,9 @@
 
 # Cortext
 
-[Try in WordPress Playground](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/Automattic/cortext/main/assets/wordpress-org/blueprints/blueprint.json)
+**Try Cortext:** [![Playground demo](https://img.shields.io/badge/Playground-demo-3858E9?logo=wordpress&logoColor=white&style=flat-square)](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/Automattic/cortext/main/assets/wordpress-org/blueprints/blueprint.json) [![Open in WordPress Studio](https://img.shields.io/badge/Open_in-WordPress_Studio-3858E9?logo=wordpress&logoColor=white&style=flat-square)](https://wp.com/open?deep_link=add-site%3Fblueprint_url%3Dhttps%253A%252F%252Fraw.githubusercontent.com%252FAutomattic%252Fcortext%252Fmain%252Fassets%252Fwordpress-org%252Fblueprints%252Fblueprint.json)<br>
+**WordPress plugin:** [![Version](https://img.shields.io/wordpress/plugin/v/cortext?label=version&style=flat-square)](https://wordpress.org/plugins/cortext/) [![Requires WordPress](https://img.shields.io/wordpress/plugin/wp-version/cortext?label=WordPress&logo=wordpress&logoColor=white&style=flat-square)](https://wordpress.org/plugins/cortext/) [![Requires PHP](https://img.shields.io/wordpress/plugin/required-php/cortext?label=PHP&logo=php&logoColor=white&style=flat-square)](https://wordpress.org/plugins/cortext/) [![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue?style=flat-square)](LICENSE) [![Download Cortext from WordPress.org](https://img.shields.io/badge/Download-WordPress.org-21759B?logo=wordpress&logoColor=white&style=flat-square)](https://wordpress.org/plugins/cortext/)<br>
+**Desktop app:** [![Download Cortext for macOS on Apple Silicon](https://img.shields.io/badge/macOS-Apple_Silicon-000000?logo=apple&logoColor=white&style=flat-square)](https://github.com/Automattic/cortext/releases/latest)
 
 > [!WARNING]
 > Cortext is an early beta. Try it somewhere low-stakes first.
