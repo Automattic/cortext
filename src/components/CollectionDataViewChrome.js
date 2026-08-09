@@ -154,18 +154,24 @@ export function DataViewsSelectionFooter( {
 	}
 
 	return (
-		<HStack expanded={ false } justify="end" className="dataviews-footer">
-			{ showBulkControls ? (
-				<DataViewsBulkSelectionControls
-					selectedIds={ selectedIds }
-					visibleIds={ visibleIds }
-					onClearSelection={ onClearSelection }
-					onDeleteSelected={ onDeleteSelected }
-					onToggleVisibleSelection={ onToggleVisibleSelection }
-				/>
-			) : null }
-			<DataViews.Pagination />
-		</HStack>
+		<div className="dataviews-footer">
+			<HStack
+				alignment="center"
+				justify="end"
+				className="dataviews-footer__content"
+			>
+				{ showBulkControls ? (
+					<DataViewsBulkSelectionControls
+						selectedIds={ selectedIds }
+						visibleIds={ visibleIds }
+						onClearSelection={ onClearSelection }
+						onDeleteSelected={ onDeleteSelected }
+						onToggleVisibleSelection={ onToggleVisibleSelection }
+					/>
+				) : null }
+				<DataViews.Pagination />
+			</HStack>
+		</div>
 	);
 }
 
