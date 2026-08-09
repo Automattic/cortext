@@ -90,11 +90,11 @@ export default function useLifecycleTabFocusIntent() {
 				originElement: event.target,
 			};
 			activationRef.current = activation;
-			afterCurrentActivation( () => {
+			window.setTimeout( () => {
 				if ( activationRef.current === activation ) {
 					activationRef.current = null;
 				}
-			} );
+			}, 0 );
 		};
 		const handlePointerDown = () => {
 			activationRef.current = null;

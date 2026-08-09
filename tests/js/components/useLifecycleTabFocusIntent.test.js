@@ -37,6 +37,52 @@ describe( 'useLifecycleTabFocusIntent', () => {
 		origin.remove();
 	} );
 
+	it( 'keeps keyboard activation through a microtask checkpoint', async () => {
+		jest.useFakeTimers();
+		const origin = makeButton();
+		origin.focus();
+		const { result } = renderHook( () => useLifecycleTabFocusIntent() );
+		let intent;
+
+		try {
+			act( () => dispatchClick( origin, 0 ) );
+			await act( async () => Promise.resolve() );
+			act( () => {
+				intent = result.current.capture( { id: 7 } );
+			} );
+
+			expect( intent ).toEqual(
+				expect.objectContaining( {
+					documentId: 7,
+					originElement: origin,
+				} )
+			);
+			expect( result.current.consume( intent ) ).toBe( true );
+		} finally {
+			act( () => jest.runOnlyPendingTimers() );
+			jest.useRealTimers();
+			origin.remove();
+		}
+	} );
+
+	it( 'expires keyboard activation in the next macrotask', () => {
+		jest.useFakeTimers();
+		const origin = makeButton();
+		const { result } = renderHook( () => useLifecycleTabFocusIntent() );
+
+		try {
+			act( () => {
+				dispatchClick( origin, 0 );
+				jest.runOnlyPendingTimers();
+			} );
+
+			expect( result.current.capture( { id: 7 } ) ).toBeNull();
+		} finally {
+			jest.useRealTimers();
+			origin.remove();
+		}
+	} );
+
 	it( 'does not create an intent for pointer activation', () => {
 		const origin = makeButton();
 		const { result } = renderHook( () => useLifecycleTabFocusIntent() );
