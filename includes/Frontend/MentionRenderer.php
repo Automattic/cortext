@@ -11,6 +11,7 @@ namespace Cortext\Frontend;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\Mention\Mention;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
@@ -193,7 +194,7 @@ final class MentionRenderer {
 		if ( ! $post instanceof WP_Post ) {
 			return false;
 		}
-		if ( 'trash' === $post->post_status ) {
+		if ( in_array( $post->post_status, array( Documents::STATUS_TRASH, Documents::STATUS_ARCHIVED ), true ) ) {
 			return false;
 		}
 		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {

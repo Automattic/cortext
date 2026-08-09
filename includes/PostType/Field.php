@@ -11,6 +11,7 @@ namespace Cortext\PostType;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeRegistry;
 use WP_Error;
@@ -213,7 +214,7 @@ final class Field {
 		$owner_ids    = get_posts(
 			array(
 				'post_type'      => Document::POST_TYPE,
-				'post_status'    => array( 'draft', 'private', 'publish', 'trash' ),
+				'post_status'    => array( 'draft', 'private', 'publish', 'trash', Documents::STATUS_ARCHIVED ),
 				'fields'         => 'ids',
 				'posts_per_page' => -1,
 				'no_found_rows'  => true,

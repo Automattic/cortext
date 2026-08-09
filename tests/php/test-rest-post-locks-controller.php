@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\Rest\PostLocksController;
@@ -115,6 +116,22 @@ final class Test_Rest_Post_Locks_Controller extends BaseTestCase {
 
 		$this->assertSame( 409, $response->get_status() );
 		$this->assertSame( 'cortext_document_in_trash', $response->as_error()->get_error_code() );
+	}
+
+	public function test_rejects_archived_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$post_id = $this->create_document();
+		wp_update_post(
+			array(
+				'ID'          => $post_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = $this->lock( $post_id );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'cortext_document_archived', $response->as_error()->get_error_code() );
 	}
 
 	public function test_rejects_user_without_edit_permission(): void {

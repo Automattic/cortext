@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -231,6 +232,39 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array(), $response->get_data()['recents'] );
+	}
+
+	public function test_get_hides_archived_recent_without_pruning_it(): void {
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		$page_id = $this->create_page();
+		$this->touch_recent( $page_id );
+		$stored = get_user_meta( $user_id, self::META_KEY, true );
+
+		wp_update_post(
+			array(
+				'ID'          => $page_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = $this->get_recents();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), $response->get_data()['recents'] );
+		$this->assertSame( $stored, get_user_meta( $user_id, self::META_KEY, true ) );
+
+		wp_update_post(
+			array(
+				'ID'          => $page_id,
+				'post_status' => 'private',
+			)
+		);
+
+		$this->assertSame(
+			array( $page_id ),
+			array_column( $this->get_recents()->get_data()['recents'], 'id' )
+		);
 	}
 
 	public function test_recents_are_capped_at_five_items(): void {

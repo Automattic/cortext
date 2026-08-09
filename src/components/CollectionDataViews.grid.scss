@@ -191,11 +191,7 @@ $grid-card-content-hover-background: #f3f3f3;
 	.dataviews-view-grid .dataviews-view-grid__fields {
 		order: 1;
 		box-sizing: border-box;
-		display: flex;
-		flex-direction: column;
 		width: 100%;
-		// tech-debt.md#td-block-canvas-style-runtime-bridge: Stack's generated
-		// display rule does not reach the editor iframe.
 		gap: $grid-unit-20 !important;
 		padding: $grid-unit-10 $grid-unit-20 0;
 		background: $grid-card-content-background;

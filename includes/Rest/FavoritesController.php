@@ -88,9 +88,22 @@ final class FavoritesController {
 			);
 		}
 
-		$formatted = array();
-		$stored    = array();
-		$seen      = array();
+		$user_id          = get_current_user_id();
+		$existing_slots   = $this->stored_favorite_slots( $user_id );
+		$existing_hidden  = array_fill_keys(
+			array_column(
+				array_filter(
+					$existing_slots,
+					static fn( array $slot ): bool => $slot['hidden']
+				),
+				'id'
+			),
+			true
+		);
+		$formatted        = array();
+		$requested        = array();
+		$requested_hidden = array();
+		$seen             = array();
 
 		foreach ( $favorites as $favorite ) {
 			if ( ! is_array( $favorite ) ) {
@@ -108,15 +121,28 @@ final class FavoritesController {
 
 			$target = $this->documents->format_target( $id );
 			if ( is_wp_error( $target ) ) {
+				if ( 'cortext_document_target_hidden' === $target->get_error_code() ) {
+					if ( ! isset( $existing_hidden[ $id ] ) ) {
+						return $target;
+					}
+					$seen[ $id ]        = true;
+					$requested_hidden[] = $id;
+					continue;
+				}
 				return $target;
 			}
 
 			$seen[ $id ] = true;
-			$stored[]    = (int) $target['id'];
+			$requested[] = (int) $target['id'];
 			$formatted[] = $target;
 		}
 
-		update_user_meta( get_current_user_id(), self::META_KEY, $stored );
+		$stored = $this->merge_with_hidden_favorites(
+			$existing_slots,
+			$requested,
+			$requested_hidden
+		);
+		update_user_meta( $user_id, self::META_KEY, $stored );
 
 		return new WP_REST_Response(
 			array(
@@ -124,6 +150,111 @@ final class FavoritesController {
 			),
 			200
 		);
+	}
+
+	/**
+	 * Merges the visible order sent by the client with archived favorites. Each
+	 * archived favorite keeps its current slot.
+	 *
+	 * @param array<int, array{id: int, hidden: bool}> $slots Existing valid slots.
+	 * @param array<int, int>                          $requested Requested visible IDs.
+	 * @param array<int, int>                          $requested_hidden Requested hidden IDs.
+	 * @return array<int, int>
+	 */
+	private function merge_with_hidden_favorites(
+		array $slots,
+		array $requested,
+		array $requested_hidden
+	): array {
+		$stored          = array();
+		$emitted         = array();
+		$requested_index = 0;
+
+		foreach ( $slots as $slot ) {
+			if ( $slot['hidden'] ) {
+				if ( ! isset( $emitted[ $slot['id'] ] ) ) {
+					$stored[]               = $slot['id'];
+					$emitted[ $slot['id'] ] = true;
+				}
+				continue;
+			}
+
+			if ( ! isset( $requested[ $requested_index ] ) ) {
+				continue;
+			}
+
+			$id = $requested[ $requested_index ];
+			++$requested_index;
+			if ( isset( $emitted[ $id ] ) ) {
+				continue;
+			}
+			$stored[]       = $id;
+			$emitted[ $id ] = true;
+		}
+
+		for ( $count = count( $requested ); $requested_index < $count; ++$requested_index ) {
+			$id = $requested[ $requested_index ];
+			if ( isset( $emitted[ $id ] ) ) {
+				continue;
+			}
+			$stored[]       = $id;
+			$emitted[ $id ] = true;
+		}
+
+		foreach ( $requested_hidden as $id ) {
+			if ( isset( $emitted[ $id ] ) ) {
+				continue;
+			}
+			$stored[]       = $id;
+			$emitted[ $id ] = true;
+		}
+
+		return $stored;
+	}
+
+	/**
+	 * Builds visible and hidden slots from the user's saved favorites. Invalid,
+	 * deleted, and inaccessible documents are left out.
+	 *
+	 * @param int $user_id User whose stored favorites should be resolved.
+	 * @return array<int, array{id: int, hidden: bool}>
+	 */
+	private function stored_favorite_slots( int $user_id ): array {
+		$raw = get_user_meta( $user_id, self::META_KEY, true );
+		if ( ! is_array( $raw ) ) {
+			return array();
+		}
+
+		$slots = array();
+		$seen  = array();
+		foreach ( $raw as $entry ) {
+			$id = $this->stored_entry_id( $entry );
+			if ( $id < 1 || isset( $seen[ $id ] ) ) {
+				continue;
+			}
+
+			$target = $this->documents->format_target( $id );
+			if ( is_wp_error( $target ) ) {
+				if ( 'cortext_document_target_hidden' !== $target->get_error_code() ) {
+					continue;
+				}
+				$slots[]     = array(
+					'id'     => $id,
+					'hidden' => true,
+				);
+				$seen[ $id ] = true;
+				continue;
+			}
+
+			$canonical_id = (int) $target['id'];
+			$slots[]      = array(
+				'id'     => $canonical_id,
+				'hidden' => false,
+			);
+			$seen[ $id ]  = true;
+		}
+
+		return $slots;
 	}
 
 	private function resolve_stored_favorites( int $user_id ): array {
@@ -143,6 +274,10 @@ final class FavoritesController {
 
 			$target = $this->documents->format_target( $id );
 			if ( is_wp_error( $target ) ) {
+				if ( 'cortext_document_target_hidden' === $target->get_error_code() ) {
+					$seen[ $id ] = true;
+					$valid[]     = $id;
+				}
 				continue;
 			}
 
