@@ -722,6 +722,8 @@ WorDBless still cannot run the SQL that Cortext assembles outside `WP_Query`'s n
 
 This is fine while collections are small and formulas are few. It becomes the wrong shape for large tables with several dependent formulas, or for sorting thousands of rows by something like `dateBetween(now(), field("Created"), "days")`. The code stores dependency ids already, but it does not yet use them as a dirty graph or background job plan.
 
+Archived rows remain part of these collection-wide passes because relations and rollups still include their values. As an archive grows, formula edits and volatile sort or filter requests therefore spend more time updating rows that regular collection views do not show.
+
 **Where.** `includes/Formula/Materializer.php`, formula refresh calls in `includes/PostType/Document.php`, `includes/Rest/RowsController.php`, and `includes/Rest/FieldsController.php`, plus formula indexing in `includes/FieldValues/FieldValueIndex.php`.
 
 **Solution.** For non-volatile formulas, keep materialized row meta as the source of truth and make refresh narrower. Row writes should recompute only formulas that depend on the changed field, in dependency order. Formula create/update can mark affected rows dirty and process them in batches instead of blocking the request on the whole collection.
