@@ -4018,6 +4018,23 @@ test.describe( 'Collection view block', () => {
 				canvas.getByText( failureMessage, { exact: true } )
 			).toBeVisible();
 			await expect( failingInput ).toHaveValue( failedStatus );
+			await page.evaluate(
+				() =>
+					new Promise( ( resolve ) =>
+						window.requestAnimationFrame( () =>
+							window.requestAnimationFrame( resolve )
+						)
+					)
+			);
+			const hasAutosaveErrorNotice = await page.evaluate( () =>
+				window.wp.data
+					.select( 'core/notices' )
+					.getNotices()
+					.some(
+						( notice ) => notice.id === 'cortext-autosave-error'
+					)
+			);
+			expect( hasAutosaveErrorNotice ).toBe( false );
 
 			const persistedAfterFailure = await requestUtils.rest( {
 				path: `/wp/v2/crtxt_documents/${ fixture.rows[ 0 ].id }`,
