@@ -9,6 +9,8 @@
  * `RowDetailView` for side peek and modal panes.
  */
 
+import createEmotionCache from '@emotion/cache';
+import { CacheProvider } from '@emotion/react';
 import apiFetch from '@wordpress/api-fetch';
 import {
 	BlockCanvas,
@@ -24,6 +26,7 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { __ } from '@wordpress/i18n';
 import { ENTER, SPACE, isKeyboardEvent } from '@wordpress/keycodes';
+import { registerDocument } from '@wordpress/style-runtime';
 import {
 	useEffect,
 	useCallback,
@@ -90,6 +93,7 @@ const CANVAS_DOCUMENT_EDITOR_CSS = `
 	}
 `;
 const CANVAS_DOCUMENT_EXTRA_STYLES = [ { css: CANVAS_DOCUMENT_EDITOR_CSS } ];
+const blockCanvasEmotionCaches = new WeakMap();
 
 export function useEditorBodyStyles(
 	baseStyles,
@@ -103,6 +107,54 @@ export function useEditorBodyStyles(
 			...( extraStyles ?? [] ),
 		],
 		[ baseStyles, extraStyles, isDocumentCanvas ]
+	);
+}
+
+function getBlockCanvasEmotionCache( canvasDocument ) {
+	const { head } = canvasDocument;
+	let emotionCache = blockCanvasEmotionCaches.get( head );
+
+	if ( ! emotionCache ) {
+		emotionCache = createEmotionCache( {
+			container: head,
+			key: 'cortext-canvas',
+		} );
+		blockCanvasEmotionCaches.set( head, emotionCache );
+	}
+
+	return emotionCache;
+}
+
+// tech-debt.md#td-block-canvas-style-runtime-bridge: DataViews puts generated
+// styles in the parent document unless we point its runtimes at the BlockCanvas
+// iframe. Set up style-runtime and Emotion before mounting the canvas children
+// so the first render uses the right styles.
+function BlockCanvasStyleProvider( { children } ) {
+	const anchorRef = useRef( null );
+	const [ emotionCache, setEmotionCache ] = useState( null );
+
+	useLayoutEffect( () => {
+		const canvasDocument = anchorRef.current?.ownerDocument;
+		if ( ! canvasDocument?.head ) {
+			return undefined;
+		}
+
+		const cache = getBlockCanvasEmotionCache( canvasDocument );
+		const unregisterDocument = registerDocument( canvasDocument );
+		setEmotionCache( cache );
+
+		return unregisterDocument;
+	}, [] );
+
+	return (
+		<>
+			<span ref={ anchorRef } hidden />
+			{ emotionCache && (
+				<CacheProvider value={ emotionCache }>
+					{ children }
+				</CacheProvider>
+			) }
+		</>
 	);
 }
 
@@ -2100,69 +2152,73 @@ export default function EditorBody( {
 				ref={ blockCanvasRef }
 			>
 				<BlockCanvas height="100%" styles={ styles }>
-					<CanvasMenuToolbarGuard />
-					<DocumentIdentityActions
-						isLocked={ isReadOnly }
-						postId={ postId }
-						postType={ postType }
-					/>
-					<EnsureHeaderBlocks
-						isLocked={ isReadOnly }
-						postId={ postId }
-						postType={ postType }
-					/>
-					<HideHeaderBlockKebab
-						postId={ postId }
-						postType={ postType }
-					/>
-					<ProtectedBlockShortcutGuard
-						postId={ postId }
-						postType={ postType }
-						canvasRootRef={ blockCanvasRef }
-					/>
-					<HeaderPrefixToolbarGuard
-						isActive={ isActive }
-						isLocked={ isReadOnly }
-						postId={ postId }
-						postType={ postType }
-						toolbarRootRef={ blockCanvasRef }
-					/>
-					<div
-						className={ [
-							'cortext-canvas__editor',
-							ownerBlockName
-								? 'cortext-canvas__editor--owner'
-								: '',
-						]
-							.filter( Boolean )
-							.join( ' ' ) }
-					>
-						<BlockList
-							className={ canvasClassName }
-							layout={ canvasLayout }
-							renderAppender={ renderAppender }
+					<BlockCanvasStyleProvider>
+						<CanvasMenuToolbarGuard />
+						<DocumentIdentityActions
+							isLocked={ isReadOnly }
+							postId={ postId }
+							postType={ postType }
 						/>
-					</div>
-					<DocumentSurfaceFocusEffect
-						isActive={ isActive }
-						isEditorSurfaceDisplayed={ isEditorSurfaceDisplayed }
-						isReadOnly={ isReadOnly }
-						isSurfaceFocusPending={ isSurfaceFocusPending }
-						postId={ postId }
-						ownerBlockName={ ownerBlockName }
-						record={ record }
-						canvasRootRef={ blockCanvasRef }
-						surfaceFocusRequest={ surfaceFocusRequest }
-						completeSurfaceFocus={ completeSurfaceFocus }
-					/>
-					<CanvasReadyEffect
-						featuredMedia={ featuredMedia }
-						postId={ postId }
-						postType={ postType }
-						canvasRootRef={ blockCanvasRef }
-						ownerContentReady={ ownerContentReady }
-						onReady={ onReady }
-					/>
+						<EnsureHeaderBlocks
+							isLocked={ isReadOnly }
+							postId={ postId }
+							postType={ postType }
+						/>
+						<HideHeaderBlockKebab
+							postId={ postId }
+							postType={ postType }
+						/>
+						<ProtectedBlockShortcutGuard
+							postId={ postId }
+							postType={ postType }
+							canvasRootRef={ blockCanvasRef }
+						/>
+						<HeaderPrefixToolbarGuard
+							isActive={ isActive }
+							isLocked={ isReadOnly }
+							postId={ postId }
+							postType={ postType }
+							toolbarRootRef={ blockCanvasRef }
+						/>
+						<div
+							className={ [
+								'cortext-canvas__editor',
+								ownerBlockName
+									? 'cortext-canvas__editor--owner'
+									: '',
+							]
+								.filter( Boolean )
+								.join( ' ' ) }
+						>
+							<BlockList
+								className={ canvasClassName }
+								layout={ canvasLayout }
+								renderAppender={ renderAppender }
+							/>
+						</div>
+						<DocumentSurfaceFocusEffect
+							isActive={ isActive }
+							isEditorSurfaceDisplayed={
+								isEditorSurfaceDisplayed
+							}
+							isReadOnly={ isReadOnly }
+							isSurfaceFocusPending={ isSurfaceFocusPending }
+							postId={ postId }
+							ownerBlockName={ ownerBlockName }
+							record={ record }
+							canvasRootRef={ blockCanvasRef }
+							surfaceFocusRequest={ surfaceFocusRequest }
+							completeSurfaceFocus={ completeSurfaceFocus }
+						/>
+						<CanvasReadyEffect
+							featuredMedia={ featuredMedia }
+							postId={ postId }
+							postType={ postType }
+							canvasRootRef={ blockCanvasRef }
+							ownerContentReady={ ownerContentReady }
+							onReady={ onReady }
+						/>
+					</BlockCanvasStyleProvider>
 				</BlockCanvas>
 			</div>
 		</CanvasReadyProvider>
