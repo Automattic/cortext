@@ -1,9 +1,12 @@
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 let mockActiveArea;
 let mockIsSmall;
 const mockEnableComplementaryArea = jest.fn();
 const mockDisableComplementaryArea = jest.fn();
+const mockFlushActiveEditor = jest.fn();
+const mockSetFavorites = jest.fn();
+const mockSetHome = jest.fn();
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	BlockInspector: () => null,
@@ -24,8 +27,13 @@ jest.mock( '@wordpress/components', () => {
 	Tabs.TabPanel = ( { children } ) => <div>{ children }</div>;
 
 	return {
-		Button: ( { children, icon, label, size, ...props } ) => (
-			<button { ...props } aria-label={ label }>
+		Button: ( { children, className, disabled, label, onClick } ) => (
+			<button
+				className={ className }
+				disabled={ disabled }
+				onClick={ onClick }
+				aria-label={ label }
+			>
 				{ children }
 			</button>
 		),
@@ -129,16 +137,31 @@ jest.mock( '../../../src/hooks/documentTrashInvalidation', () => ( {
 	notifyDocumentTrashChanged: jest.fn(),
 } ) );
 jest.mock( '../../../src/hooks/useFavorites', () => ( {
-	useFavorites: () => ( {} ),
+	useFavorites: () => ( {
+		favorites: [],
+		setFavorites: mockSetFavorites,
+		isResolving: false,
+		isUpdating: false,
+	} ),
 } ) );
 jest.mock( '../../../src/hooks/useWorkspaceHome', () => ( {
-	useWorkspaceHome: () => ( {} ),
+	useWorkspaceHome: () => ( {
+		home: null,
+		setHome: mockSetHome,
+		isUpdating: false,
+	} ),
+} ) );
+jest.mock( '../../../src/components/ActiveEditorContext', () => ( {
+	useActiveEditor: () => ( {
+		flushActiveEditor: mockFlushActiveEditor,
+	} ),
 } ) );
 
 import {
 	collectTrashCascadeIds,
 	DOCUMENT_INSPECTOR,
 	InspectorComplementaryArea,
+	PageActionsPanel,
 } from '../../../src/components/DocumentInspectorSidebar';
 
 const defaultProps = {
@@ -155,6 +178,32 @@ describe( 'collectTrashCascadeIds', () => {
 				collectTrashCascadeIds( 7, { cascade_deleted: [ 8, 9 ] } )
 			)
 		).toEqual( [ 7, 8, 9 ] );
+	} );
+} );
+
+describe( 'PageActionsPanel', () => {
+	beforeEach( () => {
+		mockFlushActiveEditor.mockReset();
+		mockSetFavorites.mockReset();
+		mockSetHome.mockReset();
+	} );
+
+	it( 'explains when Archive is canceled because saving failed', async () => {
+		mockFlushActiveEditor.mockResolvedValue( false );
+		render( <PageActionsPanel postId={ 7 } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Archive' } ) );
+
+		expect(
+			await screen.findByText(
+				'Could not save changes. Archive was canceled.'
+			)
+		).toBeInTheDocument();
+		await waitFor( () =>
+			expect(
+				screen.getByRole( 'button', { name: 'Archive' } )
+			).toBeEnabled()
+		);
 	} );
 } );
 

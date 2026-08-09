@@ -45,6 +45,7 @@ function makeCtx( overrides = {} ) {
 		invalidateResolution: jest.fn(),
 		receiveEntityRecords: jest.fn(),
 		setFavorites: jest.fn().mockResolvedValue( undefined ),
+		createErrorNotice: jest.fn(),
 		createSuccessNotice: jest.fn(),
 		...overrides,
 	};
@@ -302,6 +303,13 @@ describe( 'document archive lifecycle', () => {
 			lifecycleFocusIntent
 		);
 		expect( ctx.onAfterArchive ).not.toHaveBeenCalled();
+		expect( ctx.createErrorNotice ).toHaveBeenCalledWith(
+			'Could not save changes. Archive was canceled.',
+			{
+				id: 'cortext-document-archive-save-error',
+				type: 'snackbar',
+			}
+		);
 	} );
 
 	it( 'cancels a captured focus intent when archiving fails', async () => {

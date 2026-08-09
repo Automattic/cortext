@@ -67,6 +67,7 @@ import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import { filterFavoritesByDeletedIds } from '../documents/favorites';
 import {
 	archiveDocument,
+	archiveSaveFailureMessage,
 	syncLifecycleEntityRecords,
 } from '../documents/actions';
 import { useActiveEditor } from './ActiveEditorContext';
@@ -516,7 +517,7 @@ function PageIdentityInspectorPanel( { postId, postType, title } ) {
 	);
 }
 
-function PageActionsPanel( { postId } ) {
+export function PageActionsPanel( { postId } ) {
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( coreStore );
 	const { home, setHome, isUpdating: isHomeUpdating } = useWorkspaceHome();
@@ -610,7 +611,7 @@ function PageActionsPanel( { postId } ) {
 		setError( null );
 		setIsArchiving( true );
 		try {
-			await archiveDocument(
+			const response = await archiveDocument(
 				{ id: postId },
 				{
 					flushActiveEditor,
@@ -618,6 +619,9 @@ function PageActionsPanel( { postId } ) {
 					receiveEntityRecords,
 				}
 			);
+			if ( response === null ) {
+				setError( archiveSaveFailureMessage() );
+			}
 		} catch ( err ) {
 			setError(
 				err?.message ??

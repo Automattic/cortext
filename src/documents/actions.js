@@ -90,6 +90,10 @@ export function restoredDocumentStatusMessage( status ) {
 	);
 }
 
+export function archiveSaveFailureMessage() {
+	return __( 'Could not save changes. Archive was canceled.', 'cortext' );
+}
+
 // Pure create: saves the new document and refreshes the lists. Post-create
 // UX (navigation, auto-rename, selection in a block picker) belongs to the
 // caller; this function only owns the persistence and cache invalidation.
@@ -247,6 +251,10 @@ export async function archiveDocument( record, ctx ) {
 		const didFlush = await ctx.flushActiveEditor?.();
 		if ( didFlush === false ) {
 			ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
+			ctx.createErrorNotice?.( archiveSaveFailureMessage(), {
+				id: 'cortext-document-archive-save-error',
+				type: 'snackbar',
+			} );
 			return null;
 		}
 		const response = await apiFetch( {

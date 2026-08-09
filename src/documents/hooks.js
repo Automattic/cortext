@@ -109,7 +109,8 @@ export function useDocumentActions() {
 	const docCtx = useDocumentsContext();
 	const { saveEntityRecord, invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
-	const { createSuccessNotice } = useDispatch( 'core/notices' );
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch( 'core/notices' );
 	const navigate = useNavigate();
 	const { touchRecent } = useRecents();
 	const { setFavorites } = useFavorites();
@@ -124,6 +125,7 @@ export function useDocumentActions() {
 			navigate,
 			touchRecent,
 			setFavorites,
+			createErrorNotice,
 			createSuccessNotice,
 			flushActiveEditor,
 		} ),
@@ -135,6 +137,7 @@ export function useDocumentActions() {
 			navigate,
 			touchRecent,
 			setFavorites,
+			createErrorNotice,
 			createSuccessNotice,
 			flushActiveEditor,
 		]

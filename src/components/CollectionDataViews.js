@@ -86,7 +86,10 @@ import { toDataViewId, toRecordId } from '../hooks/fieldIds';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
 import { filterFavoritesByDeletedIds, useFavoriteToggle } from '../documents';
-import { syncLifecycleEntityRecords } from '../documents/actions';
+import {
+	archiveSaveFailureMessage,
+	syncLifecycleEntityRecords,
+} from '../documents/actions';
 import {
 	afterDocumentTrash,
 	applyInvalidationPack,
@@ -1163,12 +1166,7 @@ export default function CollectionDataViews( {
 					didClose = await closeDocument();
 				} catch {}
 				if ( ! didClose ) {
-					setRowActionError(
-						__(
-							'Could not save changes. Archive was canceled.',
-							'cortext'
-						)
-					);
+					setRowActionError( archiveSaveFailureMessage() );
 					return;
 				}
 			}
