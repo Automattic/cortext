@@ -2823,6 +2823,9 @@ test.describe( 'Collection view block', () => {
 			const actionsMenu = canvas
 				.locator( '[data-dialog][role="menu"][data-open]' )
 				.first();
+			const trashMenuItem = canvas.getByRole( 'menuitem', {
+				name: 'Trash',
+			} );
 			await expect( actionsMenu ).toBeVisible();
 			const actionMenuStyles = await actionsMenu.evaluate( ( node ) => {
 				const styles =
@@ -2831,7 +2834,6 @@ test.describe( 'Collection view block', () => {
 				return {
 					backgroundColor: styles.backgroundColor,
 					boxShadow: styles.boxShadow,
-					fontSize: styles.fontSize,
 					width,
 				};
 			} );
@@ -2839,10 +2841,10 @@ test.describe( 'Collection view block', () => {
 				'rgb(255, 255, 255)'
 			);
 			expect( actionMenuStyles.boxShadow ).not.toBe( 'none' );
-			expect( actionMenuStyles.fontSize ).toBe( '13px' );
 			expect( actionMenuStyles.width ).toBeGreaterThanOrEqual( 160 );
+			await expect( trashMenuItem ).toHaveCSS( 'font-size', '13px' );
 
-			await canvas.getByRole( 'menuitem', { name: 'Trash' } ).click();
+			await trashMenuItem.click();
 
 			await expect( rowTitle ).toHaveCount( 0 );
 
@@ -3343,6 +3345,7 @@ test.describe( 'Collection view block', () => {
 		const fixture = {};
 
 		try {
+			await page.setViewportSize( { width: 960, height: 900 } );
 			Object.assign(
 				fixture,
 				await createCalculationFixture( requestUtils )
@@ -3387,6 +3390,112 @@ test.describe( 'Collection view block', () => {
 				.filter( { hasText: 'Beta Book' } );
 
 			await expect( alphaRow ).toBeVisible();
+
+			const pagination = canvas.locator(
+				'.dataviews-footer .dataviews-pagination'
+			);
+
+			await expect( pagination ).toBeVisible();
+
+			const paginationLayout = await pagination.evaluate( ( element ) => {
+				const selector = element.querySelector(
+					'.dataviews-pagination__page-select'
+				);
+				const [ pageLabel, currentPage, totalLabel ] =
+					selector.children;
+				const buttons = element.querySelector( ':scope > :last-child' );
+				const select = element.querySelector(
+					'.components-select-control__input'
+				);
+				const container = element.querySelector(
+					'.components-input-control__container'
+				);
+				const suffix = element.querySelector(
+					'.components-input-control__suffix'
+				);
+				const lineCount = ( node ) => {
+					const range = node.ownerDocument.createRange();
+					range.selectNodeContents( node );
+					return range.getClientRects().length;
+				};
+				const bounds = ( node ) => {
+					const rect = node.getBoundingClientRect();
+					return {
+						top: rect.top,
+						right: rect.right,
+						bottom: rect.bottom,
+						left: rect.left,
+						width: rect.width,
+						centerY: rect.top + rect.height / 2,
+					};
+				};
+
+				return {
+					footer: bounds( element.closest( '.dataviews-footer' ) ),
+					selector: bounds( selector ),
+					pageLabel: bounds( pageLabel ),
+					currentPage: bounds( currentPage ),
+					totalLabel: bounds( totalLabel ),
+					totalLabelLines: lineCount( totalLabel ),
+					buttons: bounds( buttons ),
+					select: bounds( select ),
+					container: bounds( container ),
+					suffix: bounds( suffix ),
+				};
+			} );
+
+			const layoutTolerance = 1;
+			expect( paginationLayout.footer.width ).toBeLessThan( 560 );
+			expect(
+				Math.abs(
+					paginationLayout.selector.centerY -
+						paginationLayout.buttons.centerY
+				)
+			).toBeLessThanOrEqual( layoutTolerance );
+			expect(
+				Math.abs(
+					paginationLayout.pageLabel.centerY -
+						paginationLayout.currentPage.centerY
+				)
+			).toBeLessThanOrEqual( layoutTolerance );
+			expect(
+				Math.abs(
+					paginationLayout.currentPage.centerY -
+						paginationLayout.totalLabel.centerY
+				)
+			).toBeLessThanOrEqual( layoutTolerance );
+			expect( paginationLayout.totalLabelLines ).toBe( 1 );
+			expect( paginationLayout.pageLabel.right ).toBeLessThanOrEqual(
+				paginationLayout.currentPage.left + layoutTolerance
+			);
+			expect( paginationLayout.currentPage.right ).toBeLessThanOrEqual(
+				paginationLayout.totalLabel.left + layoutTolerance
+			);
+			expect(
+				Math.abs(
+					paginationLayout.select.centerY -
+						paginationLayout.suffix.centerY
+				)
+			).toBeLessThanOrEqual( layoutTolerance );
+			expect( paginationLayout.select.top ).toBeGreaterThanOrEqual(
+				paginationLayout.container.top - layoutTolerance
+			);
+			expect( paginationLayout.select.bottom ).toBeLessThanOrEqual(
+				paginationLayout.container.bottom + layoutTolerance
+			);
+			expect( paginationLayout.suffix.left ).toBeGreaterThanOrEqual(
+				paginationLayout.currentPage.left - layoutTolerance
+			);
+			expect( paginationLayout.suffix.right ).toBeLessThanOrEqual(
+				paginationLayout.currentPage.right + layoutTolerance
+			);
+			expect( paginationLayout.suffix.top ).toBeGreaterThanOrEqual(
+				paginationLayout.currentPage.top - layoutTolerance
+			);
+			expect( paginationLayout.suffix.bottom ).toBeLessThanOrEqual(
+				paginationLayout.currentPage.bottom + layoutTolerance
+			);
+
 			await alphaRow.hover();
 			await alphaRow
 				.locator( '.dataviews-selection-checkbox input' )
