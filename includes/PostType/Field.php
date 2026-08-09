@@ -243,6 +243,19 @@ final class Field {
 	 * @param int $field_id Field post ID being deleted.
 	 */
 	private function delete_dependent_rollups( int $field_id ): void {
+		foreach ( $this->dependent_rollup_ids( $field_id ) as $rollup_id ) {
+			$this->detach_from_collections( $rollup_id );
+			wp_delete_post( $rollup_id, true );
+		}
+	}
+
+	/**
+	 * Finds rollup fields that use a field as their relation or target.
+	 *
+	 * @param int $field_id Dependency field post ID.
+	 * @return int[]
+	 */
+	private function dependent_rollup_ids( int $field_id ): array {
 		$field_id_str = (string) $field_id;
 		$rollup_ids   = array();
 		foreach ( array( 'rollup_relation_field_id', 'rollup_target_field_id' ) as $meta_key ) {
@@ -265,17 +278,14 @@ final class Field {
 			$rollup_ids = array_merge( $rollup_ids, array_map( 'intval', $dependents ) );
 		}
 
-		foreach ( array_unique( $rollup_ids ) as $rollup_id ) {
-			if (
-				$rollup_id === $field_id
-				|| self::POST_TYPE !== get_post_type( $rollup_id )
-				|| 'rollup' !== (string) get_post_meta( $rollup_id, 'type', true )
-			) {
-				continue;
-			}
-			$this->detach_from_collections( $rollup_id );
-			wp_delete_post( $rollup_id, true );
-		}
+		return array_values(
+			array_filter(
+				array_unique( $rollup_ids ),
+				static fn ( int $rollup_id ): bool => $rollup_id !== $field_id
+					&& self::POST_TYPE === get_post_type( $rollup_id )
+					&& 'rollup' === (string) get_post_meta( $rollup_id, 'type', true )
+			)
+		);
 	}
 
 	/**
@@ -286,6 +296,19 @@ final class Field {
 	 * @param int $field_id Field post ID being deleted.
 	 */
 	private function delete_dependent_formulas( int $field_id ): void {
+		foreach ( $this->dependent_formula_ids( $field_id ) as $formula_id ) {
+			$this->detach_from_collections( $formula_id );
+			wp_delete_post( $formula_id, true );
+		}
+	}
+
+	/**
+	 * Finds formula fields whose stored dependencies include a field.
+	 *
+	 * @param int $field_id Dependency field post ID.
+	 * @return int[]
+	 */
+	private function dependent_formula_ids( int $field_id ): array {
 		$formula_ids = get_posts(
 			array(
 				'post_type'      => self::POST_TYPE,
@@ -303,18 +326,55 @@ final class Field {
 			)
 		);
 
-		foreach ( array_map( 'intval', $formula_ids ) as $formula_id ) {
-			if (
-				$formula_id === $field_id
-				|| self::POST_TYPE !== get_post_type( $formula_id )
-				|| 'formula' !== (string) get_post_meta( $formula_id, 'type', true )
-				|| ! in_array( $field_id, $this->formula_dependency_ids( $formula_id ), true )
-			) {
+		return array_values(
+			array_filter(
+				array_map( 'intval', $formula_ids ),
+				fn ( int $formula_id ): bool => $formula_id !== $field_id
+					&& self::POST_TYPE === get_post_type( $formula_id )
+					&& 'formula' === (string) get_post_meta( $formula_id, 'type', true )
+					&& in_array( $field_id, $this->formula_dependency_ids( $formula_id ), true )
+			)
+		);
+	}
+
+	/**
+	 * Returns every field deleted along with the requested field.
+	 *
+	 * Deleting a relation also deletes its reverse field. Deleting any field also
+	 * removes the rollups and formulas that depend on it. The REST guard needs
+	 * this list before deletion starts. `cleanup_after_delete()` follows those
+	 * links one field at a time.
+	 *
+	 * @param int $field_id Field post ID.
+	 * @return int[] Field IDs, including the requested one.
+	 */
+	public function deletion_cascade_ids( int $field_id ): array {
+		$queue = array( $field_id );
+		$seen  = array();
+
+		while ( ! empty( $queue ) ) {
+			$current_id = (int) array_pop( $queue );
+			if ( $current_id < 1 || isset( $seen[ $current_id ] ) ) {
 				continue;
 			}
-			$this->detach_from_collections( $formula_id );
-			wp_delete_post( $formula_id, true );
+			$field = get_post( $current_id );
+			if ( ! $field instanceof WP_Post || self::POST_TYPE !== $field->post_type ) {
+				continue;
+			}
+
+			$seen[ $current_id ] = true;
+			$reverse_id          = (int) get_post_meta( $current_id, 'relation_reverse_field_id', true );
+			if ( $reverse_id > 0 ) {
+				$queue[] = $reverse_id;
+			}
+			$queue = array_merge(
+				$queue,
+				$this->dependent_rollup_ids( $current_id ),
+				$this->dependent_formula_ids( $current_id )
+			);
 		}
+
+		return array_map( 'intval', array_keys( $seen ) );
 	}
 
 	/**
