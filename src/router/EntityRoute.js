@@ -38,11 +38,12 @@ import CortextSnackbars from '../components/CortextSnackbars';
 import { useSurfaceFocusIntent } from '../components/SurfaceFocusContext';
 import { isSurfaceFocusOriginCurrent } from '../components/collectionSurfaceFocus';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
+import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../components/page-queries';
 import {
-	ACTIVE_PAGES_QUERY,
-	POST_TYPE,
-	TRASHED_PAGES_QUERY,
-} from '../components/page-queries';
+	afterDocumentTrash,
+	afterRowLifecycle,
+	applyInvalidationPack,
+} from '../documents/invalidation';
 import { firstDocumentInTree } from '../components/document-tree';
 import { isPublicWebAffordancesEnabled } from '../settings';
 import afterNextPaint from '../hooks/afterNextPaint';
@@ -482,22 +483,15 @@ export default function EntityRoute( { history } ) {
 	const { invalidateResolution } = useDispatch( 'core' );
 
 	// Restore still has two cache paths: pages use core-data for the tree, rows
-	// use collection-scoped queries. Both refresh the Trash list; rows also
-	// notify open collections because relations and rollups can change elsewhere.
+	// use collection-scoped queries. Both refresh the lists their status affects;
+	// rows also notify open collections because relations and rollups can change
+	// elsewhere.
 	const onRestoreDocument = useCallback(
 		( postId, _postType, response ) => {
-			// Every document shares one post type, so a restore always re-enters
-			// the workspace tree and leaves the Trash list.
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				ACTIVE_PAGES_QUERY,
-			] );
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				TRASHED_PAGES_QUERY,
-			] );
+			applyInvalidationPack(
+				invalidateResolution,
+				isRow ? afterRowLifecycle : afterDocumentTrash
+			);
 			notifySidebarTreeChanged( {
 				parentId: Number( response?.post?.parent ?? 0 ),
 				revealId: Number( postId ),

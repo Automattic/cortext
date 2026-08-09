@@ -52,14 +52,14 @@ import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
 import { filterFavoritesForTrashedPage } from './SidebarFavorites';
-import {
-	ACTIVE_PAGES_QUERY,
-	POST_TYPE,
-	TRASHED_PAGES_QUERY,
-} from './page-queries';
+import { ACTIVE_PAGES_QUERY, POST_TYPE } from './page-queries';
 import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
 import { definesTrait } from '../documents/capabilities';
 import { trashDocumentRecord } from '../documents/mutations';
+import {
+	afterDocumentTrash,
+	applyInvalidationPack,
+} from '../documents/invalidation';
 import { unlock } from '../lock-unlock';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
 import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
@@ -565,23 +565,7 @@ function PageActionsPanel( { postId } ) {
 		setIsTrashing( true );
 		try {
 			await trashDocumentRecord( { id: postId }, receiveEntityRecords );
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				ACTIVE_PAGES_QUERY,
-			] );
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				TRASHED_PAGES_QUERY,
-			] );
-			// Page trash can also trash inline-owned and nested full-page
-			// collections, so refresh the full-page list now.
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				DOCUMENT_POST_TYPE,
-				FULL_PAGE_COLLECTION_QUERY,
-			] );
+			applyInvalidationPack( invalidateResolution, afterDocumentTrash );
 			notifySidebarTreeChanged();
 			notifyDocumentTrashChanged();
 			try {

@@ -90,6 +90,10 @@ import {
 	duplicateDocumentRecord,
 	trashDocumentRecord,
 } from '../documents/mutations';
+import {
+	afterRowLifecycle,
+	applyInvalidationPack,
+} from '../documents/invalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
@@ -125,7 +129,8 @@ export default function CollectionDataViews( {
 } ) {
 	const { fields, collection, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
-	const { receiveEntityRecords, saveEntityRecord } = useDispatch( coreStore );
+	const { invalidateResolution, receiveEntityRecords, saveEntityRecord } =
+		useDispatch( coreStore );
 	const { touchRecent } = useRecents();
 	// Field IDs from the last schema sync. We use this to auto-show fields
 	// the user just created. `null` on first run means the saved view should
@@ -991,6 +996,10 @@ export default function CollectionDataViews( {
 						collectionId,
 					} );
 				}
+				applyInvalidationPack(
+					invalidateResolution,
+					afterRowLifecycle
+				);
 				refresh();
 			} catch ( apiError ) {
 				setRowActionError(
@@ -999,7 +1008,13 @@ export default function CollectionDataViews( {
 				);
 			}
 		},
-		[ collectionId, receiveEntityRecords, refresh, touchRecent ]
+		[
+			collectionId,
+			invalidateResolution,
+			receiveEntityRecords,
+			refresh,
+			touchRecent,
+		]
 	);
 
 	const forgetDeletedRows = useCallback(
@@ -1054,6 +1069,10 @@ export default function CollectionDataViews( {
 			} );
 
 			if ( deletedIds.length > 0 ) {
+				applyInvalidationPack(
+					invalidateResolution,
+					afterRowLifecycle
+				);
 				const deleted = new Set( deletedIds );
 				if ( openRowId && deleted.has( normalizeRowId( openRowId ) ) ) {
 					closeDocument();
@@ -1108,6 +1127,7 @@ export default function CollectionDataViews( {
 		[
 			closeDocument,
 			forgetDeletedRows,
+			invalidateResolution,
 			openRowId,
 			postType,
 			receiveEntityRecords,

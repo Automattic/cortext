@@ -4,7 +4,8 @@ import { DOCUMENT_POST_TYPE } from '../collections';
 
 /**
  * Adds a canonical REST record to the shared core-data cache. Mutation
- * envelopes are partial and must stay out of the cache.
+ * envelopes are partial and must stay out of the cache. List invalidation is
+ * left to the caller so bulk actions can refresh each affected query once.
  *
  * @param {Object|null} record               Canonical document record.
  * @param {Function}    receiveEntityRecords core-data dispatcher.
@@ -19,7 +20,7 @@ export function receiveCanonicalDocumentRecord( record, receiveEntityRecords ) {
 		DOCUMENT_POST_TYPE,
 		[ record ],
 		undefined,
-		true
+		false
 	);
 	return record;
 }

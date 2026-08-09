@@ -531,7 +531,7 @@ describe( 'SidebarTrash', () => {
 			DOCUMENT_POST_TYPE,
 			[ restoredPost ],
 			undefined,
-			true
+			false
 		);
 		expect( refresh ).toHaveBeenCalled();
 	} );

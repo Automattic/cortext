@@ -18,7 +18,7 @@ describe( 'document mutation cache updates', () => {
 		jest.clearAllMocks();
 	} );
 
-	it( 'caches a canonical record and invalidates matching queries', () => {
+	it( 'caches a canonical record without invalidating list queries', () => {
 		const receiveEntityRecords = jest.fn();
 		const record = { id: 17, title: { raw: 'Canonical' } };
 
@@ -30,7 +30,7 @@ describe( 'document mutation cache updates', () => {
 			DOCUMENT_POST_TYPE,
 			[ record ],
 			undefined,
-			true
+			false
 		);
 	} );
 
@@ -67,7 +67,7 @@ describe( 'document mutation cache updates', () => {
 			DOCUMENT_POST_TYPE,
 			[ post ],
 			undefined,
-			true
+			false
 		);
 		expect( receiveEntityRecords ).toHaveBeenCalledTimes( 1 );
 	} );
@@ -107,7 +107,7 @@ describe( 'document mutation cache updates', () => {
 			DOCUMENT_POST_TYPE,
 			[ response ],
 			undefined,
-			true
+			false
 		);
 	} );
 
@@ -130,7 +130,7 @@ describe( 'document mutation cache updates', () => {
 			DOCUMENT_POST_TYPE,
 			[ previous ],
 			undefined,
-			true
+			false
 		);
 	} );
 
@@ -153,7 +153,7 @@ describe( 'document mutation cache updates', () => {
 			DOCUMENT_POST_TYPE,
 			[ post ],
 			undefined,
-			true
+			false
 		);
 	} );
 
