@@ -20,6 +20,7 @@ export function WorkspaceHomeProvider( { children } ) {
 	const [ error, setError ] = useState( null );
 	const requestIdRef = useRef( 0 );
 	const updateRequestIdRef = useRef( 0 );
+	const writeChainRef = useRef( Promise.resolve() );
 
 	const refreshHome = useCallback( async () => {
 		const requestId = requestIdRef.current + 1;
@@ -56,36 +57,47 @@ export function WorkspaceHomeProvider( { children } ) {
 			requestIdRef.current += 1;
 		};
 	}, [ refreshHome ] );
-	useDocumentArchiveInvalidation( refreshHome );
+	const refreshAfterLifecycleChange = useCallback( () => {
+		const refresh = writeChainRef.current.then( refreshHome, refreshHome );
+		writeChainRef.current = refresh.catch( () => null );
+		return refresh;
+	}, [ refreshHome ] );
+	useDocumentArchiveInvalidation( refreshAfterLifecycleChange );
 
-	const setHome = useCallback( async ( target ) => {
-		const requestId = requestIdRef.current + 1;
-		requestIdRef.current = requestId;
-		const updateRequestId = updateRequestIdRef.current + 1;
-		updateRequestIdRef.current = updateRequestId;
-		setIsResolving( false );
-		setIsUpdating( true );
-		setError( null );
-		try {
-			const response = await apiFetch( {
-				path: '/cortext/v1/workspace-home',
-				method: 'PUT',
-				data: target,
-			} );
-			if ( requestId === requestIdRef.current ) {
-				setHomeState( response?.home ?? null );
+	const setHome = useCallback( ( target ) => {
+		const write = async () => {
+			const requestId = requestIdRef.current + 1;
+			requestIdRef.current = requestId;
+			const updateRequestId = updateRequestIdRef.current + 1;
+			updateRequestIdRef.current = updateRequestId;
+			setIsResolving( false );
+			setIsUpdating( true );
+			setError( null );
+			try {
+				const response = await apiFetch( {
+					path: '/cortext/v1/workspace-home',
+					method: 'PUT',
+					data: target,
+				} );
+				if ( requestId === requestIdRef.current ) {
+					setHomeState( response?.home ?? null );
+				}
+				return response?.home ?? null;
+			} catch ( nextError ) {
+				if ( requestId === requestIdRef.current ) {
+					setError( nextError );
+				}
+				throw nextError;
+			} finally {
+				if ( updateRequestId === updateRequestIdRef.current ) {
+					setIsUpdating( false );
+				}
 			}
-			return response?.home ?? null;
-		} catch ( nextError ) {
-			if ( requestId === requestIdRef.current ) {
-				setError( nextError );
-			}
-			throw nextError;
-		} finally {
-			if ( updateRequestId === updateRequestIdRef.current ) {
-				setIsUpdating( false );
-			}
-		}
+		};
+
+		const promise = writeChainRef.current.then( write, write );
+		writeChainRef.current = promise.catch( () => null );
+		return promise;
 	}, [] );
 
 	const value = useMemo(

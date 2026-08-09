@@ -58,7 +58,7 @@ it( 'refreshes the workspace home across archive lifecycle changes', async () =>
 	expect( apiFetch ).toHaveBeenCalledTimes( 3 );
 } );
 
-it( 'does not let an older home update overwrite an archive refresh', async () => {
+it( 'queues an archive refresh behind an in-flight home update', async () => {
 	const update = deferred();
 	const refresh = deferred();
 	apiFetch
@@ -73,6 +73,7 @@ it( 'does not let an older home update overwrite an archive refresh', async () =
 	act( () => {
 		updatePromise = result.current.setHome( { id: 8 } );
 	} );
+	await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
 	act( () => {
 		window.dispatchEvent(
 			new CustomEvent( DOCUMENT_ARCHIVE_CHANGED_EVENT, {
@@ -80,18 +81,19 @@ it( 'does not let an older home update overwrite an archive refresh', async () =
 			} )
 		);
 	} );
-
-	await act( async () => {
-		refresh.resolve( { home: null } );
-		await refresh.promise;
-	} );
-	expect( result.current.home ).toBeNull();
+	expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 
 	await act( async () => {
 		update.resolve( { home: { id: 8, path: 'other-8' } } );
 		await updatePromise;
 	} );
-	expect( result.current.home ).toBeNull();
+	await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 3 ) );
+
+	await act( async () => {
+		refresh.resolve( { home: { id: 8, path: 'other-8' } } );
+		await refresh.promise;
+	} );
+	expect( result.current.home ).toEqual( { id: 8, path: 'other-8' } );
 } );
 
 it( 'clears resolving when a home update supersedes a pending refresh', async () => {
