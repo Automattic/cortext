@@ -380,13 +380,13 @@ The row editor mounts inside a subregistry, which makes it look like row saves a
 
 **Where.** Writes are in `src/components/rowDocumentMutations.js`, `src/components/rowDocumentCreation.js`, and `src/documents/mutations.js`. Custom reads and manual cache synchronization remain in `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, `src/hooks/useTrashedDocuments.js`, `src/components/CollectionDataViews.js`, `src/components/RowProperties.js`, `src/components/relations/RelationEditor.js`, `src/components/SidebarTrash.js`, and `src/router/EntityRoute.js`.
 
-**Solution.** Fetch the ordered IDs with `/cortext/v1/rows?shape=ids`, load the shared `crtxt_document` records through `core-data` in stable `include` chunks, then put them back in ID order. Once the grid and relation picker use those records, `core-data` can handle record caching, race protection, and updates after a mutation. This removes:
+**Solution.** Fetch the ordered IDs with `/cortext/v1/rows?shape=ids`, load the shared `crtxt_document` records through `core-data` in stable `include` chunks, then put them back in ID order. Once the grid and relation picker use those records, `core-data` can handle record caching, race protection, and updates after a mutation. That change would let Cortext:
 
-- The `refresh()` handles and invalidation events exist only because rows aren't reactive.
-- Half of `RowMutationContext` (also driven by [td-dataviews-inline-editing](#td-dataviews-inline-editing)) exists because cells can't reach a `core-data` store that isn't there.
-- `onCreated` still runs optimistic `lastPage = ceil((totalItems+1)/perPage)` arithmetic for unconstrained views. With reactive pagination Cortext could watch `totalPages` instead of guessing.
-- The server/client planner only decides how to query IDs; it no longer doubles as a record cache.
-- Relation label lookup becomes a normal entity-record resolver instead of a one-off include query.
+-   Remove the `refresh()` handles and invalidation events that compensate for non-reactive rows.
+-   Drop half of `RowMutationContext` (also driven by [td-dataviews-inline-editing](#td-dataviews-inline-editing)), because cells would have access to the records in `core-data`.
+-   Replace the optimistic `lastPage = ceil((totalItems+1)/perPage)` calculation in `onCreated` with the reactive `totalPages` value.
+-   Limit the server/client planner to deciding how to query IDs instead of using it as a record cache too.
+-   Resolve relation labels through the standard entity-record resolver instead of a one-off include query.
 
 The record query must request `draft`, `private`, and `publish` explicitly. WordPress otherwise returns only published rows. Cross-document views such as Trash can stay behind `/cortext/v1/documents/*` endpoints.
 
