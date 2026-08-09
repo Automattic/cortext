@@ -24,6 +24,7 @@ namespace Cortext\Media;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\PostType\Document;
 use WP_Post;
 use WP_REST_Request;
@@ -96,7 +97,7 @@ final class CortextMedia {
 		$document_ids = get_posts(
 			array(
 				'post_type'      => Document::POST_TYPE,
-				'post_status'    => array( 'publish', 'future', 'draft', 'pending', 'private', 'trash' ),
+				'post_status'    => array( 'publish', 'future', 'draft', 'pending', 'private', 'trash', Documents::STATUS_ARCHIVED ),
 				'posts_per_page' => -1,
 				'fields'         => 'ids',
 			)

@@ -11,6 +11,7 @@ namespace Cortext\Rest;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use WP_Error;
 use WP_Post;
 use WP_REST_Request;
@@ -81,13 +82,21 @@ final class PostLocksController {
 			);
 		}
 
-		if ( 'trash' === $post->post_status ) {
+		if ( Documents::STATUS_TRASH === $post->post_status ) {
 			return new WP_Error(
 				'cortext_document_in_trash',
 				__(
 					'Move this document out of Trash before editing it.',
 					'cortext'
 				),
+				array( 'status' => 409 )
+			);
+		}
+
+		if ( Documents::STATUS_ARCHIVED === $post->post_status ) {
+			return new WP_Error(
+				'cortext_document_archived',
+				__( 'Restore this document before editing it.', 'cortext' ),
 				array( 'status' => 409 )
 			);
 		}

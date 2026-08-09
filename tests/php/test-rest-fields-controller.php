@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\Rest\FieldsController;
@@ -1371,6 +1373,74 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( '{"mode":"value","value":"doing"}', get_post_meta( $field_id, 'default_value', true ) );
 	}
 
+	public function test_update_options_migrates_and_counts_an_archived_row(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		( new ArchiveCascade() )->register_status();
+
+		$collection_id = $this->create_collection_with_slug( 'Archived options', 'archived-options' );
+		$field_id      = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'parked',
+						'label' => 'Parked',
+					),
+				),
+			)
+		)->get_data()['id'];
+		$row_id        = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => Documents::STATUS_ARCHIVED,
+				'post_title'  => 'Archived row',
+				'meta_input'  => array( "field-{$field_id}" => 'parked' ),
+			)
+		);
+
+		$this->with_archived_row_query(
+			$row_id,
+			function () use ( $field_id ): void {
+				$response = $this->update_options(
+					$field_id,
+					array(
+						'options'    => array(
+							array(
+								'value' => 'done',
+								'label' => 'Done',
+							),
+						),
+						'migrations' => array(
+							array(
+								'from'   => 'parked',
+								'action' => 'replace',
+								'to'     => 'done',
+							),
+						),
+					)
+				);
+
+				$this->assertSame( 200, $response->get_status() );
+				$this->assertSame( 1, ( (array) $response->get_data()['migrated'] )['parked'] );
+
+				$request = new WP_REST_Request(
+					'GET',
+					"/cortext/v1/fields/{$field_id}/options/done/usage"
+				);
+				$request->set_param( 'field_id', $field_id );
+				$request->set_param( 'value', 'done' );
+				$usage = rest_do_request( $request );
+
+				$this->assertSame( 200, $usage->get_status() );
+				$this->assertSame( 1, $usage->get_data()['count'] );
+			}
+		);
+
+		$this->assertSame( 'done', get_post_meta( $row_id, "field-{$field_id}", true ) );
+	}
+
 	public function test_update_options_prunes_missing_multiselect_defaults(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$collection_id = $this->create_collection_with_slug( 'Multi Defaults', 'mdefopts' );
@@ -1590,6 +1660,35 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$tokens = $this->collect_option_tokens( $field_id, 'select', $row_ids );
 
 		$this->assertSame( array( 'Open' ), $tokens );
+	}
+
+	public function test_convert_collects_option_tokens_from_an_archived_row(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		( new ArchiveCascade() )->register_status();
+
+		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
+			'archived-token',
+			array( 'Waiting' )
+		);
+
+		$row_id = $row_ids[0];
+		wp_update_post(
+			array(
+				'ID'          => $row_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = null;
+		$this->with_archived_row_query(
+			$row_id,
+			function () use ( $field_id, &$response ): void {
+				$response = $this->convert_field( $field_id, 'select' );
+			}
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'Waiting' ), $response->get_data()['new_options'] );
 	}
 
 	public function test_convert_text_to_number_returns_lean_response_without_scanning_rows(): void {
@@ -1917,6 +2016,49 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$method     = new \ReflectionMethod( $controller, 'collect_option_tokens' );
 		$method->setAccessible( true );
 		return $method->invoke( $controller, $field_id, $target_type, $row_ids );
+	}
+
+	/**
+	 * Adds one archived row to matching controller queries in WorDBless.
+	 *
+	 * @param int      $row_id   ID of the archived row.
+	 * @param callable $callback Assertions to run while the query shim is active.
+	 */
+	private function with_archived_row_query( int $row_id, callable $callback ): void {
+		$filter = static function ( $posts, \WP_Query $query ) use ( $row_id ) {
+			$vars     = $query->query_vars;
+			$statuses = (array) ( $vars['post_status'] ?? array() );
+			$post     = get_post( $row_id );
+			if (
+				! $post instanceof \WP_Post
+				|| Document::POST_TYPE !== ( $vars['post_type'] ?? '' )
+				|| ! in_array( Documents::STATUS_ARCHIVED, $statuses, true )
+				|| Documents::STATUS_ARCHIVED !== $post->post_status
+			) {
+				return $posts;
+			}
+
+			foreach ( (array) ( $vars['meta_query'] ?? array() ) as $clause ) {
+				if (
+					is_array( $clause )
+					&& isset( $clause['key'], $clause['value'] )
+					&& (string) get_post_meta( $row_id, (string) $clause['key'], true ) !== (string) $clause['value']
+				) {
+					return array();
+				}
+			}
+
+			$query->found_posts   = 1;
+			$query->max_num_pages = 1;
+			return 'ids' === ( $vars['fields'] ?? '' ) ? array( $row_id ) : array( $post );
+		};
+
+		add_filter( 'posts_pre_query', $filter, 10, 2 );
+		try {
+			$callback();
+		} finally {
+			remove_filter( 'posts_pre_query', $filter, 10 );
+		}
 	}
 
 	private function convert_field( int $field_id, string $target_type ) {

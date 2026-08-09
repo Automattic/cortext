@@ -11,6 +11,7 @@ namespace Cortext\Tests;
 
 use Cortext\Documents;
 use Cortext\Documents\DocumentDuplicator;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -31,6 +32,7 @@ final class Test_Document_Duplicator extends BaseTestCase {
 		parent::set_up();
 
 		( new Document() )->register_post_type();
+		( new ArchiveCascade() )->register_status();
 		( new DocumentIdentity() )->register();
 		$trait_taxonomy = new TraitTaxonomy();
 		$trait_taxonomy->register_taxonomy();
@@ -135,6 +137,78 @@ final class Test_Document_Duplicator extends BaseTestCase {
 		$this->assertSame( 'Hello excerpt', wp_unslash( (string) $document->post_excerpt ) );
 		$this->assertSame( 'publish', $document->post_status );
 		$this->assertSame( $parent_id, (int) $document->post_parent );
+	}
+
+	public function test_duplicate_archived_page_is_private(): void {
+		$source_id = $this->create_page( 'Archived source' );
+		wp_update_post(
+			array(
+				'ID'          => $source_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$result = $this->duplicator->duplicate( get_post( $source_id ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'private', $result['document']->post_status );
+	}
+
+	public function test_duplicate_rejects_document_under_archived_parent(): void {
+		$parent_id = $this->create_page( 'Archived parent' );
+		$source_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Child',
+				'post_parent' => $parent_id,
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'          => $parent_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$result = $this->duplicator->duplicate( get_post( $source_id ) );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'cortext_duplicate_archived_container', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+	}
+
+	public function test_duplicate_rejects_row_in_archived_collection(): void {
+		$collection_id = $this->create_collection_with_fields( array() );
+		$row_id        = $this->create_row( $collection_id, 'Active row' );
+		wp_update_post(
+			array(
+				'ID'          => $collection_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$result = $this->duplicator->duplicate( get_post( $row_id ) );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'cortext_duplicate_archived_container', $result->get_error_code() );
+	}
+
+	public function test_duplicate_allows_independently_archived_row_in_active_collection(): void {
+		$collection_id = $this->create_collection_with_fields( array() );
+		$row_id        = $this->create_row( $collection_id, 'Archived row' );
+		wp_update_post(
+			array(
+				'ID'          => $row_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$result = $this->duplicator->duplicate( get_post( $row_id ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'private', $result['document']->post_status );
+		$this->assertSame( $collection_id, $result['collection_id'] );
 	}
 
 	public function test_duplicate_collection_clones_schema_with_new_field_posts(): void {

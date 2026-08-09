@@ -11,6 +11,7 @@ namespace Cortext\Rest;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeConverter;
 use Cortext\Fields\FieldTypeRegistry;
@@ -688,7 +689,7 @@ final class FieldsController {
 			$row_ids = get_posts(
 				array(
 					'post_type'      => Document::POST_TYPE,
-					'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
+					'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit', Documents::STATUS_ARCHIVED ),
 					'posts_per_page' => -1,
 					'fields'         => 'ids',
 					'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
@@ -886,7 +887,7 @@ final class FieldsController {
 		$row_ids = get_posts(
 			array(
 				'post_type'      => Document::POST_TYPE,
-				'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
+				'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit', Documents::STATUS_ARCHIVED ),
 				'posts_per_page' => -1,
 				'fields'         => 'ids',
 				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded migration over Cortext rows.
@@ -932,7 +933,7 @@ final class FieldsController {
 		$row_ids  = get_posts(
 			array(
 				'post_type'      => Document::POST_TYPE,
-				'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit' ),
+				'post_status'    => array( 'draft', 'pending', 'private', 'publish', 'future', 'inherit', Documents::STATUS_ARCHIVED ),
 				'posts_per_page' => -1,
 				'fields'         => 'ids',
 				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded count over Cortext rows.

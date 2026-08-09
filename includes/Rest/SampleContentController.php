@@ -12,6 +12,7 @@ namespace Cortext\Rest;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\CLI\SeedDummyCollections;
+use Cortext\Documents;
 use Cortext\PostType\Document;
 use WP_Error;
 use WP_REST_Response;
@@ -88,7 +89,7 @@ final class SampleContentController {
 		$posts = get_posts(
 			array(
 				'post_type'      => Document::POST_TYPE,
-				'post_status'    => array( 'draft', 'private', 'publish', 'pending', 'future', 'trash' ),
+				'post_status'    => array( 'draft', 'private', 'publish', 'pending', 'future', 'trash', Documents::STATUS_ARCHIVED ),
 				'fields'         => 'ids',
 				'posts_per_page' => -1,
 				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key

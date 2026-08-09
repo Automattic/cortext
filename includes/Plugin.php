@@ -23,6 +23,7 @@ use Cortext\Frontend\Assets;
 use Cortext\Frontend\MentionRenderer;
 use Cortext\Frontend\Template;
 use Cortext\Media\CortextMedia;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -65,6 +66,9 @@ final class Plugin {
 		( new Field() )->register();
 		( new FieldValueIndex() )->register();
 
+		$archive_cascade = new ArchiveCascade();
+		$archive_cascade->register();
+
 		// Single instance owns every trash cascade hook and also answers
 		// `descendants_for_root` for the REST endpoints.
 		$trash_cascade = new TrashCascade();
@@ -78,7 +82,7 @@ final class Plugin {
 		( new FieldsController() )->register();
 		( new BacklinksController() )->register();
 		( new DocumentLocatorController() )->register();
-		( new DocumentsController( null, $trash_cascade ) )->register();
+		( new DocumentsController( null, $trash_cascade, $archive_cascade ) )->register();
 		( new ExperimentsController() )->register();
 		( new PostLocksController() )->register();
 		( new RecentsController() )->register();

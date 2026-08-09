@@ -63,6 +63,44 @@ final class DocumentCascade {
 	}
 
 	/**
+	 * Finds every active descendant a cascade from this document would move.
+	 *
+	 * @param int $root_id Root document ID.
+	 * @return int[] Active descendant IDs, excluding the root.
+	 */
+	public function candidates_for_cascade( int $root_id ): array {
+		if ( Document::POST_TYPE !== get_post_type( $root_id ) ) {
+			return array();
+		}
+
+		$collected = array();
+		$seen      = array( $root_id => true );
+		$frontier  = array( $root_id );
+
+		while ( ! empty( $frontier ) ) {
+			$next = array();
+			foreach ( $frontier as $current ) {
+				$candidates = $this->active_child_ids( $current );
+				if ( Document::is_collection( $current ) ) {
+					$candidates = array_merge( $candidates, $this->active_row_ids( $current ) );
+				}
+
+				foreach ( $candidates as $candidate_id ) {
+					if ( isset( $seen[ $candidate_id ] ) ) {
+						continue;
+					}
+					$seen[ $candidate_id ] = true;
+					$collected[]           = $candidate_id;
+					$next[]                = $candidate_id;
+				}
+			}
+			$frontier = $next;
+		}
+
+		return $collected;
+	}
+
+	/**
 	 * Restores the children and rows marked by this document.
 	 *
 	 * @param int      $post_id    Document whose children and rows should be restored.
