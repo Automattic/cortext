@@ -26,6 +26,36 @@ const wpIconMaskCache = new Map();
 const mentionTargetIconCache = new Map();
 const mentionIconHydrators = new WeakMap();
 
+function updateAttribute( element, name, value ) {
+	if ( value ) {
+		if ( element.getAttribute( name ) === value ) {
+			return false;
+		}
+		element.setAttribute( name, value );
+		return true;
+	}
+	if ( element.hasAttribute( name ) ) {
+		element.removeAttribute( name );
+		return true;
+	}
+	return false;
+}
+
+function updateStyleProperty( element, property, value ) {
+	if ( value ) {
+		if ( element.style.getPropertyValue( property ) === value ) {
+			return false;
+		}
+		element.style.setProperty( property, value );
+		return true;
+	}
+	if ( element.style.getPropertyValue( property ) ) {
+		element.style.removeProperty( property );
+		return true;
+	}
+	return false;
+}
+
 function rangeIntersectsNode( range, node ) {
 	try {
 		return range.intersectsNode( node );
@@ -180,7 +210,11 @@ export function hydrateMentionWpIconMasks( root = document ) {
 			}
 			const mask = mentionWpIconMask( name );
 			if ( mask ) {
-				anchor.style.setProperty( '--cortext-mention-icon-mask', mask );
+				updateStyleProperty(
+					anchor,
+					'--cortext-mention-icon-mask',
+					mask
+				);
 			}
 		}
 	);
@@ -222,33 +256,46 @@ function fetchMentionTargetIcon( id ) {
 	return promise;
 }
 
-function applyMentionIcon( anchor, icon, imageUrl = '' ) {
+function mentionIconDomSnapshot( icon, imageUrl = '' ) {
 	const { attributes, style } = mentionIconSnapshotAttributes(
 		icon,
 		imageUrl
 	);
-
-	ICON_ATTRIBUTES.forEach( ( name ) => {
-		if ( attributes[ name ] ) {
-			anchor.setAttribute( name, attributes[ name ] );
-		} else {
-			anchor.removeAttribute( name );
-		}
-	} );
-	ICON_STYLE_PROPERTIES.forEach( ( property ) => {
-		anchor.style.removeProperty( property );
-	} );
-	Object.entries( style ).forEach( ( [ property, value ] ) => {
-		anchor.style.setProperty( property, value );
-	} );
-
-	const wpIconName = anchor.getAttribute( 'data-crtxt-icon-wp' );
+	const wpIconName = attributes[ 'data-crtxt-icon-wp' ];
 	if ( wpIconName ) {
 		const mask = mentionWpIconMask( wpIconName );
 		if ( mask ) {
-			anchor.style.setProperty( '--cortext-mention-icon-mask', mask );
+			style[ '--cortext-mention-icon-mask' ] = mask;
 		}
 	}
+	return { attributes, style };
+}
+
+function mentionIconDomSnapshotMatches( anchor, icon, imageUrl = '' ) {
+	const { attributes, style } = mentionIconDomSnapshot( icon, imageUrl );
+	return (
+		ICON_ATTRIBUTES.every(
+			( name ) =>
+				( anchor.getAttribute( name ) ?? '' ) ===
+				( attributes[ name ] ?? '' )
+		) &&
+		ICON_STYLE_PROPERTIES.every(
+			( property ) =>
+				anchor.style.getPropertyValue( property ) ===
+				( style[ property ] ?? '' )
+		)
+	);
+}
+
+function applyMentionIcon( anchor, icon, imageUrl = '' ) {
+	const { attributes, style } = mentionIconDomSnapshot( icon, imageUrl );
+
+	ICON_ATTRIBUTES.forEach( ( name ) => {
+		updateAttribute( anchor, name, attributes[ name ] ?? '' );
+	} );
+	ICON_STYLE_PROPERTIES.forEach( ( property ) => {
+		updateStyleProperty( anchor, property, style[ property ] ?? '' );
+	} );
 }
 
 export async function hydrateMentionIcons( root = document ) {
@@ -266,15 +313,18 @@ export async function hydrateMentionIcons( root = document ) {
 			if ( ! id ) {
 				return;
 			}
+
+			const { icon, imageUrl } = await fetchMentionTargetIcon( id );
 			if (
-				anchor.getAttribute( HYDRATED_FOR_ATTRIBUTE ) === String( id )
+				anchor.getAttribute( HYDRATED_FOR_ATTRIBUTE ) ===
+					String( id ) &&
+				mentionIconDomSnapshotMatches( anchor, icon, imageUrl )
 			) {
 				return;
 			}
 
-			const { icon, imageUrl } = await fetchMentionTargetIcon( id );
 			applyMentionIcon( anchor, icon, imageUrl );
-			anchor.setAttribute( HYDRATED_FOR_ATTRIBUTE, String( id ) );
+			updateAttribute( anchor, HYDRATED_FOR_ATTRIBUTE, String( id ) );
 		} )
 	);
 }
@@ -313,7 +363,19 @@ export function retainMentionIconHydrator( ownerDocument ) {
 		const MutationObserver = view?.MutationObserver;
 		const observer =
 			MutationObserver && ownerDocument.body
-				? new MutationObserver( scheduleHydrate )
+				? new MutationObserver( ( mutations ) => {
+						if (
+							mutations.some(
+								( mutation ) =>
+									mutation.type === 'childList' ||
+									mutation.target?.classList?.contains(
+										'cortext-mention'
+									)
+							)
+						) {
+							scheduleHydrate();
+						}
+				  } )
 				: null;
 
 		hydrate();
@@ -323,7 +385,7 @@ export function retainMentionIconHydrator( ownerDocument ) {
 		ownerDocument.addEventListener( 'keyup', updateSelection, true );
 		observer?.observe( ownerDocument.body, {
 			attributes: true,
-			attributeFilter: [ MENTION_ATTRIBUTE, 'data-crtxt-icon-wp' ],
+			attributeFilter: [ MENTION_ATTRIBUTE, ...ICON_ATTRIBUTES, 'style' ],
 			childList: true,
 			subtree: true,
 		} );

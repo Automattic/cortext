@@ -250,6 +250,153 @@ describe( 'mention icons', () => {
 		anchor.remove();
 	} );
 
+	it( 'restores a wp icon after the editor resets its visual snapshot', async () => {
+		apiFetch.mockResolvedValue( {
+			id: 390,
+			meta: {
+				cortext_document_icon:
+					'{"type":"wp","name":"chartBar","color":"purple"}',
+			},
+		} );
+		const anchor = document.createElement( 'a' );
+		anchor.className = 'cortext-mention';
+		anchor.setAttribute( 'data-crtxt-mention', '390' );
+		document.body.appendChild( anchor );
+
+		const release = retainMentionIconHydratorsForEditorDocument( document );
+
+		await waitFor( () => {
+			expect( anchor.getAttribute( 'data-crtxt-icon-wp' ) ).toBe(
+				'chartBar'
+			);
+		} );
+		expect( anchor.getAttribute( 'data-crtxt-icon-hydrated-for' ) ).toBe(
+			'390'
+		);
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		// Losing only the mask is enough for the generic document icon to show.
+		anchor.style.removeProperty( '--cortext-mention-icon-mask' );
+
+		await waitFor( () => {
+			expect(
+				anchor.style.getPropertyValue( '--cortext-mention-icon-mask' )
+			).toContain( 'data:image/svg+xml' );
+		} );
+
+		anchor.removeAttribute( 'data-crtxt-icon-wp' );
+		anchor.removeAttribute( 'data-crtxt-icon-color' );
+		anchor.style.removeProperty( '--cortext-mention-icon-color' );
+		anchor.style.removeProperty( '--cortext-mention-icon-mask' );
+
+		// Gutenberg can leave the hydration marker behind when it rebuilds the
+		// mention around a new caret position.
+		expect( anchor.getAttribute( 'data-crtxt-icon-hydrated-for' ) ).toBe(
+			'390'
+		);
+
+		await waitFor( () => {
+			expect( anchor.getAttribute( 'data-crtxt-icon-wp' ) ).toBe(
+				'chartBar'
+			);
+			expect( anchor.getAttribute( 'data-crtxt-icon-color' ) ).toBe(
+				'purple'
+			);
+			expect(
+				anchor.style.getPropertyValue( '--cortext-mention-icon-mask' )
+			).toContain( 'data:image/svg+xml' );
+		} );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		release();
+		anchor.remove();
+	} );
+
+	it( 'restores an emoji icon from the cached target snapshot', async () => {
+		apiFetch.mockResolvedValue( {
+			id: 391,
+			meta: {
+				cortext_document_icon: '{"type":"emoji","value":"📚"}',
+			},
+		} );
+		const anchor = document.createElement( 'a' );
+		anchor.className = 'cortext-mention';
+		anchor.setAttribute( 'data-crtxt-mention', '391' );
+		document.body.appendChild( anchor );
+
+		await hydrateMentionIcons( document );
+		expect( anchor.getAttribute( 'data-crtxt-icon-emoji' ) ).toBe( '📚' );
+
+		anchor.removeAttribute( 'data-crtxt-icon-emoji' );
+		await hydrateMentionIcons( document );
+
+		expect( anchor.getAttribute( 'data-crtxt-icon-emoji' ) ).toBe( '📚' );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		anchor.remove();
+	} );
+
+	it( 'restores an image icon from the cached target snapshot', async () => {
+		apiFetch.mockImplementation( ( { path } ) => {
+			if ( path.startsWith( '/wp/v2/media/72' ) ) {
+				return Promise.resolve( {
+					id: 72,
+					media_details: {
+						sizes: {
+							thumbnail: {
+								source_url: '/media/books-thumbnail.jpg',
+							},
+						},
+					},
+				} );
+			}
+			return Promise.resolve( {
+				id: 392,
+				meta: {
+					cortext_document_icon: '{"type":"image","id":72}',
+				},
+			} );
+		} );
+		const anchor = document.createElement( 'a' );
+		anchor.className = 'cortext-mention';
+		anchor.setAttribute( 'data-crtxt-mention', '392' );
+		document.body.appendChild( anchor );
+
+		await hydrateMentionIcons( document );
+		expect( anchor.getAttribute( 'data-crtxt-icon-image' ) ).toBe( 'true' );
+		expect(
+			anchor.style.getPropertyValue( '--cortext-mention-icon-image' )
+		).toContain( '/media/books-thumbnail.jpg' );
+
+		anchor.removeAttribute( 'data-crtxt-icon-image' );
+		anchor.style.removeProperty( '--cortext-mention-icon-image' );
+		await hydrateMentionIcons( document );
+
+		expect( anchor.getAttribute( 'data-crtxt-icon-image' ) ).toBe( 'true' );
+		expect(
+			anchor.style.getPropertyValue( '--cortext-mention-icon-image' )
+		).toContain( '/media/books-thumbnail.jpg' );
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		anchor.remove();
+	} );
+
+	it( 'keeps the generic fallback for targets without an icon', async () => {
+		apiFetch.mockResolvedValue( { id: 393 } );
+		const anchor = document.createElement( 'a' );
+		anchor.className = 'cortext-mention';
+		anchor.setAttribute( 'data-crtxt-mention', '393' );
+		document.body.appendChild( anchor );
+
+		await hydrateMentionIcons( document );
+		await hydrateMentionIcons( document );
+
+		expect( anchor ).not.toHaveAttribute( 'data-crtxt-icon-emoji' );
+		expect( anchor ).not.toHaveAttribute( 'data-crtxt-icon-image' );
+		expect( anchor ).not.toHaveAttribute( 'data-crtxt-icon-wp' );
+		expect( anchor.getAttribute( 'style' ) ).toBeNull();
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		anchor.remove();
+	} );
+
 	it( 'updates mentions inside the editor iframe from the mounted controller', async () => {
 		apiFetch.mockResolvedValue( {
 			id: 289,
