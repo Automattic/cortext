@@ -511,13 +511,15 @@ The row-detail layout setting means public rendering cannot just print every fie
 
 <a id="td-block-canvas-style-runtime-bridge"></a>
 
-**Bundled WordPress component styles stop at the BlockCanvas boundary.**
+**The bundled DataViews styles miss the BlockCanvas iframe.**
 
-**What.** DataViews 17 and `@wordpress/components` 36 register generated CSS through `@wordpress/style-runtime`. WordPress 7.0 does not register the BlockCanvas iframe as a target, so those rules land in the parent document while the DataView renders inside the canvas. Cortext copies the missing Menu, search, toolbar, InputControl, and Stack rules. The Menu fallback is the riskiest part: it uses broad ARIA and data selectors plus private child order, so it can also restyle an unrelated menu inside the iframe.
+**What.** WordPress 7.0 already wraps the BlockCanvas iframe in the `StyleProvider` from core components. That covers Emotion styles from `wp.components`. Cortext imports `@wordpress/dataviews/wp`, though, and that build includes its own copies of parts of `@wordpress/components` and `@wordpress/ui`. Those copies use the `@emotion/react` instance bundled with Cortext, not the one behind Gutenberg's provider, so their styles still go to the parent page. They also add CSS to the shared `@wordpress/style-runtime` registry, where the BlockCanvas iframe has not been registered. Menu, Stack, InputControl, and other DataViews internals therefore lose part of their styling.
 
-**Where.** The Menu fallback and DataViews toolbar/search rules in `src/components/CollectionDataViews.scss`, the Stack fallback in `src/components/CollectionDataViews.grid.scss`, and the `BlockCanvas` mount in `src/components/EditorBody.js`.
+`BlockCanvasStyleProvider` handles the two cases separately. It registers the iframe with style-runtime and creates a cache with the same Emotion instance used by the DataViews bundle. It waits to render the canvas children until both are ready, so there is no unstyled first pass. This lets us delete our copies of private component CSS.
 
-**Solution.** This can be fixed in Cortext now. Add `@wordpress/style-runtime` as a direct dependency, register the BlockCanvas iframe document while it is mounted, and remove the copied component rules once the generated styles reach the iframe. Keep the bridge only until BlockCanvas registers style-runtime documents itself.
+**Where.** `BlockCanvasStyleProvider` and the `BlockCanvas` mount in `src/components/EditorBody.js`, plus the direct `@wordpress/style-runtime`, `@emotion/react`, and `@emotion/cache` dependencies in `package.json`.
+
+**Solution.** Gutenberg can take over the style-runtime work by registering the BlockCanvas iframe with `globalThis.__wpStyleRuntime`. Then we can delete the local `registerDocument` call and the direct `@wordpress/style-runtime` dependency. The Emotion cache is different. We need it while `@wordpress/dataviews/wp` includes its own component copies, because a provider backed by one Emotion module cannot set context for another. It can go when the DataViews bundle stops including those copies or exports a document provider built with the same Emotion instance. At that point, we can remove `CacheProvider` and the two Emotion dependencies as well.
 
 <a id="td-canvas-interface-skeleton-clone"></a>
 
