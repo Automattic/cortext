@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const CORTEXT_URL_PATTERN = /\/wp-admin\/admin\.php\?page=cortext(?:&|$)/;
 const CORTEXT_ROOT_SELECTOR = '#cortext-root';
+const WORKSPACE_SELECTOR = '.cortext-workspace';
 const PANE_SELECTOR = '.cortext-workspace__pane';
 const ACTIVE_PANE_SELECTOR = `${ PANE_SELECTOR }[data-active="true"]`;
 const CANVAS_SELECTOR = '.cortext-canvas';
@@ -393,6 +394,10 @@ async function describeStalledRenderer( page, activity ) {
 		sections.push( `Slowest completed requests:\n${ slowest.join( '\n' ) }` );
 	}
 
+	// The address says which document the workspace was asked to open, which is
+	// the first thing to check when nothing painted.
+	sections.push( `Renderer URL: ${ truncate( page.url(), REPORTED_URL_LENGTH ) }` );
+
 	// An unauthenticated request is rejected by the runtime's router, so any
 	// status at all proves PHP is still serving and moves blame to the renderer.
 	const origin = new URL( page.url() ).origin;
@@ -409,6 +414,11 @@ async function describeStalledRenderer( page, activity ) {
 	// the active pane alone cannot tell the two apart.
 	const dom = await page.evaluate(
 		( selectors ) => ( {
+			// The workspace publishes the route it is on. A document target with
+			// no document pane below means the id never resolved.
+			targetKind:
+				document.querySelector( selectors.workspace )?.dataset
+					.targetKind ?? null,
 			panes: [ ...document.querySelectorAll( selectors.pane ) ].map(
 				( pane ) => ( {
 					active: pane.dataset.active === 'true',
@@ -420,11 +430,13 @@ async function describeStalledRenderer( page, activity ) {
 				document.querySelector( selectors.activePane )?.innerHTML ?? null,
 		} ),
 		{
+			workspace: WORKSPACE_SELECTOR,
 			pane: PANE_SELECTOR,
 			activePane: ACTIVE_PANE_SELECTOR,
 			canvas: CANVAS_SELECTOR,
 		}
 	);
+	sections.push( `Workspace target: ${ dom.targetKind ?? '(not rendered)' }` );
 	const panes = dom.panes.map(
 		( pane, index ) =>
 			`  ${ index } ${ pane.active ? 'active  ' : 'inactive' } ` +

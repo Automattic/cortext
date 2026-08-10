@@ -35,6 +35,7 @@ function fakePage( succeed, dom = {} ) {
 		// Port 1 refuses instantly, which is the runtime being unreachable.
 		url: () => 'http://127.0.0.1:1/wp-admin/admin.php?page=cortext',
 		evaluate: async () => ( {
+			targetKind: 'document',
 			panes: [
 				{ active: true, canvases: 0, content: 'cortext-canvas__loading' },
 				{ active: false, canvases: 1, content: 'cortext-canvas' },
@@ -71,10 +72,12 @@ test( 'shell wait reports what the renderer had painted and reached', async () =
 	await assert.rejects( waitForCortextShell( fakePage( 2 ) ), ( error ) => {
 		assert.match( error.message, /No requests were still in flight\./ );
 		assert.match( error.message, /No requests failed\./ );
+		assert.match( error.message, /Renderer URL: http:\/\/127\.0\.0\.1:1\// );
 		assert.match(
 			error.message,
 			/Runtime at http:\/\/127\.0\.0\.1:1 did not answer:/
 		);
+		assert.match( error.message, /Workspace target: document/ );
 		assert.match( error.message, /cortext-loading/ );
 		return true;
 	} );
