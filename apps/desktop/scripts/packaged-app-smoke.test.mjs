@@ -95,6 +95,7 @@ test( 'keeps packaged output in an already rendered error stack', () => {
 } );
 
 // Resolves the first `succeed` waits, then times out like Playwright would.
+// `evaluate` stands in for what the renderer painted by the time it gave up.
 function fakePage( succeed ) {
 	let calls = 0;
 	const step = async () => {
@@ -102,7 +103,19 @@ function fakePage( succeed ) {
 			throw new Error( 'locator.waitFor: Timeout 120000ms exceeded.' );
 		}
 	};
-	return { waitForURL: step, locator: () => ( { waitFor: step } ) };
+	return {
+		waitForURL: step,
+		locator: () => ( { waitFor: step } ),
+		on: () => {},
+		// Port 1 refuses instantly, which is the runtime being unreachable.
+		url: () => 'http://127.0.0.1:1/wp-admin/admin.php?page=cortext',
+		evaluate: async () => ( {
+			panes: 1,
+			activePanes: 1,
+			canvases: 0,
+			markup: '<div class="cortext-loading"></div>',
+		} ),
+	};
 }
 
 test( 'shell wait reports the milestones it reached before timing out', async () => {
@@ -125,6 +138,46 @@ test( 'shell wait says so when the boot never reached the first milestone', asyn
 
 test( 'shell wait resolves once the canvas is visible', async () => {
 	await waitForCortextShell( fakePage( 3 ) );
+} );
+
+test( 'shell wait reports what the renderer had painted and reached', async () => {
+	await assert.rejects( waitForCortextShell( fakePage( 2 ) ), ( error ) => {
+		assert.match( error.message, /No requests were still in flight\./ );
+		assert.match(
+			error.message,
+			/Runtime at http:\/\/127\.0\.0\.1:1 did not answer:/
+		);
+		assert.match( error.message, /Panes: 1 \(1 active\), canvases: 0\./ );
+		assert.match( error.message, /cortext-loading/ );
+		return true;
+	} );
+} );
+
+test( 'shell wait skips the runtime probe when the renderer never got there', async () => {
+	const page = fakePage( 0 );
+	page.url = () => 'about:blank';
+
+	await assert.rejects( waitForCortextShell( page ), ( error ) => {
+		assert.match( error.message, /The renderer never reached the runtime\./ );
+		assert.doesNotMatch( error.message, /Runtime at/ );
+		return true;
+	} );
+} );
+
+test( 'shell wait keeps the timeout when the report itself fails', async () => {
+	const page = fakePage( 2 );
+	page.evaluate = async () => {
+		throw new Error( 'Execution context was destroyed.' );
+	};
+
+	await assert.rejects( waitForCortextShell( page ), ( error ) => {
+		assert.match( error.message, /Timeout 120000ms exceeded/ );
+		assert.match(
+			error.message,
+			/Could not describe the renderer: Execution context was destroyed\./
+		);
+		return true;
+	} );
 } );
 
 async function listen( handler ) {
