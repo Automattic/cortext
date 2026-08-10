@@ -173,6 +173,28 @@ test( 'shell wait shows a canvas sitting in an inactive pane', async () => {
 	} );
 } );
 
+// A stall is read from the last request before the silence, so a long boot
+// must drop the earliest requests, not the latest.
+test( 'shell wait lists the latest requests when there are too many', async () => {
+	const page = fakePage( 2 );
+	page.on = ( event, handler ) => {
+		if ( event !== 'requestfinished' ) {
+			return;
+		}
+		for ( let index = 0; index < 100; index++ ) {
+			handler( { url: () => `http://127.0.0.1:1/wp-json/step-${ index }` } );
+		}
+	};
+
+	await assert.rejects( waitForCortextShell( page ), ( error ) => {
+		assert.match( error.message, /100 total, 0 assets hidden, showing last 80/ );
+		assert.match( error.message, /\+\?ms \?ms ok http:\/\/127\.0\.0\.1:1\/wp-json\/step-99\n/ );
+		assert.doesNotMatch( error.message, /step-19\n/ );
+		assert.match( error.message, /step-20\n/ );
+		return true;
+	} );
+} );
+
 test( 'shell wait skips the runtime probe when the renderer never got there', async () => {
 	const page = fakePage( 0 );
 	page.url = () => 'about:blank';
