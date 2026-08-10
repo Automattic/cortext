@@ -35,9 +35,10 @@ function fakePage( succeed, dom = {} ) {
 		// Port 1 refuses instantly, which is the runtime being unreachable.
 		url: () => 'http://127.0.0.1:1/wp-admin/admin.php?page=cortext',
 		evaluate: async () => ( {
-			panes: 1,
-			activePanes: 1,
-			canvases: 0,
+			panes: [
+				{ active: true, canvases: 0, content: 'cortext-canvas__loading' },
+				{ active: false, canvases: 1, content: 'cortext-canvas' },
+			],
 			markup: '<div class="cortext-loading"></div>',
 			...dom,
 		} ),
@@ -69,12 +70,28 @@ test( 'shell wait resolves once the canvas is visible', async () => {
 test( 'shell wait reports what the renderer had painted and reached', async () => {
 	await assert.rejects( waitForCortextShell( fakePage( 2 ) ), ( error ) => {
 		assert.match( error.message, /No requests were still in flight\./ );
+		assert.match( error.message, /No requests failed\./ );
 		assert.match(
 			error.message,
 			/Runtime at http:\/\/127\.0\.0\.1:1 did not answer:/
 		);
-		assert.match( error.message, /Panes: 1 \(1 active\), canvases: 0\./ );
 		assert.match( error.message, /cortext-loading/ );
+		return true;
+	} );
+} );
+
+// The whole point of listing every pane: a canvas parked in an inactive one is
+// a workspace that never switched, not an editor that failed to load.
+test( 'shell wait shows a canvas sitting in an inactive pane', async () => {
+	await assert.rejects( waitForCortextShell( fakePage( 2 ) ), ( error ) => {
+		assert.match(
+			error.message,
+			/Panes:\n\s+0 active\s+canvases=0\s+cortext-canvas__loading/
+		);
+		assert.match(
+			error.message,
+			/\n\s+1 inactive\s+canvases=1\s+cortext-canvas/
+		);
 		return true;
 	} );
 } );

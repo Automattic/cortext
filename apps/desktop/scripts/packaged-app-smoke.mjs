@@ -365,6 +365,21 @@ async function describeStalledRenderer( page, activity ) {
 			: 'No requests were still in flight.'
 	);
 
+	// Kept separate from the slowest list because a request that fails usually
+	// fails fast, so ranking by duration hides exactly the ones worth seeing.
+	const failed = activity.settled
+		.filter( ( entry ) => entry.outcome !== 'ok' )
+		.map(
+			( entry ) =>
+				`  ${ entry.milliseconds }ms ${ entry.outcome } ` +
+				truncate( entry.url, REPORTED_URL_LENGTH )
+		);
+	sections.push(
+		failed.length
+			? `Failed requests:\n${ failed.join( '\n' ) }`
+			: 'No requests failed.'
+	);
+
 	const slowest = activity.settled
 		.slice()
 		.sort( ( a, b ) => ( b.milliseconds ?? 0 ) - ( a.milliseconds ?? 0 ) )
@@ -388,11 +403,19 @@ async function describeStalledRenderer( page, activity ) {
 		sections.push( `Runtime at ${ origin } did not answer: ${ error.message }` );
 	}
 
+	// Every pane stays mounted, active or not, so a canvas sitting in an
+	// inactive pane means the editor loaded and the workspace never switched to
+	// it. That is a different bug from a canvas that never mounted at all, and
+	// the active pane alone cannot tell the two apart.
 	const dom = await page.evaluate(
 		( selectors ) => ( {
-			panes: document.querySelectorAll( selectors.pane ).length,
-			activePanes: document.querySelectorAll( selectors.activePane ).length,
-			canvases: document.querySelectorAll( selectors.canvas ).length,
+			panes: [ ...document.querySelectorAll( selectors.pane ) ].map(
+				( pane ) => ( {
+					active: pane.dataset.active === 'true',
+					canvases: pane.querySelectorAll( selectors.canvas ).length,
+					content: pane.firstElementChild?.className || '(empty)',
+				} )
+			),
 			markup:
 				document.querySelector( selectors.activePane )?.innerHTML ?? null,
 		} ),
@@ -402,9 +425,13 @@ async function describeStalledRenderer( page, activity ) {
 			canvas: CANVAS_SELECTOR,
 		}
 	);
+	const panes = dom.panes.map(
+		( pane, index ) =>
+			`  ${ index } ${ pane.active ? 'active  ' : 'inactive' } ` +
+			`canvases=${ pane.canvases }  ${ truncate( pane.content, 80 ) }`
+	);
 	sections.push(
-		`Panes: ${ dom.panes } (${ dom.activePanes } active), ` +
-			`canvases: ${ dom.canvases }.\n` +
+		`Panes:\n${ panes.join( '\n' ) || '  (none)' }\n` +
 			`Active pane markup: ${
 				dom.markup === null
 					? '(no active pane)'
