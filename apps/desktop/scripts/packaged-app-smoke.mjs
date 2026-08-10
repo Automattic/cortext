@@ -26,7 +26,9 @@ const EXIT_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 250;
 const RUNTIME_PROBE_TIMEOUT_MS = 2_000;
 const REPORTED_URL_LENGTH = 140;
-const REPORTED_REQUESTS = 10;
+const REPORTED_REQUESTS = 80;
+const ASSET_PATTERN =
+	/\.(?:js|mjs|css|svg|png|jpe?g|gif|webp|woff2?|ttf|eot|map|ico)(?:\?|$)/;
 const REPORTED_MESSAGES = 20;
 const REPORTED_MARKUP_LENGTH = 600;
 
@@ -320,6 +322,7 @@ function truncate( text, limit ) {
 // only reports the selector it gave up on, which is the one thing we already
 // know.
 function recordRendererActivity( page ) {
+	const openedAt = Date.now();
 	const inFlight = new Map();
 	const settled = [];
 	const messages = [];
@@ -338,6 +341,7 @@ function recordRendererActivity( page ) {
 		settled.push( {
 			outcome,
 			url: pending.url(),
+			offset: startedAt === undefined ? null : startedAt - openedAt,
 			milliseconds: startedAt === undefined ? null : Date.now() - startedAt,
 		} );
 	};
@@ -346,7 +350,7 @@ function recordRendererActivity( page ) {
 		settle( pending, pending.failure()?.errorText || 'failed' )
 	);
 
-	return { inFlight, settled, messages };
+	return { openedAt, inFlight, settled, messages };
 }
 
 // Answers the question the milestones cannot: whether the renderer is still
@@ -381,17 +385,31 @@ async function describeStalledRenderer( page, activity ) {
 			: 'No requests failed.'
 	);
 
-	const slowest = activity.settled
+	// Chronological rather than ranked by duration: a boot that stalls does it at
+	// a particular point in the sequence, and the last request before the silence
+	// is the one worth reading. Scripts and styles are dropped because a few
+	// hundred of them bury the handful of REST calls that carry the boot.
+	const dataRequests = activity.settled.filter(
+		( entry ) => ! ASSET_PATTERN.test( entry.url )
+	);
+	const timeline = dataRequests
 		.slice()
-		.sort( ( a, b ) => ( b.milliseconds ?? 0 ) - ( a.milliseconds ?? 0 ) )
+		.sort( ( a, b ) => ( a.offset ?? 0 ) - ( b.offset ?? 0 ) )
 		.slice( 0, REPORTED_REQUESTS )
 		.map(
 			( entry ) =>
-				`  ${ entry.milliseconds }ms ${ entry.outcome } ` +
-				truncate( entry.url, REPORTED_URL_LENGTH )
+				`  +${ entry.offset }ms ${ entry.milliseconds }ms ` +
+				`${ entry.outcome } ${ truncate( entry.url, REPORTED_URL_LENGTH ) }`
 		);
-	if ( slowest.length ) {
-		sections.push( `Slowest completed requests:\n${ slowest.join( '\n' ) }` );
+	if ( timeline.length ) {
+		const assets = activity.settled.length - dataRequests.length;
+		const dropped = dataRequests.length - timeline.length;
+		sections.push(
+			`Requests (${ activity.settled.length } total, ` +
+				`${ assets } assets hidden` +
+				`${ dropped > 0 ? `, showing first ${ timeline.length }` : '' }):\n` +
+				timeline.join( '\n' )
+		);
 	}
 
 	// The address says which document the workspace was asked to open, which is
