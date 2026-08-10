@@ -123,10 +123,10 @@ test( 'POSIX keeps the configured PHP worker count and uses a process group', ()
 	);
 } );
 
-test( 'POSIX forks a worker pool when nothing is configured', () => {
+test( 'POSIX runs a single worker when nothing is configured', () => {
 	assert.deepEqual( phpCliWorkerConfig( {}, 'darwin' ), {
-		workers: '4',
-		detached: true,
+		workers: null,
+		detached: false,
 		ignoredWorkers: null,
 	} );
 } );
