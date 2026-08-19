@@ -101,6 +101,7 @@ jest.mock(
 	'../../../src/components/DocumentIdentityControls',
 	() => () => null
 );
+jest.mock( '../../../src/components/RevisionPropertiesDiff', () => () => null );
 jest.mock( '../../../src/components/Skeleton', () => ( {
 	SkeletonBlock: () => null,
 } ) );
@@ -135,6 +136,13 @@ jest.mock( '../../../src/hooks/useFavorites', () => ( {
 } ) );
 jest.mock( '../../../src/hooks/useWorkspaceHome', () => ( {
 	useWorkspaceHome: () => ( {} ),
+} ) );
+jest.mock( '../../../src/hooks/useRevisions', () => ( {
+	useRevisionControls: () => ( { isRevisionsMode: false } ),
+	useRevisionedDocumentIdentity: ( { featuredId, meta } ) => ( {
+		featuredId,
+		iconMeta: meta?.cortext_document_icon ?? '',
+	} ),
 } ) );
 
 import {

@@ -60,6 +60,7 @@ jest.mock( '@wordpress/components', () => {
 	};
 } );
 jest.mock( '@wordpress/icons', () => ( {
+	backup: 'backup',
 	closeSmall: 'close-small',
 	cog: 'cog',
 	pencil: 'pencil',
@@ -74,6 +75,12 @@ jest.mock( '../../../src/components/initEditor', () => ( {
 jest.mock( '../../../src/hooks/useAutosave', () => jest.fn() );
 jest.mock( '../../../src/hooks/useDelayedFlag', () => jest.fn() );
 jest.mock( '../../../src/hooks/usePostLock', () => jest.fn() );
+jest.mock( '../../../src/hooks/useRevisions', () => ( {
+	useRevisionControls: () => ( {
+		isAvailable: false,
+		isRevisionsMode: false,
+	} ),
+} ) );
 jest.mock( '../../../src/hooks/viewTransition', () => ( {
 	withViewTransition: jest.fn(),
 } ) );
@@ -96,6 +103,8 @@ jest.mock( '../../../src/components/DocumentPropertiesContext', () => ( {
 } ) );
 jest.mock( '../../../src/components/DocumentPublishToggle', () => () => null );
 jest.mock( '../../../src/components/EditorBody', () => () => null );
+jest.mock( '../../../src/components/RevisionHistoryPanel', () => () => null );
+jest.mock( '../../../src/components/RevisionsHeader', () => () => null );
 jest.mock( '../../../src/components/PostLockControls', () => ( {
 	PostLockFailureNotice: () => null,
 	PostLockModal: () => null,
@@ -114,6 +123,9 @@ jest.mock( '../../../src/components/DocumentInspectorSidebar', () => ( {
 	InspectorSidebarSlot: () => null,
 	getActiveInspectorArea: jest.fn(),
 	isInspectorArea: jest.fn(),
+} ) );
+jest.mock( '../../../src/lock-unlock', () => ( {
+	unlock: ( value ) => value,
 } ) );
 jest.mock( '../../../src/router/rowContextCache', () => ( {
 	makeRowDocumentContext: jest.fn(),

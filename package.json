@@ -60,6 +60,7 @@
 		"@emoji-mart/react": "^1.1.1",
 		"@emotion/cache": "^11.14.0",
 		"@emotion/react": "^11.14.0",
+		"@floating-ui/react-dom": "^2.1.8",
 		"@tanstack/react-router": "^1.170.16",
 		"@wordpress/api-fetch": "^7.49.0",
 		"@wordpress/base-styles": "^10.1.0",
