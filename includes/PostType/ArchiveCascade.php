@@ -17,6 +17,7 @@ namespace Cortext\PostType;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Documents;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
 use WP_REST_Request;
@@ -68,7 +69,7 @@ final class ArchiveCascade {
 		add_action( 'init', array( $this, 'register_meta' ) );
 		add_action( 'transition_post_status', array( $this, 'on_transition' ), 10, 3 );
 		add_filter( 'rest_pre_insert_' . Document::POST_TYPE, array( $this, 'validate_rest_archive_transition' ), 5, 2 );
-		add_filter( 'rest_dispatch_request', array( $this, 'block_archived_autosave' ), 10, 4 );
+		add_filter( 'rest_dispatch_request', array( $this, 'guard_archived_core_rest_request' ), 10, 4 );
 		add_filter( 'map_meta_cap', array( $this, 'preserve_original_status_capabilities' ), 10, 4 );
 		add_filter( 'wp_untrash_post_status', array( $this, 'allow_archived_untrash_status' ), PHP_INT_MAX, 3 );
 		add_filter( 'wp_insert_post_parent', array( $this, 'capture_trash_archive_slug_state' ), 5, 4 );
@@ -219,17 +220,22 @@ final class ArchiveCascade {
 		}
 
 		$post_id = (int) $request->get_param( 'id' );
-		if ( $post_id < 1 ) {
+		$post    = $post_id > 0 ? get_post( $post_id ) : null;
+		if ( $post instanceof WP_Post && Document::POST_TYPE !== $post->post_type ) {
 			return $prepared_post;
 		}
 
-		$post = get_post( $post_id );
-		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
-			return $prepared_post;
-		}
-
-		if ( Documents::STATUS_ARCHIVED === $post->post_status ) {
+		if ( $post instanceof WP_Post && Documents::STATUS_ARCHIVED === $post->post_status ) {
 			return $this->archived_write_error();
+		}
+
+		$container_error = $this->rest_container_error( $prepared_post, $post, $request );
+		if ( $container_error instanceof WP_Error ) {
+			return $container_error;
+		}
+
+		if ( ! $post instanceof WP_Post ) {
+			return $prepared_post;
 		}
 
 		if ( Documents::STATUS_ARCHIVED !== $request->get_param( 'status' ) ) {
@@ -253,12 +259,10 @@ final class ArchiveCascade {
 	}
 
 	/**
-	 * Stops core's autosave controller before it can create a revision for an
-	 * archived document.
+	 * Handles core REST paths that skip the pre-insert guard.
 	 *
-	 * The autosave controller ignores errors returned by its parent post
-	 * controller's prepare method, so the regular pre-insert guard is not enough
-	 * for this route.
+	 * The autosave controller ignores errors from its parent controller's prepare
+	 * method. Delete requests never run the pre-insert filter. Check both here.
 	 *
 	 * @param mixed           $dispatch_result Result supplied by an earlier filter.
 	 * @param WP_REST_Request $request         Incoming REST request.
@@ -266,28 +270,51 @@ final class ArchiveCascade {
 	 * @param array           $handler         Matched route handler.
 	 * @return mixed|WP_Error
 	 */
-	public function block_archived_autosave( $dispatch_result, WP_REST_Request $request, string $route, array $handler ) {
+	public function guard_archived_core_rest_request( $dispatch_result, WP_REST_Request $request, string $route, array $handler ) {
 		unset( $route );
 
 		$callback = $handler['callback'] ?? null;
 		if (
 			null !== $dispatch_result
-			|| 'POST' !== $request->get_method()
 			|| ! is_array( $callback )
 			|| ! isset( $callback[0], $callback[1] )
-			|| ! $callback[0] instanceof \WP_REST_Autosaves_Controller
-			|| 'create_item' !== $callback[1]
 		) {
 			return $dispatch_result;
 		}
 
+		$method       = $request->get_method();
+		$is_autosave  = 'POST' === $method
+			&& $callback[0] instanceof \WP_REST_Autosaves_Controller
+			&& 'create_item' === $callback[1];
+		$force_delete = 'DELETE' === $method
+			&& $callback[0] instanceof \WP_REST_Posts_Controller
+			&& 'delete_item' === $callback[1]
+			&& rest_sanitize_boolean( $request->get_param( 'force' ) );
+		if ( ! $is_autosave && ! $force_delete ) {
+			return $dispatch_result;
+		}
+
 		$post = get_post( (int) $request->get_param( 'id' ) );
-		if (
-			$post instanceof WP_Post
-			&& Document::POST_TYPE === $post->post_type
-			&& Documents::STATUS_ARCHIVED === $post->post_status
-		) {
-			return $this->archived_write_error();
+		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+			return $dispatch_result;
+		}
+
+		if ( $is_autosave ) {
+			if ( Documents::STATUS_ARCHIVED === $post->post_status ) {
+				return $this->archived_write_error();
+			}
+			$container_error = $this->container_error_for_document( $post );
+			if ( $container_error instanceof WP_Error ) {
+				return $container_error;
+			}
+		}
+
+		if ( $force_delete && Documents::STATUS_ARCHIVED === $post->post_status ) {
+			return new WP_Error(
+				'cortext_document_not_trashed',
+				__( 'Move this document to Trash before deleting it permanently.', 'cortext' ),
+				array( 'status' => 400 )
+			);
 		}
 
 		return $dispatch_result;
@@ -504,8 +531,14 @@ final class ArchiveCascade {
 			);
 		}
 
-		$candidates = $this->descendants_for_root( $post_id );
-		$result     = wp_update_post(
+		$candidates      = $this->descendants_for_root( $post_id );
+		$restoring_ids   = array_values( array_unique( array_merge( array( $post_id ), $candidates ) ) );
+		$container_error = $this->container_error_for_documents( $restoring_ids, $restoring_ids );
+		if ( $container_error instanceof WP_Error ) {
+			return $container_error;
+		}
+
+		$result = wp_update_post(
 			array(
 				'ID'          => $post_id,
 				'post_status' => $this->restore_status_for( $post_id ),
@@ -587,9 +620,205 @@ final class ArchiveCascade {
 		return true;
 	}
 
+	/**
+	 * Rejects an active write when its parent or collection is archived.
+	 *
+	 * @param WP_Post $post                  Document that would be active.
+	 * @param int[]   $ignored_container_ids Containers that will become active in the same operation.
+	 */
+	public function container_error_for_document( WP_Post $post, array $ignored_container_ids = array() ): ?WP_Error {
+		return $this->archived_container_error( $this->direct_container_ids( $post ), $ignored_container_ids );
+	}
+
+	/**
+	 * Checks every document that will become active in the same operation.
+	 * It collects the container IDs first to avoid walking the same ancestors
+	 * more than once.
+	 *
+	 * @param int[] $post_ids              Documents that would become active.
+	 * @param int[] $ignored_container_ids Containers that will become active in the same operation.
+	 */
+	public function container_error_for_documents( array $post_ids, array $ignored_container_ids = array() ): ?WP_Error {
+		$container_ids = array();
+		foreach ( array_unique( array_map( 'intval', $post_ids ) ) as $post_id ) {
+			$post = get_post( $post_id );
+			if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+				continue;
+			}
+
+			$container_ids = array_merge( $container_ids, $this->direct_container_ids( $post ) );
+		}
+
+		return $this->archived_container_error( $container_ids, $ignored_container_ids );
+	}
+
+	/**
+	 * Returns the parent and collections a document hangs from.
+	 *
+	 * @param WP_Post $post Document to inspect.
+	 * @return int[]
+	 */
+	private function direct_container_ids( WP_Post $post ): array {
+		$container_ids = array();
+		if ( $post->post_parent > 0 ) {
+			$container_ids[] = (int) $post->post_parent;
+		}
+
+		return array_merge( $container_ids, $this->stored_trait_ids( (int) $post->ID ) );
+	}
+
 	private function restore_status_for( int $post_id ): string {
 		$status = (string) get_post_meta( $post_id, self::STATUS_META, true );
 		return in_array( $status, self::ACTIVE_STATUSES, true ) ? $status : 'draft';
+	}
+
+	/**
+	 * Checks the parent and collection assigned by a core REST write.
+	 *
+	 * The check skips archived and trashed documents because they stay hidden.
+	 *
+	 * @param mixed           $prepared_post Prepared post from core REST.
+	 * @param WP_Post|null    $post          Existing post on updates.
+	 * @param WP_REST_Request $request       Incoming request.
+	 */
+	private function rest_container_error( $prepared_post, ?WP_Post $post, WP_REST_Request $request ): ?WP_Error {
+		$status = isset( $prepared_post->post_status )
+			? (string) $prepared_post->post_status
+			: ( $post instanceof WP_Post ? $post->post_status : 'draft' );
+		if ( in_array( $status, array( Documents::STATUS_ARCHIVED, Documents::STATUS_TRASH ), true ) ) {
+			return null;
+		}
+
+		$container_ids = array();
+		if ( isset( $prepared_post->post_parent ) ) {
+			$parent_id = (int) $prepared_post->post_parent;
+		} else {
+			$parent_id = $post instanceof WP_Post ? (int) $post->post_parent : 0;
+		}
+		if ( $parent_id > 0 ) {
+			$container_ids[] = $parent_id;
+		}
+
+		// Cortext applies a valid `cortext_trait` after WordPress's native terms,
+		// so it sets the final collection. Otherwise, use the native terms. If
+		// neither parameter is present, keep the stored terms.
+		$requested_trait_ids = $request->has_param( 'cortext_trait' )
+			? $this->requested_trait_ids( $request->get_param( 'cortext_trait' ) )
+			: array();
+		if ( ! empty( $requested_trait_ids ) ) {
+			$container_ids = array_merge( $container_ids, $requested_trait_ids );
+		} elseif ( $request->has_param( TraitTaxonomy::TAXONOMY ) ) {
+			$container_ids = array_merge(
+				$container_ids,
+				$this->requested_term_trait_ids( $request->get_param( TraitTaxonomy::TAXONOMY ) )
+			);
+		} elseif ( $post instanceof WP_Post ) {
+			$container_ids = array_merge( $container_ids, $this->stored_trait_ids( (int) $post->ID ) );
+		}
+
+		return $this->archived_container_error( $container_ids );
+	}
+
+	/**
+	 * Resolves collection document IDs from Cortext's custom trait parameter.
+	 *
+	 * @param mixed $raw_trait Requested trait value.
+	 * @return int[]
+	 */
+	private function requested_trait_ids( $raw_trait ): array {
+		$trait_id = (int) $raw_trait;
+		return $trait_id > 0 && TraitTaxonomy::term_id_for_trait( $trait_id ) > 0
+			? array( $trait_id )
+			: array();
+	}
+
+	/**
+	 * Resolves collection document IDs from core's native trait term IDs.
+	 * Skips terms it cannot resolve, matching `wp_set_object_terms()`.
+	 *
+	 * @param mixed $raw_terms Requested taxonomy terms.
+	 * @return int[]
+	 */
+	private function requested_term_trait_ids( $raw_terms ): array {
+		$trait_ids = array();
+		foreach ( (array) $raw_terms as $term_id ) {
+			$trait_id = TraitTaxonomy::trait_id_for_term( (int) $term_id );
+			if ( $trait_id > 0 ) {
+				$trait_ids[] = $trait_id;
+			}
+		}
+		return array_values( array_unique( $trait_ids ) );
+	}
+
+	/**
+	 * Returns every collection document attached to a row.
+	 *
+	 * @param int $post_id Row document ID.
+	 * @return int[]
+	 */
+	private function stored_trait_ids( int $post_id ): array {
+		$term_ids = wp_get_object_terms(
+			$post_id,
+			TraitTaxonomy::TAXONOMY,
+			array( 'fields' => 'ids' )
+		);
+		if ( ! is_array( $term_ids ) ) {
+			return array();
+		}
+
+		$trait_ids = array();
+		foreach ( $term_ids as $term_id ) {
+			$trait_id = TraitTaxonomy::trait_id_for_term( (int) $term_id );
+			if ( $trait_id > 0 ) {
+				$trait_ids[] = $trait_id;
+			}
+		}
+		return array_values( array_unique( $trait_ids ) );
+	}
+
+	/**
+	 * Returns a conflict when a container or one of its parents is archived.
+	 *
+	 * @param int[] $container_ids         Parent and collection document IDs.
+	 * @param int[] $ignored_container_ids Containers that will become active in the same operation.
+	 */
+	private function archived_container_error( array $container_ids, array $ignored_container_ids = array() ): ?WP_Error {
+		$ignored = array_fill_keys( array_map( 'intval', $ignored_container_ids ), true );
+		$queue   = array_values( array_unique( array_map( 'intval', $container_ids ) ) );
+		$seen    = array();
+		while ( ! empty( $queue ) ) {
+			$container_id = (int) array_pop( $queue );
+			if ( $container_id < 1 || isset( $seen[ $container_id ] ) ) {
+				continue;
+			}
+			$seen[ $container_id ] = true;
+			$container             = get_post( $container_id );
+			if ( ! $container instanceof WP_Post || Document::POST_TYPE !== $container->post_type ) {
+				continue;
+			}
+
+			$is_archived = Documents::STATUS_ARCHIVED === $container->post_status;
+			if ( Documents::STATUS_TRASH === $container->post_status ) {
+				$is_archived = Documents::STATUS_ARCHIVED
+					=== (string) get_post_meta( $container_id, '_wp_trash_meta_status', true );
+			}
+			if ( ! isset( $ignored[ $container_id ] ) && $is_archived ) {
+				return new WP_Error(
+					'cortext_document_archived_container',
+					__( 'Restore this document\'s parent or collection from Archive first.', 'cortext' ),
+					array(
+						'status'       => 409,
+						'container_id' => $container_id,
+					)
+				);
+			}
+
+			if ( $container->post_parent > 0 ) {
+				$queue[] = (int) $container->post_parent;
+			}
+		}
+
+		return null;
 	}
 
 	private function archived_write_error(): WP_Error {

@@ -70,6 +70,8 @@ final class FieldsController {
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
+		add_filter( 'rest_pre_insert_' . Field::POST_TYPE, array( $this, 'guard_core_field_write' ), 5, 2 );
+		add_filter( 'rest_dispatch_request', array( $this, 'guard_core_field_delete' ), 10, 4 );
 	}
 
 	public function register_routes(): void {
@@ -296,7 +298,11 @@ final class FieldsController {
 				array( 'status' => 404 )
 			);
 		}
-		return current_user_can( 'edit_post', $collection_id );
+		if ( ! current_user_can( 'edit_post', $collection_id ) ) {
+			return false;
+		}
+
+		return $this->archived_collection_error( $collection_id ) ?? true;
 	}
 
 	public function can_edit_field( WP_REST_Request $request ): bool|WP_Error {
@@ -309,7 +315,78 @@ final class FieldsController {
 				array( 'status' => 404 )
 			);
 		}
-		return current_user_can( 'edit_post', $field_id );
+		if ( ! current_user_can( 'edit_post', $field_id ) ) {
+			return false;
+		}
+
+		if ( ! in_array( $request->get_method(), array( 'GET', 'HEAD' ), true ) ) {
+			$archive_error = $this->archived_collection_error_for_fields( array( $field_id ) );
+			if ( $archive_error instanceof WP_Error ) {
+				return $archive_error;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Blocks core REST updates to fields in archived collections.
+	 *
+	 * @param mixed           $prepared_post Prepared field post.
+	 * @param WP_REST_Request $request       Incoming core REST request.
+	 * @return mixed|WP_Error
+	 */
+	public function guard_core_field_write( $prepared_post, WP_REST_Request $request ) {
+		if ( is_wp_error( $prepared_post ) ) {
+			return $prepared_post;
+		}
+
+		$field_id = (int) $request->get_param( 'id' );
+		$field    = $field_id > 0 ? get_post( $field_id ) : null;
+		if ( ! $field instanceof WP_Post || Field::POST_TYPE !== $field->post_type ) {
+			return $prepared_post;
+		}
+
+		return $this->archived_collection_error_for_fields( array( $field_id ) ) ?? $prepared_post;
+	}
+
+	/**
+	 * Blocks core REST deletes that would change an archived collection's schema,
+	 * including reverse fields and dependent fields.
+	 *
+	 * @param mixed           $dispatch_result Result supplied by an earlier filter.
+	 * @param WP_REST_Request $request         Incoming REST request.
+	 * @param string          $route           Matched route pattern.
+	 * @param array           $handler         Matched route handler.
+	 * @return mixed|WP_Error
+	 */
+	public function guard_core_field_delete( $dispatch_result, WP_REST_Request $request, string $route, array $handler ) {
+		unset( $route );
+
+		$callback = $handler['callback'] ?? null;
+		if (
+			null !== $dispatch_result
+			|| 'DELETE' !== $request->get_method()
+			|| ! is_array( $callback )
+			|| ! isset( $callback[0], $callback[1] )
+			|| ! $callback[0] instanceof \WP_REST_Posts_Controller
+			|| 'delete_item' !== $callback[1]
+		) {
+			return $dispatch_result;
+		}
+
+		$field_id = (int) $request->get_param( 'id' );
+		$field    = get_post( $field_id );
+		if ( ! $field instanceof WP_Post || Field::POST_TYPE !== $field->post_type ) {
+			return $dispatch_result;
+		}
+
+		$affected_field_ids = rest_sanitize_boolean( $request->get_param( 'force' ) )
+			? ( new Field() )->deletion_cascade_ids( $field_id )
+			: array( $field_id );
+
+		return $this->archived_collection_error_for_fields( $affected_field_ids )
+			?? $dispatch_result;
 	}
 
 	public function create( WP_REST_Request $request ): WP_REST_Response|WP_Error {
@@ -745,7 +822,7 @@ final class FieldsController {
 		$field_id_str = (string) $field_id;
 
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- field→collection reverse lookup; bounded by a single matching row.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Looks up a field's collection and returns at most one row.
 		$collection_id = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s LIMIT 1",
@@ -776,6 +853,56 @@ final class FieldsController {
 
 	private static function is_wordbless_active(): bool {
 		return class_exists( '\WorDBless\PostMeta' );
+	}
+
+	/**
+	 * Returns an error when a request would change an archived collection's schema.
+	 *
+	 * @param int $collection_id Collection document ID.
+	 */
+	private function archived_collection_error( int $collection_id ): ?WP_Error {
+		if ( $collection_id < 1 ) {
+			return null;
+		}
+
+		$collection = get_post( $collection_id );
+		if ( ! $collection instanceof WP_Post || Document::POST_TYPE !== $collection->post_type ) {
+			return null;
+		}
+
+		$is_archived = Documents::STATUS_ARCHIVED === $collection->post_status;
+		if ( Documents::STATUS_TRASH === $collection->post_status ) {
+			$is_archived = Documents::STATUS_ARCHIVED
+				=== (string) get_post_meta( $collection_id, '_wp_trash_meta_status', true );
+		}
+		if ( ! $is_archived ) {
+			return null;
+		}
+
+		return new WP_Error(
+			'cortext_collection_archived',
+			__( 'Restore this collection from Archive before changing its fields.', 'cortext' ),
+			array(
+				'status'        => 409,
+				'collection_id' => $collection_id,
+			)
+		);
+	}
+
+	/**
+	 * Checks each field's collection for Archive status.
+	 *
+	 * @param int[] $field_ids Field post IDs.
+	 */
+	private function archived_collection_error_for_fields( array $field_ids ): ?WP_Error {
+		foreach ( array_unique( array_map( 'intval', $field_ids ) ) as $field_id ) {
+			$error = $this->archived_collection_error( $this->collection_id_for_field( $field_id ) );
+			if ( $error instanceof WP_Error ) {
+				return $error;
+			}
+		}
+
+		return null;
 	}
 
 	/**
@@ -963,6 +1090,10 @@ final class FieldsController {
 				__( 'Relation target collection is required.', 'cortext' ),
 				array( 'status' => 400 )
 			);
+		}
+		$target_archive_error = $this->archived_collection_error( $target_collection_id );
+		if ( $target_archive_error instanceof WP_Error ) {
+			return $target_archive_error;
 		}
 
 		$source_collection = get_post( $collection_id );
