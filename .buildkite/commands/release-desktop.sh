@@ -34,7 +34,18 @@ brew install cmake autoconf automake libtool bison re2c
 export PATH="$(brew --prefix bison)/bin:$PATH"
 
 echo "--- :php: build bundled arm64 PHP runtime"
+# Compiling PHP takes two and a half minutes and 33 GitHub API calls, one per
+# library it looks up. Unauthenticated those share a 60-an-hour cap with every
+# other mac agent, so busy afternoons fail on a 403 nobody caused.
+#
+# The binary depends on nothing but this installer, which pins both versions and
+# lists the extensions, so its hash is a safe key. A restored binary still gets
+# checked: install-runtime.mjs skips the build but verifies what it found. If
+# the agent has no cache bucket, both commands fail and PHP builds as usual.
+php_cache_key="cortext-php-$(uname -m)-$(hash_file apps/desktop/scripts/install-runtime.mjs)"
+restore_cache "$php_cache_key" || echo "Cache restore unavailable; building PHP."
 npm --prefix apps/desktop run runtime:php
+save_cache apps/desktop/runtime/bin/php "$php_cache_key" || echo "Cache save unavailable."
 
 echo "--- :card_index_dividers: build distribution snapshot"
 CORTEXT_DESKTOP_DISTRIBUTION=1 npm --prefix apps/desktop run snapshot
