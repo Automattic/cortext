@@ -364,11 +364,12 @@ export default function useAutosave( options = {} ) {
 					: null;
 			}
 			setStatus( 'saving' );
-		} else if ( didFail ) {
+		} else if ( didFail && wasSaving ) {
+			// Row mutations share this core-data error flag, but they never
+			// enter the editor's saving state. Only an editor save owns the
+			// status, retry pause, and notice managed by this hook.
 			savingTargetRef.current = null;
-			if ( wasSaving || ! failedEditsReferenceRef.current ) {
-				failedEditsReferenceRef.current = editsReference;
-			}
+			failedEditsReferenceRef.current = editsReference;
 			setStatus( 'error' );
 			// Successful autosaves stay quiet, so failures need a clear notice.
 			// Show it once when saving first fails; background retries would
