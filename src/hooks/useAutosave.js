@@ -28,6 +28,7 @@ export default function useAutosave( options = {} ) {
 		didSucceed,
 		didFail,
 		editsReference,
+		editedContent,
 		isPostLocked,
 		postStatus,
 		postTitle,
@@ -41,6 +42,7 @@ export default function useAutosave( options = {} ) {
 			didSucceed: editor.didPostSaveRequestSucceed(),
 			didFail: editor.didPostSaveRequestFail(),
 			isPostLocked: editor.isPostLocked?.() ?? false,
+			editedContent: editor.getEditedPostContent?.() ?? '',
 			editsReference:
 				select( coreDataStore ).getReferenceByDistinctEdits(),
 			postStatus: editor.getEditedPostAttribute( 'status' ),
@@ -78,6 +80,8 @@ export default function useAutosave( options = {} ) {
 		editPost,
 		postStatus,
 		postTitle,
+		currentPostId,
+		editedContent,
 		editsReference,
 	} );
 	stateRef.current = {
@@ -89,6 +93,8 @@ export default function useAutosave( options = {} ) {
 		editPost,
 		postStatus,
 		postTitle,
+		currentPostId,
+		editedContent,
 		editsReference,
 	};
 
@@ -106,14 +112,41 @@ export default function useAutosave( options = {} ) {
 	}, [] );
 
 	const saveCurrentPost = useCallback( () => {
-		const { savePost: save } = stateRef.current;
+		async function saveUntilContentSettles() {
+			const {
+				currentPostId: savingPostId,
+				editedContent: contentAtSaveStart,
+				savePost: save,
+			} = stateRef.current;
 
-		maybePromoteStatus();
-		lastSaveAtRef.current = Date.now();
-		const savePromise = Promise.resolve( save() ).then(
-			() => true,
-			() => false
-		);
+			maybePromoteStatus();
+			lastSaveAtRef.current = Date.now();
+			try {
+				await save();
+			} catch {
+				return false;
+			}
+
+			const current = stateRef.current;
+			if (
+				current.currentPostId === savingPostId &&
+				current.editedContent !== contentAtSaveStart
+			) {
+				// tech-debt.md#td-autosave-save-completion: WordPress 7.1 can
+				// mark a newer block edit as saved when an earlier request finishes,
+				// even though that edit was never sent. Reapply the current content
+				// and save it again.
+				current.editPost?.(
+					{ content: current.editedContent },
+					{ undoIgnore: true }
+				);
+				return saveUntilContentSettles();
+			}
+
+			return true;
+		}
+
+		const savePromise = saveUntilContentSettles();
 		savePromiseRef.current = savePromise;
 		savePromise.finally( () => {
 			if ( savePromiseRef.current === savePromise ) {

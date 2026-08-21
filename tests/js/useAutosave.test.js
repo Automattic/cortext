@@ -42,6 +42,7 @@ const DEFAULT_STATE = {
 	postStatus: 'private',
 	postTitle: '',
 	currentPostId: 1,
+	editedContent: '',
 };
 
 let editsReference = {};
@@ -55,6 +56,7 @@ function setStoreState( state ) {
 		didPostSaveRequestSucceed: () => merged.didSucceed,
 		didPostSaveRequestFail: () => merged.didFail,
 		isPostLocked: () => merged.isPostLocked,
+		getEditedPostContent: () => merged.editedContent,
 		getCurrentPostId: () => merged.currentPostId,
 		getEditedPostAttribute: ( name ) => {
 			if ( name === 'status' ) {
@@ -150,6 +152,51 @@ describe( 'useAutosave: debounce', () => {
 			jest.advanceTimersByTime( 800 );
 		} );
 		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'queues content changed while a save is in flight', async () => {
+		let resolveFirstSave;
+		const savePost = jest
+			.fn()
+			.mockImplementationOnce(
+				() =>
+					new Promise( ( resolve ) => {
+						resolveFirstSave = resolve;
+					} )
+			)
+			.mockResolvedValueOnce();
+		const editPost = jest.fn();
+		useDispatch.mockReturnValue( { savePost, editPost } );
+		setStoreState( { isDirty: true, editedContent: 'compact' } );
+
+		const { rerender } = renderHook( () =>
+			useAutosave( { debounceMs: 0, minSaveIntervalMs: 0 } )
+		);
+
+		act( () => {
+			jest.advanceTimersByTime( 0 );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+
+		act( () => {
+			setStoreState( {
+				isDirty: false,
+				isSaving: false,
+				editedContent: 'comfortable',
+			} );
+			rerender();
+		} );
+		await act( async () => {
+			resolveFirstSave();
+			await Promise.resolve();
+			await Promise.resolve();
+		} );
+
+		expect( editPost ).toHaveBeenCalledWith(
+			{ content: 'comfortable' },
+			{ undoIgnore: true }
+		);
+		expect( savePost ).toHaveBeenCalledTimes( 2 );
 	} );
 
 	it( 'skips save when not dirty', () => {
