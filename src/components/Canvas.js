@@ -428,6 +428,7 @@ function CanvasEditor( {
 		// read-only state from there.
 		enabled: isActive && ! isTrashed,
 	} );
+	const isReadOnly = postLock.isReadOnly || isTrashed;
 	const { resetPost, setIsInserterOpened } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const lastNotifiedBacklinkSaveRef = useRef( null );
@@ -545,7 +546,7 @@ function CanvasEditor( {
 		>
 			<CortextMentions />
 			<DocumentActions
-				disabled={ postLock.isReadOnly }
+				disabled={ isReadOnly }
 				canInsertBlocks={ ! isCollection }
 				isActive={ isActive }
 				postId={ post.id }
@@ -572,7 +573,7 @@ function CanvasEditor( {
 							isEditorSurfaceDisplayed={
 								isEditorSurfaceDisplayed
 							}
-							isLocked={ postLock.isReadOnly }
+							isLocked={ isReadOnly }
 							isSurfaceFocusPending={
 								postLock.isReadOnly &&
 								! postLock.isFailed &&
@@ -602,7 +603,7 @@ function CanvasEditor( {
 				user={ postLock.user }
 			/>
 			<DocumentInspectorSidebar
-				isLocked={ postLock.isReadOnly }
+				isLocked={ isReadOnly }
 				postId={ post.id }
 				postType={ postType }
 			/>

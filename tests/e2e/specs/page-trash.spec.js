@@ -120,6 +120,11 @@ test.describe( 'Page trash flow', () => {
 			await expect( notice ).toContainText(
 				'This document is in the Trash.'
 			);
+			await expect(
+				page
+					.locator( '.cortext-document-actions' )
+					.getByRole( 'button', { name: 'Publish', exact: true } )
+			).toBeDisabled();
 
 			// Restore via the banner. Subtree returns; banner disappears.
 			await restoreButton.click();
