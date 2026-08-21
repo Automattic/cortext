@@ -368,8 +368,8 @@ tbody > tr > td:not(:first-child) {
 // overlay the editor on top via position: absolute.
 // Absolutely-positioned children don't contribute to their parent's
 // intrinsic size, so the table never sees the editor's wider min-content.
-// The shell's min-height is also pinned to 40px to match
-// __next40pxDefaultSize, so opening an editor doesn't bump row height.
+// The shell's min-height is also pinned to 40px, the default control
+// height in WordPress 7.1, so opening an editor doesn't bump row height.
 .cortext-editable-cell {
 	position: relative;
 	width: 100%;
@@ -379,7 +379,7 @@ tbody > tr > td:not(:first-child) {
 	&__shell {
 		cursor: pointer;
 		// 40px matches the height of the editor controls
-		// (TextControl/NumberControl/SelectControl with __next40pxDefaultSize),
+		// (the default TextControl/NumberControl/SelectControl height),
 		// so opening a cell doesn't bump the row height.
 		min-height: $grid-unit-50;
 		padding: $grid-unit-05;
@@ -1102,7 +1102,7 @@ tr:has(.cortext-title-cell--is-opening)
 	// DataViews's per-density row heights on the shell (and the checkbox
 	// cell, which shares the shell's dimensions). Headers (`<th>`) keep
 	// their padding so they still breathe. Balanced and comfortable mirror
-	// DataViews 17's td `padding-block` (12 and 16); compact is
+	// DataViews 18's td `padding-block` (12 and 16); compact is
 	// intentionally tighter than DataViews's default (4 -> 0) so the row
 	// matches the 40px editor floor and gets closer to a compact
 	// density. See tech-debt.md#td-dataviews-inline-editing.

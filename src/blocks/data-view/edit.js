@@ -227,7 +227,6 @@ function CollectionCreator( { onCreate } ) {
 				label={ __( 'Name', 'cortext' ) }
 				value={ title }
 				onChange={ setTitle }
-				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
 			<Button
@@ -511,7 +510,6 @@ function CollectionInspectorControls( {
 								value={ align ?? '' }
 								onChange={ onChangeAlign }
 								isBlock
-								__next40pxDefaultSize
 								__nextHasNoMarginBottom
 							>
 								{ WIDTH_OPTIONS.map( ( option ) => (
@@ -544,7 +542,6 @@ function CollectionInspectorControls( {
 										},
 									} )
 								}
-								__next40pxDefaultSize
 								__nextHasNoMarginBottom
 							/>
 						) }
@@ -559,7 +556,6 @@ function CollectionInspectorControls( {
 									page: 1,
 								} )
 							}
-							__next40pxDefaultSize
 							__nextHasNoMarginBottom
 						/>
 						<ToggleGroupControl
@@ -571,7 +567,6 @@ function CollectionInspectorControls( {
 								onChangeView( { ...view, rowDetailMode } )
 							}
 							isBlock
-							__next40pxDefaultSize
 							__nextHasNoMarginBottom
 						>
 							{ ROW_DETAIL_OPTIONS.map( ( option ) => (

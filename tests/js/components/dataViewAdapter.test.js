@@ -245,7 +245,7 @@ describe( 'dataViewAdapter', () => {
 		expect( view.startPosition ).toBeUndefined();
 	} );
 
-	it( 'migrates legacy grouping to the DataViews 17 shape', () => {
+	it( 'migrates legacy grouping to the DataViews 18 shape', () => {
 		const legacyView = {
 			...canonicalView,
 			groupByField: 'field-2',

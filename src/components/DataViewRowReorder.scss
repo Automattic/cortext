@@ -402,7 +402,7 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 
 .cortext-row-drag-preview--grid-card {
 	display: block;
-	border-radius: var(--wpds-border-radius-md, 6px);
+	border-radius: var(--wpds-border-radius-md);
 	background: transparent;
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 }
@@ -417,7 +417,7 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	height: 100%;
 	min-width: 0;
 	border: $border-width solid $gray-200;
-	border-radius: var(--wpds-border-radius-md, 6px);
+	border-radius: var(--wpds-border-radius-md);
 	background: $white;
 	isolation: isolate;
 	overflow: hidden;
@@ -429,9 +429,9 @@ body.cortext-row-dragging .cortext-row-drop-indicator {
 	width: 100%;
 	aspect-ratio: 1 / 1;
 	border-radius:
-		var(--wpds-border-radius-md, 6px)
-		var(--wpds-border-radius-md, 6px) 0 0;
-	background-color: var(--wpds-color-background-surface-neutral-strong, $white);
+		var(--wpds-border-radius-md)
+		var(--wpds-border-radius-md) 0 0;
+	background-color: var(--wpds-color-background-surface-neutral-strong);
 	overflow: hidden;
 }
 

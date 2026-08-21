@@ -251,7 +251,6 @@ export default function DocumentRow( {
 							className="cortext-sidebar__rename"
 						>
 							<TextControl
-								__next40pxDefaultSize
 								__nextHasNoMarginBottom
 								size="compact"
 								value={ draftTitle }

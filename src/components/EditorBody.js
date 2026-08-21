@@ -26,7 +26,6 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { __ } from '@wordpress/i18n';
 import { ENTER, SPACE, isKeyboardEvent } from '@wordpress/keycodes';
-import { registerDocument } from '@wordpress/style-runtime';
 import {
 	useEffect,
 	useCallback,
@@ -125,10 +124,9 @@ function getBlockCanvasEmotionCache( canvasDocument ) {
 	return emotionCache;
 }
 
-// tech-debt.md#td-block-canvas-style-runtime-bridge: DataViews puts generated
-// styles in the parent document unless we point its runtimes at the BlockCanvas
-// iframe. Set up style-runtime and Emotion before mounting the canvas children
-// so the first render uses the right styles.
+// tech-debt.md#td-block-canvas-style-runtime-bridge: DataViews bundles its own
+// Emotion instance. Point its cache at the BlockCanvas iframe before mounting
+// the canvas children. Core's StyleProvider already registers the document.
 function BlockCanvasStyleProvider( { children } ) {
 	const anchorRef = useRef( null );
 	const [ emotionCache, setEmotionCache ] = useState( null );
@@ -140,10 +138,8 @@ function BlockCanvasStyleProvider( { children } ) {
 		}
 
 		const cache = getBlockCanvasEmotionCache( canvasDocument );
-		const unregisterDocument = registerDocument( canvasDocument );
 		setEmotionCache( cache );
-
-		return unregisterDocument;
+		return undefined;
 	}, [] );
 
 	return (
