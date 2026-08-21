@@ -159,6 +159,11 @@ export default function useAutosave( options = {} ) {
 			} catch {
 				return { didSave: false, hasPendingEdits: false };
 			}
+			// Core resolves savePost() after REST failures. Read the result from
+			// the editor store before treating the flush as successful.
+			if ( registry.select( editorStore ).didPostSaveRequestFail() ) {
+				return { didSave: false, hasPendingEdits: false };
+			}
 
 			const current = readCurrentSaveState();
 			const hasPendingEdits =
@@ -208,6 +213,14 @@ export default function useAutosave( options = {} ) {
 		} );
 	}, [ readCurrentSaveState ] );
 
+	const waitForNextSaveWindow = useCallback( () => {
+		const elapsed = Date.now() - lastSaveAtRef.current;
+		const wait = Math.max( 0, minSaveIntervalMs - elapsed );
+		return wait > 0
+			? new Promise( ( resolve ) => setTimeout( resolve, wait ) )
+			: Promise.resolve();
+	}, [ minSaveIntervalMs ] );
+
 	const flushNow = useCallback( async () => {
 		if ( debounceRef.current ) {
 			clearTimeout( debounceRef.current );
@@ -222,6 +235,9 @@ export default function useAutosave( options = {} ) {
 				const activeSave = await savePromiseRef.current;
 				if ( ! activeSave.didSave ) {
 					return false;
+				}
+				if ( activeSave.hasPendingEdits ) {
+					await waitForNextSaveWindow();
 				}
 			}
 
@@ -244,8 +260,15 @@ export default function useAutosave( options = {} ) {
 			if ( ! result.hasPendingEdits ) {
 				return true;
 			}
+
+			await waitForNextSaveWindow();
 		}
-	}, [ readCurrentSaveState, saveCurrentPost, waitForSavingToFinish ] );
+	}, [
+		readCurrentSaveState,
+		saveCurrentPost,
+		waitForNextSaveWindow,
+		waitForSavingToFinish,
+	] );
 
 	useEffect( () => {
 		if ( isSaving || savingWaitersRef.current.length === 0 ) {
