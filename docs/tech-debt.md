@@ -18,9 +18,9 @@ Pair with [decisions.md](decisions.md) for choices we've made peace with and [ro
 
 **DataViews has no inline cell editing.**
 
-**What.** DataViews v17 can render values and edit them through a separate `DataForm`, but it cannot turn a rendered value into an inline editor. Cortext mounts its own editor from `field.render` (documented as a display renderer, but the only hook available), keeps edit state per cell, and sends saves through `RowMutationContext` because `field.render` only receives `{ item }`. Tab and Shift+Tab live in the same layer: editors catch Tab, ask the parent for the next editable cell through `requestNext`, and the target cell opens through the same `editRequest` channel used to focus the title cell in a fresh row. Table, grid, and list use that surface when a visible field supports it.
+**What.** DataViews v18 can display values and edit them through a separate `DataForm`, but it cannot turn a displayed cell into an inline editor. Cortext mounts its editor from `field.render`, even though the API documents it as a display renderer. Each cell owns its edit state and sends saves through `RowMutationContext` because `field.render` only receives `{ item }`. The same layer handles Tab and Shift+Tab: the active editor asks the parent for the next editable cell through `requestNext`, then opens that cell through the `editRequest` channel. Table, grid, and list all use this path.
 
-DataViews renders an actual `<table>`; Cortext switches it to `table-layout: fixed` so resize widths behave as real column constraints, renders the display shell, and overlays the editor on top via `position: absolute` so the table only sees the display state while the editor is open. The shell's `min-height` is pinned to 40px to match `__next40pxDefaultSize`, the height of TextControl/NumberControl/SelectControl with the modern WP size flag. DataViews paints row height via the td's `padding-block`, varied per density; the shell zeroes that padding and replicates the per-density row heights via `min-height` overrides so the hover/edit highlight covers the row edge to edge. Balanced and comfortable mirror DataViews 17 (12 / 16); compact is intentionally tighter than upstream (4 → 0) to match the 40px editor floor, and compact is the default in `createDefaultView` and `DEFAULT_LAYOUTS`.
+DataViews renders a real `<table>`. Cortext sets `table-layout: fixed` so resized columns act as constraints, then places the editor over a display shell with `position: absolute`. The table only measures the display state while a cell is being edited. The shell has a 40px `min-height` to match the default TextControl, NumberControl, and SelectControl height in WordPress 7.1. DataViews normally sets row height through the cell's density-specific `padding-block`; Cortext removes that padding and recreates each height on the shell so the hover and edit backgrounds reach the row edges. Balanced and comfortable keep DataViews 18's 12px and 16px padding. Compact changes 4px to 0 so the row matches the 40px editor floor. Compact remains the default in `createDefaultView` and `DEFAULT_LAYOUTS`.
 
 **Where.** `src/components/EditableCell.js`, `RowMutationContext` and `requestNext` in `src/components/CollectionDataViews.js`, plus the `.cortext-editable-cell`, `.cortext-cell-checkbox`, and `.cortext-data-view .dataviews-view-table` rules in `src/components/CollectionDataViews.scss`.
 
@@ -30,7 +30,7 @@ DataViews renders an actual `<table>`; Cortext switches it to `table-layout: fix
 
 **DataViews cannot manage Cortext options from its array control.**
 
-**What.** DataViews v17 renders arrays with `FormTokenField`. Cortext uses the same option picker for Select and Multiselect so users can create, recolor, rename, delete, and migrate options from a cell. The built-in array control has no hooks for that workflow, so every multiselect cell still uses a custom editor.
+**What.** DataViews v18 renders arrays with `FormTokenField`, but that control has no hooks for managing Cortext options. Select and Multiselect share a picker that lets users create, recolor, rename, delete, and migrate options from a cell, so multiselect cells still need a custom editor.
 
 **Where.** `src/components/MultiselectEdit.js`.
 
@@ -166,7 +166,7 @@ That makes row reorder sensitive to DataViews DOM changes: density classes, bulk
 
 **Grid column count ignores density and padding.**
 
-**What.** DataViews v17 calculates the grid's column count with a fixed 32px gap and the container's outer width. The rendered gap is 16px, 24px, or 32px depending on density, and the cards sit inside a padded content area. Near a breakpoint, DataViews can pick the wrong number of columns: rows either leave room for another card or squeeze cards below the selected preview size. Cortext keeps the native density control and saves its value, so it inherits this mismatch.
+**What.** DataViews v18 counts grid columns with a fixed 32px gap and the container's outer width. The CSS uses a 16px, 24px, or 32px gap depending on density, and it places the cards inside a padded content area. Because the calculation and the rendered grid use different measurements, DataViews can choose the wrong column count near a breakpoint. A row may leave space for another card or squeeze its cards below the selected preview size. Cortext keeps and saves the native density setting, so it inherits the mismatch.
 
 **Where.** `useGridColumns` in DataViews' grid preview-size picker calculates the count. Cortext stores the setting in `layoutForGridDataViews` in `src/components/dataViewAdapter.js` and lets DataViews render the corresponding gap.
 
@@ -208,7 +208,7 @@ That makes row reorder sensitive to DataViews DOM changes: density classes, bulk
 
 **Sidebar rename input pinned via WP component internals.**
 
-**What.** The page-row rename uses `<TextControl size="compact" __next40pxDefaultSize>`, which should produce a 32px input matching the 32px row. It doesn't, on its own: the wrapping `BaseControl > field > InputControl > container` chain still contributes vertical space, so opening rename used to bump the row a few pixels. The fix pins `height` / `min-height` / `max-height` to `$grid-unit-40` and zeroes `padding-block` on every layer in that chain (`.components-base-control`, `.components-base-control__field`, `.components-input-control`, `.components-input-control__container`, `.components-input-control__input`). It works, but it couples Cortext to WP component-internal class names. If WP refactors `TextControl` (renames a class, drops a wrapper, restructures the DOM), the input loses its height pin and the row starts bumping again, silently.
+**What.** The page-row rename uses `<TextControl size="compact">` to produce a 32px input for a 32px row. The wrappers around the input still add vertical space, so opening rename used to make the row jump by a few pixels. Cortext pins `height`, `min-height`, and `max-height` to `$grid-unit-40` and removes `padding-block` from every layer in the `BaseControl > field > InputControl > container` chain. This relies on the internal classes `.components-base-control`, `.components-base-control__field`, `.components-input-control`, `.components-input-control__container`, and `.components-input-control__input`. If WordPress changes that markup, the height pin can stop working without an obvious error.
 
 **Where.** The `&__rename` block in `src/components/Sidebar.scss`. The e2e test `keeps the rename input inside the page row height` in `tests/e2e/specs/sidebar-layout.spec.js` is the tripwire: it asserts the input never overflows the row's bounding rect, so a WP-internals refactor would surface there before reaching production.
 
@@ -294,9 +294,11 @@ The awkward bit is `CortextCommandMenu`. `@wordpress/commands` has a built-in "R
 
 The same selector shape affects user-visible save side effects. `didPostSaveRequestSucceed()` and `didPostSaveRequestFail()` are level signals, not one-shot events. They can stay true after the save that set them, so mounting autosave on a different row or changing `recentTarget` can otherwise replay an old success into status and Recents. The hook tracks the previous `isSaving` value and only treats success as current when this hook observed the save finish.
 
-**Where.** `savePromiseRef`, `savingWaitersRef`, `prevIsSavingRef`, `flushNow`, and the save-status effect in `src/hooks/useAutosave.js`.
+Edits made while `savePost()` is in flight can disappear. When the first request finishes, WordPress may mark a newer edit as saved even though it was never sent. The editor then looks clean while REST still has the older content. Cortext records `getEditedPostContent()` before each save and checks it again when the request finishes. If the content changed, the hook reapplies the current value with `undoIgnore` and saves again before resolving.
 
-**Solution.** Gutenberg exposes the current save promise, makes `savePost()` return the in-flight promise when one already exists, or exposes per-save completion events/state keyed to a request. Then Cortext drops the waiter bookkeeping and the local `isSaving` edge detection.
+**Where.** `savePromiseRef`, `savingWaitersRef`, `prevIsSavingRef`, `saveUntilContentSettles`, `flushNow`, and the save-status effect in `src/hooks/useAutosave.js`.
+
+**Solution.** Gutenberg associates each response with the edits sent in that request and leaves later edits dirty. It should also return the active promise from `savePost()` or expose completion state for each request. Cortext could then remove the reapply loop, waiter bookkeeping, and local `isSaving` edge detection.
 
 <a id="td-gutenberg-header-boundary"></a>
 
@@ -324,9 +326,11 @@ The same selector shape affects user-visible save side effects. `didPostSaveRequ
 
 **What.** Page-to-page navigation rebuilds the editor provider inside the same workspace pane. A normal View Transition cross-fade can expose the empty editor frame while Gutenberg, cover media, and the editor iframe catch up. Cortext keeps the old `cortext-canvas` snapshot above the new one until the new editor says it has painted, then fades the old snapshot away. Import and Published also need a plain opacity fade, because Chrome's default `plus-lighter` blend washes two light panes toward white. That leaves Cortext with a `data-cortext-view-transition` mode on `:root`, custom `::view-transition-*` CSS, a long-running hold animation, and promise plumbing around `startViewTransition()` because the browser update callback may run after `withViewTransition()` has already returned.
 
+`Canvas` can receive the target record before `EditorProvider` has switched `core/editor` to that post. Header repairs made during that gap update the outgoing editor and disappear when hydration finishes. `EnsureHeaderBlocks` therefore checks the current editor post ID before inserting anything. Surface focus waits for a full paint for a related reason: selection updates can stay batched past a single animation frame.
+
 **Where.** `withViewTransition` in `src/hooks/viewTransition.js`, the `hold-old-canvas`, `reveal-old-canvas`, and `pane-crossfade` rules in `src/styles/global/_view-transitions.scss`, pane switching in `src/router/EntityRoute.js`, document switching in `src/components/Canvas.js`, editor readiness in `src/components/EditorBody.js`, and the navigation lifecycle coverage in `tests/e2e/specs/navigation-lifecycle.spec.js`.
 
-**Solution.** A first-class hold/release hook in the View Transitions API, or a reliable editor-surface "painted" signal from Gutenberg for document swaps. Replace the mode flag and long CSS hold animation with that primitive when it exists.
+**Solution.** Cortext needs either a first-class hold/release hook in the View Transitions API or a reliable post-scoped "ready and painted" signal from Gutenberg. Either API would let Cortext remove the mode flag, long CSS hold animation, post-ID guard, and extra focus delay.
 
 <a id="td-collection-owner-block-template"></a>
 
@@ -511,15 +515,15 @@ The row-detail layout setting means public rendering cannot just print every fie
 
 <a id="td-block-canvas-style-runtime-bridge"></a>
 
-**The bundled DataViews styles miss the BlockCanvas iframe.**
+**DataViews' bundled Emotion styles miss the BlockCanvas iframe.**
 
-**What.** WordPress 7.0 already wraps the BlockCanvas iframe in the `StyleProvider` from core components. That covers Emotion styles from `wp.components`. Cortext imports `@wordpress/dataviews/wp`, though, and that build includes its own copies of parts of `@wordpress/components` and `@wordpress/ui`. Those copies use the `@emotion/react` instance bundled with Cortext, not the one behind Gutenberg's provider, so their styles still go to the parent page. They also add CSS to the shared `@wordpress/style-runtime` registry, where the BlockCanvas iframe has not been registered. Menu, Stack, InputControl, and other DataViews internals therefore lose part of their styling.
+**What.** In WordPress 7.1, core's `StyleProvider` registers the BlockCanvas iframe with the shared style-runtime. Core styles now reach the canvas without Cortext's old registration bridge. One problem remains: the `@wordpress/dataviews/wp` build includes copies of parts of `@wordpress/components` and `@wordpress/ui`. They run on the `@emotion/react` instance bundled with Cortext, so their styles land in the parent page unless Cortext gives them a cache pointed at the iframe.
 
-`BlockCanvasStyleProvider` handles the two cases separately. It registers the iframe with style-runtime and creates a cache with the same Emotion instance used by the DataViews bundle. It waits to render the canvas children until both are ready, so there is no unstyled first pass. This lets us delete our copies of private component CSS.
+`BlockCanvasStyleProvider` creates that cache with DataViews' Emotion instance and waits to mount the canvas children until the cache is ready. This avoids an unstyled first render without copying private component CSS into Cortext.
 
-**Where.** `BlockCanvasStyleProvider` and the `BlockCanvas` mount in `src/components/EditorBody.js`, plus the direct `@wordpress/style-runtime`, `@emotion/react`, and `@emotion/cache` dependencies in `package.json`.
+**Where.** `BlockCanvasStyleProvider` and the `BlockCanvas` mount in `src/components/EditorBody.js`, plus the direct `@emotion/react` and `@emotion/cache` dependencies in `package.json`.
 
-**Solution.** Gutenberg can take over the style-runtime work by registering the BlockCanvas iframe with `globalThis.__wpStyleRuntime`. Then we can delete the local `registerDocument` call and the direct `@wordpress/style-runtime` dependency. The Emotion cache is different. We need it while `@wordpress/dataviews/wp` includes its own component copies, because a provider backed by one Emotion module cannot set context for another. It can go when the DataViews bundle stops including those copies or exports a document provider built with the same Emotion instance. At that point, we can remove `CacheProvider` and the two Emotion dependencies as well.
+**Solution.** The cache has to stay while `@wordpress/dataviews/wp` ships its own component copies because one Emotion module cannot provide context to another. Cortext can remove `CacheProvider` and the two Emotion dependencies when DataViews stops bundling those copies or exports a document provider built on the same Emotion instance.
 
 <a id="td-canvas-interface-skeleton-clone"></a>
 
