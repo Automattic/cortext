@@ -412,6 +412,26 @@ describe( 'useAutosave: debounce', () => {
 		expect( savePost ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	it( 'flushNow returns false when the requested save fails', async () => {
+		const savePost = jest.fn().mockRejectedValue( new Error( 'failed' ) );
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice: jest.fn(),
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true } );
+
+		const { result } = renderHook( () =>
+			useAutosave( { debounceMs: 0, minSaveIntervalMs: 0 } )
+		);
+
+		await act( async () => {
+			await expect( result.current.flushNow() ).resolves.toBe( false );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	it( 'retries after a failed save once the edits change', () => {
 		const savePost = jest.fn();
 		useDispatch.mockReturnValue( {
@@ -685,7 +705,7 @@ describe( 'useAutosave: flush triggers', () => {
 		expect( savePost ).toHaveBeenCalledTimes( 2 );
 	} );
 
-	it( 'stops after two flush attempts when edits keep arriving', async () => {
+	it( 'keeps flushing until a save finishes without overlapping edits', async () => {
 		const resolvers = [];
 		const savePost = jest.fn(
 			() =>
@@ -725,10 +745,18 @@ describe( 'useAutosave: flush triggers', () => {
 		};
 		await act( async () => {
 			resolvers[ 1 ]();
-			await expect( flushPromise ).resolves.toBe( false );
+			await Promise.resolve();
+			await Promise.resolve();
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 3 );
+
+		storeState = { ...storeState, isDirty: false };
+		await act( async () => {
+			resolvers[ 2 ]();
+			await expect( flushPromise ).resolves.toBe( true );
 		} );
 
-		expect( savePost ).toHaveBeenCalledTimes( 2 );
+		expect( savePost ).toHaveBeenCalledTimes( 3 );
 	} );
 
 	it( 'waits for a store-reported save before flushing remaining edits', async () => {
@@ -759,6 +787,55 @@ describe( 'useAutosave: flush triggers', () => {
 
 		await expect( flushPromise ).resolves.toBe( true );
 		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'waits when another save starts between flush attempts', async () => {
+		let resolveFirstSave;
+		const savePost = jest
+			.fn()
+			.mockImplementationOnce(
+				() =>
+					new Promise( ( resolve ) => {
+						resolveFirstSave = resolve;
+					} )
+			)
+			.mockResolvedValueOnce();
+		const editPost = jest.fn( () => {
+			storeState = { ...storeState, isDirty: true };
+		} );
+		useDispatch.mockReturnValue( { savePost, editPost } );
+		setStoreState( { isDirty: true, editedContent: 'first' } );
+
+		const { result, rerender } = renderHook( () =>
+			useAutosave( { debounceMs: 0, minSaveIntervalMs: 0 } )
+		);
+		const flushPromise = result.current.flushNow();
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+
+		act( () => {
+			simulateEdit();
+			setStoreState( {
+				isDirty: false,
+				isSaving: true,
+				editedContent: 'second',
+			} );
+			rerender();
+		} );
+		await act( async () => {
+			resolveFirstSave();
+			await Promise.resolve();
+			await Promise.resolve();
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+
+		act( () => {
+			setStoreState( { isDirty: true, isSaving: false } );
+			rerender();
+		} );
+		await act( async () => {
+			await expect( flushPromise ).resolves.toBe( true );
+		} );
+		expect( savePost ).toHaveBeenCalledTimes( 2 );
 	} );
 } );
 

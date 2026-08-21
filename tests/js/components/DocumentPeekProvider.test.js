@@ -272,4 +272,33 @@ describe( 'DocumentPeekProvider', () => {
 		expect( flushNow ).toHaveBeenCalled();
 		expect( refresh ).toHaveBeenCalled();
 	} );
+
+	it( 'keeps the peek open when its flush reports a real failure', async () => {
+		const flushNow = jest.fn().mockResolvedValue( false );
+		const { result } = renderHook( useHarness, { wrapper } );
+
+		await act( async () => {
+			result.current.actions.openDocument( {
+				id: 1,
+				postType: 'crtxt_a',
+				collectionId: 1,
+				preferredMode: 'side',
+			} );
+		} );
+		act( () => {
+			result.current.surface.setDetailApi( {
+				flushNow,
+				discard: jest.fn(),
+				hasPendingEdits: jest.fn().mockReturnValue( true ),
+			} );
+		} );
+		await act( async () => {
+			await result.current.actions.closeDocument();
+		} );
+
+		expect( result.current.state.peek?.docId ).toBe( 1 );
+		expect( result.current.surface.saveError ).toBe(
+			'Cortext could not save changes. Retry or discard your edits to continue.'
+		);
+	} );
 } );

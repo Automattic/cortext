@@ -9,7 +9,6 @@ import { useRecents } from './useRecents';
 
 const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
-const MAX_FLUSH_SAVE_ATTEMPTS = 2;
 const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
 
 function canSavePost( state ) {
@@ -200,14 +199,14 @@ export default function useAutosave( options = {} ) {
 	}, [ maybePromoteStatus, readCurrentSaveState, registry ] );
 
 	const waitForSavingToFinish = useCallback( () => {
-		if ( ! stateRef.current.isSaving ) {
+		if ( ! readCurrentSaveState().isSaving ) {
 			return Promise.resolve( true );
 		}
 
 		return new Promise( ( resolve ) => {
 			savingWaitersRef.current.push( resolve );
 		} );
-	}, [] );
+	}, [ readCurrentSaveState ] );
 
 	const flushNow = useCallback( async () => {
 		if ( debounceRef.current ) {
@@ -215,22 +214,25 @@ export default function useAutosave( options = {} ) {
 			debounceRef.current = null;
 		}
 
-		if ( savePromiseRef.current ) {
-			const result = await savePromiseRef.current;
-			if ( ! result.didSave ) {
-				return false;
+		// Transitions unmount the editor once this returns true. Keep draining
+		// client edits that land during a request; false is reserved for a real
+		// save failure, where the caller can safely offer Retry or Discard.
+		while ( true ) {
+			if ( savePromiseRef.current ) {
+				const activeSave = await savePromiseRef.current;
+				if ( ! activeSave.didSave ) {
+					return false;
+				}
 			}
-		}
 
-		if ( stateRef.current.isSaving ) {
-			const didSave = await waitForSavingToFinish();
-			if ( ! didSave ) {
-				return false;
-			}
-		}
-
-		for ( let attempt = 0; attempt < MAX_FLUSH_SAVE_ATTEMPTS; attempt++ ) {
 			const saveState = readCurrentSaveState();
+			if ( saveState.isSaving ) {
+				const didSave = await waitForSavingToFinish();
+				if ( ! didSave ) {
+					return false;
+				}
+				continue;
+			}
 			if ( ! canSavePost( saveState ) ) {
 				return true;
 			}
@@ -243,10 +245,6 @@ export default function useAutosave( options = {} ) {
 				return true;
 			}
 		}
-
-		// Keep the user on the current document if edits overlap both bounded
-		// flush attempts. The normal debounce will pick them up once typing stops.
-		return false;
 	}, [ readCurrentSaveState, saveCurrentPost, waitForSavingToFinish ] );
 
 	useEffect( () => {
