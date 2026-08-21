@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
-import { useSelect, useDispatch } from '@wordpress/data';
+import { useSelect, useDispatch, useRegistry } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as coreDataStore } from '@wordpress/core-data';
 import { store as noticesStore } from '@wordpress/notices';
@@ -9,13 +9,25 @@ import { useRecents } from './useRecents';
 
 const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
+const MAX_FLUSH_SAVE_ATTEMPTS = 2;
 const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
+
+function canSavePost( state ) {
+	return (
+		state.isDirty &&
+		state.isSaveable &&
+		! state.isSaving &&
+		! state.isPostLocked &&
+		state.postStatus !== 'trash'
+	);
+}
 
 export default function useAutosave( options = {} ) {
 	const debounceMs = options.debounceMs ?? DEBOUNCE_MS;
 	const minSaveIntervalMs = options.minSaveIntervalMs ?? MIN_SAVE_INTERVAL_MS;
 	const recentId = options.recentTarget?.id ?? null;
 	const recentCollectionId = options.recentTarget?.collectionId ?? null;
+	const registry = useRegistry();
 	const { savePost, editPost } = useDispatch( editorStore );
 	const { createErrorNotice, createSuccessNotice } =
 		useDispatch( noticesStore );
@@ -28,7 +40,6 @@ export default function useAutosave( options = {} ) {
 		didSucceed,
 		didFail,
 		editsReference,
-		editedContent,
 		isPostLocked,
 		postStatus,
 		postTitle,
@@ -42,7 +53,6 @@ export default function useAutosave( options = {} ) {
 			didSucceed: editor.didPostSaveRequestSucceed(),
 			didFail: editor.didPostSaveRequestFail(),
 			isPostLocked: editor.isPostLocked?.() ?? false,
-			editedContent: editor.getEditedPostContent?.() ?? '',
 			editsReference:
 				select( coreDataStore ).getReferenceByDistinctEdits(),
 			postStatus: editor.getEditedPostAttribute( 'status' ),
@@ -81,7 +91,6 @@ export default function useAutosave( options = {} ) {
 		postStatus,
 		postTitle,
 		currentPostId,
-		editedContent,
 		editsReference,
 	} );
 	stateRef.current = {
@@ -94,9 +103,20 @@ export default function useAutosave( options = {} ) {
 		postStatus,
 		postTitle,
 		currentPostId,
-		editedContent,
 		editsReference,
 	};
+
+	const readCurrentSaveState = useCallback( () => {
+		const editor = registry.select( editorStore );
+		return {
+			isDirty: editor.isEditedPostDirty(),
+			isSaveable: editor.isEditedPostSaveable(),
+			isSaving: editor.isSavingPost(),
+			isPostLocked: editor.isPostLocked?.() ?? false,
+			postStatus: editor.getEditedPostAttribute( 'status' ),
+			currentPostId: editor.getCurrentPostId(),
+		};
+	}, [ registry ] );
 
 	// Promote draft to private once the user has given the page a real title,
 	// so WP core regenerates post_name from the title on save.
@@ -112,41 +132,63 @@ export default function useAutosave( options = {} ) {
 	}, [] );
 
 	const saveCurrentPost = useCallback( () => {
-		async function saveUntilContentSettles() {
-			const {
-				currentPostId: savingPostId,
-				editedContent: contentAtSaveStart,
-				savePost: save,
-			} = stateRef.current;
+		if ( savePromiseRef.current ) {
+			return savePromiseRef.current;
+		}
+
+		async function performSave() {
+			const saveState = readCurrentSaveState();
+			if ( ! canSavePost( saveState ) ) {
+				return { didSave: true, hasPendingEdits: false };
+			}
+
+			const savingPostId = saveState.currentPostId;
+			const { savePost: save } = stateRef.current;
 
 			maybePromoteStatus();
 			lastSaveAtRef.current = Date.now();
+			let editsAtRequestStart;
 			try {
-				await save();
+				const request = save();
+				// savePost() synchronously writes its serialized content before its
+				// first await. Capture the edit reference after that internal write,
+				// so only later client edits count as pending work.
+				editsAtRequestStart = registry
+					.select( coreDataStore )
+					.getReferenceByDistinctEdits();
+				await request;
 			} catch {
-				return false;
+				return { didSave: false, hasPendingEdits: false };
 			}
 
-			const current = stateRef.current;
-			if (
+			const current = readCurrentSaveState();
+			const hasPendingEdits =
 				current.currentPostId === savingPostId &&
-				current.editedContent !== contentAtSaveStart
+				registry
+					.select( coreDataStore )
+					.getReferenceByDistinctEdits() !== editsAtRequestStart;
+			if (
+				hasPendingEdits &&
+				current.isSaveable &&
+				! current.isPostLocked &&
+				current.postStatus !== 'trash'
 			) {
-				// tech-debt.md#td-autosave-save-completion: WordPress 7.1 can
-				// mark a newer block edit as saved when an earlier request finishes,
-				// even though that edit was never sent. Reapply the current content
-				// and save it again.
-				current.editPost?.(
-					{ content: current.editedContent },
+				// tech-debt.md#td-autosave-save-completion: WordPress 7.1 may
+				// mark a client edit made during this request as saved. Read the
+				// content only at this boundary, then make that edit dirty again.
+				const currentContent = registry
+					.select( editorStore )
+					.getEditedPostContent();
+				stateRef.current.editPost?.(
+					{ content: currentContent },
 					{ undoIgnore: true }
 				);
-				return saveUntilContentSettles();
 			}
 
-			return true;
+			return { didSave: true, hasPendingEdits };
 		}
 
-		const savePromise = saveUntilContentSettles();
+		const savePromise = performSave();
 		savePromiseRef.current = savePromise;
 		savePromise.finally( () => {
 			if ( savePromiseRef.current === savePromise ) {
@@ -155,7 +197,7 @@ export default function useAutosave( options = {} ) {
 		} );
 
 		return savePromise;
-	}, [ maybePromoteStatus ] );
+	}, [ maybePromoteStatus, readCurrentSaveState, registry ] );
 
 	const waitForSavingToFinish = useCallback( () => {
 		if ( ! stateRef.current.isSaving ) {
@@ -174,8 +216,8 @@ export default function useAutosave( options = {} ) {
 		}
 
 		if ( savePromiseRef.current ) {
-			const didSave = await savePromiseRef.current;
-			if ( ! didSave ) {
+			const result = await savePromiseRef.current;
+			if ( ! result.didSave ) {
 				return false;
 			}
 		}
@@ -187,21 +229,25 @@ export default function useAutosave( options = {} ) {
 			}
 		}
 
-		const {
-			isDirty: d,
-			isSaveable: s,
-			isSaving: saving,
-			isPostLocked: locked,
-			postStatus: ps,
-		} = stateRef.current;
-		if ( ! d || ! s || locked || ps === 'trash' ) {
-			return true;
+		for ( let attempt = 0; attempt < MAX_FLUSH_SAVE_ATTEMPTS; attempt++ ) {
+			const saveState = readCurrentSaveState();
+			if ( ! canSavePost( saveState ) ) {
+				return true;
+			}
+
+			const result = await saveCurrentPost();
+			if ( ! result.didSave ) {
+				return false;
+			}
+			if ( ! result.hasPendingEdits ) {
+				return true;
+			}
 		}
-		if ( saving ) {
-			return waitForSavingToFinish();
-		}
-		return saveCurrentPost();
-	}, [ saveCurrentPost, waitForSavingToFinish ] );
+
+		// Keep the user on the current document if edits overlap both bounded
+		// flush attempts. The normal debounce will pick them up once typing stops.
+		return false;
+	}, [ readCurrentSaveState, saveCurrentPost, waitForSavingToFinish ] );
 
 	useEffect( () => {
 		if ( isSaving || savingWaitersRef.current.length === 0 ) {

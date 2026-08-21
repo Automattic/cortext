@@ -294,11 +294,11 @@ The awkward bit is `CortextCommandMenu`. `@wordpress/commands` has a built-in "R
 
 The same selector shape affects user-visible save side effects. `didPostSaveRequestSucceed()` and `didPostSaveRequestFail()` are level signals, not one-shot events. They can stay true after the save that set them, so mounting autosave on a different row or changing `recentTarget` can otherwise replay an old success into status and Recents. The hook tracks the previous `isSaving` value and only treats success as current when this hook observed the save finish.
 
-Edits made while `savePost()` is in flight can disappear. When the first request finishes, WordPress may mark a newer edit as saved even though it was never sent. The editor then looks clean while REST still has the older content. Cortext records `getEditedPostContent()` before each save and checks it again when the request finishes. If the content changed, the hook reapplies the current value with `undoIgnore` and saves again before resolving.
+Edits made while `savePost()` is in flight can disappear. When the request finishes, WordPress may mark a newer edit as saved even though it was never sent. Cortext captures Core Data's edit reference after `savePost()` has prepared the request. If that reference changes before the request finishes, the hook serializes the current content once and reapplies it with `undoIgnore`. A normal autosave then goes back through the debounce and minimum save interval. An explicit flush can try twice before it leaves the document open for the regular autosave. REST responses do not change the edit reference, so server-side normalization cannot start another save by itself.
 
-**Where.** `savePromiseRef`, `savingWaitersRef`, `prevIsSavingRef`, `saveUntilContentSettles`, `flushNow`, and the save-status effect in `src/hooks/useAutosave.js`.
+**Where.** `savePromiseRef`, `savingWaitersRef`, `prevIsSavingRef`, `performSave`, `flushNow`, and the save-status effect in `src/hooks/useAutosave.js`.
 
-**Solution.** Gutenberg associates each response with the edits sent in that request and leaves later edits dirty. It should also return the active promise from `savePost()` or expose completion state for each request. Cortext could then remove the reapply loop, waiter bookkeeping, and local `isSaving` edge detection.
+**Solution.** Gutenberg associates each response with the edits sent in that request and leaves later edits dirty. It should also return the active promise from `savePost()` or expose completion state for each request. Cortext could then remove the edit-reference check, content reapply, waiter bookkeeping, and local `isSaving` edge detection.
 
 <a id="td-gutenberg-header-boundary"></a>
 
