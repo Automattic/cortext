@@ -23,7 +23,7 @@ async function deleteIfCreated( requestUtils, id ) {
 			path: `/wp/v2/crtxt_documents/${ id }`,
 			params: { force: true },
 		} );
-	} catch ( _error ) {
+	} catch {
 		// Best-effort cleanup; the test may have already deleted the page.
 	}
 }
@@ -110,13 +110,19 @@ test.describe( 'Page trash flow', () => {
 			await expect( trashList ).toContainText( '1 nested document' );
 
 			// Canvas keeps the parent open with a trashed banner.
-			const notice = page.locator( '.cortext-canvas__notice' );
+			const notice = page
+				.locator( '.cortext-canvas__notice' )
+				.filter( { hasText: 'This document is in the Trash.' } );
+			const restoreButton = notice.getByRole( 'button', {
+				name: 'Restore',
+				exact: true,
+			} );
 			await expect( notice ).toContainText(
 				'This document is in the Trash.'
 			);
 
 			// Restore via the banner. Subtree returns; banner disappears.
-			await notice.getByRole( 'button', { name: 'Restore' } ).click();
+			await restoreButton.click();
 
 			await expect( notice ).toHaveCount( 0 );
 			await expect(

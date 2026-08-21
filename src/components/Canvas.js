@@ -414,10 +414,19 @@ function CanvasEditor( {
 	const { status, lastSavedAt, flushNow, isDirty, isSaving } = useAutosave( {
 		recentTarget: autosaveRecentTarget,
 	} );
+	const isTrashed = useSelect(
+		( select ) =>
+			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
+			'trash',
+		[]
+	);
 	const postLock = usePostLock( {
 		postId: post.id,
 		postType: post.type ?? postType,
-		enabled: isActive,
+		// WordPress rejects lock acquisition for trashed posts. Disable the lock
+		// as soon as the status becomes `trash`; the restore notice handles the
+		// read-only state from there.
+		enabled: isActive && ! isTrashed,
 	} );
 	const { resetPost, setIsInserterOpened } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
