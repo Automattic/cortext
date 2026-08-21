@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fb386820ffe94bbeb5fe142d437005ca",
+    "content-hash": "d67e09d50ed5c929e5eae24850631bd9",
     "packages": [],
     "packages-dev": [
         {
@@ -1063,7 +1063,7 @@
         },
         {
             "name": "roots/wordpress",
-            "version": "7.0.1",
+            "version": "7.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/roots/wordpress.git",
@@ -1094,7 +1094,7 @@
             ],
             "support": {
                 "issues": "https://github.com/roots/wordpress/issues",
-                "source": "https://github.com/roots/wordpress/tree/7.0.1"
+                "source": "https://github.com/roots/wordpress/tree/7.1"
             },
             "funding": [
                 {
@@ -1173,23 +1173,23 @@
         },
         {
             "name": "roots/wordpress-no-content",
-            "version": "7.0.1",
+            "version": "7.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/WordPress/WordPress.git",
-                "reference": "7.0.1"
+                "reference": "7.1"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://downloads.w.org/release/wordpress-7.0.1-no-content.zip",
-                "reference": "7.0.1",
-                "shasum": "808ab53004d9c6fe69175855cd7d2317fe9502b3"
+                "url": "https://downloads.wordpress.org/release/wordpress-7.1-no-content.zip",
+                "reference": "7.1",
+                "shasum": "7b28e5af89345d79a30b44a16cbe3244379d1765"
             },
             "require": {
                 "php": ">= 7.4"
             },
             "provide": {
-                "wordpress/core-implementation": "7.0.1"
+                "wordpress/core-implementation": "7.1"
             },
             "suggest": {
                 "ext-curl": "Performs remote request operations.",
@@ -1240,7 +1240,7 @@
                     "type": "other"
                 }
             ],
-            "time": "2026-07-09T17:26:02+00:00"
+            "time": "2026-08-19T20:16:40+00:00"
         },
         {
             "name": "sebastian/cli-parser",
