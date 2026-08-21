@@ -1178,6 +1178,7 @@ final class RowsController {
 		if ( ! is_array( $value ) ) {
 			return new WP_Error(
 				'rest_invalid_param',
+				/* translators: include is a REST parameter and must remain unchanged. */
 				__( 'Pass include as an array of row IDs.', 'cortext' ),
 				array( 'status' => 400 )
 			);
@@ -1210,7 +1211,7 @@ final class RowsController {
 		return new WP_Error(
 			'rest_invalid_param',
 			sprintf(
-				/* translators: %d: maximum number of rows allowed per page. */
+				/* translators: %d: maximum number of rows allowed per page. per_page is a REST parameter and must remain unchanged. */
 				__( 'per_page must be between 1 and %d.', 'cortext' ),
 				$max
 			),

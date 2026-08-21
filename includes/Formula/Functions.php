@@ -179,17 +179,26 @@ final class Functions {
 				throw new FormulaParseError(
 					'cortext_formula_type_mismatch',
 					sprintf(
-						/* translators: 1: function name, 2: argument number, 3: expected type. */
+						/* translators: 1: function name, 2: argument number, 3: localized expected value type. */
 						__( 'Value %2$d in %1$s() must be %3$s.', 'cortext' ),
 						$name,
 						$index + 1,
-						$type
+						self::display_type_label( $type )
 					)
 				);
 			}
 		}
 
 		return $return_type;
+	}
+
+	/**
+	 * Localizes an internal value type for display without changing formula data.
+	 */
+	private static function display_type_label( string $type ): string {
+		return 'text' === $type
+			? _x( 'text', 'formula value type', 'cortext' )
+			: $type;
 	}
 
 	/**
@@ -200,18 +209,21 @@ final class Functions {
 		if ( 3 !== count( $args ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_invalid_arity',
+				/* translators: if() is a canonical formula function name and must remain in English. */
 				__( 'if() needs condition, then, and else values.', 'cortext' )
 			);
 		}
 		if ( ! self::type_matches( (string) $args[0]['type'], 'checkbox' ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_type_mismatch',
+				/* translators: if() is a canonical formula function name and must remain in English. */
 				__( 'The if() condition must be true or false.', 'cortext' )
 			);
 		}
 		if ( $args[1]['type'] !== $args[2]['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_mixed_if',
+				/* translators: if() and v0 are canonical formula identifiers and must remain unchanged. */
 				__( 'The then and else values in if() must use the same type in v0.', 'cortext' )
 			);
 		}
@@ -228,18 +240,21 @@ final class Functions {
 		if ( 3 !== count( $args ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_invalid_arity',
+				/* translators: dateBetween() is a canonical formula function name and must remain in English. */
 				__( 'dateBetween() needs two dates and a unit.', 'cortext' )
 			);
 		}
 		if ( ! self::type_matches( (string) $args[0]['type'], 'date' ) || ! self::type_matches( (string) $args[1]['type'], 'date' ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_type_mismatch',
+				/* translators: dateBetween() is a canonical formula function name and must remain in English. */
 				__( 'dateBetween() needs two dates.', 'cortext' )
 			);
 		}
 		if ( 'text' !== $args[2]['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_type_mismatch',
+				/* translators: dateBetween() and "days" are canonical formula identifiers and must remain in English. */
 				__( 'The dateBetween() unit must be text, like "days".', 'cortext' )
 			);
 		}
@@ -253,12 +268,14 @@ final class Functions {
 		if ( 2 !== count( $args ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_invalid_arity',
+				/* translators: formatDate() is a canonical formula function name and must remain in English. */
 				__( 'formatDate() needs a date and a format.', 'cortext' )
 			);
 		}
 		if ( ! self::type_matches( (string) $args[0]['type'], 'date' ) || 'text' !== $args[1]['type'] ) {
 			throw new FormulaParseError(
 				'cortext_formula_type_mismatch',
+				/* translators: formatDate() is a canonical formula function name and must remain in English. */
 				__( 'formatDate() needs a date and a text format.', 'cortext' )
 			);
 		}

@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, _x } from '@wordpress/i18n';
 import {
 	BlockControls,
 	InspectorControls,
@@ -501,7 +501,10 @@ function CollectionInspectorControls( {
 					</>
 				) }
 			</PanelBody>
-			<PanelBody title={ __( 'View', 'cortext' ) } initialOpen={ false }>
+			<PanelBody
+				title={ _x( 'View', 'noun', 'cortext' ) }
+				initialOpen={ false }
+			>
 				{ isCollectionValid && (
 					<>
 						{ ! isOwner && (

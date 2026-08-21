@@ -1,4 +1,4 @@
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 import {
@@ -255,7 +255,12 @@ function ImportBody( {
 			<Text variant="muted">
 				{ sprintf(
 					/* translators: %d: number of Notion collections found */
-					__( '%d collections', 'cortext' ),
+					_n(
+						'%d collection',
+						'%d collections',
+						collections.length,
+						'cortext'
+					),
 					collections.length
 				) }
 			</Text>
@@ -336,8 +341,10 @@ function CollectionCard( { collection, job, onImport } ) {
 				statusLine = processed
 					? sprintf(
 							/* translators: 1: documents processed so far, 2: seconds remaining before retry */
-							__(
+							_n(
+								'Imported %1$d document. Waiting for Notion: %2$d s…',
 								'Imported %1$d documents. Waiting for Notion: %2$d s…',
+								processed,
 								'cortext'
 							),
 							processed,
@@ -351,7 +358,12 @@ function CollectionCard( { collection, job, onImport } ) {
 			} else if ( processed ) {
 				statusLine = sprintf(
 					/* translators: %d: documents processed */
-					__( 'Importing %d documents…', 'cortext' ),
+					_n(
+						'Importing %d document…',
+						'Importing %d documents…',
+						processed,
+						'cortext'
+					),
 					processed
 				);
 			}
@@ -361,7 +373,12 @@ function CollectionCard( { collection, job, onImport } ) {
 			if ( processed ) {
 				statusLine = sprintf(
 					/* translators: %d: documents processed */
-					__( '%d documents imported.', 'cortext' ),
+					_n(
+						'%d document imported.',
+						'%d documents imported.',
+						processed,
+						'cortext'
+					),
 					processed
 				);
 			}

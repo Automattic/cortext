@@ -180,6 +180,7 @@ final class NotionController {
 		if ( '' === $data_source_id ) {
 			return new WP_Error(
 				'cortext_notion_missing_data_source',
+				/* translators: data_source_id is a Notion API property name and must remain unchanged. */
 				__( 'Missing data_source_id.', 'cortext' ),
 				array( 'status' => 400 )
 			);
