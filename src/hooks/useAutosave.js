@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
-import { useSelect, useDispatch } from '@wordpress/data';
+import { useSelect, useDispatch, useRegistry } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { store as coreDataStore } from '@wordpress/core-data';
 import { store as noticesStore } from '@wordpress/notices';
@@ -11,11 +11,22 @@ const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
 const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
 
+function canSavePost( state ) {
+	return (
+		state.isDirty &&
+		state.isSaveable &&
+		! state.isSaving &&
+		! state.isPostLocked &&
+		state.postStatus !== 'trash'
+	);
+}
+
 export default function useAutosave( options = {} ) {
 	const debounceMs = options.debounceMs ?? DEBOUNCE_MS;
 	const minSaveIntervalMs = options.minSaveIntervalMs ?? MIN_SAVE_INTERVAL_MS;
 	const recentId = options.recentTarget?.id ?? null;
 	const recentCollectionId = options.recentTarget?.collectionId ?? null;
+	const registry = useRegistry();
 	const { savePost, editPost } = useDispatch( editorStore );
 	const { createErrorNotice, createSuccessNotice } =
 		useDispatch( noticesStore );
@@ -78,6 +89,7 @@ export default function useAutosave( options = {} ) {
 		editPost,
 		postStatus,
 		postTitle,
+		currentPostId,
 		editsReference,
 	} );
 	stateRef.current = {
@@ -89,8 +101,21 @@ export default function useAutosave( options = {} ) {
 		editPost,
 		postStatus,
 		postTitle,
+		currentPostId,
 		editsReference,
 	};
+
+	const readCurrentSaveState = useCallback( () => {
+		const editor = registry.select( editorStore );
+		return {
+			isDirty: editor.isEditedPostDirty(),
+			isSaveable: editor.isEditedPostSaveable(),
+			isSaving: editor.isSavingPost(),
+			isPostLocked: editor.isPostLocked?.() ?? false,
+			postStatus: editor.getEditedPostAttribute( 'status' ),
+			currentPostId: editor.getCurrentPostId(),
+		};
+	}, [ registry ] );
 
 	// Promote draft to private once the user has given the page a real title,
 	// so WP core regenerates post_name from the title on save.
@@ -106,14 +131,68 @@ export default function useAutosave( options = {} ) {
 	}, [] );
 
 	const saveCurrentPost = useCallback( () => {
-		const { savePost: save } = stateRef.current;
+		if ( savePromiseRef.current ) {
+			return savePromiseRef.current;
+		}
 
-		maybePromoteStatus();
-		lastSaveAtRef.current = Date.now();
-		const savePromise = Promise.resolve( save() ).then(
-			() => true,
-			() => false
-		);
+		async function performSave() {
+			const saveState = readCurrentSaveState();
+			if ( ! canSavePost( saveState ) ) {
+				return { didSave: true, hasPendingEdits: false };
+			}
+
+			const savingPostId = saveState.currentPostId;
+			const { savePost: save } = stateRef.current;
+
+			maybePromoteStatus();
+			lastSaveAtRef.current = Date.now();
+			let editsAtRequestStart;
+			try {
+				const request = save();
+				// savePost() synchronously writes its serialized content before its
+				// first await. Capture the edit reference after that internal write,
+				// so only later client edits count as pending work.
+				editsAtRequestStart = registry
+					.select( coreDataStore )
+					.getReferenceByDistinctEdits();
+				await request;
+			} catch {
+				return { didSave: false, hasPendingEdits: false };
+			}
+			// Core resolves savePost() after REST failures. Read the result from
+			// the editor store before treating the flush as successful.
+			if ( registry.select( editorStore ).didPostSaveRequestFail() ) {
+				return { didSave: false, hasPendingEdits: false };
+			}
+
+			const current = readCurrentSaveState();
+			const hasPendingEdits =
+				current.currentPostId === savingPostId &&
+				registry
+					.select( coreDataStore )
+					.getReferenceByDistinctEdits() !== editsAtRequestStart;
+			if (
+				hasPendingEdits &&
+				current.isSaveable &&
+				! current.isPostLocked &&
+				current.postStatus !== 'trash'
+			) {
+				// tech-debt.md#td-autosave-save-completion: WordPress 7.1 may
+				// mark a client edit made during this request as saved. Read the
+				// content only at this boundary, then make that edit dirty again.
+				const currentContent = registry
+					.select( editorStore )
+					.getEditedPostContent();
+				stateRef.current.editPost?.(
+					{ content: currentContent },
+					{ undoIgnore: true }
+				);
+			}
+
+			return { didSave: true, hasPendingEdits };
+		}
+
+		const savePromise = performSave();
 		savePromiseRef.current = savePromise;
 		savePromise.finally( () => {
 			if ( savePromiseRef.current === savePromise ) {
@@ -122,17 +201,25 @@ export default function useAutosave( options = {} ) {
 		} );
 
 		return savePromise;
-	}, [ maybePromoteStatus ] );
+	}, [ maybePromoteStatus, readCurrentSaveState, registry ] );
 
 	const waitForSavingToFinish = useCallback( () => {
-		if ( ! stateRef.current.isSaving ) {
+		if ( ! readCurrentSaveState().isSaving ) {
 			return Promise.resolve( true );
 		}
 
 		return new Promise( ( resolve ) => {
 			savingWaitersRef.current.push( resolve );
 		} );
-	}, [] );
+	}, [ readCurrentSaveState ] );
+
+	const waitForNextSaveWindow = useCallback( () => {
+		const elapsed = Date.now() - lastSaveAtRef.current;
+		const wait = Math.max( 0, minSaveIntervalMs - elapsed );
+		return wait > 0
+			? new Promise( ( resolve ) => setTimeout( resolve, wait ) )
+			: Promise.resolve();
+	}, [ minSaveIntervalMs ] );
 
 	const flushNow = useCallback( async () => {
 		if ( debounceRef.current ) {
@@ -140,35 +227,48 @@ export default function useAutosave( options = {} ) {
 			debounceRef.current = null;
 		}
 
-		if ( savePromiseRef.current ) {
-			const didSave = await savePromiseRef.current;
-			if ( ! didSave ) {
+		// Transitions unmount the editor once this returns true. Keep draining
+		// client edits that land during a request; false is reserved for a real
+		// save failure, where the caller can safely offer Retry or Discard.
+		while ( true ) {
+			if ( savePromiseRef.current ) {
+				const activeSave = await savePromiseRef.current;
+				if ( ! activeSave.didSave ) {
+					return false;
+				}
+				if ( activeSave.hasPendingEdits ) {
+					await waitForNextSaveWindow();
+				}
+			}
+
+			const saveState = readCurrentSaveState();
+			if ( saveState.isSaving ) {
+				const didSave = await waitForSavingToFinish();
+				if ( ! didSave ) {
+					return false;
+				}
+				continue;
+			}
+			if ( ! canSavePost( saveState ) ) {
+				return true;
+			}
+
+			const result = await saveCurrentPost();
+			if ( ! result.didSave ) {
 				return false;
 			}
-		}
-
-		if ( stateRef.current.isSaving ) {
-			const didSave = await waitForSavingToFinish();
-			if ( ! didSave ) {
-				return false;
+			if ( ! result.hasPendingEdits ) {
+				return true;
 			}
-		}
 
-		const {
-			isDirty: d,
-			isSaveable: s,
-			isSaving: saving,
-			isPostLocked: locked,
-			postStatus: ps,
-		} = stateRef.current;
-		if ( ! d || ! s || locked || ps === 'trash' ) {
-			return true;
+			await waitForNextSaveWindow();
 		}
-		if ( saving ) {
-			return waitForSavingToFinish();
-		}
-		return saveCurrentPost();
-	}, [ saveCurrentPost, waitForSavingToFinish ] );
+	}, [
+		readCurrentSaveState,
+		saveCurrentPost,
+		waitForNextSaveWindow,
+		waitForSavingToFinish,
+	] );
 
 	useEffect( () => {
 		if ( isSaving || savingWaitersRef.current.length === 0 ) {

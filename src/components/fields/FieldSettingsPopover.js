@@ -198,7 +198,6 @@ function ScalarDefaultControl( {
 		value: mode === 'value' ? value : '',
 		onChange,
 		onBlur: () => onDefaultCommit( mode, value ),
-		__next40pxDefaultSize: true,
 	};
 
 	return (

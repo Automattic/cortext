@@ -450,7 +450,6 @@ function SubmenuInputRow( { label, value, onChange, min = 1 } ) {
 				spinControls="none"
 				hideLabelFromVision
 				label={ label }
-				__next40pxDefaultSize
 			/>
 		</div>
 	);

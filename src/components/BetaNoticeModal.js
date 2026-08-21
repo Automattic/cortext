@@ -71,7 +71,7 @@ export default function BetaNoticeModal( { onAcknowledge } ) {
 				</li>
 			</ul>
 			<p className="cortext-beta-notice__repo">
-				<ExternalLink href={ REPO_URL }>
+				<ExternalLink href={ REPO_URL } rel="noopener noreferrer">
 					{ __( 'View Cortext on GitHub', 'cortext' ) }
 				</ExternalLink>
 			</p>

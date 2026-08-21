@@ -60,7 +60,27 @@ async function loadMoreUntilVisible( target, loadMoreButton, maxClicks = 10 ) {
 			return;
 		}
 		await expect( loadMoreButton ).toBeVisible();
+		const itemCount = await loadMoreButton.evaluate(
+			( button ) => button.closest( 'ul' )?.children.length ?? 0
+		);
 		await loadMoreButton.evaluate( ( button ) => button.click() );
+		// The REST request and React render are asynchronous. Wait for this
+		// branch to gain another page before clicking the loading button again.
+		await expect
+			.poll( async () => {
+				if ( await target.isVisible().catch( () => false ) ) {
+					return true;
+				}
+				return loadMoreButton
+					.evaluate(
+						( button, previousCount ) =>
+							( button.closest( 'ul' )?.children.length ?? 0 ) >
+							previousCount,
+						itemCount
+					)
+					.catch( () => false );
+			} )
+			.toBe( true );
 	}
 	await expect( target ).toBeVisible();
 }

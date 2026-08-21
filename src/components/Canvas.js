@@ -414,11 +414,21 @@ function CanvasEditor( {
 	const { status, lastSavedAt, flushNow, isDirty, isSaving } = useAutosave( {
 		recentTarget: autosaveRecentTarget,
 	} );
+	const isTrashed = useSelect(
+		( select ) =>
+			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
+			'trash',
+		[]
+	);
 	const postLock = usePostLock( {
 		postId: post.id,
 		postType: post.type ?? postType,
-		enabled: isActive,
+		// WordPress rejects lock acquisition for trashed posts. Disable the lock
+		// as soon as the status becomes `trash`; the restore notice handles the
+		// read-only state from there.
+		enabled: isActive && ! isTrashed,
 	} );
+	const isReadOnly = postLock.isReadOnly || isTrashed;
 	const { resetPost, setIsInserterOpened } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const lastNotifiedBacklinkSaveRef = useRef( null );
@@ -536,7 +546,7 @@ function CanvasEditor( {
 		>
 			<CortextMentions />
 			<DocumentActions
-				disabled={ postLock.isReadOnly }
+				disabled={ isReadOnly }
 				canInsertBlocks={ ! isCollection }
 				isActive={ isActive }
 				postId={ post.id }
@@ -563,7 +573,7 @@ function CanvasEditor( {
 							isEditorSurfaceDisplayed={
 								isEditorSurfaceDisplayed
 							}
-							isLocked={ postLock.isReadOnly }
+							isLocked={ isReadOnly }
 							isSurfaceFocusPending={
 								postLock.isReadOnly &&
 								! postLock.isFailed &&
@@ -593,7 +603,7 @@ function CanvasEditor( {
 				user={ postLock.user }
 			/>
 			<DocumentInspectorSidebar
-				isLocked={ postLock.isReadOnly }
+				isLocked={ isReadOnly }
 				postId={ post.id }
 				postType={ postType }
 			/>

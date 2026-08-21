@@ -8,6 +8,12 @@ module.exports = {
 		'<rootDir>/tests/js/setup.js',
 	],
 	testMatch: [ '<rootDir>/tests/js/**/*.test.js' ],
+	transform: {
+		...( base.transform ?? {} ),
+		'^.+\\.mjs$': require.resolve(
+			'@wordpress/scripts/config/babel-transform'
+		),
+	},
 	// The WordPress build is ESM and injects CSS that jsdom cannot parse. Unit
 	// tests use the CJS build; Playwright still covers the real `/wp` entrypoint.
 	moduleNameMapper: {
@@ -18,6 +24,6 @@ module.exports = {
 	// transform node_modules, so their `import` / `export` syntax blows up at
 	// parse time. Allowlist those packages so Babel transpiles them first.
 	transformIgnorePatterns: [
-		'node_modules/(?!(\\.pnpm/)?(parsel-js|@parsel-js|uuid|marked)(@|/))',
+		'node_modules/(?!(\\.pnpm/)?(parsel-js|@parsel-js|uuid|marked|@wordpress[\\/+]+theme)(@|/))',
 	],
 };

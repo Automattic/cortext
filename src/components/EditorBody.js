@@ -26,7 +26,6 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { __ } from '@wordpress/i18n';
 import { ENTER, SPACE, isKeyboardEvent } from '@wordpress/keycodes';
-import { registerDocument } from '@wordpress/style-runtime';
 import {
 	useEffect,
 	useCallback,
@@ -125,10 +124,9 @@ function getBlockCanvasEmotionCache( canvasDocument ) {
 	return emotionCache;
 }
 
-// tech-debt.md#td-block-canvas-style-runtime-bridge: DataViews puts generated
-// styles in the parent document unless we point its runtimes at the BlockCanvas
-// iframe. Set up style-runtime and Emotion before mounting the canvas children
-// so the first render uses the right styles.
+// tech-debt.md#td-block-canvas-style-runtime-bridge: DataViews bundles its own
+// Emotion instance. Point its cache at the BlockCanvas iframe before mounting
+// the canvas children. Core's StyleProvider already registers the document.
 function BlockCanvasStyleProvider( { children } ) {
 	const anchorRef = useRef( null );
 	const [ emotionCache, setEmotionCache ] = useState( null );
@@ -140,10 +138,8 @@ function BlockCanvasStyleProvider( { children } ) {
 		}
 
 		const cache = getBlockCanvasEmotionCache( canvasDocument );
-		const unregisterDocument = registerDocument( canvasDocument );
 		setEmotionCache( cache );
-
-		return unregisterDocument;
+		return undefined;
 	}, [] );
 
 	return (
@@ -416,8 +412,7 @@ export function scheduleDocumentSurfaceFocus( {
 	token,
 } ) {
 	let cancelled = false;
-	let focusFrame = ownerWindow.requestAnimationFrame( () => {
-		focusFrame = null;
+	afterNextPaint( ownerWindow ).then( () => {
 		if ( cancelled || ! requestIsCurrent() || ! originIsCurrent() ) {
 			return;
 		}
@@ -425,15 +420,14 @@ export function scheduleDocumentSurfaceFocus( {
 		completeSurfaceFocus?.( token, () => selectBlock( clientId, 0 ) );
 	} );
 
-	// Clear the rich-text position now. The next frame restores the caret and
-	// claims the request, which remains cancellable until then.
+	// tech-debt.md#td-page-transitions-snapshot: WordPress 7.1 may batch
+	// block-editor selection updates past one animation frame. Clear the
+	// rich-text position now, then wait for a full paint before restoring the
+	// caret. The request remains cancellable until then.
 	selectBlock( clientId, null );
 
 	return () => {
 		cancelled = true;
-		if ( focusFrame !== null ) {
-			ownerWindow.cancelAnimationFrame( focusFrame );
-		}
 	};
 }
 
@@ -528,6 +522,17 @@ export function areCanvasReadyRequirementsMet( {
 		! isPropertiesResolving &&
 		( ! needsProperties || hasProperties ) &&
 		( ! needsOwner || ( hasOwner && isOwnerContentReady ) )
+	);
+}
+
+export function isEditorPostReadyForHeaderRepair(
+	currentEditorPostId,
+	targetPostId
+) {
+	return (
+		currentEditorPostId !== null &&
+		currentEditorPostId !== undefined &&
+		Number( currentEditorPostId ) === Number( targetPostId )
 	);
 }
 
@@ -1092,6 +1097,14 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		startTyping,
 		stopTyping,
 	} = useDispatch( blockEditorStore );
+	const currentEditorPostId = useSelect(
+		( select ) => select( editorStore ).getCurrentPostId(),
+		[]
+	);
+	const isEditorPostReady = isEditorPostReadyForHeaderRepair(
+		currentEditorPostId,
+		postId
+	);
 
 	useLayoutEffect( () => {
 		collectionBodySnapshotRef.current = {
@@ -1244,7 +1257,11 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	// reads as "the icon is being inserted right now" when really the
 	// document is just hydrating.
 	useLayoutEffect( () => {
-		if ( isTrashed || isLocked ) {
+		// tech-debt.md#td-page-transitions-snapshot: Canvas can receive the next
+		// post before EditorProvider hydrates it into core/editor. Header blocks
+		// inserted during that gap are overwritten, so wait for the store to
+		// identify the target post.
+		if ( ! isEditorPostReady || isTrashed || isLocked ) {
 			return;
 		}
 
@@ -1353,6 +1370,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		iconMeta,
 		insertBlocks,
+		isEditorPostReady,
 		isLocked,
 		isTrashed,
 		ownerBlockName,

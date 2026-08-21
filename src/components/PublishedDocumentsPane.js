@@ -184,7 +184,10 @@ export default function PublishedDocumentsPane() {
 						);
 					}
 					return (
-						<ExternalLink href={ item.link }>
+						<ExternalLink
+							href={ item.link }
+							rel="noopener noreferrer"
+						>
 							{ __( 'View', 'cortext' ) }
 						</ExternalLink>
 					);

@@ -155,7 +155,7 @@ describe( 'PublishedDocumentsPane', () => {
 		);
 	} );
 
-	it( 'passes DataViews 17 layout defaults to the published documents table', () => {
+	it( 'passes DataViews 18 layout defaults to the published documents table', () => {
 		render( <PublishedDocumentsPane /> );
 
 		expect( DataViews ).toHaveBeenCalledTimes( 1 );

@@ -487,7 +487,6 @@ function NoKeyForm( { onSave, onCancel } ) {
 					) }
 				</Text>
 				<TextControl
-					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 					label={ __( 'Notion connection token', 'cortext' ) }
 					type="password"
