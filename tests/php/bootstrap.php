@@ -14,5 +14,6 @@ require_once $cortext_root . '/vendor/autoload.php';
 // Constants normally defined by cortext.php (main plugin file).
 define( 'CORTEXT_PATH', $cortext_root . '/' );
 define( 'CORTEXT_URL', 'http://example.org/wp-content/plugins/cortext/' );
+define( 'CORTEXT_VERSION', 'test' );
 
 \WorDBless\Load::load();
