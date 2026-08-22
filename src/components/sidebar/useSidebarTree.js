@@ -1,13 +1,17 @@
 import apiFetch from '@wordpress/api-fetch';
+import { store as coreStore } from '@wordpress/core-data';
+import { useSelect } from '@wordpress/data';
 import { addQueryArgs } from '@wordpress/url';
 import {
 	useState,
 	useMemo,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 } from '@wordpress/element';
 
+import { DOCUMENT_POST_TYPE } from '../../collections';
 import { SIDEBAR_TREE_CHANGED_EVENT } from '../../hooks/sidebarTreeInvalidation';
 
 export const ROOT_PARENT_ID = 0;
@@ -90,6 +94,82 @@ function mergeRecords( current, incoming ) {
 		out.push( record );
 	} );
 	return out;
+}
+
+function treeTitle( title ) {
+	if ( typeof title === 'string' ) {
+		return { raw: title, rendered: title };
+	}
+	if ( ! title || typeof title !== 'object' ) {
+		return undefined;
+	}
+	return {
+		raw: title.raw ?? title.rendered ?? '',
+		rendered: title.rendered ?? title.raw ?? '',
+	};
+}
+
+// Overlay the selected record's tree-consumed fields from core-data onto the
+// loaded REST snapshots. `title` is compared on `raw` alone: core-data holds
+// the raw string, while a snapshot's `rendered` came through `the_title`, so
+// comparing both would treat every texturized title as edited. `status` keeps
+// row actions current, and `slug` feeds canonical sidebar navigation.
+export function overlaySidebarTreeRecord( branches, recordId, fields ) {
+	if ( ! fields ) {
+		return branches;
+	}
+
+	const title = treeTitle( fields.title );
+	let nextBranches;
+	for ( const [ key, branch ] of branches ) {
+		const index = branch.records.findIndex(
+			( record ) => record.id === recordId
+		);
+		const record = branch.records[ index ];
+		if ( ! record ) {
+			continue;
+		}
+		const titleChanged =
+			title !== undefined && record.title?.raw !== title.raw;
+		const iconChanged =
+			typeof fields.icon === 'string' &&
+			record.meta?.cortext_document_icon !== fields.icon;
+		const statusChanged =
+			typeof fields.status === 'string' &&
+			record.status !== fields.status;
+		const slugChanged =
+			typeof fields.slug === 'string' && record.slug !== fields.slug;
+		if (
+			! titleChanged &&
+			! iconChanged &&
+			! statusChanged &&
+			! slugChanged
+		) {
+			continue;
+		}
+
+		const records = [ ...branch.records ];
+		const nextRecord = { ...record };
+		if ( titleChanged ) {
+			nextRecord.title = title;
+		}
+		if ( iconChanged ) {
+			nextRecord.meta = {
+				...( record.meta ?? {} ),
+				cortext_document_icon: fields.icon,
+			};
+		}
+		if ( statusChanged ) {
+			nextRecord.status = fields.status;
+		}
+		if ( slugChanged ) {
+			nextRecord.slug = fields.slug;
+		}
+		records[ index ] = nextRecord;
+		nextBranches ??= new Map( branches );
+		nextBranches.set( key, { ...branch, records } );
+	}
+	return nextBranches ?? branches;
 }
 
 function branchHasMore( branch ) {
@@ -224,6 +304,31 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 	const expandedIdsRef = useRef( expandedIds );
 	const loadingRef = useRef( new Map() );
 	const preferenceWriteRef = useRef( Promise.resolve() );
+	const selectedRecordId = normalizeId(
+		selectedId ?? selectedCollectionId ?? 0
+	);
+	const selectedTreeFields = useSelect(
+		( select ) => {
+			if ( selectedRecordId < 1 ) {
+				return null;
+			}
+			const record = select( coreStore ).getEditedEntityRecord(
+				'postType',
+				DOCUMENT_POST_TYPE,
+				selectedRecordId
+			);
+			if ( ! record ) {
+				return null;
+			}
+			return {
+				title: record.title,
+				icon: record.meta?.cortext_document_icon,
+				status: record.status,
+				slug: record.slug,
+			};
+		},
+		[ selectedRecordId ]
+	);
 
 	useEffect( () => {
 		branchesRef.current = branches;
@@ -232,6 +337,25 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 	useEffect( () => {
 		expandedIdsRef.current = expandedIds;
 	}, [ expandedIds ] );
+
+	// Branch membership and pagination stay local; the active entity's title,
+	// icon, status, and slug come from core-data. Commit the overlay into the
+	// snapshots rather than deriving it: a derived overlay only covers the
+	// selected record, so the row would fall back to its stale snapshot the
+	// moment the user opens another document. Reconciling before paint also
+	// re-applies the value after a branch refetch serves the pre-save copy.
+	useLayoutEffect( () => {
+		if ( ! selectedTreeFields ) {
+			return;
+		}
+		setBranches( ( previous ) =>
+			overlaySidebarTreeRecord(
+				previous,
+				selectedRecordId,
+				selectedTreeFields
+			)
+		);
+	}, [ branches, selectedRecordId, selectedTreeFields ] );
 
 	const loadedRecords = useMemo( () => {
 		const byId = new Map();
