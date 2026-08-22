@@ -425,6 +425,7 @@ final class RowsFilterQuery {
 		if ( ! in_array( $relation, array( 'AND', 'OR' ), true ) ) {
 			return new WP_Error(
 				'cortext_invalid_filter_relation',
+				/* translators: AND and OR are canonical filter operators and must remain unchanged. */
 				__( 'Filter group relation must be AND or OR.', 'cortext' ),
 				array( 'status' => 400 )
 			);

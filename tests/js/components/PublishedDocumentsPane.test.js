@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 jest.mock( '@wordpress/i18n', () => ( {
 	__: ( value ) => value,
 	_n: ( single, plural, count ) => ( count === 1 ? single : plural ),
+	_x: ( value ) => value,
 	sprintf: ( value ) => value,
 } ) );
 

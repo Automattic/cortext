@@ -188,6 +188,8 @@ final class Test_Formula_Functions extends BaseTestCase {
 	}
 
 	/**
+	 * Builds an expression that divides by zero.
+	 *
 	 * @return array<string,mixed>
 	 */
 	private function divide_by_zero_ast(): array {

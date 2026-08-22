@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, _x } from '@wordpress/i18n';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { useEntityRecords } from '@wordpress/core-data';
 import {
@@ -188,7 +188,7 @@ export default function PublishedDocumentsPane() {
 							href={ item.link }
 							rel="noopener noreferrer"
 						>
-							{ __( 'View', 'cortext' ) }
+							{ _x( 'View', 'verb', 'cortext' ) }
 						</ExternalLink>
 					);
 				},

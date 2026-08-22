@@ -64,6 +64,8 @@ final class Assets {
 			true
 		);
 
+		wp_set_script_translations( 'cortext-frontend', 'cortext' );
+
 		wp_enqueue_style(
 			'cortext-frontend',
 			CORTEXT_URL . 'build/frontend.css',
