@@ -7,7 +7,6 @@ import {
 	useMemo,
 	useCallback,
 	useEffect,
-	useLayoutEffect,
 	useRef,
 } from '@wordpress/element';
 
@@ -338,34 +337,28 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 		expandedIdsRef.current = expandedIds;
 	}, [ expandedIds ] );
 
-	// Branch membership and pagination stay local; the active entity's title,
-	// icon, status, and slug come from core-data. Commit the overlay into the
-	// snapshots rather than deriving it: a derived overlay only covers the
-	// selected record, so the row would fall back to its stale snapshot the
-	// moment the user opens another document. Reconciling before paint also
-	// re-applies the value after a branch refetch serves the pre-save copy.
-	useLayoutEffect( () => {
-		if ( ! selectedTreeFields ) {
-			return;
-		}
-		setBranches( ( previous ) =>
+	// Branch membership and pagination stay local. Render-path consumers get
+	// the active entity's title, icon, status, and slug from core-data without
+	// mutating the server snapshots or refetching every loaded parent/page.
+	const displayBranches = useMemo(
+		() =>
 			overlaySidebarTreeRecord(
-				previous,
+				branches,
 				selectedRecordId,
 				selectedTreeFields
-			)
-		);
-	}, [ branches, selectedRecordId, selectedTreeFields ] );
+			),
+		[ branches, selectedRecordId, selectedTreeFields ]
+	);
 
 	const loadedRecords = useMemo( () => {
 		const byId = new Map();
-		branches.forEach( ( branch ) => {
+		displayBranches.forEach( ( branch ) => {
 			branch.records.forEach( ( record ) => {
 				byId.set( record.id, record );
 			} );
 		} );
 		return [ ...byId.values() ];
-	}, [ branches ] );
+	}, [ displayBranches ] );
 
 	const getBranch = useCallback(
 		( parentId ) => branchesRef.current.get( parentKey( parentId ) ),
@@ -726,10 +719,10 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 	}, [ refreshBranch, refreshLoadedBranches, revealRecordPath ] );
 
 	const tree = useMemo(
-		() => buildNodesForParent( ROOT_PARENT_ID, branches ),
-		[ branches ]
+		() => buildNodesForParent( ROOT_PARENT_ID, displayBranches ),
+		[ displayBranches ]
 	);
-	const rootBranch = branches.get( ROOT_PARENT_ID ) ?? EMPTY_BRANCH;
+	const rootBranch = displayBranches.get( ROOT_PARENT_ID ) ?? EMPTY_BRANCH;
 
 	return {
 		tree,
