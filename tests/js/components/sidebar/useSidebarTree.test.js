@@ -1,8 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
+import { store as coreStore } from '@wordpress/core-data';
+import { createRegistry, RegistryProvider } from '@wordpress/data';
 
 import useSidebarTree, {
 	buildSidebarTreeBranchPath,
+	overlaySidebarTreeRecord,
 	ROOT_PARENT_ID,
 	SIDEBAR_TREE_PREFERENCES_PATH,
 } from '../../../../src/components/sidebar/useSidebarTree';
@@ -50,6 +53,43 @@ function parsedPath( path ) {
 	return new URL( path, 'https://example.test' );
 }
 
+function createSidebarRegistry( records = [] ) {
+	const registry = createRegistry();
+	registry.register( coreStore );
+	registry.dispatch( coreStore ).addEntities( [
+		{
+			kind: 'postType',
+			name: 'crtxt_document',
+			baseURL: '/wp/v2/crtxt_documents',
+			key: 'id',
+			rawAttributes: [ 'title', 'excerpt', 'content' ],
+			mergedEdits: { meta: true },
+			transientEdits: { blocks: true, selection: true },
+		},
+	] );
+	records.forEach( ( record ) => {
+		registry
+			.dispatch( coreStore )
+			.receiveEntityRecords( 'postType', 'crtxt_document', record );
+		registry
+			.dispatch( coreStore )
+			.finishResolution( 'getEntityRecord', [
+				'postType',
+				'crtxt_document',
+				record.id,
+			] );
+	} );
+	return registry;
+}
+
+function registryWrapper( registry ) {
+	return function Wrapper( { children } ) {
+		return (
+			<RegistryProvider value={ registry }>{ children }</RegistryProvider>
+		);
+	};
+}
+
 describe( 'buildSidebarTreeBranchPath', () => {
 	it( 'builds a request for one parent branch', () => {
 		const url = parsedPath( buildSidebarTreeBranchPath( 12, 3 ) );
@@ -68,6 +108,90 @@ describe( 'buildSidebarTreeBranchPath', () => {
 		expect( url.searchParams.get( '_fields' ) ).toContain(
 			'cortext_has_tree_children'
 		);
+	} );
+} );
+
+describe( 'overlaySidebarTreeRecord', () => {
+	it( 'overlays tree fields without mutating the REST snapshots', () => {
+		const rootRecord = makeRecord( 1 );
+		rootRecord.meta.other = 'preserved';
+		const duplicateRecord = { ...rootRecord, meta: { ...rootRecord.meta } };
+		const untouchedBranch = {
+			records: [ makeRecord( 2, 1 ) ],
+			page: 1,
+		};
+		const branches = new Map( [
+			[ 0, { records: [ rootRecord ], page: 1 } ],
+			[ 1, untouchedBranch ],
+			[ 2, { records: [ duplicateRecord ], page: 1 } ],
+		] );
+		const fields = {
+			title: 'New title',
+			icon: JSON.stringify( { type: 'emoji', value: '👍' } ),
+			status: 'publish',
+			slug: 'new-title',
+		};
+
+		const updated = overlaySidebarTreeRecord( branches, 1, fields );
+
+		expect( updated ).not.toBe( branches );
+		expect( updated.get( 0 ).records[ 0 ] ).toMatchObject( {
+			title: { raw: 'New title', rendered: 'New title' },
+			meta: {
+				cortext_document_icon: fields.icon,
+				other: 'preserved',
+			},
+			status: 'publish',
+			slug: 'new-title',
+		} );
+		expect( updated.get( 0 ).records[ 0 ].meta.other ).toBe( 'preserved' );
+		expect( updated.get( 2 ).records[ 0 ].meta.cortext_document_icon ).toBe(
+			fields.icon
+		);
+		expect( updated.get( 1 ) ).toBe( untouchedBranch );
+		expect( rootRecord ).toEqual(
+			expect.objectContaining( {
+				title: { raw: 'Page 1', rendered: 'Page 1' },
+				meta: {
+					cortext_document_icon: '',
+					other: 'preserved',
+				},
+				status: 'private',
+				slug: 'page-1',
+			} )
+		);
+	} );
+
+	it( 'preserves the map identity when every field is current', () => {
+		const record = makeRecord( 1 );
+		record.meta.cortext_document_icon = 'current';
+		const branches = new Map( [ [ 0, { records: [ record ], page: 1 } ] ] );
+
+		expect(
+			overlaySidebarTreeRecord( branches, 1, {
+				title: 'Page 1',
+				icon: 'current',
+				status: 'private',
+				slug: 'page-1',
+			} )
+		).toBe( branches );
+	} );
+
+	it( 'leaves a texturized title alone when only `rendered` differs', () => {
+		// WP runs `the_title` on `rendered`, so an unedited title with an
+		// ampersand never matches the raw string core-data holds.
+		const record = makeRecord( 1, 0, 'Tom & Jerry' );
+		record.title.rendered = 'Tom &#038; Jerry';
+		const branches = new Map( [ [ 0, { records: [ record ], page: 1 } ] ] );
+
+		expect(
+			overlaySidebarTreeRecord( branches, 1, {
+				title: 'Tom & Jerry',
+				icon: '',
+				status: 'private',
+				slug: 'page-1',
+			} )
+		).toBe( branches );
 	} );
 } );
 
@@ -329,5 +453,136 @@ describe( 'useSidebarTree', () => {
 				result.current.tree.map( ( node ) => node.page.id )
 			).toEqual( [ 1, 2 ] )
 		);
+	} );
+
+	it( 'derives selected tree fields from core-data across stale branch refetches', async () => {
+		const serverRecord = makeRecord( 1, 0, 'Old title' );
+		serverRecord.meta.cortext_document_icon = 'old-icon';
+		const registry = createSidebarRegistry( [ serverRecord ] );
+		mockTreeRequests( {
+			records: { 1: serverRecord },
+			branches: {
+				'0:1': {
+					records: [ serverRecord ],
+					total: 1,
+					totalPages: 1,
+				},
+			},
+		} );
+
+		const { result } = renderHook(
+			() =>
+				useSidebarTree( {
+					selectedId: 1,
+					selectedCollectionId: null,
+				} ),
+			{ wrapper: registryWrapper( registry ) }
+		);
+
+		await waitFor( () => expect( result.current.tree ).toHaveLength( 1 ) );
+
+		act( () => {
+			registry
+				.dispatch( coreStore )
+				.editEntityRecord( 'postType', 'crtxt_document', 1, {
+					title: 'New title',
+					meta: { cortext_document_icon: 'new-icon' },
+					status: 'publish',
+					slug: 'new-title',
+				} );
+		} );
+
+		await waitFor( () =>
+			expect( result.current.tree[ 0 ].page ).toMatchObject( {
+				title: { raw: 'New title', rendered: 'New title' },
+				meta: { cortext_document_icon: 'new-icon' },
+				status: 'publish',
+				slug: 'new-title',
+			} )
+		);
+		expect( result.current.getBranch( ROOT_PARENT_ID ).records[ 0 ] ).toBe(
+			serverRecord
+		);
+
+		await act( async () => {
+			await result.current.refreshBranch( ROOT_PARENT_ID );
+		} );
+
+		expect( result.current.tree[ 0 ].page ).toMatchObject( {
+			title: { raw: 'New title', rendered: 'New title' },
+			meta: { cortext_document_icon: 'new-icon' },
+			status: 'publish',
+			slug: 'new-title',
+		} );
+		expect( result.current.getBranch( ROOT_PARENT_ID ).records[ 0 ] ).toBe(
+			serverRecord
+		);
+		expect( serverRecord ).toMatchObject( {
+			title: { raw: 'Old title', rendered: 'Old title' },
+			meta: { cortext_document_icon: 'old-icon' },
+			status: 'private',
+			slug: 'page-1',
+		} );
+	} );
+
+	it( 'leaves an unedited record alone when its title is texturized', async () => {
+		const serverRecord = makeRecord( 1, 0, 'Tom & Jerry' );
+		serverRecord.title.rendered = 'Tom &#038; Jerry';
+		const registry = createSidebarRegistry( [ serverRecord ] );
+		mockTreeRequests( {
+			records: { 1: serverRecord },
+			branches: {
+				'0:1': {
+					records: [ serverRecord ],
+					total: 1,
+					totalPages: 1,
+				},
+			},
+		} );
+
+		const { result } = renderHook(
+			() =>
+				useSidebarTree( {
+					selectedId: 1,
+					selectedCollectionId: null,
+				} ),
+			{ wrapper: registryWrapper( registry ) }
+		);
+
+		await waitFor( () => expect( result.current.tree ).toHaveLength( 1 ) );
+		expect( result.current.tree[ 0 ].page ).toBe( serverRecord );
+	} );
+
+	it( 'leaves snapshots untouched when the selected id is absent from core-data', async () => {
+		const serverRecord = makeRecord( 1, 0, 'Server title' );
+		const registry = createSidebarRegistry();
+		registry
+			.dispatch( coreStore )
+			.finishResolution( 'getEntityRecord', [
+				'postType',
+				'crtxt_document',
+				99,
+			] );
+		mockTreeRequests( {
+			branches: {
+				'0:1': {
+					records: [ serverRecord ],
+					total: 1,
+					totalPages: 1,
+				},
+			},
+		} );
+
+		const { result } = renderHook(
+			() =>
+				useSidebarTree( {
+					selectedId: 99,
+					selectedCollectionId: null,
+				} ),
+			{ wrapper: registryWrapper( registry ) }
+		);
+
+		await waitFor( () => expect( result.current.tree ).toHaveLength( 1 ) );
+		expect( result.current.tree[ 0 ].page ).toBe( serverRecord );
 	} );
 } );

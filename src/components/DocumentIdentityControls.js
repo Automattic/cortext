@@ -286,9 +286,10 @@ function PickerBody( {
 	const initialIconColor = currentWpIcon?.color ?? 'default';
 	const currentEmoji = decodeEmoji( currentIcon );
 
-	// editEntityRecord updates the local data store synchronously so
-	// every subscriber (icon block, sidebar tree) sees the new value
-	// immediately. The actual server save is debounced; without it,
+	// editEntityRecord updates core-data synchronously. The icon block reads it
+	// directly, and the lazy sidebar derives the active record's display fields
+	// from the same store, so both surfaces update immediately. The actual server
+	// save is debounced; without it,
 	// rapid picks (browsing emojis, switching colors) fire a save per
 	// click, and each server round-trip re-renders the whole post
 	// graph (including the trash sidebar's resolution state), which
