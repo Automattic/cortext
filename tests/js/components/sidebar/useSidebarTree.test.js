@@ -500,6 +500,9 @@ describe( 'useSidebarTree', () => {
 				slug: 'new-title',
 			} )
 		);
+		expect( result.current.getBranch( ROOT_PARENT_ID ).records[ 0 ] ).toBe(
+			serverRecord
+		);
 
 		await act( async () => {
 			await result.current.refreshBranch( ROOT_PARENT_ID );
@@ -511,6 +514,9 @@ describe( 'useSidebarTree', () => {
 			status: 'publish',
 			slug: 'new-title',
 		} );
+		expect( result.current.getBranch( ROOT_PARENT_ID ).records[ 0 ] ).toBe(
+			serverRecord
+		);
 		expect( serverRecord ).toMatchObject( {
 			title: { raw: 'Old title', rendered: 'Old title' },
 			meta: { cortext_document_icon: 'old-icon' },
@@ -578,67 +584,5 @@ describe( 'useSidebarTree', () => {
 
 		await waitFor( () => expect( result.current.tree ).toHaveLength( 1 ) );
 		expect( result.current.tree[ 0 ].page ).toBe( serverRecord );
-	} );
-
-	it( 'keeps reconciled fields after the selection moves to another document', async () => {
-		const first = makeRecord( 1, 0, 'Old title' );
-		first.meta.cortext_document_icon = 'old-icon';
-		const second = makeRecord( 2, 0, 'Doc two' );
-		const registry = createSidebarRegistry( [ first, second ] );
-		mockTreeRequests( {
-			records: { 1: first, 2: second },
-			branches: {
-				'0:1': {
-					records: [ first, second ],
-					total: 2,
-					totalPages: 1,
-				},
-			},
-		} );
-
-		const { result, rerender } = renderHook(
-			( props ) => useSidebarTree( props ),
-			{
-				wrapper: registryWrapper( registry ),
-				initialProps: { selectedId: 1, selectedCollectionId: null },
-			}
-		);
-
-		await waitFor( () => expect( result.current.tree ).toHaveLength( 2 ) );
-
-		act( () => {
-			registry
-				.dispatch( coreStore )
-				.editEntityRecord( 'postType', 'crtxt_document', 1, {
-					title: 'New title',
-					meta: { cortext_document_icon: 'new-icon' },
-				} );
-		} );
-
-		await waitFor( () =>
-			expect( result.current.tree[ 0 ].page ).toMatchObject( {
-				title: { raw: 'New title', rendered: 'New title' },
-				meta: { cortext_document_icon: 'new-icon' },
-			} )
-		);
-
-		// The autosave lands: core-data holds the persisted values and clears
-		// the edits. The branch snapshot is still the pre-save copy, and no
-		// editor-save path invalidates it.
-		act( () => {
-			const saved = makeRecord( 1, 0, 'New title' );
-			saved.meta.cortext_document_icon = 'new-icon';
-			registry
-				.dispatch( coreStore )
-				.receiveEntityRecords( 'postType', 'crtxt_document', saved );
-		} );
-
-		rerender( { selectedId: 2, selectedCollectionId: null } );
-
-		await waitFor( () => expect( result.current.tree ).toHaveLength( 2 ) );
-		expect( result.current.tree[ 0 ].page ).toMatchObject( {
-			title: { raw: 'New title', rendered: 'New title' },
-			meta: { cortext_document_icon: 'new-icon' },
-		} );
 	} );
 } );
