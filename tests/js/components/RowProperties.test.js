@@ -11,9 +11,9 @@ let mockDndProps;
 let mockSortableContextProps;
 
 const mockEditPost = jest.fn();
+const mockSaveEntityRecord = jest.fn();
 const mockRelationEditorProps = [];
 
-jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '@wordpress/components', () => {
 	const { createElement, forwardRef } = require( '@wordpress/element' );
 
@@ -66,6 +66,10 @@ jest.mock( '@wordpress/components', () => {
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: jest.fn(),
 	useSelect: jest.fn(),
+} ) );
+
+jest.mock( '@wordpress/core-data', () => ( {
+	store: { name: 'core' },
 } ) );
 
 jest.mock( '@wordpress/editor', () => ( {
@@ -182,7 +186,6 @@ jest.mock( '../../../src/components/relations/RelationEditor', () => ( {
 	},
 } ) );
 
-import apiFetch from '@wordpress/api-fetch';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { closestCenter, pointerWithin, useDroppable } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
@@ -196,7 +199,7 @@ describe( 'RowProperties', () => {
 	beforeEach( () => {
 		mockDndProps = null;
 		mockSortableContextProps = null;
-		apiFetch.mockReset();
+		mockSaveEntityRecord.mockReset();
 		closestCenter.mockReset();
 		pointerWithin.mockReset();
 		useDroppable.mockReturnValue( {
@@ -213,7 +216,10 @@ describe( 'RowProperties', () => {
 		} );
 		mockEditPost.mockReset();
 		mockRelationEditorProps.length = 0;
-		useDispatch.mockReturnValue( { editPost: mockEditPost } );
+		useDispatch.mockReturnValue( {
+			editPost: mockEditPost,
+			saveEntityRecord: mockSaveEntityRecord,
+		} );
 		useSelect.mockReturnValue( {
 			title: 'Current title',
 			meta: { 'field-7': 'Open' },
@@ -351,9 +357,9 @@ describe( 'RowProperties', () => {
 		expect( handle ).not.toHaveFocus();
 	} );
 
-	it( 'keeps text-like properties single-line while saving a minimal row patch', async () => {
+	it( 'keeps text-like properties on one line and saves only the changed field', async () => {
 		jest.useFakeTimers();
-		apiFetch.mockResolvedValue( {
+		mockSaveEntityRecord.mockResolvedValue( {
 			id: 99,
 			title: { raw: 'Current title', rendered: 'Current title' },
 			meta: { 'field-7': 'https://example.com bad' },
@@ -388,7 +394,7 @@ describe( 'RowProperties', () => {
 			} );
 
 			expect( input ).toHaveValue( 'https://example.com bad' );
-			expect( apiFetch ).not.toHaveBeenCalled();
+			expect( mockSaveEntityRecord ).not.toHaveBeenCalled();
 
 			await act( async () => {
 				jest.advanceTimersByTime( 500 );
@@ -396,13 +402,15 @@ describe( 'RowProperties', () => {
 			} );
 
 			await waitFor( () =>
-				expect( apiFetch ).toHaveBeenCalledWith( {
-					path: '/wp/v2/crtxt_documents/99',
-					method: 'POST',
-					data: {
+				expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+					'postType',
+					'crtxt_document',
+					{
+						id: 99,
 						meta: { 'field-7': 'https://example.com bad' },
 					},
-				} )
+					{ throwOnError: true }
+				)
 			);
 			expect( mockEditPost ).not.toHaveBeenCalled();
 		} finally {
@@ -443,9 +451,9 @@ describe( 'RowProperties', () => {
 		);
 	} );
 
-	it( 'keeps a saved property visible until the row fallback catches up', async () => {
+	it( 'keeps a saved value visible while the row fallback catches up', async () => {
 		jest.useFakeTimers();
-		apiFetch.mockResolvedValue( {
+		mockSaveEntityRecord.mockResolvedValue( {
 			id: 99,
 			meta: { 'field-7': 'Doing' },
 		} );
@@ -519,7 +527,7 @@ describe( 'RowProperties', () => {
 	it( 'keeps field save responses from overwriting other edited fields', async () => {
 		jest.useFakeTimers();
 		const resolvers = [];
-		apiFetch.mockImplementation(
+		mockSaveEntityRecord.mockImplementation(
 			() =>
 				new Promise( ( resolve ) => {
 					resolvers.push( resolve );
@@ -569,16 +577,20 @@ describe( 'RowProperties', () => {
 				await Promise.resolve();
 			} );
 
-			expect( apiFetch ).toHaveBeenNthCalledWith( 1, {
-				path: '/wp/v2/crtxt_documents/99',
-				method: 'POST',
-				data: { meta: { 'field-7': 'Doing' } },
-			} );
-			expect( apiFetch ).toHaveBeenNthCalledWith( 2, {
-				path: '/wp/v2/crtxt_documents/99',
-				method: 'POST',
-				data: { meta: { 'field-8': 'Tagged' } },
-			} );
+			expect( mockSaveEntityRecord ).toHaveBeenNthCalledWith(
+				1,
+				'postType',
+				'crtxt_document',
+				{ id: 99, meta: { 'field-7': 'Doing' } },
+				{ throwOnError: true }
+			);
+			expect( mockSaveEntityRecord ).toHaveBeenNthCalledWith(
+				2,
+				'postType',
+				'crtxt_document',
+				{ id: 99, meta: { 'field-8': 'Tagged' } },
+				{ throwOnError: true }
+			);
 
 			await act( async () => {
 				resolvers[ 1 ]( {
@@ -820,14 +832,15 @@ describe( 'RowProperties', () => {
 		).not.toBeInTheDocument();
 	} );
 
-	it( 'saves relation edits through the row endpoint and updates the displayed chip', async () => {
+	it( 'saves relation edits through core-data and updates the chip from the hydrated response', async () => {
 		const refreshRows = jest.fn();
 		const onRowsChanged = jest.fn();
 		window.addEventListener( COLLECTION_ROWS_CHANGED_EVENT, onRowsChanged );
-		apiFetch.mockResolvedValue( {
+		mockSaveEntityRecord.mockResolvedValue( {
 			id: 99,
 			title: { raw: 'Source row', rendered: 'Source row' },
-			meta: {
+			meta: { 'field-7': [ 456 ] },
+			cortext_hydrated_meta: {
 				'field-7': [
 					{
 						id: 456,
@@ -883,13 +896,15 @@ describe( 'RowProperties', () => {
 		);
 
 		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledWith( {
-				path: '/wp/v2/crtxt_documents/99',
-				method: 'POST',
-				data: {
+			expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+				'postType',
+				'crtxt_document',
+				{
+					id: 99,
 					meta: { 'field-7': [ 456 ] },
 				},
-			} )
+				{ throwOnError: true }
+			)
 		);
 		await screen.findByRole( 'button', { name: 'Grace Hopper' } );
 		expect( refreshRows ).toHaveBeenCalled();

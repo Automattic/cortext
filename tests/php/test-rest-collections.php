@@ -24,13 +24,16 @@ use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\Rest\DocumentsController;
+use Cortext\Rest\RowsController;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
+use WP_Error;
 use WP_REST_Request;
 use WP_REST_Server;
 
 final class Test_Rest_Collections extends BaseTestCase {
 
+	use InMemoryPostsQuery;
 	use InMemoryTermStore;
 
 	public function set_up(): void {
@@ -49,13 +52,16 @@ final class Test_Rest_Collections extends BaseTestCase {
 		( new Document() )->register_collection_meta();
 
 		$this->install_in_memory_term_store();
+		$this->install_in_memory_posts_query();
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new DocumentsController() )->register();
+		( new RowsController() )->register();
 		do_action( 'rest_api_init' );
 	}
 
 	public function tear_down(): void {
+		$this->uninstall_in_memory_posts_query();
 		$this->uninstall_in_memory_term_store();
 		wp_set_current_user( 0 );
 
@@ -182,9 +188,16 @@ final class Test_Rest_Collections extends BaseTestCase {
 
 		$this->assertSame( 201, $response->get_status() );
 		$data = $response->get_data();
+		$this->assertSame(
+			array( 'id', 'title', 'slug', 'restBase', 'parent', 'collection_id', 'skipped_fields', 'post' ),
+			array_keys( $data )
+		);
 		$this->assertSame( 'Copy of Quarterly reports', $data['title'] );
 		$this->assertSame( $page_id, $data['parent'] );
 		$this->assertSame( array(), $data['skipped_fields'] );
+		$this->assertIsArray( $data['post'] );
+		$this->assertSame( $data['id'], $data['post']['id'] );
+		$this->assertSame( 'Copy of Quarterly reports', $data['post']['title']['raw'] );
 
 		$new_field_ids = $this->stored_collection_field_ids( (int) $data['id'] );
 		// The source's seeded "Title" placeholder is cloned alongside the
@@ -268,6 +281,73 @@ final class Test_Rest_Collections extends BaseTestCase {
 		);
 	}
 
+	public function test_duplicate_succeeds_when_canonical_post_cannot_be_prepared(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$source = $this->create_page();
+
+		$fail_core_read = static function ( $response, $_handler, WP_REST_Request $request ) {
+			if (
+				'GET' === $request->get_method()
+				&& str_starts_with( $request->get_route(), '/wp/v2/crtxt_documents/' )
+			) {
+				return new WP_Error( 'cortext_test_prepared_post_failed', 'Forced preparation failure.' );
+			}
+			return $response;
+		};
+		add_filter( 'rest_request_before_callbacks', $fail_core_read, 10, 3 );
+		try {
+			$response = $this->duplicate_collection( $source );
+		} finally {
+			remove_filter( 'rest_request_before_callbacks', $fail_core_read, 10 );
+		}
+
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertGreaterThan( 0, $data['id'] );
+		$this->assertNull( $data['post'] );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $data['id'] ) );
+	}
+
+	public function test_duplicate_row_returns_canonical_post_with_copied_hydrated_values(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_collection( 'invoices', 'Invoices' );
+		$amount_id     = $this->attach_scalar_field( $collection_id, 'Amount', 'number' );
+		$tags_id       = $this->attach_scalar_field( $collection_id, 'Tags', 'multiselect' );
+		$row_id        = $this->create_row( $collection_id, 'July invoice' );
+
+		update_post_meta( $row_id, 'field-' . $amount_id, '7.5' );
+		add_post_meta( $row_id, 'field-' . $tags_id, 'Paid' );
+		add_post_meta( $row_id, 'field-' . $tags_id, 'Priority' );
+
+		// Production init registers collection fields as document meta. Do the
+		// same here before dispatching the REST request.
+		( new Document() )->register_field_meta();
+
+		$response = $this->duplicate_collection( $row_id );
+
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( $collection_id, $data['collection_id'] );
+		$this->assertIsArray( $data['post'] );
+		$this->assertSame( $data['id'], $data['post']['id'] );
+		$this->assertSame( 'Copy of July invoice', $data['post']['title']['raw'] );
+		$this->assertSame( 'private', $data['post']['status'] );
+		$this->assertSame( 7.5, $data['post']['meta'][ 'field-' . $amount_id ] );
+		$this->assertSame(
+			array( 'Paid', 'Priority' ),
+			$data['post']['meta'][ 'field-' . $tags_id ]
+		);
+		$this->assertSame(
+			7.5,
+			$data['post']['cortext_hydrated_meta'][ 'field-' . $amount_id ]
+		);
+		$this->assertSame(
+			array( 'Paid', 'Priority' ),
+			$data['post']['cortext_hydrated_meta'][ 'field-' . $tags_id ]
+		);
+	}
+
 	public function test_duplicate_returns_404_for_unknown_id(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
@@ -317,6 +397,23 @@ final class Test_Rest_Collections extends BaseTestCase {
 		);
 		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
 		return $field_id;
+	}
+
+	private function create_row( int $collection_id, string $title ): int {
+		$id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+			)
+		);
+		$this->assertGreaterThan( 0, $id );
+
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+		wp_set_object_terms( $id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+
+		return $id;
 	}
 
 	private function create_user( string $role ): int {
