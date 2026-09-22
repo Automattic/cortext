@@ -16,11 +16,21 @@ import { fileURLToPath } from 'node:url';
 
 const CORTEXT_URL_PATTERN = /\/wp-admin\/admin\.php\?page=cortext(?:&|$)/;
 const CORTEXT_ROOT_SELECTOR = '#cortext-root';
-const ACTIVE_CANVAS_SELECTOR =
-	'.cortext-workspace__pane[data-active="true"] .cortext-canvas';
+const WORKSPACE_SELECTOR = '.cortext-workspace';
+const PANE_SELECTOR = '.cortext-workspace__pane';
+const ACTIVE_PANE_SELECTOR = `${ PANE_SELECTOR }[data-active="true"]`;
+const CANVAS_SELECTOR = '.cortext-canvas';
+const ACTIVE_CANVAS_SELECTOR = `${ ACTIVE_PANE_SELECTOR } ${ CANVAS_SELECTOR }`;
 const START_TIMEOUT_MS = 120_000;
 const EXIT_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 250;
+const RUNTIME_PROBE_TIMEOUT_MS = 2_000;
+const REPORTED_URL_LENGTH = 140;
+const REPORTED_REQUESTS = 80;
+const ASSET_PATTERN =
+	/\.(?:js|mjs|css|svg|png|jpe?g|gif|webp|woff2?|ttf|eot|map|ico)(?:\?|$)/;
+const REPORTED_MESSAGES = 20;
+const REPORTED_MARKUP_LENGTH = 600;
 
 function usage() {
 	return 'Usage: node apps/desktop/scripts/packaged-app-smoke.mjs --app <path-to-Cortext.app>';
@@ -329,6 +339,169 @@ async function firstRendererPage( browser ) {
 	throw new Error( 'Cortext did not open a renderer page.' );
 }
 
+function truncate( text, limit ) {
+	return text.length > limit ? `${ text.slice( 0, limit ) }...` : text;
+}
+
+// Watches the renderer so a timeout can name what it was waiting on. Playwright
+// only reports the selector it gave up on, which is the one thing we already
+// know.
+function recordRendererActivity( page ) {
+	const openedAt = Date.now();
+	const inFlight = new Map();
+	const settled = [];
+	const messages = [];
+
+	page.on( 'console', ( message ) =>
+		messages.push( `${ message.type() }: ${ message.text() }` )
+	);
+	page.on( 'pageerror', ( error ) =>
+		messages.push( `pageerror: ${ error.message }` )
+	);
+	page.on( 'request', ( pending ) => inFlight.set( pending, Date.now() ) );
+
+	const settle = ( pending, outcome ) => {
+		const startedAt = inFlight.get( pending );
+		inFlight.delete( pending );
+		settled.push( {
+			outcome,
+			url: pending.url(),
+			offset: startedAt === undefined ? null : startedAt - openedAt,
+			milliseconds: startedAt === undefined ? null : Date.now() - startedAt,
+		} );
+	};
+	page.on( 'requestfinished', ( pending ) => settle( pending, 'ok' ) );
+	page.on( 'requestfailed', ( pending ) =>
+		settle( pending, pending.failure()?.errorText || 'failed' )
+	);
+
+	return { openedAt, inFlight, settled, messages };
+}
+
+// Answers the question the milestones cannot: whether the renderer is still
+// waiting on the runtime, gave up on a request, or rendered a pane that never
+// swapped in a canvas.
+async function describeStalledRenderer( page, activity ) {
+	const sections = [];
+
+	const stalled = [ ...activity.inFlight ].map(
+		( [ pending, startedAt ] ) =>
+			`  ${ Date.now() - startedAt }ms ${ pending.method() } ` +
+			truncate( pending.url(), REPORTED_URL_LENGTH )
+	);
+	sections.push(
+		stalled.length
+			? `Requests still in flight:\n${ stalled.join( '\n' ) }`
+			: 'No requests were still in flight.'
+	);
+
+	// Kept separate from the slowest list because a request that fails usually
+	// fails fast, so ranking by duration hides exactly the ones worth seeing.
+	const failed = activity.settled
+		.filter( ( entry ) => entry.outcome !== 'ok' )
+		.map(
+			( entry ) =>
+				`  ${ entry.milliseconds }ms ${ entry.outcome } ` +
+				truncate( entry.url, REPORTED_URL_LENGTH )
+		);
+	sections.push(
+		failed.length
+			? `Failed requests:\n${ failed.join( '\n' ) }`
+			: 'No requests failed.'
+	);
+
+	// Chronological rather than ranked by duration: a boot that stalls does it at
+	// a particular point in the sequence, and the last request before the silence
+	// is the one worth reading. Scripts and styles are dropped because a few
+	// hundred of them bury the handful of REST calls that carry the boot.
+	const dataRequests = activity.settled.filter(
+		( entry ) => ! ASSET_PATTERN.test( entry.url )
+	);
+	const timeline = dataRequests
+		.slice()
+		.sort( ( a, b ) => ( a.offset ?? 0 ) - ( b.offset ?? 0 ) )
+		.slice( 0, REPORTED_REQUESTS )
+		.map(
+			( entry ) =>
+				`  +${ entry.offset }ms ${ entry.milliseconds }ms ` +
+				`${ entry.outcome } ${ truncate( entry.url, REPORTED_URL_LENGTH ) }`
+		);
+	if ( timeline.length ) {
+		const assets = activity.settled.length - dataRequests.length;
+		const dropped = dataRequests.length - timeline.length;
+		sections.push(
+			`Requests (${ activity.settled.length } total, ` +
+				`${ assets } assets hidden` +
+				`${ dropped > 0 ? `, showing first ${ timeline.length }` : '' }):\n` +
+				timeline.join( '\n' )
+		);
+	}
+
+	// The address says which document the workspace was asked to open, which is
+	// the first thing to check when nothing painted.
+	sections.push( `Renderer URL: ${ truncate( page.url(), REPORTED_URL_LENGTH ) }` );
+
+	// An unauthenticated request is rejected by the runtime's router, so any
+	// status at all proves PHP is still serving and moves blame to the renderer.
+	const origin = new URL( page.url() ).origin;
+	try {
+		const { statusCode } = await request( origin, RUNTIME_PROBE_TIMEOUT_MS );
+		sections.push( `Runtime at ${ origin } answered HTTP ${ statusCode }.` );
+	} catch ( error ) {
+		sections.push( `Runtime at ${ origin } did not answer: ${ error.message }` );
+	}
+
+	// Every pane stays mounted, active or not, so a canvas sitting in an
+	// inactive pane means the editor loaded and the workspace never switched to
+	// it. That is a different bug from a canvas that never mounted at all, and
+	// the active pane alone cannot tell the two apart.
+	const dom = await page.evaluate(
+		( selectors ) => ( {
+			// The workspace publishes the route it is on. A document target with
+			// no document pane below means the id never resolved.
+			targetKind:
+				document.querySelector( selectors.workspace )?.dataset
+					.targetKind ?? null,
+			panes: [ ...document.querySelectorAll( selectors.pane ) ].map(
+				( pane ) => ( {
+					active: pane.dataset.active === 'true',
+					canvases: pane.querySelectorAll( selectors.canvas ).length,
+					content: pane.firstElementChild?.className || '(empty)',
+				} )
+			),
+			markup:
+				document.querySelector( selectors.activePane )?.innerHTML ?? null,
+		} ),
+		{
+			workspace: WORKSPACE_SELECTOR,
+			pane: PANE_SELECTOR,
+			activePane: ACTIVE_PANE_SELECTOR,
+			canvas: CANVAS_SELECTOR,
+		}
+	);
+	sections.push( `Workspace target: ${ dom.targetKind ?? '(not rendered)' }` );
+	const panes = dom.panes.map(
+		( pane, index ) =>
+			`  ${ index } ${ pane.active ? 'active  ' : 'inactive' } ` +
+			`canvases=${ pane.canvases }  ${ truncate( pane.content, 80 ) }`
+	);
+	sections.push(
+		`Panes:\n${ panes.join( '\n' ) || '  (none)' }\n` +
+			`Active pane markup: ${
+				dom.markup === null
+					? '(no active pane)'
+					: truncate( dom.markup, REPORTED_MARKUP_LENGTH )
+			}`
+	);
+
+	const messages = activity.messages.slice( -REPORTED_MESSAGES );
+	if ( messages.length ) {
+		sections.push( `Renderer console:\n  ${ messages.join( '\n  ' ) }` );
+	}
+
+	return sections.join( '\n\n' );
+}
+
 // Every milestone here shares the cold-start budget. The app is unpacking the
 // snapshot, installing WordPress and compiling PHP for the first time, and the
 // canvas is the last thing to land, so it needs at least as long as the URL it
@@ -343,6 +516,7 @@ export async function waitForCortextShell( page ) {
 	const milestones = [];
 	const reached = ( name ) =>
 		milestones.push( `${ name } ${ Date.now() - started }ms` );
+	const activity = recordRendererActivity( page );
 
 	try {
 		await page.waitForURL( CORTEXT_URL_PATTERN, {
@@ -365,11 +539,20 @@ export async function waitForCortextShell( page ) {
 	} catch ( error ) {
 		// A bare locator timeout cannot distinguish a slow agent from a wedged
 		// one. Report how far the boot got so the first failure is diagnosable.
-		appendErrorDetails(
-			error,
+		let details =
 			`Shell milestones: ${ milestones.join( ', ' ) || 'none reached' }\n` +
-				`Gave up after ${ Date.now() - started }ms.`
-		);
+			`Gave up after ${ Date.now() - started }ms.`;
+		try {
+			details = `${ details }\n\n${ await describeStalledRenderer(
+				page,
+				activity
+			) }`;
+		} catch ( reportError ) {
+			// The timeout is the finding. Losing the report is a shame; losing
+			// the failure it explains would be worse.
+			details = `${ details }\n\nCould not describe the renderer: ${ reportError.message }`;
+		}
+		appendErrorDetails( error, details );
 		throw error;
 	}
 
