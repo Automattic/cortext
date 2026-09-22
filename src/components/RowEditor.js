@@ -5,6 +5,7 @@
 // (toolbar, modal frame, navigation buttons) lives in RowDetailView and
 // renders synchronously; only this inner stack suspends on first row open.
 import { useDispatch } from '@wordpress/data';
+import { store as coreStore } from '@wordpress/core-data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { SlotFillProvider } from '@wordpress/components';
@@ -124,6 +125,7 @@ function DetailPaneContent( {
 	row,
 	rowId,
 	shouldAcquirePostLock,
+	receiveEntityRecords,
 } ) {
 	const postLock = usePostLock( {
 		postId: row?.id ?? rowId,
@@ -181,6 +183,7 @@ function DetailPaneContent( {
 				extraStyles={ ROW_DETAIL_EXTRA_STYLES }
 				onReady={ handleReady }
 				onRestored={ onRestored }
+				receiveEntityRecords={ receiveEntityRecords }
 			/>
 			<PostLockModal
 				isOpen={ postLock.isLocked }
@@ -242,6 +245,12 @@ export default function RowEditor( {
 	rowId,
 	shouldAcquirePostLock = false,
 } ) {
+	// EditorProvider's subregistry only re-registers core/block-editor and
+	// core/editor, so `core` resolves to the root registry from either side of
+	// the boundary. Reading the dispatcher here keeps that explicit: lifecycle
+	// responses land in the record cache RowDetailView and the grid read.
+	const { receiveEntityRecords } = useDispatch( coreStore );
+
 	return (
 		<EditorProvider
 			post={ post }
@@ -277,6 +286,7 @@ export default function RowEditor( {
 						row={ row }
 						rowId={ rowId }
 						shouldAcquirePostLock={ shouldAcquirePostLock }
+						receiveEntityRecords={ receiveEntityRecords }
 					/>
 				</EditorSurfaceProvider>
 			</SlotFillProvider>

@@ -1,8 +1,9 @@
-import apiFetch from '@wordpress/api-fetch';
 import { Button, Notice } from '@wordpress/components';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
+
+import { useCreateRowDocument } from './rowDocumentCreation';
 
 // Pull a simple `is` prefill from the active filters. Multi-value operators
 // are ignored for now; this path only handles one scalar value per field.
@@ -46,6 +47,7 @@ export default function DataViewNewRowButton( {
 } ) {
 	const [ isCreating, setIsCreating ] = useState( false );
 	const [ error, setError ] = useState( null );
+	const createRowDocument = useCreateRowDocument();
 
 	const prefillableFieldIds = useMemo(
 		() =>
@@ -65,15 +67,9 @@ export default function DataViewNewRowButton( {
 		setError( null );
 		const meta = prefillFromFilters( view?.filters, prefillableFieldIds );
 		try {
-			const created = await apiFetch( {
-				path: '/wp/v2/crtxt_documents',
-				method: 'POST',
-				data: {
-					status: 'private',
-					title: '',
-					cortext_trait: collectionId,
-					...( Object.keys( meta ).length ? { meta } : {} ),
-				},
+			const created = await createRowDocument( {
+				collectionId,
+				meta,
 			} );
 			onCreated( created );
 		} catch ( err ) {
@@ -83,7 +79,13 @@ export default function DataViewNewRowButton( {
 		} finally {
 			setIsCreating( false );
 		}
-	}, [ collectionId, view, prefillableFieldIds, onCreated ] );
+	}, [
+		collectionId,
+		view,
+		prefillableFieldIds,
+		onCreated,
+		createRowDocument,
+	] );
 
 	const button = (
 		<Button
