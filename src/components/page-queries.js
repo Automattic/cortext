@@ -33,3 +33,17 @@ export const PUBLISHED_DOCUMENTS_QUERY = {
 	status: 'publish',
 	context: 'edit',
 };
+
+// Only the first root document is needed as a home fallback when no explicit
+// home is set. Keep this query shared with lifecycle invalidation so removing
+// or restoring the first document cannot leave the command palette stale.
+export const HOME_FALLBACK_QUERY = {
+	parent: 0,
+	per_page: 1,
+	status: [ 'draft', 'private', 'publish' ],
+	context: 'edit',
+	cortext_no_trait: 1,
+	cortext_tree_order: 1,
+	orderby: 'menu_order',
+	order: 'asc',
+};
