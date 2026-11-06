@@ -1,5 +1,4 @@
-import apiFetch from '@wordpress/api-fetch';
-
+import { DOCUMENT_POST_TYPE } from '../collections';
 import { TITLE_FIELD_ID } from './dataViewColumns';
 
 export function rowDocumentFieldPayload( fieldId, value ) {
@@ -10,10 +9,19 @@ export function rowDocumentFieldPayload( fieldId, value ) {
 	return { meta: { [ fieldId ]: value } };
 }
 
-export function saveRowDocumentField( rowId, fieldId, value ) {
-	return apiFetch( {
-		path: `/wp/v2/crtxt_documents/${ rowId }`,
-		method: 'POST',
-		data: rowDocumentFieldPayload( fieldId, value ),
-	} );
+export function saveRowDocumentField(
+	saveEntityRecord,
+	rowId,
+	fieldId,
+	value
+) {
+	return saveEntityRecord(
+		'postType',
+		DOCUMENT_POST_TYPE,
+		{
+			id: rowId,
+			...rowDocumentFieldPayload( fieldId, value ),
+		},
+		{ throwOnError: true }
+	);
 }
