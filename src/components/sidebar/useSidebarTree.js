@@ -312,6 +312,19 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 			if ( selectedRecordId < 1 ) {
 				return null;
 			}
+			// Only read a record the editor has already loaded. Calling
+			// `getEditedEntityRecord` first would start the record fetch from
+			// here, ahead of the editor, and a page opened that way can mount
+			// with empty content and save it over the real body.
+			if (
+				! select( coreStore ).hasEntityRecord(
+					'postType',
+					DOCUMENT_POST_TYPE,
+					selectedRecordId
+				)
+			) {
+				return null;
+			}
 			const record = select( coreStore ).getEditedEntityRecord(
 				'postType',
 				DOCUMENT_POST_TYPE,

@@ -611,13 +611,6 @@ describe( 'useSidebarTree', () => {
 	it( 'leaves snapshots untouched when the selected id is absent from core-data', async () => {
 		const serverRecord = makeRecord( 1, 0, 'Server title' );
 		const registry = createSidebarRegistry();
-		registry
-			.dispatch( coreStore )
-			.finishResolution( 'getEntityRecord', [
-				'postType',
-				'crtxt_document',
-				99,
-			] );
 		mockTreeRequests( {
 			branches: {
 				'0:1': {
@@ -639,5 +632,18 @@ describe( 'useSidebarTree', () => {
 
 		await waitFor( () => expect( result.current.tree ).toHaveLength( 1 ) );
 		expect( result.current.tree[ 0 ].page ).toBe( serverRecord );
+		// The editor owns the full record fetch. The sidebar only reads what
+		// is already loaded, so it never requests the record without
+		// `_fields`.
+		const fullRecordRequests = apiFetch.mock.calls.filter(
+			( [ request ] ) => {
+				const url = parsedPath( request.path );
+				return (
+					/^\/wp\/v2\/crtxt_documents\/99$/.test( url.pathname ) &&
+					! url.searchParams.has( '_fields' )
+				);
+			}
+		);
+		expect( fullRecordRequests ).toEqual( [] );
 	} );
 } );
