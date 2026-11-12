@@ -65,9 +65,11 @@ test.describe( 'Sidebar document fields', () => {
 		requestUtils,
 	} ) => {
 		let document;
+		let otherDocument;
 		const suffix = Date.now().toString( 36 ).slice( -5 );
 		const initialTitle = `E2E Sidebar Fields ${ suffix }`;
 		const updatedTitle = `E2E Sidebar Updated ${ suffix }`;
+		const otherTitle = `E2E Sidebar Other ${ suffix }`;
 		const initialIcon = encodeEmoji( INITIAL_EMOJI );
 		const updatedIcon = encodeEmoji( UPDATED_EMOJI );
 
@@ -82,6 +84,16 @@ test.describe( 'Sidebar document fields', () => {
 					content:
 						'<!-- wp:paragraph --><p>Sidebar field test.</p><!-- /wp:paragraph -->',
 					meta: { cortext_document_icon: initialIcon },
+				},
+			} );
+
+			otherDocument = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: otherTitle,
+					status: 'private',
+					menu_order: -999,
 				},
 			} );
 
@@ -178,8 +190,21 @@ test.describe( 'Sidebar document fields', () => {
 					{ timeout: 15_000 }
 				)
 				.toBe( '' );
+
+			// The edited row keeps its new fields after the selection moves.
+			await page
+				.locator( '[data-sidebar-section="pages"]' )
+				.getByRole( 'button', { name: otherTitle, exact: true } )
+				.click();
+			await waitForEditorPost( page, otherDocument.id );
+			node = sidebarNodeByTitle( page, updatedTitle );
+			await expect( node ).toBeVisible();
+			await expect(
+				node.locator( '.cortext-document-icon--fallback' )
+			).toBeVisible();
 		} finally {
 			await deleteIfCreated( requestUtils, document?.id );
+			await deleteIfCreated( requestUtils, otherDocument?.id );
 		}
 	} );
 } );

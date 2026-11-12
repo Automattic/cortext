@@ -7,6 +7,7 @@ import {
 	useMemo,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 } from '@wordpress/element';
 
@@ -337,9 +338,33 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 		expandedIdsRef.current = expandedIds;
 	}, [ expandedIds ] );
 
+	// The overlay below only covers the selected record, so when the selection
+	// moves, write the outgoing record's last core-data fields into the
+	// snapshots. Otherwise its row would fall back to the pre-edit copy. A
+	// layout effect commits it before paint, so the stale title never flashes.
+	// It depends on the selection only, never on `branches`, so it cannot loop.
+	// tech-debt.md#td-sidebar-tree-local-cache
+	const lastSelectedRef = useRef( {
+		id: selectedRecordId,
+		fields: selectedTreeFields,
+	} );
+	useLayoutEffect( () => {
+		const previous = lastSelectedRef.current;
+		lastSelectedRef.current = {
+			id: selectedRecordId,
+			fields: selectedTreeFields,
+		};
+		if ( previous.id === selectedRecordId || ! previous.fields ) {
+			return;
+		}
+		setBranches( ( current ) =>
+			overlaySidebarTreeRecord( current, previous.id, previous.fields )
+		);
+	}, [ selectedRecordId, selectedTreeFields ] );
+
 	// Branch membership and pagination stay local. Render-path consumers get
 	// the active entity's title, icon, status, and slug from core-data without
-	// mutating the server snapshots or refetching every loaded parent/page.
+	// refetching every loaded parent/page.
 	const displayBranches = useMemo(
 		() =>
 			overlaySidebarTreeRecord(

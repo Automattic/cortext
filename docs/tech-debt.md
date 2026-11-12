@@ -629,6 +629,20 @@ Drag/drop and `menu_order` accounting look at both pages and collections through
 
 **Solution.** Add a workspace-tree REST endpoint that returns navigable nodes with `kind`, `id`, `parent`, `menu_order`, and visibility in one shape. Row-owned collections could then appear under their row, missing parents would not look top-level by accident, and page/collection branching would move out of every consumer. The Collections section then becomes a view over the same model with the user's chosen filter, instead of a separate flat list.
 
+<a id="td-sidebar-tree-local-cache"></a>
+
+**The sidebar tree keeps its own record cache outside `core-data`.**
+
+**What.** The lazy sidebar tree loads each branch page with `apiFetch` and keeps the records in local state. Edits saved through `core-data` (title, icon, status, slug) never reach those snapshots, so the tree patches them by hand. The selected record gets an overlay of its `core-data` fields, and when the selection moves, the outgoing record's last fields are written into the snapshots. That covers the common case, but it is a copy of what `core-data` would do for free, and it has gaps:
+
+-   The values written on selection change are whatever `core-data` held at that moment, saved or not. If the save then fails, the row shows a value the server never stored.
+-   A branch refetch that started before a save can resolve after the selection moves and put the pre-save copy back.
+-   Membership changes still need the `cortext:sidebar-tree-changed` event, because the local cache has no other invalidation path.
+
+**Where.** `useSidebarTree` in `src/components/sidebar/useSidebarTree.js` (`loadBranch`, `refreshBranch`, `overlaySidebarTreeRecord`, and the selection-change write), `notifySidebarTreeChanged` in `src/hooks/sidebarTreeInvalidation.js`, and its callers in `src/documents/actions.js`, `src/router/EntityRoute.js`, `src/components/DocumentInspectorSidebar.js`, and `src/components/ImportPane.js`.
+
+**Solution.** Load each branch page through `getEntityRecords`, with the totals from `getEntityRecordsTotalItems` and `getEntityRecordsTotalPages`, and await branches with `resolveSelect` when revealing the selected record. Saves then update every loaded row on their own, the selection-change write goes away, and the overlay only has to cover unsaved edits on the selected record. Leave `context` out of the branch query: `core-data` stores list items by the query's `context`, and saves land in `default`, so a query with an explicit `context: 'edit'` never sees them. The entity's `baseURLParams` still sends `context=edit` on the request. Pagination order and the cross-page dedupe in `mergeRecords` need to survive the move. Membership changes can keep the event at first and move to `invalidateResolution` afterwards.
+
 <a id="td-collection-owner-body-contract"></a>
 
 **Collection canvases use a self-referencing owner block.**

@@ -525,6 +525,61 @@ describe( 'useSidebarTree', () => {
 		} );
 	} );
 
+	it( 'keeps the edited fields on the row after selecting another document', async () => {
+		const first = makeRecord( 1, 0, 'Old title' );
+		const second = makeRecord( 2, 0, 'Second' );
+		const registry = createSidebarRegistry( [ first, second ] );
+		mockTreeRequests( {
+			records: { 1: first, 2: second },
+			branches: {
+				'0:1': {
+					records: [ first, second ],
+					total: 2,
+					totalPages: 1,
+				},
+			},
+		} );
+
+		const { result, rerender } = renderHook(
+			( props ) => useSidebarTree( props ),
+			{
+				wrapper: registryWrapper( registry ),
+				initialProps: { selectedId: 1, selectedCollectionId: null },
+			}
+		);
+
+		await waitFor( () => expect( result.current.tree ).toHaveLength( 2 ) );
+
+		// An edit with no save yet, like the debounced icon save that only
+		// flushes once the picker unmounts.
+		act( () => {
+			registry
+				.dispatch( coreStore )
+				.editEntityRecord( 'postType', 'crtxt_document', 1, {
+					title: 'New title',
+					meta: { cortext_document_icon: 'new-icon' },
+				} );
+		} );
+		await waitFor( () =>
+			expect( result.current.tree[ 0 ].page.title.raw ).toBe(
+				'New title'
+			)
+		);
+
+		rerender( { selectedId: 2, selectedCollectionId: null } );
+
+		await waitFor( () =>
+			expect( result.current.tree[ 0 ].page ).toMatchObject( {
+				title: { raw: 'New title', rendered: 'New title' },
+				meta: { cortext_document_icon: 'new-icon' },
+			} )
+		);
+		expect(
+			result.current.pages.find( ( page ) => page.id === 1 ).title.raw
+		).toBe( 'New title' );
+		expect( result.current.tree[ 1 ].page ).toBe( second );
+	} );
+
 	it( 'leaves an unedited record alone when its title is texturized', async () => {
 		const serverRecord = makeRecord( 1, 0, 'Tom & Jerry' );
 		serverRecord.title.rendered = 'Tom &#038; Jerry';
