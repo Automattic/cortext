@@ -1,5 +1,4 @@
 import { __, sprintf } from '@wordpress/i18n';
-import apiFetch from '@wordpress/api-fetch';
 import { Button, Dropdown, Spinner } from '@wordpress/components';
 import {
 	useCallback,
@@ -20,6 +19,7 @@ import useCollectionRows from '../../hooks/useCollectionRows';
 import useCollectionRowsByIds from '../../hooks/useCollectionRowsByIds';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { useRecents } from '../../hooks/useRecents';
+import { useCreateRowDocument } from '../rowDocumentCreation';
 import { relationIds, relationTitle } from './relationUtils';
 
 const RELATION_PICKER_PER_PAGE = 25;
@@ -52,6 +52,7 @@ export default function RelationEditor( {
 	const [ isCreating, setIsCreating ] = useState( false );
 	const [ createError, setCreateError ] = useState( '' );
 	const searchRef = useRef( null );
+	const createRowDocument = useCreateRowDocument();
 	const { touchRecent } = useRecents();
 	const selectedIds = useMemo( () => relationIds( value ), [ value ] );
 	const currentRefs = useMemo(
@@ -208,14 +209,9 @@ export default function RelationEditor( {
 		setIsCreating( true );
 		setCreateError( '' );
 		try {
-			const created = await apiFetch( {
-				path: '/wp/v2/crtxt_documents',
-				method: 'POST',
-				data: {
-					title: createTitle,
-					status: 'private',
-					cortext_trait: targetCollectionId,
-				},
+			const created = await createRowDocument( {
+				title: createTitle,
+				collectionId: targetCollectionId,
 			} );
 			const createdId = Number( created?.id );
 			if ( ! createdId ) {
