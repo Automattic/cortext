@@ -1,13 +1,17 @@
 import apiFetch from '@wordpress/api-fetch';
+import { store as coreStore } from '@wordpress/core-data';
+import { useSelect } from '@wordpress/data';
 import { addQueryArgs } from '@wordpress/url';
 import {
 	useState,
 	useMemo,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 } from '@wordpress/element';
 
+import { DOCUMENT_POST_TYPE } from '../../collections';
 import { SIDEBAR_TREE_CHANGED_EVENT } from '../../hooks/sidebarTreeInvalidation';
 
 export const ROOT_PARENT_ID = 0;
@@ -90,6 +94,82 @@ function mergeRecords( current, incoming ) {
 		out.push( record );
 	} );
 	return out;
+}
+
+function treeTitle( title ) {
+	if ( typeof title === 'string' ) {
+		return { raw: title, rendered: title };
+	}
+	if ( ! title || typeof title !== 'object' ) {
+		return undefined;
+	}
+	return {
+		raw: title.raw ?? title.rendered ?? '',
+		rendered: title.rendered ?? title.raw ?? '',
+	};
+}
+
+// Overlay the selected record's tree-consumed fields from core-data onto the
+// loaded REST snapshots. `title` is compared on `raw` alone: core-data holds
+// the raw string, while a snapshot's `rendered` came through `the_title`, so
+// comparing both would treat every texturized title as edited. `status` keeps
+// row actions current, and `slug` feeds canonical sidebar navigation.
+export function overlaySidebarTreeRecord( branches, recordId, fields ) {
+	if ( ! fields ) {
+		return branches;
+	}
+
+	const title = treeTitle( fields.title );
+	let nextBranches;
+	for ( const [ key, branch ] of branches ) {
+		const index = branch.records.findIndex(
+			( record ) => record.id === recordId
+		);
+		const record = branch.records[ index ];
+		if ( ! record ) {
+			continue;
+		}
+		const titleChanged =
+			title !== undefined && record.title?.raw !== title.raw;
+		const iconChanged =
+			typeof fields.icon === 'string' &&
+			record.meta?.cortext_document_icon !== fields.icon;
+		const statusChanged =
+			typeof fields.status === 'string' &&
+			record.status !== fields.status;
+		const slugChanged =
+			typeof fields.slug === 'string' && record.slug !== fields.slug;
+		if (
+			! titleChanged &&
+			! iconChanged &&
+			! statusChanged &&
+			! slugChanged
+		) {
+			continue;
+		}
+
+		const records = [ ...branch.records ];
+		const nextRecord = { ...record };
+		if ( titleChanged ) {
+			nextRecord.title = title;
+		}
+		if ( iconChanged ) {
+			nextRecord.meta = {
+				...( record.meta ?? {} ),
+				cortext_document_icon: fields.icon,
+			};
+		}
+		if ( statusChanged ) {
+			nextRecord.status = fields.status;
+		}
+		if ( slugChanged ) {
+			nextRecord.slug = fields.slug;
+		}
+		records[ index ] = nextRecord;
+		nextBranches ??= new Map( branches );
+		nextBranches.set( key, { ...branch, records } );
+	}
+	return nextBranches ?? branches;
 }
 
 function branchHasMore( branch ) {
@@ -224,6 +304,44 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 	const expandedIdsRef = useRef( expandedIds );
 	const loadingRef = useRef( new Map() );
 	const preferenceWriteRef = useRef( Promise.resolve() );
+	const selectedRecordId = normalizeId(
+		selectedId ?? selectedCollectionId ?? 0
+	);
+	const selectedTreeFields = useSelect(
+		( select ) => {
+			if ( selectedRecordId < 1 ) {
+				return null;
+			}
+			// Only read a record the editor has already loaded. Calling
+			// `getEditedEntityRecord` first would start the record fetch from
+			// here, ahead of the editor, and a page opened that way can mount
+			// with empty content and save it over the real body.
+			if (
+				! select( coreStore ).hasEntityRecord(
+					'postType',
+					DOCUMENT_POST_TYPE,
+					selectedRecordId
+				)
+			) {
+				return null;
+			}
+			const record = select( coreStore ).getEditedEntityRecord(
+				'postType',
+				DOCUMENT_POST_TYPE,
+				selectedRecordId
+			);
+			if ( ! record ) {
+				return null;
+			}
+			return {
+				title: record.title,
+				icon: record.meta?.cortext_document_icon,
+				status: record.status,
+				slug: record.slug,
+			};
+		},
+		[ selectedRecordId ]
+	);
 
 	useEffect( () => {
 		branchesRef.current = branches;
@@ -233,15 +351,52 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 		expandedIdsRef.current = expandedIds;
 	}, [ expandedIds ] );
 
+	// The overlay below only covers the selected record, so when the selection
+	// moves, write the outgoing record's last core-data fields into the
+	// snapshots. Otherwise its row would fall back to the pre-edit copy. A
+	// layout effect commits it before paint, so the stale title never flashes.
+	// It depends on the selection only, never on `branches`, so it cannot loop.
+	// tech-debt.md#td-sidebar-tree-local-cache
+	const lastSelectedRef = useRef( {
+		id: selectedRecordId,
+		fields: selectedTreeFields,
+	} );
+	useLayoutEffect( () => {
+		const previous = lastSelectedRef.current;
+		lastSelectedRef.current = {
+			id: selectedRecordId,
+			fields: selectedTreeFields,
+		};
+		if ( previous.id === selectedRecordId || ! previous.fields ) {
+			return;
+		}
+		setBranches( ( current ) =>
+			overlaySidebarTreeRecord( current, previous.id, previous.fields )
+		);
+	}, [ selectedRecordId, selectedTreeFields ] );
+
+	// Branch membership and pagination stay local. Render-path consumers get
+	// the active entity's title, icon, status, and slug from core-data without
+	// refetching every loaded parent/page.
+	const displayBranches = useMemo(
+		() =>
+			overlaySidebarTreeRecord(
+				branches,
+				selectedRecordId,
+				selectedTreeFields
+			),
+		[ branches, selectedRecordId, selectedTreeFields ]
+	);
+
 	const loadedRecords = useMemo( () => {
 		const byId = new Map();
-		branches.forEach( ( branch ) => {
+		displayBranches.forEach( ( branch ) => {
 			branch.records.forEach( ( record ) => {
 				byId.set( record.id, record );
 			} );
 		} );
 		return [ ...byId.values() ];
-	}, [ branches ] );
+	}, [ displayBranches ] );
 
 	const getBranch = useCallback(
 		( parentId ) => branchesRef.current.get( parentKey( parentId ) ),
@@ -602,10 +757,10 @@ export default function useSidebarTree( { selectedId, selectedCollectionId } ) {
 	}, [ refreshBranch, refreshLoadedBranches, revealRecordPath ] );
 
 	const tree = useMemo(
-		() => buildNodesForParent( ROOT_PARENT_ID, branches ),
-		[ branches ]
+		() => buildNodesForParent( ROOT_PARENT_ID, displayBranches ),
+		[ displayBranches ]
 	);
-	const rootBranch = branches.get( ROOT_PARENT_ID ) ?? EMPTY_BRANCH;
+	const rootBranch = displayBranches.get( ROOT_PARENT_ID ) ?? EMPTY_BRANCH;
 
 	return {
 		tree,
