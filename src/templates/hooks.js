@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 
 import { fetchTemplates, instantiateTemplate } from './actions';
@@ -36,7 +42,13 @@ export function useTemplates( { kind, collectionId, enabled = true } = {} ) {
 	const [ isResolving, setIsResolving ] = useState( enabled );
 	const [ error, setError ] = useState( null );
 
+	// Only the latest request may update state, so a slow response for a
+	// previous kind or collection cannot replace the current list.
+	const latestRequestRef = useRef( 0 );
+
 	const refresh = useCallback( async () => {
+		latestRequestRef.current += 1;
+		const request = latestRequestRef.current;
 		if ( ! enabled ) {
 			setTemplates( [] );
 			setIsResolving( false );
@@ -45,48 +57,27 @@ export function useTemplates( { kind, collectionId, enabled = true } = {} ) {
 		}
 		setIsResolving( true );
 		setError( null );
+		let next = [];
+		let nextError = null;
 		try {
-			const next = await fetchTemplates( { kind, collectionId } );
+			next = await fetchTemplates( { kind, collectionId } );
+		} catch ( caught ) {
+			nextError = caught;
+		}
+		if ( request === latestRequestRef.current ) {
 			setTemplates( next );
-			return next;
-		} catch ( nextError ) {
-			setTemplates( [] );
 			setError( nextError );
-			return [];
-		} finally {
 			setIsResolving( false );
 		}
+		return next;
 	}, [ kind, collectionId, enabled ] );
 
 	useEffect( () => {
-		if ( ! enabled ) {
-			setTemplates( [] );
-			setIsResolving( false );
-			setError( null );
-			return undefined;
-		}
-
-		let cancelled = false;
-		setIsResolving( true );
-		setError( null );
-		fetchTemplates( { kind, collectionId } )
-			.then( ( next ) => {
-				if ( ! cancelled ) {
-					setTemplates( next );
-					setIsResolving( false );
-				}
-			} )
-			.catch( ( nextError ) => {
-				if ( ! cancelled ) {
-					setTemplates( [] );
-					setError( nextError );
-					setIsResolving( false );
-				}
-			} );
+		refresh();
 		return () => {
-			cancelled = true;
+			latestRequestRef.current += 1;
 		};
-	}, [ kind, collectionId, enabled ] );
+	}, [ refresh ] );
 
 	useEffect( () => {
 		if ( ! enabled || typeof window === 'undefined' ) {

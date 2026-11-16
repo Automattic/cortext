@@ -96,6 +96,42 @@ describe( 'template hooks', () => {
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 	} );
 
+	it( 'ignores a response for a collection the hook has moved away from', async () => {
+		let resolveStale;
+		apiFetch
+			.mockResolvedValueOnce( { templates: [ { id: 1 } ] } )
+			.mockReturnValueOnce(
+				new Promise( ( resolve ) => {
+					resolveStale = resolve;
+				} )
+			)
+			.mockResolvedValueOnce( { templates: [ { id: 3 } ] } );
+
+		const { result, rerender } = renderHook(
+			( { collectionId } ) =>
+				useTemplates( { kind: 'row', collectionId } ),
+			{ initialProps: { collectionId: 7 } }
+		);
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+
+		act( () => {
+			notifyTemplatesChanged( { kind: 'row', collectionId: 7 } );
+		} );
+		rerender( { collectionId: 8 } );
+		await waitFor( () =>
+			expect( result.current.templates ).toEqual( [ { id: 3 } ] )
+		);
+
+		await act( async () => {
+			resolveStale( { templates: [ { id: 2 } ] } );
+		} );
+
+		expect( result.current.templates ).toEqual( [ { id: 3 } ] );
+		expect( result.current.isResolving ).toBe( false );
+	} );
+
 	it( 'invalidates document lists after instantiating a template', async () => {
 		const invalidateResolution = jest.fn();
 		useDispatch.mockReturnValue( { invalidateResolution } );
