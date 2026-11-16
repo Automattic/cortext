@@ -276,11 +276,11 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 
 	public function test_instantiate_row_template_skips_relation_default_to_deleted_row(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$tasks_id    = $this->create_collection( 'Tasks' );
-		$people_id   = $this->create_collection( 'People' );
-		$owner_id    = $this->attach_field( $tasks_id, 'Owner', 'relation' );
-		$tasks_rel   = $this->attach_field( $people_id, 'Tasks', 'relation' );
-		$person_id   = $this->create_row( $people_id, 'Ada' );
+		$tasks_id  = $this->create_collection( 'Tasks' );
+		$people_id = $this->create_collection( 'People' );
+		$owner_id  = $this->attach_field( $tasks_id, 'Owner', 'relation' );
+		$tasks_rel = $this->attach_field( $people_id, 'Tasks', 'relation' );
+		$person_id = $this->create_row( $people_id, 'Ada' );
 		update_post_meta( $owner_id, 'related_collection_id', (string) $people_id );
 		update_post_meta( $owner_id, 'relation_reverse_field_id', (string) $tasks_rel );
 		update_post_meta( $tasks_rel, 'related_collection_id', (string) $tasks_id );
@@ -293,7 +293,7 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 				'field_values'  => array( 'field-' . $owner_id => array( $person_id ) ),
 			)
 		);
-		$path = '/cortext/v1/templates/' . $template_id . '/instantiate';
+		$path        = '/cortext/v1/templates/' . $template_id . '/instantiate';
 
 		$linked = $this->request( 'POST', $path );
 		$this->assertSame( 201, $linked->get_status() );
