@@ -407,7 +407,8 @@ final class Templates {
 
 	private function normalize_value_for_type( $value, string $type ) {
 		if ( 'checkbox' === $type ) {
-			return rest_sanitize_boolean( $value ) ? '1' : '0';
+			// Numbers, because the editor reads the string '0' as checked.
+			return rest_sanitize_boolean( $value ) ? 1 : 0;
 		}
 		if ( in_array( $type, array( 'multiselect', 'relation' ), true ) ) {
 			return is_array( $value ) ? array_values( $value ) : array( $value );

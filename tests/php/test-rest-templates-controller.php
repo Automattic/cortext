@@ -371,6 +371,28 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->assertSame( 42.0, (float) get_post_meta( $row_id, Relations::meta_key( $total_id ), true ) );
 	}
 
+	public function test_checkbox_defaults_are_numbers(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'Tasks' );
+		$key           = 'field-' . $this->attach_field( $collection_id, 'Done', 'checkbox' );
+		$template_id   = $this->create_template(
+			array(
+				'kind'          => Templates::KIND_ROW,
+				'collection_id' => $collection_id,
+				'title'         => 'Task starter',
+			)
+		);
+		$path          = '/cortext/v1/templates/' . $template_id;
+
+		$checked   = $this->request( 'POST', $path, array( 'field_values' => array( $key => true ) ) );
+		$unchecked = $this->request( 'POST', $path, array( 'field_values' => array( $key => false ) ) );
+		$row       = $this->request( 'POST', $path . '/instantiate' );
+
+		$this->assertSame( 1, $checked->get_data()['template']['field_values'][ $key ] );
+		$this->assertSame( 0, $unchecked->get_data()['template']['field_values'][ $key ] );
+		$this->assertSame( '0', (string) get_post_meta( (int) $row->get_data()['document']['id'], $key, true ) );
+	}
+
 	public function test_rejects_row_template_defaults_for_fields_outside_collection(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'Tasks' );
