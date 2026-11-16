@@ -82,6 +82,7 @@ describe( 'revisionQuery', () => {
 				'author',
 				'meta',
 				'featured_media',
+				'cortext_carries_meta',
 				'title.raw',
 				'excerpt.raw',
 				'content.raw',
@@ -105,7 +106,7 @@ describe( 'revisionQuery', () => {
 		expect( revisionRecordQuery( 'custom_key' ) ).toEqual( {
 			context: 'edit',
 			_fields:
-				'id,date,modified,author,meta,featured_media,title.raw,excerpt.raw,content.raw,custom_key',
+				'id,date,modified,author,meta,featured_media,cortext_carries_meta,title.raw,excerpt.raw,content.raw,custom_key',
 		} );
 	} );
 } );
@@ -242,7 +243,7 @@ describe( 'useRevisions', () => {
 } );
 
 describe( 'useRevisionControls', () => {
-	it( 'commits rapid revision selections synchronously without refetching history', () => {
+	function mockEditorStores( { editor = {}, core = {} } = {} ) {
 		const setCurrentRevisionId = jest.fn();
 		const editorSelectors = {
 			getCurrentRevisionId: () => null,
@@ -254,12 +255,19 @@ describe( 'useRevisionControls', () => {
 			isEditedPostDirty: () => false,
 			isSavingPost: () => false,
 			isPostLocked: () => false,
+			...editor,
 		};
 		const coreSelectors = {
 			getEntityConfig: () => ( {
 				revisionKey: 'id',
 				getRevisionsUrl: () => '/wp/v2/pages/7/revisions',
 			} ),
+		};
+		const coreActions = {
+			clearEntityRecordEdits: jest.fn(),
+			invalidateResolutionForStoreSelector: jest.fn(),
+			receiveEntityRecords: jest.fn(),
+			...core,
 		};
 		useSelect.mockImplementation( ( callback ) =>
 			callback( ( store ) =>
@@ -276,12 +284,14 @@ describe( 'useRevisionControls', () => {
 					createSuccessNotice: jest.fn(),
 				};
 			}
-			return {
-				clearEntityRecordEdits: jest.fn(),
-				invalidateResolution: jest.fn(),
-				receiveEntityRecords: jest.fn(),
-			};
+			return coreActions;
 		} );
+
+		return { coreActions, setCurrentRevisionId };
+	}
+
+	it( 'commits rapid revision selections synchronously without refetching history', () => {
+		const { setCurrentRevisionId } = mockEditorStores();
 
 		const { result } = renderHook( () =>
 			useRevisionControls( { postId: 7, postType: 'page' } )
@@ -295,5 +305,35 @@ describe( 'useRevisionControls', () => {
 		expect( setCurrentRevisionId.mock.calls ).toEqual( [ [ 10 ], [ 20 ] ] );
 		expect( result.current.canRestore ).toBe( true );
 		expect( apiFetch ).not.toHaveBeenCalled();
+	} );
+
+	it( 'drops every cached revisions list after a restore', async () => {
+		const { coreActions, setCurrentRevisionId } = mockEditorStores( {
+			editor: {
+				getCurrentRevisionId: () => 20,
+				isRevisionsMode: () => true,
+			},
+		} );
+		apiFetch.mockResolvedValue( { post: { id: 7 }, contentOnly: false } );
+
+		const { result } = renderHook( () =>
+			useRevisionControls( { postId: 7, postType: 'page' } )
+		);
+
+		await act( async () => {
+			await result.current.restoreRevision();
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/7/restore-revision',
+			method: 'POST',
+			data: { revision_id: 20 },
+		} );
+		// One query would miss the list core's `useEntityProp` keeps for the
+		// revision preview, so the whole selector is invalidated.
+		expect(
+			coreActions.invalidateResolutionForStoreSelector
+		).toHaveBeenCalledWith( 'getRevisions' );
+		expect( setCurrentRevisionId ).toHaveBeenCalledWith( null );
 	} );
 } );

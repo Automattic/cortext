@@ -40,6 +40,7 @@ jest.mock( '../../../src/components/DocumentPropertiesContext', () => ( {
 
 import RevisionPropertiesDiff, {
 	displayValues,
+	isBlank,
 	metaValues,
 	valuesEqual,
 } from '../../../src/components/RevisionPropertiesDiff';
@@ -60,6 +61,15 @@ describe( 'RevisionPropertiesDiff helpers', () => {
 		expect( valuesEqual( [ 'a' ], [ 'a' ] ) ).toBe( true );
 		expect( valuesEqual( [ 'a' ], [ 'b' ] ) ).toBe( false );
 		expect( valuesEqual( undefined, [] ) ).toBe( true );
+	} );
+
+	it( 'treats missing values and REST defaults as blank', () => {
+		expect( isBlank( [] ) ).toBe( true );
+		expect( isBlank( [ '' ] ) ).toBe( true );
+		expect( isBlank( [ 0 ] ) ).toBe( true );
+		expect( isBlank( [ false ] ) ).toBe( true );
+		expect( isBlank( [ 'a' ] ) ).toBe( false );
+		expect( isBlank( [ 3 ] ) ).toBe( false );
 	} );
 
 	it( 'formats empty, list, and checkbox values', () => {
@@ -104,6 +114,47 @@ describe( 'RevisionPropertiesDiff', () => {
 		// Unchanged field and rollup field are both omitted.
 		expect( screen.queryByText( 'Status' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Total' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'lists only properties that hold a value on the oldest revision', () => {
+		mockUseDocumentPropertiesContext.mockReturnValue( {
+			fields: [
+				{ id: 'field-1', label: 'Name', cortextFieldType: 'text' },
+				{ id: 'field-2', label: 'Notes', cortextFieldType: 'text' },
+				{ id: 'field-3', label: 'Amount', cortextFieldType: 'number' },
+				{ id: 'field-4', label: 'Done', cortextFieldType: 'checkbox' },
+				{
+					id: 'field-5',
+					label: 'Tags',
+					cortextFieldType: 'multiselect',
+				},
+			],
+		} );
+		// The oldest revision has no predecessor, and REST fills unset
+		// single-value keys with defaults.
+		mockUseRevisionControls.mockReturnValue( {
+			currentRevision: {
+				meta: {
+					'field-1': 'first',
+					'field-2': '',
+					'field-3': 0,
+					'field-4': false,
+					'field-5': [],
+				},
+			},
+			previousRevision: null,
+		} );
+
+		render( <RevisionPropertiesDiff /> );
+
+		expect(
+			screen.getByRole( 'region', { name: 'Changed properties (1)' } )
+		).toBeInTheDocument();
+		expect( screen.getByText( 'Name' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Notes' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Amount' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Done' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Tags' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders nothing without fields or a revision', () => {

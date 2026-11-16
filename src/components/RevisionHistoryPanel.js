@@ -105,7 +105,13 @@ function RevisionRow( {
 	);
 }
 
-export default function RevisionHistoryPanel( { postId, postType } ) {
+function RevisionHistoryList( {
+	currentRevisionId,
+	exitRevisions,
+	postId,
+	postType,
+	selectRevision,
+} ) {
 	const { record: currentRecord } = useEntityRecord(
 		'postType',
 		postType,
@@ -115,30 +121,6 @@ export default function RevisionHistoryPanel( { postId, postType } ) {
 		postType,
 		postId
 	);
-	const { isAvailable, currentRevisionId, exitRevisions, selectRevision } =
-		useRevisionControls( { postId, postType } );
-	const activeArea = useSelect(
-		( select ) =>
-			select( interfaceStore ).getActiveComplementaryArea(
-				INSPECTOR_SCOPE
-			),
-		[]
-	);
-
-	useEffect( () => {
-		if (
-			isAvailable &&
-			currentRevisionId &&
-			activeArea !== REVISION_HISTORY_PANEL &&
-			activeArea !== DOCUMENT_INSPECTOR
-		) {
-			exitRevisions();
-		}
-	}, [ activeArea, currentRevisionId, exitRevisions, isAvailable ] );
-
-	if ( ! isAvailable ) {
-		return null;
-	}
 
 	const currentRow = {
 		id: `current-${ postId }`,
@@ -148,20 +130,7 @@ export default function RevisionHistoryPanel( { postId, postType } ) {
 	const latestRevisionId = revisionId( data[ 0 ], revisionKey );
 
 	return (
-		<ComplementaryArea
-			scope={ INSPECTOR_SCOPE }
-			identifier={ REVISION_HISTORY_PANEL }
-			title={ __( 'History', 'cortext' ) }
-			closeLabel={ __( 'Close history', 'cortext' ) }
-			isPinnable={ false }
-			className="editor-sidebar__panel cortext-revision-history"
-			headerClassName="cortext-revision-history__header"
-			header={
-				<div className="cortext-revision-history__header-row">
-					<strong>{ __( 'History', 'cortext' ) }</strong>
-				</div>
-			}
-		>
+		<>
 			{ isLoading && ! hasResolved ? (
 				<div className="cortext-revision-history__loading">
 					<Spinner />
@@ -214,6 +183,60 @@ export default function RevisionHistoryPanel( { postId, postType } ) {
 					  } )
 					: null }
 			</ul>
+		</>
+	);
+}
+
+export default function RevisionHistoryPanel( { postId, postType } ) {
+	const { isAvailable, currentRevisionId, exitRevisions, selectRevision } =
+		useRevisionControls( { postId, postType } );
+	const activeArea = useSelect(
+		( select ) =>
+			select( interfaceStore ).getActiveComplementaryArea(
+				INSPECTOR_SCOPE
+			),
+		[]
+	);
+
+	useEffect( () => {
+		if (
+			isAvailable &&
+			currentRevisionId &&
+			activeArea !== REVISION_HISTORY_PANEL &&
+			activeArea !== DOCUMENT_INSPECTOR
+		) {
+			exitRevisions();
+		}
+	}, [ activeArea, currentRevisionId, exitRevisions, isAvailable ] );
+
+	if ( ! isAvailable ) {
+		return null;
+	}
+
+	// The area renders its children only while it is open, so the history is
+	// requested when the panel opens, not with every document.
+	return (
+		<ComplementaryArea
+			scope={ INSPECTOR_SCOPE }
+			identifier={ REVISION_HISTORY_PANEL }
+			title={ __( 'History', 'cortext' ) }
+			closeLabel={ __( 'Close history', 'cortext' ) }
+			isPinnable={ false }
+			className="editor-sidebar__panel cortext-revision-history"
+			headerClassName="cortext-revision-history__header"
+			header={
+				<div className="cortext-revision-history__header-row">
+					<strong>{ __( 'History', 'cortext' ) }</strong>
+				</div>
+			}
+		>
+			<RevisionHistoryList
+				currentRevisionId={ currentRevisionId }
+				exitRevisions={ exitRevisions }
+				postId={ postId }
+				postType={ postType }
+				selectRevision={ selectRevision }
+			/>
 		</ComplementaryArea>
 	);
 }

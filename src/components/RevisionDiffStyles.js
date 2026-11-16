@@ -2,7 +2,6 @@ import { privateApis as blockEditorPrivateApis } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { useEffect } from '@wordpress/element';
-import { addFilter, removeFilter } from '@wordpress/hooks';
 import { __ } from '@wordpress/i18n';
 
 import { unlock } from '../lock-unlock';
@@ -10,8 +9,6 @@ import { unlock } from '../lock-unlock';
 const { usePrivateStyleOverride = () => {} } = blockEditorPrivateApis
 	? unlock( blockEditorPrivateApis )
 	: {};
-
-const FILTER_NAME = 'cortext/revisions/with-revision-diff-classes';
 
 const REVISION_REMOVED_FILTER_SVG = `
 <svg
@@ -124,45 +121,12 @@ function unregisterDiffFormatTypes() {
 	} );
 }
 
-function withRevisionDiffClasses( BlockListBlock ) {
-	return function CortextRevisionBlockListBlock( props ) {
-		const diffStatus = props.block?.__revisionDiffStatus?.status;
-		const className = [
-			props.className,
-			diffStatus === 'added' ? 'is-revision-added' : '',
-			diffStatus === 'removed' ? 'is-revision-removed' : '',
-			diffStatus === 'modified' ? 'is-revision-modified' : '',
-		]
-			.filter( Boolean )
-			.join( ' ' );
-		return <BlockListBlock { ...props } className={ className } />;
-	};
-}
-
-let filterRegistrations = 0;
 let formatRegistrations = 0;
 
-function useRevisionDiffFilter() {
-	useEffect( () => {
-		if ( filterRegistrations === 0 ) {
-			addFilter(
-				'editor.BlockListBlock',
-				FILTER_NAME,
-				withRevisionDiffClasses
-			);
-		}
-		++filterRegistrations;
-		return () => {
-			filterRegistrations = Math.max( 0, filterRegistrations - 1 );
-			if ( filterRegistrations === 0 ) {
-				removeFilter( 'editor.BlockListBlock', FILTER_NAME );
-			}
-		};
-	}, [] );
-}
-
+// The editor package adds the `is-revision-*` classes to changed blocks through
+// its own `editor.BlockListBlock` filter. This component adds the rest: the
+// inline diff format types and the styles those classes target.
 export default function RevisionDiffStyles() {
-	useRevisionDiffFilter();
 	useEffect( () => {
 		if ( formatRegistrations === 0 ) {
 			registerDiffFormatTypes();

@@ -102,6 +102,7 @@ jest.mock(
 	() => () => null
 );
 jest.mock( '../../../src/components/RevisionPropertiesDiff', () => () => null );
+jest.mock( '../../../src/components/RevisionRestoreChanges', () => () => null );
 jest.mock( '../../../src/components/Skeleton', () => ( {
 	SkeletonBlock: () => null,
 } ) );

@@ -6,7 +6,7 @@ import {
 	useSelect,
 } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
-import { useCallback, useMemo, useState } from '@wordpress/element';
+import { useCallback, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { store as noticesStore } from '@wordpress/notices';
 
@@ -22,6 +22,7 @@ const BASE_REVISION_FIELDS = [
 	'author',
 	'meta',
 	'featured_media',
+	'cortext_carries_meta',
 	'title.raw',
 	'excerpt.raw',
 	'content.raw',
@@ -454,17 +455,10 @@ export function useRevisionControls( {
 	const {
 		clearEntityRecordEdits,
 		receiveEntityRecords,
-		invalidateResolution,
+		invalidateResolutionForStoreSelector,
 	} = useDispatch( coreStore );
 	const { createErrorNotice, createSuccessNotice } =
 		useDispatch( noticesStore );
-	// The desc collection is the only revisions query anything resolves: the
-	// history panel reads it and the editor's current/previous revision
-	// selectors are pointed at it too.
-	const invalidationQuery = useMemo(
-		() => revisionQuery( revisionKey, 'desc' ),
-		[ revisionKey ]
-	);
 	const selectRevision = useCallback(
 		( revisionId ) => {
 			setCurrentRevisionId?.( revisionId );
@@ -513,12 +507,11 @@ export function useRevisionControls( {
 				// both need their own nudge.
 				notifyCollectionRowsChanged();
 				notifyBacklinksChanged();
-				invalidateResolution( 'getRevisions', [
-					'postType',
-					postType,
-					postId,
-					invalidationQuery,
-				] );
+				// A restore adds revisions on the server, and core-data only
+				// refreshes revisions lists after a save made from the client.
+				// More than one list is cached: the history panel's, and the
+				// one core's `useEntityProp` reads while a revision is on screen.
+				invalidateResolutionForStoreSelector( 'getRevisions' );
 				setCurrentRevisionId?.( null );
 				createSuccessNotice(
 					response?.contentOnly
@@ -556,8 +549,7 @@ export function useRevisionControls( {
 			createErrorNotice,
 			createSuccessNotice,
 			currentRevisionId,
-			invalidateResolution,
-			invalidationQuery,
+			invalidateResolutionForStoreSelector,
 			postId,
 			postType,
 			receiveEntityRecords,

@@ -50,6 +50,7 @@ import DocumentIcon from './DocumentIcon';
 import DocumentIdentityControls from './DocumentIdentityControls';
 import { SkeletonBlock } from './Skeleton';
 import RevisionPropertiesDiff from './RevisionPropertiesDiff';
+import RevisionRestoreChanges from './RevisionRestoreChanges';
 import {
 	BLOCK_INSPECTOR,
 	DOCUMENT_INSPECTOR,
@@ -730,9 +731,10 @@ function CollectionInspectorContent( { postId, postType } ) {
 	);
 }
 
-// Revision inspector: the identity the revision carried, then the properties
-// that changed against the previous revision. Documents without property
-// fields still get the identity panel, so the tab is never empty.
+// Revision inspector: the identity the revision carried, what a restore would
+// overwrite on the row, then the properties that changed against the previous
+// revision. Documents without property fields still get the identity panel,
+// so the tab is never empty.
 function RevisionInspectorContent( { postId, postType } ) {
 	return (
 		<div className="cortext-document-inspector">
@@ -741,6 +743,7 @@ function RevisionInspectorContent( { postId, postType } ) {
 				postType={ postType }
 				title={ __( 'Identity', 'cortext' ) }
 			/>
+			<RevisionRestoreChanges />
 			<RevisionPropertiesDiff />
 		</div>
 	);

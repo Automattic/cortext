@@ -24,8 +24,43 @@ final class RevisionMetaFormat {
 	 */
 	public const VERSION = 1;
 
+	/**
+	 * REST field on revisions that tells clients whether the marker is present.
+	 */
+	public const REST_FIELD = 'cortext_carries_meta';
+
 	public function register(): void {
 		add_action( '_wp_put_post_revision', array( $this, 'mark_revision' ), 10, 2 );
+		add_action( 'rest_api_init', array( $this, 'register_rest_field' ) );
+	}
+
+	/**
+	 * Exposes the marker on revision responses. The meta key itself is
+	 * protected, and without it a client reads a revision's missing metadata
+	 * as empty values.
+	 */
+	public function register_rest_field(): void {
+		foreach ( get_post_types( array( 'show_in_rest' => true ) ) as $post_type ) {
+			if ( ! post_type_supports( $post_type, 'cortext-document' ) ) {
+				continue;
+			}
+
+			register_rest_field(
+				$post_type . '-revision',
+				self::REST_FIELD,
+				array(
+					'get_callback' => static function ( array $revision ): bool {
+						return self::carries_meta( (int) ( $revision['id'] ?? 0 ) );
+					},
+					'schema'       => array(
+						'description' => __( 'Whether the revision stores its own copy of the document metadata.', 'cortext' ),
+						'type'        => 'boolean',
+						'context'     => array( 'view', 'edit' ),
+						'readonly'    => true,
+					),
+				)
+			);
+		}
 	}
 
 	/**

@@ -31,6 +31,52 @@ final class Test_Revision_Meta_Format extends BaseTestCase {
 		$this->assertNotFalse( has_action( '_wp_put_post_revision' ) );
 	}
 
+	public function test_rest_field_reports_whether_a_revision_carries_meta(): void {
+		register_post_type(
+			'rest_document',
+			array(
+				'public'       => false,
+				'show_in_rest' => true,
+			)
+		);
+		add_post_type_support( 'rest_document', 'cortext-document' );
+		register_post_type(
+			'rest_plain_thing',
+			array(
+				'public'       => false,
+				'show_in_rest' => true,
+			)
+		);
+
+		$format = new RevisionMetaFormat();
+		$format->register_rest_field();
+
+		global $wp_rest_additional_fields;
+		$field = $wp_rest_additional_fields['rest_document-revision'][ RevisionMetaFormat::REST_FIELD ] ?? null;
+		$this->assertIsArray( $field );
+		$this->assertArrayNotHasKey( 'rest_plain_thing-revision', $wp_rest_additional_fields );
+
+		$parent   = (int) wp_insert_post(
+			array(
+				'post_type'  => 'rest_document',
+				'post_title' => 'Doc',
+			)
+		);
+		$revision = (int) wp_insert_post(
+			array(
+				'post_type'   => 'revision',
+				'post_status' => 'inherit',
+				'post_parent' => $parent,
+			)
+		);
+
+		$this->assertFalse( $field['get_callback']( array( 'id' => $revision ) ) );
+
+		$format->mark_revision( $revision, $parent );
+
+		$this->assertTrue( $field['get_callback']( array( 'id' => $revision ) ) );
+	}
+
 	public function test_marks_revisions_of_cortext_documents(): void {
 		$parent   = (int) wp_insert_post(
 			array(

@@ -16,6 +16,20 @@ export function valuesEqual( a, b ) {
 	return JSON.stringify( a ?? [] ) === JSON.stringify( b ?? [] );
 }
 
+// The REST API reports an unset single-value key as its type's default, and
+// the oldest revision has no predecessor to read values from. Both describe a
+// property that holds nothing.
+export function isBlank( values ) {
+	return values.every(
+		( value ) =>
+			value === '' ||
+			value === null ||
+			value === undefined ||
+			value === 0 ||
+			value === false
+	);
+}
+
 function stringifyValue( value ) {
 	if ( value === null || value === undefined || value === '' ) {
 		return '';
@@ -46,49 +60,33 @@ export function displayValues( values, field ) {
 	);
 }
 
-export default function RevisionPropertiesDiff() {
-	const properties = useDocumentPropertiesContext();
-	const { currentRevision, previousRevision } = useRevisionControls();
-	const fields = Array.isArray( properties?.fields ) ? properties.fields : [];
-
-	if ( fields.length === 0 || ! currentRevision ) {
-		return null;
-	}
-
-	const changedFields = fields
+// Properties whose stored value differs between two meta maps. Rollups are
+// computed, so neither a revision nor a restore owns their value.
+export function changedProperties( fields, beforeMeta, afterMeta ) {
+	return fields
 		.filter( ( field ) => field?.cortextFieldType !== 'rollup' )
-		.map( ( field ) => {
-			const key = field.id;
-			const before = metaValues( previousRevision?.meta, key );
-			const after = metaValues( currentRevision?.meta, key );
-			return {
-				field,
-				before,
-				after,
-				changed: ! valuesEqual( before, after ),
-			};
-		} )
-		.filter( ( entry ) => entry.changed );
+		.map( ( field ) => ( {
+			field,
+			before: metaValues( beforeMeta, field.id ),
+			after: metaValues( afterMeta, field.id ),
+		} ) )
+		.filter(
+			( { before, after } ) =>
+				! valuesEqual( before, after ) &&
+				! ( isBlank( before ) && isBlank( after ) )
+		);
+}
 
+export function PropertyChangesPanel( { title, emptyMessage, changes } ) {
 	return (
-		<PanelBody
-			title={ sprintf(
-				/* translators: %d: number of changed properties. */
-				__( 'Changed properties (%d)', 'cortext' ),
-				changedFields.length
-			) }
-			initialOpen
-		>
-			{ changedFields.length === 0 ? (
+		<PanelBody title={ title } initialOpen>
+			{ changes.length === 0 ? (
 				<p className="cortext-revision-properties__empty">
-					{ __(
-						'No properties changed in this revision.',
-						'cortext'
-					) }
+					{ emptyMessage }
 				</p>
 			) : (
 				<div className="cortext-revision-properties">
-					{ changedFields.map( ( { field, before, after } ) => (
+					{ changes.map( ( { field, before, after } ) => (
 						<div
 							key={ field.id }
 							className="cortext-revision-properties__field"
@@ -105,5 +103,36 @@ export default function RevisionPropertiesDiff() {
 				</div>
 			) }
 		</PanelBody>
+	);
+}
+
+export default function RevisionPropertiesDiff() {
+	const properties = useDocumentPropertiesContext();
+	const { currentRevision, previousRevision } = useRevisionControls();
+	const fields = Array.isArray( properties?.fields ) ? properties.fields : [];
+
+	if ( fields.length === 0 || ! currentRevision ) {
+		return null;
+	}
+
+	const changes = changedProperties(
+		fields,
+		previousRevision?.meta,
+		currentRevision?.meta
+	);
+
+	return (
+		<PropertyChangesPanel
+			title={ sprintf(
+				/* translators: %d: number of changed properties. */
+				__( 'Changed properties (%d)', 'cortext' ),
+				changes.length
+			) }
+			emptyMessage={ __(
+				'No properties changed in this revision.',
+				'cortext'
+			) }
+			changes={ changes }
+		/>
 	);
 }

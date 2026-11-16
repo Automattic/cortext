@@ -115,7 +115,8 @@ function updateDocumentWithRevisionBypass(
 	title,
 	body,
 	icon = '',
-	featuredMedia = 0
+	featuredMedia = 0,
+	meta = {}
 ) {
 	const encodedPayload = Buffer.from(
 		JSON.stringify( {
@@ -124,6 +125,7 @@ function updateDocumentWithRevisionBypass(
 			content: documentContent( body ),
 			icon,
 			featuredMedia,
+			meta,
 		} )
 	).toString( 'base64' );
 	const code = `
@@ -144,6 +146,13 @@ $result = Cortext\\Editor\\RevisionThrottle::with_bypass(
 			);
 		} else {
 			delete_post_meta( (int) $payload['id'], '_thumbnail_id' );
+		}
+		foreach ( (array) ( $payload['meta'] ?? array() ) as $key => $value ) {
+			update_post_meta(
+				(int) $payload['id'],
+				(string) $key,
+				wp_slash( (string) $value )
+			);
 		}
 		return wp_update_post(
 			array(
@@ -214,6 +223,131 @@ async function deleteRestPath( requestUtils, restPath ) {
 	}
 }
 
+/**
+ * Creates a row with two text properties and two revisions. The older revision
+ * holds Status "Todo"; the newer one, like the row itself, holds "Done".
+ *
+ * @param {Object} requestUtils Playwright REST helper.
+ */
+async function createRowWithHistory( requestUtils ) {
+	const collection = await requestUtils.rest( {
+		method: 'POST',
+		path: '/wp/v2/crtxt_documents',
+		data: {
+			title: `E2E History Collection ${ SUFFIX }`,
+			status: 'private',
+			cortext_collection: true,
+		},
+	} );
+	const fields = [];
+	for ( const title of [ 'Status', 'Owner' ] ) {
+		fields.push(
+			await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_fields',
+				data: { title, status: 'private', meta: { type: 'text' } },
+			} )
+		);
+	}
+	await requestUtils.rest( {
+		method: 'POST',
+		path: `/wp/v2/crtxt_documents/${ collection.id }`,
+		data: {
+			meta: {
+				cortext_fields: fields.map( ( field ) => String( field.id ) ),
+			},
+		},
+	} );
+	const rowTitle = `E2E History Row ${ SUFFIX }`;
+	const row = await requestUtils.rest( {
+		method: 'POST',
+		path: '/wp/v2/crtxt_documents',
+		data: {
+			title: rowTitle,
+			status: 'private',
+			cortext_trait: collection.id,
+			content: paragraph( SEED_BODY ),
+		},
+	} );
+	const statusKey = `field-${ fields[ 0 ].id }`;
+	const ownerKey = `field-${ fields[ 1 ].id }`;
+
+	updateDocumentWithRevisionBypass( row.id, rowTitle, OLD_BODY, '', 0, {
+		[ statusKey ]: 'Todo',
+		[ ownerKey ]: 'Ana',
+	} );
+	await delay( 1100 );
+	updateDocumentWithRevisionBypass( row.id, rowTitle, CURRENT_BODY, '', 0, {
+		[ statusKey ]: 'Done',
+	} );
+
+	return { collection, fields, row, statusKey };
+}
+
+async function deleteRowWithHistory( requestUtils, fixture ) {
+	if ( ! fixture ) {
+		return;
+	}
+	await deleteIfCreated( requestUtils, fixture.row.id );
+	await deleteIfCreated( requestUtils, fixture.collection.id );
+	for ( const field of fixture.fields ) {
+		await deleteRestPath(
+			requestUtils,
+			`/wp/v2/crtxt_fields/${ field.id }`
+		);
+	}
+}
+
+/**
+ * Opens a document, selects its oldest revision and switches the sidebar to
+ * the Revision tab.
+ *
+ * @param {Object} admin      Playwright admin helper.
+ * @param {Object} page       Playwright page.
+ * @param {number} documentId Document to open.
+ */
+async function openOldestRevisionProperties( admin, page, documentId ) {
+	await admin.visitAdminPage(
+		'admin.php',
+		`page=cortext&p=/${ documentId }`
+	);
+	await page.waitForFunction(
+		( postId ) =>
+			window.wp?.data?.select( 'core/editor' )?.getCurrentPostId?.() ===
+			postId,
+		documentId,
+		{ timeout: 15_000 }
+	);
+	await page
+		.locator( '.cortext-document-actions' )
+		.getByRole( 'button', { name: 'History' } )
+		.click();
+	const panel = page.locator( '.cortext-revision-history' );
+	await expect( panel ).toBeVisible();
+	await panel
+		.locator( '.cortext-revision-history__button' )
+		.filter( { hasNotText: 'Current' } )
+		.last()
+		.click();
+
+	const header = page.locator( '.cortext-revisions-header' );
+	await expect( header ).toBeVisible();
+	await header.getByRole( 'button', { name: 'Revision properties' } ).click();
+
+	const restoreChanges = page
+		.locator( '.cortext-document-inspector .components-panel__body' )
+		.filter( { hasText: 'Restoring will change' } );
+	return { header, restoreChanges };
+}
+
+async function restoreSelectedRevision( page, header ) {
+	await header.getByRole( 'button', { name: 'Restore revision' } ).click();
+	await page
+		.getByRole( 'dialog' )
+		.getByRole( 'button', { name: 'Restore', exact: true } )
+		.click();
+}
+
 test.describe( 'Visual revision history', () => {
 	test( 'preview an older revision and restore it from the shell', async ( {
 		admin,
@@ -262,6 +396,18 @@ test.describe( 'Visual revision history', () => {
 				currentCoverMedia.id
 			);
 
+			const historyRequests = [];
+			page.on( 'request', ( request ) => {
+				const url = decodeURIComponent( request.url() );
+				if (
+					url.includes(
+						`/crtxt_documents/${ createdPage.id }/revisions`
+					)
+				) {
+					historyRequests.push( url );
+				}
+			} );
+
 			await admin.visitAdminPage(
 				'admin.php',
 				`page=cortext&p=/${ createdPage.id }`
@@ -281,6 +427,9 @@ test.describe( 'Visual revision history', () => {
 			await expect(
 				sidebarEmojiIconForTitle( page, CURRENT_TITLE )
 			).toHaveAttribute( 'alt', CURRENT_ICON_VALUE );
+
+			// History loads when its panel opens, not with the document.
+			expect( historyRequests ).toHaveLength( 0 );
 
 			// Open the history panel from the editor top bar.
 			await page
@@ -323,6 +472,14 @@ test.describe( 'Visual revision history', () => {
 				canvas.locator(
 					'.cortext-document-icon-block.is-revision-modified'
 				)
+			).toBeVisible();
+			// Changed body blocks get their diff class from the editor package.
+			await expect(
+				canvas
+					.locator(
+						'[data-type="core/paragraph"][class*="is-revision-"]'
+					)
+					.first()
 			).toBeVisible();
 
 			// Selecting a revision drops the canvas into read-only revisions
@@ -454,6 +611,11 @@ test.describe( 'Visual revision history', () => {
 			await expect(
 				canvas.locator( '.cortext-canvas__editor' )
 			).toContainText( OLD_BODY );
+			// The title block reads a different revisions list than the body,
+			// and both revisions the restore created must be in it.
+			await expect( canvas.locator( '.wp-block-post-title' ) ).toHaveText(
+				OLD_TITLE
+			);
 			await expect(
 				canvas.locator( '.cortext-document-cover-block__image' )
 			).toHaveAttribute(
@@ -465,6 +627,9 @@ test.describe( 'Visual revision history', () => {
 			await expect(
 				canvas.locator( '.cortext-canvas__editor' )
 			).toContainText( CURRENT_BODY );
+			await expect( canvas.locator( '.wp-block-post-title' ) ).toHaveText(
+				CURRENT_TITLE
+			);
 			await expect(
 				canvas.locator( '.cortext-document-cover-block__image' )
 			).toHaveAttribute(
@@ -481,6 +646,110 @@ test.describe( 'Visual revision history', () => {
 				requestUtils,
 				oldCoverMedia && `/wp/v2/media/${ oldCoverMedia.id }`
 			);
+		}
+	} );
+
+	test( 'lists the property values a restore would change', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let fixture;
+
+		try {
+			fixture = await createRowWithHistory( requestUtils );
+			const { header, restoreChanges } =
+				await openOldestRevisionProperties(
+					admin,
+					page,
+					fixture.row.id
+				);
+
+			// Only Status differs between the row and the selected revision.
+			await expect(
+				restoreChanges.getByRole( 'button', {
+					name: 'Restoring will change (1)',
+				} )
+			).toBeVisible();
+			const statusChange = restoreChanges
+				.locator( '.cortext-revision-properties__field' )
+				.filter( { hasText: 'Status' } );
+			await expect( statusChange.locator( 'del' ) ).toHaveText( 'Done' );
+			await expect( statusChange.locator( 'ins' ) ).toHaveText( 'Todo' );
+
+			// The restore then does what the list announced.
+			await restoreSelectedRevision( page, header );
+			await expect
+				.poll( async () => {
+					const restored = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_documents/${ fixture.row.id }`,
+						params: { context: 'edit' },
+					} );
+					return restored.meta[ fixture.statusKey ];
+				} )
+				.toBe( 'Todo' );
+		} finally {
+			await deleteRowWithHistory( requestUtils, fixture );
+		}
+	} );
+
+	test( 'announces no property changes for a revision without metadata', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let fixture;
+
+		try {
+			fixture = await createRowWithHistory( requestUtils );
+			// Strip the marker so the oldest revision reads like one stored
+			// before metadata was revisioned.
+			const revisions = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ fixture.row.id }/revisions`,
+				params: { context: 'edit', _fields: 'id' },
+			} );
+			const oldestId = Math.min(
+				...revisions.map( ( revision ) => revision.id )
+			);
+			runWpCli( [
+				'eval',
+				`delete_metadata( 'post', ${ oldestId }, '_cortext_revision_meta' );`,
+			] );
+
+			const { header, restoreChanges } =
+				await openOldestRevisionProperties(
+					admin,
+					page,
+					fixture.row.id
+				);
+
+			await expect(
+				restoreChanges.getByRole( 'button', {
+					name: 'Restoring will change (0)',
+				} )
+			).toBeVisible();
+			await expect( restoreChanges ).toContainText(
+				'This version predates property history'
+			);
+
+			// Content comes back; the row keeps its current Status.
+			await restoreSelectedRevision( page, header );
+			await expect
+				.poll( async () => {
+					const restored = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_documents/${ fixture.row.id }`,
+						params: { context: 'edit' },
+					} );
+					return restored.content.raw.includes( OLD_BODY );
+				} )
+				.toBe( true );
+			const restored = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ fixture.row.id }`,
+				params: { context: 'edit' },
+			} );
+			expect( restored.meta[ fixture.statusKey ] ).toBe( 'Done' );
+		} finally {
+			await deleteRowWithHistory( requestUtils, fixture );
 		}
 	} );
 } );

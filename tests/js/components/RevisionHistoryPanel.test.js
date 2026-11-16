@@ -9,6 +9,7 @@ const mockUseEntityRecord = jest.fn();
 const mockUseRevisionControls = jest.fn();
 const mockUseRevisions = jest.fn();
 const mockUseSelect = jest.fn();
+let mockIsAreaOpen = true;
 
 jest.mock( '@wordpress/components', () => ( {
 	__esModule: true,
@@ -58,12 +59,14 @@ jest.mock( '@wordpress/i18n', () => ( {
 
 jest.mock( '@wordpress/interface', () => ( {
 	__esModule: true,
-	ComplementaryArea: ( { children, header } ) => (
-		<aside>
-			{ header }
-			{ children }
-		</aside>
-	),
+	// Like the real area, children mount only while the area is open.
+	ComplementaryArea: ( { children, header } ) =>
+		mockIsAreaOpen ? (
+			<aside>
+				{ header }
+				{ children }
+			</aside>
+		) : null,
 	store: {},
 } ) );
 
@@ -116,6 +119,7 @@ function setDefaults( overrides = {} ) {
 describe( 'RevisionHistoryPanel', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
+		mockIsAreaOpen = true;
 		setDefaults();
 	} );
 
@@ -139,6 +143,17 @@ describe( 'RevisionHistoryPanel', () => {
 			screen.getByText( 'Latest revision' ).closest( 'button' )
 		);
 		expect( mockSelectRevision ).toHaveBeenCalledWith( 11 );
+	} );
+
+	it( 'leaves the history unrequested while its sidebar is closed', () => {
+		mockIsAreaOpen = false;
+		mockUseSelect.mockReturnValue( DOCUMENT_INSPECTOR );
+
+		render(
+			<RevisionHistoryPanel postId={ 7 } postType="crtxt_document" />
+		);
+
+		expect( mockUseRevisions ).not.toHaveBeenCalled();
 	} );
 
 	it( 'keeps revision mode active while showing property differences', () => {
