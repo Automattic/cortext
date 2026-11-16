@@ -579,12 +579,30 @@ export default function CollectionDataViews( {
 		[ dataFiltered, editableVisibleFields ]
 	);
 
+	// Inline field saves still in flight, keyed by row id, so archiving a row
+	// can wait for them instead of racing them to the server.
+	const pendingRowFieldSaves = useRef( new Map() );
 	const saveRowField = useCallback(
 		async ( rowId, fieldId, value ) => {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			const updated = await saveRowDocumentField( rowId, fieldId, value );
+			const save = saveRowDocumentField( rowId, fieldId, value );
+			const rowKey = normalizeRowId( rowId );
+			const rowSaves = pendingRowFieldSaves.current.get( rowKey ) ?? [];
+			pendingRowFieldSaves.current.set( rowKey, [ ...rowSaves, save ] );
+			const forgetSave = () => {
+				const remaining = (
+					pendingRowFieldSaves.current.get( rowKey ) ?? []
+				).filter( ( pending ) => pending !== save );
+				if ( remaining.length > 0 ) {
+					pendingRowFieldSaves.current.set( rowKey, remaining );
+				} else {
+					pendingRowFieldSaves.current.delete( rowKey );
+				}
+			};
+			save.then( forgetSave, forgetSave );
+			const updated = await save;
 			touchRecent( {
 				kind: 'row',
 				id: updated?.id ?? rowId,
@@ -1154,6 +1172,18 @@ export default function CollectionDataViews( {
 			}
 
 			setRowActionError( null );
+			const fieldSaves = await Promise.allSettled(
+				nextRows.flatMap(
+					( row ) =>
+						pendingRowFieldSaves.current.get(
+							normalizeRowId( row.id )
+						) ?? []
+				)
+			);
+			if ( fieldSaves.some( ( save ) => save.status === 'rejected' ) ) {
+				setRowActionError( archiveSaveFailureMessage() );
+				return;
+			}
 			const closesOpenRow =
 				openRowId &&
 				nextRows.some(

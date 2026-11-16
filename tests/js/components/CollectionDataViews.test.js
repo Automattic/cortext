@@ -1,4 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react';
+import { useContext } from '@wordpress/element';
 import { DataViews as mockDataViews } from '@wordpress/dataviews/wp';
 
 jest.mock( '@wordpress/api-fetch', () => ( {
@@ -117,6 +118,7 @@ jest.mock( '../../../src/components/dataViewScroll', () => {
 
 import { useCollectionFieldsContext } from '../../../src/components/CollectionFieldsContext';
 import CollectionDataViews from '../../../src/components/CollectionDataViews';
+import { RowMutationContext } from '../../../src/components/EditableCell';
 import { scrollToEndQuickly } from '../../../src/components/dataViewScroll';
 import { whenViewTransitionsSettled } from '../../../src/hooks/viewTransition';
 import useCollectionRows from '../../../src/hooks/useCollectionRows';
@@ -685,6 +687,109 @@ describe( 'CollectionDataViews archive actions', () => {
 		} );
 
 		expect( apiFetch ).not.toHaveBeenCalled();
+		expect(
+			await findAllByText(
+				'Could not save changes. Archive was canceled.'
+			)
+		).not.toHaveLength( 0 );
+	} );
+
+	function renderWithMutationContext( row ) {
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		const captured = {};
+		function CaptureMutationContext() {
+			captured.saveRowField =
+				useContext( RowMutationContext ).saveRowField;
+			return null;
+		}
+		const defaultImplementation = mockDataViews.getMockImplementation();
+		mockDataViews.mockImplementation( () => <CaptureMutationContext /> );
+		const view = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+		mockDataViews.mockImplementation( defaultImplementation );
+		const archiveAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'archive-row' );
+		return { ...view, archiveAction, captured };
+	}
+
+	it( 'waits for a pending field save before archiving the row', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		let resolveSave;
+		apiFetch.mockImplementation( ( { path } ) =>
+			path === '/wp/v2/crtxt_documents/1'
+				? new Promise( ( resolve ) => {
+						resolveSave = resolve;
+				  } )
+				: Promise.resolve( {
+						archived: [ 1 ],
+						post: { id: 1, status: 'crtxt_archived' },
+				  } )
+		);
+		const { archiveAction, captured } = renderWithMutationContext( row );
+
+		let savePromise;
+		let archivePromise;
+		act( () => {
+			savePromise = captured.saveRowField( 1, 'field-9', true );
+			archivePromise = archiveAction.callback( [ row ] );
+		} );
+		await act( async () => {
+			await Promise.resolve();
+		} );
+		expect( apiFetch ).not.toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/1/archive',
+			method: 'POST',
+		} );
+
+		await act( async () => {
+			resolveSave( { id: 1 } );
+			await savePromise;
+			await archivePromise;
+		} );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/1/archive',
+			method: 'POST',
+		} );
+	} );
+
+	it( 'aborts archive when a pending field save fails', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		let rejectSave;
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( ( resolve, reject ) => {
+					rejectSave = reject;
+				} )
+		);
+		const { archiveAction, captured, findAllByText } =
+			renderWithMutationContext( row );
+
+		let savePromise;
+		let archivePromise;
+		act( () => {
+			savePromise = captured
+				.saveRowField( 1, 'field-9', true )
+				.catch( () => null );
+			archivePromise = archiveAction.callback( [ row ] );
+		} );
+		await act( async () => {
+			rejectSave( new Error( 'offline' ) );
+			await savePromise;
+			await archivePromise;
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 		expect(
 			await findAllByText(
 				'Could not save changes. Archive was canceled.'
