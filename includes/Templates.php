@@ -384,7 +384,7 @@ final class Templates {
 			}
 
 			$type = (string) get_post_meta( $field_id, 'type', true );
-			if ( '' === $type || 'rollup' === $type ) {
+			if ( '' === $type || in_array( $type, array( 'rollup', 'formula' ), true ) ) {
 				if ( $reject_invalid ) {
 					return $this->invalid_field_error( $key );
 				}
