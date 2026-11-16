@@ -346,11 +346,7 @@ final class Templates {
 			return $set;
 		}
 
-		$written = $this->write_row_field_values( $post_id, $collection_id, $field_values );
-		if ( $written instanceof WP_Error ) {
-			wp_delete_post( $post_id, true );
-			return $written;
-		}
+		$this->write_row_field_values( $post_id, $collection_id, $field_values );
 
 		return $this->format_document_post( $post_id );
 	}
@@ -407,16 +403,17 @@ final class Templates {
 		return $value;
 	}
 
-	private function write_row_field_values( int $row_id, int $collection_id, array $field_values ): bool|WP_Error {
+	private function write_row_field_values( int $row_id, int $collection_id, array $field_values ): void {
 		$index = new FieldValueIndex();
 
 		foreach ( $field_values as $key => $value ) {
 			$field_id = (int) substr( $key, 6 );
 			$type     = (string) get_post_meta( $field_id, 'type', true );
 			if ( 'relation' === $type ) {
-				$synced = Relations::sync_relation_value( $row_id, $field_id, $value );
-				if ( $synced instanceof WP_Error ) {
-					return $synced;
+				// A default can point at a row that was deleted after the
+				// template was saved. Skip it, as with removed fields.
+				if ( Relations::sync_relation_value( $row_id, $field_id, $value ) instanceof WP_Error ) {
+					continue;
 				}
 				$index->index_row_field( $row_id, $field_id, $collection_id );
 				continue;
@@ -439,8 +436,6 @@ final class Templates {
 			}
 			$index->index_row_field( $row_id, $field_id, $collection_id );
 		}
-
-		return true;
 	}
 
 	private function starter_content( string $content ): string {

@@ -274,6 +274,37 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->assertTrue( has_term( $term_id, TraitTaxonomy::TAXONOMY, $row_id ) );
 	}
 
+	public function test_instantiate_row_template_skips_relation_default_to_deleted_row(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$tasks_id    = $this->create_collection( 'Tasks' );
+		$people_id   = $this->create_collection( 'People' );
+		$owner_id    = $this->attach_field( $tasks_id, 'Owner', 'relation' );
+		$tasks_rel   = $this->attach_field( $people_id, 'Tasks', 'relation' );
+		$person_id   = $this->create_row( $people_id, 'Ada' );
+		update_post_meta( $owner_id, 'related_collection_id', (string) $people_id );
+		update_post_meta( $owner_id, 'relation_reverse_field_id', (string) $tasks_rel );
+		update_post_meta( $tasks_rel, 'related_collection_id', (string) $tasks_id );
+		update_post_meta( $tasks_rel, 'relation_reverse_field_id', (string) $owner_id );
+		$template_id = $this->create_template(
+			array(
+				'kind'          => Templates::KIND_ROW,
+				'collection_id' => $tasks_id,
+				'title'         => 'Task starter',
+				'field_values'  => array( 'field-' . $owner_id => array( $person_id ) ),
+			)
+		);
+		$path = '/cortext/v1/templates/' . $template_id . '/instantiate';
+
+		$linked = $this->request( 'POST', $path );
+		$this->assertSame( 201, $linked->get_status() );
+		$this->assertSame( array( $person_id ), Relations::relation_values( (int) $linked->get_data()['document']['id'], $owner_id ) );
+
+		wp_delete_post( $person_id, true );
+		$unlinked = $this->request( 'POST', $path );
+		$this->assertSame( 201, $unlinked->get_status(), wp_json_encode( $unlinked->get_data() ) );
+		$this->assertSame( array(), Relations::relation_values( (int) $unlinked->get_data()['document']['id'], $owner_id ) );
+	}
+
 	public function test_rejects_row_template_defaults_for_fields_outside_collection(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'Tasks' );
