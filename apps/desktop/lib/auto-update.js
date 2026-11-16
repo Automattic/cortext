@@ -257,10 +257,10 @@ function checkForUpdatesInteractive() {
 		showMessage( {
 			type: 'info',
 			message: branchBuild
-				? 'This build does not receive updates'
+				? 'This build does not update automatically'
 				: 'Use the installed app for updates',
 			detail: branchBuild
-				? `Cortext ${ app.getVersion() } was built from a branch. Install a release to get updates.`
+				? `Cortext ${ app.getVersion() } was built from a branch. Install a release to get automatic updates.`
 				: 'Run the installed Cortext app to check for updates.',
 			buttons: [ 'OK' ],
 		} );

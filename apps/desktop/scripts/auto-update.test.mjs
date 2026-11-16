@@ -126,6 +126,6 @@ test( 'a branch build says so instead of offering to check', () => {
 	checkForUpdatesInteractive();
 
 	assert.equal( calls.dialogs.length, 1 );
-	assert.match( calls.dialogs[ 0 ].message, /does not receive updates/ );
+	assert.match( calls.dialogs[ 0 ].message, /does not update automatically/ );
 	assert.match( calls.dialogs[ 0 ].detail, /0\.2\.0-b6d0105/ );
 } );
