@@ -233,9 +233,9 @@ function runCheck( { manual } ) {
 	autoUpdater.checkForUpdates().catch( reportError );
 }
 
-// Run a silent launch check and schedule later checks. If electron-updater
-// cannot load in a packaged build, use the old notify-only checker so users
-// still hear about updates.
+// Run a silent launch check and schedule later checks. A packaged build that
+// does not run electron-updater, because it is a branch build or the updater
+// cannot load, uses the notify-only checker so users still hear about updates.
 function scheduleUpdateCheck( options = {} ) {
 	// Keep packaged smoke tests offline and suppress update dialogs.
 	if ( process.env.CORTEXT_E2E === '1' ) {
