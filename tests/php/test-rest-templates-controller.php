@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\Documents;
+use Cortext\Formula\Compiler as FormulaCompiler;
 use Cortext\Plugin;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
@@ -349,6 +350,27 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->assertSame( array(), Relations::relation_values( (int) $unlinked->get_data()['document']['id'], $owner_id ) );
 	}
 
+	public function test_instantiate_row_template_computes_formula_values(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'Tasks' );
+		$score_id      = $this->attach_field( $collection_id, 'Score', 'number' );
+		$total_id      = $this->attach_formula_field( $collection_id, 'field("Score") * 2' );
+		$template_id   = $this->create_template(
+			array(
+				'kind'          => Templates::KIND_ROW,
+				'collection_id' => $collection_id,
+				'title'         => 'Task starter',
+				'field_values'  => array( 'field-' . $score_id => 21 ),
+			)
+		);
+
+		$response = $this->request( 'POST', '/cortext/v1/templates/' . $template_id . '/instantiate' );
+
+		$this->assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$row_id = (int) $response->get_data()['document']['id'];
+		$this->assertSame( 42.0, (float) get_post_meta( $row_id, Relations::meta_key( $total_id ), true ) );
+	}
+
 	public function test_rejects_row_template_defaults_for_fields_outside_collection(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'Tasks' );
@@ -488,6 +510,14 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		);
 		$this->assertGreaterThan( 0, $field_id );
 		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
+		return $field_id;
+	}
+
+	private function attach_formula_field( int $collection_id, string $expression ): int {
+		$field_id = $this->attach_field( $collection_id, 'Formula', 'formula' );
+		$compiled = ( new FormulaCompiler() )->compile( $expression, $collection_id, $field_id );
+		update_post_meta( $field_id, 'formula_ast', wp_json_encode( $compiled['ast'] ) );
+		update_post_meta( $field_id, 'formula_dep_field_ids', wp_json_encode( $compiled['deps'] ) );
 		return $field_id;
 	}
 

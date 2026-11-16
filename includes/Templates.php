@@ -358,6 +358,7 @@ final class Templates {
 		}
 
 		$this->write_row_field_values( $post_id, $collection_id, $field_values );
+		Document::materialize_row_formulas( $collection_id, $post_id );
 
 		return $this->format_document_post( $post_id );
 	}

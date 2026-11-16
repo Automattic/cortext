@@ -792,7 +792,19 @@ final class Document {
 			$index->index_row_field( $row_id, $field_id, $collection_id );
 		}
 
+		self::materialize_row_formulas( $collection_id, $row_id );
+	}
+
+	/**
+	 * Computes a row's formula values and indexes them, so filters and sorts
+	 * on formula fields see the row without waiting for a later read.
+	 *
+	 * @param int $collection_id Collection the row belongs to.
+	 * @param int $row_id        Row document id.
+	 */
+	public static function materialize_row_formulas( int $collection_id, int $row_id ): void {
 		FormulaMaterializer::recompute_row( $collection_id, $row_id );
+		$index = new FieldValueIndex();
 		foreach ( self::collection_field_ids( $collection_id ) as $field_id ) {
 			if ( 'formula' === (string) get_post_meta( $field_id, 'type', true ) ) {
 				$index->index_row_field( $row_id, $field_id, $collection_id );
