@@ -75,9 +75,10 @@ jest.mock( '../../../src/components/MediaPicker', () => ( {
 	MediaUploadCheck: () => null,
 } ) );
 
+const mockAfterNextPaint = jest.fn();
 jest.mock( '../../../src/hooks/afterNextPaint', () => ( {
 	__esModule: true,
-	default: () => () => {},
+	default: ( ...args ) => mockAfterNextPaint( ...args ),
 } ) );
 
 const {
@@ -86,6 +87,7 @@ const {
 	collectDuplicateHeaderClientIds,
 	getDocumentSurfaceFocusClientId,
 	getEditorBodyMutationPermissions,
+	isEditorPostReadyForHeaderRepair,
 	projectIframeRectToParent,
 	rectsOverlap,
 	scheduleDocumentSurfaceFocus,
@@ -95,6 +97,14 @@ const { renderHook } = require( '@testing-library/react' );
 
 const COLLECTION_ID = 7;
 const OWNER = 'cortext/data-view';
+
+describe( 'isEditorPostReadyForHeaderRepair', () => {
+	it( 'waits until core/editor has hydrated the target post', () => {
+		expect( isEditorPostReadyForHeaderRepair( null, 42 ) ).toBe( false );
+		expect( isEditorPostReadyForHeaderRepair( 41, 42 ) ).toBe( false );
+		expect( isEditorPostReadyForHeaderRepair( '42', 42 ) ).toBe( true );
+	} );
+} );
 
 function ownerBlock( clientId, collectionId ) {
 	return {
@@ -166,29 +176,33 @@ describe( 'getDocumentSurfaceFocusClientId', () => {
 
 describe( 'scheduleDocumentSurfaceFocus', () => {
 	function setup() {
-		let frameCallback;
-		const ownerWindow = {
-			requestAnimationFrame: jest.fn( ( callback ) => {
-				frameCallback = callback;
-				return 7;
-			} ),
-			cancelAnimationFrame: jest.fn(),
-		};
+		let resolvePaint;
+		const ownerWindow = {};
 		const selectBlock = jest.fn();
 		const completeSurfaceFocus = jest.fn( ( token, onConsume ) => {
 			onConsume();
 			return true;
 		} );
+		mockAfterNextPaint.mockReset();
+		mockAfterNextPaint.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					resolvePaint = resolve;
+				} )
+		);
 
 		return {
 			completeSurfaceFocus,
 			ownerWindow,
-			runFrame: () => frameCallback(),
+			runPaint: async () => {
+				resolvePaint();
+				await Promise.resolve();
+			},
 			selectBlock,
 		};
 	}
 
-	it( 'clears the selection, then revalidates and places the caret on the next frame', () => {
+	it( 'clears the selection, then revalidates and places the caret after paint', async () => {
 		const state = setup();
 		scheduleDocumentSurfaceFocus( {
 			clientId: 'body',
@@ -203,7 +217,7 @@ describe( 'scheduleDocumentSurfaceFocus', () => {
 		expect( state.selectBlock ).toHaveBeenCalledWith( 'body', null );
 		expect( state.completeSurfaceFocus ).not.toHaveBeenCalled();
 
-		state.runFrame();
+		await state.runPaint();
 
 		expect( state.completeSurfaceFocus ).toHaveBeenCalledWith(
 			9,
@@ -212,7 +226,7 @@ describe( 'scheduleDocumentSurfaceFocus', () => {
 		expect( state.selectBlock ).toHaveBeenLastCalledWith( 'body', 0 );
 	} );
 
-	it( 'stops if the request is cancelled before the next frame', () => {
+	it( 'stops if the request is cancelled before the next paint', async () => {
 		const state = setup();
 		let requestIsCurrent = true;
 		scheduleDocumentSurfaceFocus( {
@@ -226,7 +240,7 @@ describe( 'scheduleDocumentSurfaceFocus', () => {
 		} );
 		requestIsCurrent = false;
 
-		state.runFrame();
+		await state.runPaint();
 
 		expect( state.completeSurfaceFocus ).not.toHaveBeenCalled();
 		expect( state.selectBlock ).toHaveBeenCalledTimes( 1 );

@@ -159,6 +159,15 @@ function waitForProcessExit( child, timeoutMs, label ) {
 	} );
 }
 
+// ESRCH means the group is gone. EPERM means the kernel refuses to signal what
+// is left of it; we have seen that while an Electron helper outlived the app
+// and was exiting. The refusal is not understood, but neither case leaves
+// anything we can wait on or kill, and throwing fails a test that already
+// passed.
+function processGroupIsUnreachable( error ) {
+	return error.code === 'ESRCH' || error.code === 'EPERM';
+}
+
 function signalProcessGroup( child, signal ) {
 	if ( ! child?.pid ) {
 		return false;
@@ -167,14 +176,14 @@ function signalProcessGroup( child, signal ) {
 		process.kill( -child.pid, signal );
 		return true;
 	} catch ( error ) {
-		if ( error.code === 'ESRCH' ) {
+		if ( processGroupIsUnreachable( error ) ) {
 			return false;
 		}
 		throw error;
 	}
 }
 
-async function terminateProcessGroup( child ) {
+export async function terminateProcessGroup( child ) {
 	if ( ! child?.pid || ! signalProcessGroup( child, 'SIGTERM' ) ) {
 		return;
 	}
@@ -185,7 +194,7 @@ async function terminateProcessGroup( child ) {
 		try {
 			process.kill( -child.pid, 0 );
 		} catch ( error ) {
-			if ( error.code === 'ESRCH' ) {
+			if ( processGroupIsUnreachable( error ) ) {
 				return;
 			}
 			throw error;
@@ -201,7 +210,7 @@ async function assertProcessGroupIsClosed( child, label ) {
 		try {
 			process.kill( -child.pid, 0 );
 		} catch ( error ) {
-			if ( error.code === 'ESRCH' ) {
+			if ( processGroupIsUnreachable( error ) ) {
 				return;
 			}
 			throw error;
@@ -212,6 +221,22 @@ async function assertProcessGroupIsClosed( child, label ) {
 	throw new Error(
 		`${ label } left one or more processes running after shutdown.`
 	);
+}
+
+// Runs every step even when one throws, and hands back the first failure. A
+// throw inside a `finally` replaces whatever error was already on its way out,
+// so cleanup that raises on its own turns a canvas that never painted into a
+// teardown error nobody can act on.
+export async function runCleanupSteps( steps ) {
+	let firstError = null;
+	for ( const step of steps ) {
+		try {
+			await step();
+		} catch ( error ) {
+			firstError = firstError ?? error;
+		}
+	}
+	return firstError;
 }
 
 export function request( url, timeoutMs = 2_000 ) {
@@ -478,13 +503,22 @@ async function runSmoke( appPath ) {
 		if ( browser ) {
 			await browser.close().catch( () => {} );
 		}
-		await terminateProcessGroup( second?.child );
-		await terminateProcessGroup( first?.child );
-		rmSync( tempRoot, {
-			force: true,
-			maxRetries: 3,
-			recursive: true,
-		} );
+		const cleanupError = await runCleanupSteps( [
+			() => terminateProcessGroup( second?.child ),
+			() => terminateProcessGroup( first?.child ),
+			() =>
+				rmSync( tempRoot, {
+					force: true,
+					maxRetries: 3,
+					recursive: true,
+				} ),
+		] );
+		if ( completed && cleanupError ) {
+			throw cleanupError;
+		}
+		if ( cleanupError ) {
+			console.error( `Cleanup also failed: ${ cleanupError.message }` );
+		}
 		if ( ! completed ) {
 			console.error( 'Cleaned up after failed smoke test.' );
 		}

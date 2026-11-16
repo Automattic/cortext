@@ -6,8 +6,83 @@ import test from 'node:test';
 import {
 	appendErrorDetails,
 	request,
+	runCleanupSteps,
+	terminateProcessGroup,
 	waitForCortextShell,
 } from './packaged-app-smoke.mjs';
+
+test( 'cleanup finishes every step after one of them throws', async () => {
+	const ran = [];
+	const error = await runCleanupSteps( [
+		() => ran.push( 'stop second' ),
+		() => {
+			ran.push( 'stop first' );
+			throw new Error( 'kill EPERM' );
+		},
+		() => ran.push( 'remove temp dir' ),
+	] );
+
+	assert.deepEqual( ran, [ 'stop second', 'stop first', 'remove temp dir' ] );
+	assert.match( error.message, /kill EPERM/ );
+} );
+
+test( 'cleanup reports the first failure, not the last', async () => {
+	const error = await runCleanupSteps( [
+		() => {
+			throw new Error( 'first' );
+		},
+		() => {
+			throw new Error( 'second' );
+		},
+	] );
+
+	assert.match( error.message, /first/ );
+} );
+
+test( 'cleanup reports nothing when every step works', async () => {
+	assert.equal( await runCleanupSteps( [ () => {}, async () => {} ] ), null );
+} );
+
+function killError( code ) {
+	const error = new Error( `kill ${ code }` );
+	error.code = code;
+	return error;
+}
+
+// The signal lands, then the group stops answering with the given code.
+function killStub( t, code ) {
+	const signals = [];
+	t.mock.method( process, 'kill', ( pid, signal ) => {
+		signals.push( signal );
+		if ( signals.length === 1 ) {
+			return true;
+		}
+		throw killError( code );
+	} );
+	return signals;
+}
+
+test( 'teardown stops waiting when the process group is no longer ours', async ( t ) => {
+	const signals = killStub( t, 'EPERM' );
+
+	await terminateProcessGroup( { pid: 4242 } );
+
+	assert.deepEqual( signals, [ 'SIGTERM', 0 ] );
+} );
+
+test( 'teardown stops waiting once the process group is gone', async ( t ) => {
+	const signals = killStub( t, 'ESRCH' );
+
+	await terminateProcessGroup( { pid: 4242 } );
+
+	assert.deepEqual( signals, [ 'SIGTERM', 0 ] );
+} );
+
+test( 'teardown still reports an error it cannot explain', async ( t ) => {
+	killStub( t, 'EINVAL' );
+
+	await assert.rejects( terminateProcessGroup( { pid: 4242 } ), /EINVAL/ );
+} );
 
 test( 'keeps packaged output in an already rendered error stack', () => {
 	const error = new Error( 'Canvas did not load.' );

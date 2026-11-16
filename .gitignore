@@ -6,6 +6,7 @@ wordpress/
 # Build outputs
 build/
 dist/
+languages/
 playground/gallery/cortext.zip
 
 # macOS

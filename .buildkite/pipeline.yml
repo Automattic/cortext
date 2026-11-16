@@ -20,7 +20,6 @@ steps:
 
   # Cortext ships no Windows build yet.
   # This is just a walking skeleton to ensure code signing is at least set up correctly.
-  # See https://linear.app/a8c/issue/AINFRA-2751
   - label: ":windows: Verify Azure Artifact Signing setup"
     key: verify-windows-signing
     agents:

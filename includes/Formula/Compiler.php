@@ -289,6 +289,7 @@ final class Compiler {
 		if ( 1 !== count( $args ) || 'literal' !== ( $args[0]['node'] ?? '' ) || 'text' !== ( $args[0]['type'] ?? '' ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_invalid_prop',
+				/* translators: field() and prop() are canonical formula function names and must remain in English. */
 				__( 'Use a quoted field name, like field("Price"). prop("Price") works too.', 'cortext' )
 			);
 		}

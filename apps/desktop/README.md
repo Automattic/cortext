@@ -135,9 +135,9 @@ CORTEXT_RUNTIME=php-fpm npm --prefix apps/desktop start
 
 `php` is the default. It uses `apps/desktop/runtime/bin/php` first, then
 falls back to `php` on `PATH`. Set `CORTEXT_PHP_BIN` to force a specific
-binary. PHP's built-in server runs four worker children so request-heavy pages
-do not serialize; set `CORTEXT_PHP_CLI_SERVER_WORKERS` to change the count.
-Windows always uses a single worker.
+binary. Set `CORTEXT_PHP_CLI_SERVER_WORKERS=4` to run PHP's built-in server
+with worker children for request-heavy pages. Windows always uses a single
+worker.
 
 `franken` expects FrankenPHP at `apps/desktop/runtime/bin/frankenphp`, on
 `PATH`, or at `CORTEXT_FRANKENPHP_BIN`. Install the local binary with:

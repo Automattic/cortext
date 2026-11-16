@@ -6,12 +6,53 @@ import { seen as seenIcon, unseen as unseenIcon } from '@wordpress/icons';
 import './FormulaConfig.scss';
 
 import { useCollectionFieldsContext } from '../CollectionFieldsContext';
+import { fieldTypeLabel } from './fieldTypes';
 
+// Labels are localized for display, while reference names remain stable parts
+// of the formula DSL.
+const BUILT_IN_FIELD_DESCRIPTION = __( 'Built-in field', 'cortext' );
 const SYSTEM_FIELDS = [
-	{ label: 'Title', type: 'text' },
-	{ label: 'Created', type: 'datetime' },
-	{ label: 'Last edited', type: 'datetime' },
+	{
+		description: BUILT_IN_FIELD_DESCRIPTION,
+		label: __(
+			/* translators: Display label only. Formula references keep the canonical name "Title" in English. */
+			'Title',
+			'cortext'
+		),
+		referenceName: 'Title',
+		type: 'text',
+	},
+	{
+		description: BUILT_IN_FIELD_DESCRIPTION,
+		label: __(
+			/* translators: Display label only. Formula references keep the canonical name "Created" in English. */
+			'Created',
+			'cortext'
+		),
+		referenceName: 'Created',
+		type: 'datetime',
+	},
+	{
+		description: BUILT_IN_FIELD_DESCRIPTION,
+		label: __(
+			/* translators: Display label only. Formula references keep the canonical name "Last edited" in English. */
+			'Last edited',
+			'cortext'
+		),
+		referenceName: 'Last edited',
+		type: 'datetime',
+	},
 ];
+
+const FORMULA_TYPE_LABELS = {
+	alias: __( 'Alias', 'cortext' ),
+	field: __( 'Field', 'cortext' ),
+	'same type': __( 'Same type', 'cortext' ),
+};
+
+function typeLabel( type ) {
+	return FORMULA_TYPE_LABELS[ type ] ?? fieldTypeLabel( type ) ?? type;
+}
 
 const UNSUPPORTED_FIELD_REF_TYPES = new Set( [
 	'multiselect',
@@ -54,7 +95,11 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'prop("")',
 		caretOffset: 'prop("'.length,
 		type: 'alias',
-		description: __( 'Works the same as field().', 'cortext' ),
+		description: __(
+			/* translators: field() is a canonical formula function name and must remain in English. */
+			'Works the same as field().',
+			'cortext'
+		),
 	},
 	{
 		label: 'concat',
@@ -322,8 +367,11 @@ function escapePropName( name ) {
 }
 
 function uniqueProperties( fields, excludeRecordId ) {
-	const options = [ ...SYSTEM_FIELDS ];
-	const seen = new Set( options.map( ( option ) => option.label ) );
+	const options = SYSTEM_FIELDS.map( ( option ) => ( {
+		...option,
+		typeLabel: typeLabel( option.type ),
+	} ) );
+	const seen = new Set( options.map( ( option ) => option.referenceName ) );
 	fields.forEach( ( field ) => {
 		if (
 			field.recordId === excludeRecordId ||
@@ -336,9 +384,12 @@ function uniqueProperties( fields, excludeRecordId ) {
 			return;
 		}
 		seen.add( field.label );
+		const type = field.formulaResultType ?? field.cortextType ?? 'text';
 		options.push( {
 			label: field.label,
-			type: field.formulaResultType ?? field.cortextType ?? 'text',
+			referenceName: field.label,
+			type,
+			typeLabel: typeLabel( type ),
 		} );
 	} );
 	return options;
@@ -394,11 +445,14 @@ export default function FormulaConfig( {
 				.map( ( completion ) => ( {
 					...completion,
 					kind: 'function',
+					typeLabel: typeLabel( completion.type ),
 				} ) );
 		}
 		return properties
 			.filter( ( property ) =>
-				property.label.toLowerCase().includes( needle )
+				`${ property.label } ${ property.referenceName }`
+					.toLowerCase()
+					.includes( needle )
 			)
 			.slice( 0, 8 )
 			.map( ( property ) => ( {
@@ -424,7 +478,7 @@ export default function FormulaConfig( {
 			insertText = suggestion.insertText;
 			nextCaret = activeMatch.start + suggestion.caretOffset;
 		} else {
-			const escaped = escapePropName( suggestion.label );
+			const escaped = escapePropName( suggestion.referenceName );
 			const hasClosingSuffix = expression
 				.slice( activeMatch.end )
 				.startsWith( '")' );
@@ -600,7 +654,9 @@ export default function FormulaConfig( {
 					>
 						{ suggestions.map( ( suggestion, index ) => (
 							<button
-								key={ `${ suggestion.kind }-${ suggestion.label }` }
+								key={ `${ suggestion.kind }-${
+									suggestion.referenceName ?? suggestion.label
+								}` }
 								type="button"
 								className={
 									'cortext-formula-config__suggestion' +
@@ -626,7 +682,7 @@ export default function FormulaConfig( {
 										</small>
 									) : null }
 								</span>
-								<code>{ suggestion.type }</code>
+								<code>{ suggestion.typeLabel }</code>
 							</button>
 						) ) }
 					</div>
@@ -692,7 +748,13 @@ function FormulaReference() {
 		<div className="cortext-formula-reference">
 			<div className="cortext-formula-reference__header">
 				<strong>{ __( 'Formula language', 'cortext' ) }</strong>
-				<span>{ __( 'v0', 'cortext' ) }</span>
+				<span>
+					{ __(
+						/* translators: Technical version identifier for the formula language. */
+						'v0',
+						'cortext'
+					) }
+				</span>
 			</div>
 			<FormulaReferenceSection title={ __( 'Fields', 'cortext' ) }>
 				<FormulaReferenceRow
@@ -701,11 +763,16 @@ function FormulaReference() {
 				/>
 				<FormulaReferenceRow
 					code={ 'prop("Price")' }
-					text={ __( 'Works the same as field().', 'cortext' ) }
+					text={ __(
+						/* translators: field() is a canonical formula function name and must remain in English. */
+						'Works the same as field().',
+						'cortext'
+					) }
 				/>
 				<FormulaReferenceRow
 					code={ 'field("Title")' }
 					text={ __(
+						/* translators: Title, Created, and Last edited are canonical formula field names and must remain in English. */
 						'Built-in fields: Title, Created, Last edited.',
 						'cortext'
 					) }
@@ -750,6 +817,7 @@ function FormulaReference() {
 				<FormulaReferenceRow
 					code={ '=  ==  !=  >  <  >=  <=' }
 					text={ __(
+						/* translators: true and false are canonical formula literals and must remain in English. */
 						'Comparisons return true or false.',
 						'cortext'
 					) }
@@ -784,6 +852,7 @@ function FormulaReference() {
 				<FormulaReferenceRow
 					code={ 'if(condition, then, else)' }
 					text={ __(
+						/* translators: then, else, and v0 are labels in the canonical formula reference shown alongside this text. */
 						'The then and else values must use the same type in v0.',
 						'cortext'
 					) }
@@ -797,6 +866,7 @@ function FormulaReference() {
 				<FormulaReferenceRow
 					code={ 'dateBetween(a, b, "days")' }
 					text={ __(
+						/* translators: minutes, hours, days, weeks, months, and years are canonical formula unit values and must remain in English. */
 						'Difference between two dates. Units: minutes, hours, days, weeks, months, years.',
 						'cortext'
 					) }
@@ -804,6 +874,7 @@ function FormulaReference() {
 				<FormulaReferenceRow
 					code={ 'formatDate(d, "YYYY-MM-DD")' }
 					text={ __(
+						/* translators: The date-format tokens are canonical formula syntax and must remain unchanged. */
 						'Format a date as text. Tokens: YYYY, Y, MMMM, MMM, MM, DD, D, h, mm, A.',
 						'cortext'
 					) }

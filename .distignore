@@ -42,6 +42,7 @@
 
 # Source, tooling, tests, docs, and the desktop app (not part of the plugin)
 /src
+/languages
 /apps
 /scripts
 /tests

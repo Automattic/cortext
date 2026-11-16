@@ -236,6 +236,301 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertSame( $before_revisions, $after_revisions );
 	}
 
+	public function test_core_rest_requires_trash_before_permanently_deleting_an_archived_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$post_id = $this->create_page();
+		$this->archive( $post_id );
+
+		$delete_request = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_documents/' . $post_id );
+		$delete_request->set_param( 'force', true );
+		$delete_response = rest_do_request( $delete_request );
+
+		$this->assertSame( 400, $delete_response->get_status() );
+		$this->assertSame( 'cortext_document_not_trashed', $delete_response->get_data()['code'] );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $post_id ) );
+		$this->assertSame( 'publish', get_post_meta( $post_id, ArchiveCascade::STATUS_META, true ) );
+
+		$trash_request  = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_documents/' . $post_id );
+		$trash_response = rest_do_request( $trash_request );
+
+		$this->assertSame( 200, $trash_response->get_status() );
+		$this->assertSame( Documents::STATUS_TRASH, get_post_status( $post_id ) );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_meta( $post_id, '_wp_trash_meta_status', true ) );
+
+		$this->assertSame( 200, $this->permanent_delete( $post_id )->get_status() );
+		$this->assertNull( get_post( $post_id ) );
+	}
+
+	public function test_core_rest_rejects_creating_active_documents_under_archived_parents(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id = $this->create_page();
+		$this->archive( $parent_id );
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'title', 'Blocked child' );
+		$request->set_param( 'status', 'publish' );
+		$request->set_param( 'parent', $parent_id );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'cortext_document_archived_container', $response->get_data()['code'] );
+		$this->assertSame( $parent_id, $response->get_data()['data']['container_id'] );
+		$this->assertSame(
+			array(),
+			get_posts(
+				array(
+					'post_type'   => Document::POST_TYPE,
+					'post_status' => 'any',
+					'title'       => 'Blocked child',
+					'fields'      => 'ids',
+				)
+			)
+		);
+	}
+
+	public function test_core_rest_rejects_creating_active_rows_in_archived_collections(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$filler_term = wp_insert_term( 'Filler', TraitTaxonomy::TAXONOMY, array( 'slug' => 'filler' ) );
+		$this->assertIsArray( $filler_term );
+		$collection_id = $this->create_full_page_collection( 'archived-create-target' );
+		$this->assertNotSame( $collection_id, TraitTaxonomy::term_id_for_trait( $collection_id ) );
+		$this->archive( $collection_id );
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'title', 'Blocked row' );
+		$request->set_param( 'status', 'publish' );
+		$request->set_param( 'cortext_trait', $collection_id );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'cortext_document_archived_container', $response->get_data()['code'] );
+		$this->assertSame( $collection_id, $response->get_data()['data']['container_id'] );
+		$this->assertSame(
+			array(),
+			get_posts(
+				array(
+					'post_type'   => Document::POST_TYPE,
+					'post_status' => 'any',
+					'title'       => 'Blocked row',
+					'fields'      => 'ids',
+				)
+			)
+		);
+	}
+
+	public function test_core_rest_rejects_native_trait_terms_for_archived_collections(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$filler_term = wp_insert_term( 'Native filler', TraitTaxonomy::TAXONOMY, array( 'slug' => 'native-filler' ) );
+		$this->assertIsArray( $filler_term );
+		$collection_id = $this->create_full_page_collection( 'archived-native-trait-target' );
+		$term_id       = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertNotSame( $collection_id, $term_id );
+		$this->archive( $collection_id );
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'title', 'Blocked native row' );
+		$request->set_param( 'status', 'publish' );
+		$request->set_param( TraitTaxonomy::TAXONOMY, array( $term_id ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'cortext_document_archived_container', $response->get_data()['code'] );
+		$this->assertSame( $collection_id, $response->get_data()['data']['container_id'] );
+	}
+
+	public function test_core_rest_lets_a_valid_trait_param_override_archived_native_terms(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$active_collection_id   = $this->create_full_page_collection( 'active-trait-winner' );
+		$archived_collection_id = $this->create_full_page_collection( 'archived-native-loser' );
+		$archived_term_id       = TraitTaxonomy::term_id_for_trait( $archived_collection_id );
+		$this->archive( $archived_collection_id );
+		// WordPress applies the native terms first. `assign_trait_from_request` then
+		// replaces them with the collection from `cortext_trait`.
+		add_action( 'rest_after_insert_' . Document::POST_TYPE, array( new Document(), 'assign_trait_from_request' ), 10, 3 );
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'title', 'Row despite stale native terms' );
+		$request->set_param( 'status', 'publish' );
+		$request->set_param( 'cortext_trait', $active_collection_id );
+		$request->set_param( TraitTaxonomy::TAXONOMY, array( $archived_term_id ) );
+
+		$response = rest_do_request( $request );
+		remove_all_actions( 'rest_after_insert_' . Document::POST_TYPE );
+
+		$this->assertSame( 201, $response->get_status() );
+		$row_id = (int) $response->get_data()['id'];
+		$this->assertSame(
+			array( TraitTaxonomy::term_id_for_trait( $active_collection_id ) ),
+			array_map( 'intval', wp_get_object_terms( $row_id, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) ) )
+		);
+	}
+
+	public function test_core_rest_rejects_moving_active_documents_into_archived_containers(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id     = $this->create_page();
+		$collection_id = $this->create_full_page_collection( 'archived-update-target' );
+		$page_id       = $this->create_page( array( 'post_title' => 'Original page' ) );
+		$row_id        = $this->create_page( array( 'post_title' => 'Original row' ) );
+		$this->archive( $parent_id );
+		$this->archive( $collection_id );
+
+		$parent_request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $page_id );
+		$parent_request->set_param( 'parent', $parent_id );
+		$parent_request->set_param( 'title', 'Changed page' );
+		$parent_response = rest_do_request( $parent_request );
+
+		$trait_request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $row_id );
+		$trait_request->set_param( 'cortext_trait', $collection_id );
+		$trait_request->set_param( 'title', 'Changed row' );
+		$trait_response = rest_do_request( $trait_request );
+
+		$this->assertSame( 409, $parent_response->get_status() );
+		$this->assertSame( 409, $trait_response->get_status() );
+		$this->assertSame( 0, (int) get_post( $page_id )->post_parent );
+		$this->assertSame( 'Original page', get_post( $page_id )->post_title );
+		$this->assertSame( 'Original row', get_post( $row_id )->post_title );
+		$this->assertSame(
+			array(),
+			wp_get_object_terms( $row_id, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) )
+		);
+	}
+
+	public function test_core_rest_rejects_writes_to_active_documents_still_in_archived_containers(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id     = $this->create_page();
+		$collection_id = $this->create_full_page_collection( 'archived-existing-container' );
+		$this->archive( $parent_id );
+		$this->archive( $collection_id );
+		$child_id  = $this->create_page(
+			array(
+				'post_content' => 'Existing content',
+				'post_parent'  => $parent_id,
+				'post_title'   => 'Existing child',
+			)
+		);
+		$row_id    = $this->create_row( $collection_id );
+		$row_title = get_post( $row_id )->post_title;
+
+		$child_request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $child_id );
+		$child_request->set_param( 'title', 'Changed child' );
+		$row_request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $row_id );
+		$row_request->set_param( 'title', 'Changed row' );
+		$autosave_request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents/' . $child_id . '/autosaves' );
+		$autosave_request->set_param( 'content', 'Changed content' );
+
+		$this->assertSame( 409, rest_do_request( $child_request )->get_status() );
+		$this->assertSame( 409, rest_do_request( $row_request )->get_status() );
+		$this->assertSame( 409, rest_do_request( $autosave_request )->get_status() );
+		$this->assertSame( 'Existing child', get_post( $child_id )->post_title );
+		$this->assertSame( 'Existing content', get_post( $child_id )->post_content );
+		$this->assertSame( $row_title, get_post( $row_id )->post_title );
+	}
+
+	public function test_core_rest_allows_active_documents_to_leave_archived_containers_or_be_archived(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id     = $this->create_page();
+		$collection_id = $this->create_full_page_collection( 'archived-leave-target' );
+		$this->archive( $parent_id );
+		$this->archive( $collection_id );
+		$moved_id    = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$archived_id = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$row_id      = $this->create_row( $collection_id );
+
+		$move_request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $moved_id );
+		$move_request->set_param( 'parent', 0 );
+		$archive_request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $archived_id );
+		$archive_request->set_param( 'status', Documents::STATUS_ARCHIVED );
+		$leave_collection_request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $row_id );
+		$leave_collection_request->set_param( TraitTaxonomy::TAXONOMY, array() );
+
+		$this->assertSame( 200, rest_do_request( $move_request )->get_status() );
+		$this->assertSame( 200, rest_do_request( $archive_request )->get_status() );
+		$this->assertSame( 200, rest_do_request( $leave_collection_request )->get_status() );
+		$this->assertSame( 0, (int) get_post( $moved_id )->post_parent );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $archived_id ) );
+		$this->assertSame(
+			array(),
+			wp_get_object_terms( $row_id, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) )
+		);
+	}
+
+	public function test_cascaded_documents_cannot_be_unarchived_while_their_container_is_archived(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id = $this->create_page();
+		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$this->archive( $parent_id );
+
+		$response = $this->unarchive( $child_id );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'cortext_document_archived_container', $response->get_data()['code'] );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $child_id ) );
+		$this->assertSame( (string) $parent_id, (string) get_post_meta( $child_id, ArchiveCascade::PARENT_MARKER_META, true ) );
+	}
+
+	public function test_unarchive_rejects_descendants_that_belong_to_another_archived_container(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id     = $this->create_page();
+		$collection_id = $this->create_full_page_collection( 'overlapping-unarchive' );
+		$row_id        = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$term_id       = TraitTaxonomy::term_id_for_trait( $collection_id );
+		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+		$this->archive( $parent_id );
+		$this->archive( $collection_id );
+
+		$response = $this->unarchive( $parent_id );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'cortext_document_archived_container', $response->get_data()['code'] );
+		$this->assertSame( $collection_id, $response->get_data()['data']['container_id'] );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $parent_id ) );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $row_id ) );
+	}
+
+	public function test_trashed_document_cannot_be_restored_under_an_archived_parent(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id = $this->create_page();
+		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
+		wp_trash_post( $child_id );
+		$this->archive( $parent_id );
+
+		$response = $this->restore( $child_id );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'cortext_document_archived_container', $response->get_data()['code'] );
+		$this->assertSame( Documents::STATUS_TRASH, get_post_status( $child_id ) );
+	}
+
+	public function test_restore_rejects_descendants_that_belong_to_another_archived_container(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id     = $this->create_page();
+		$collection_id = $this->create_full_page_collection( 'overlapping-restore' );
+		$row_id        = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$term_id       = TraitTaxonomy::term_id_for_trait( $collection_id );
+		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+		wp_trash_post( $parent_id );
+		$this->archive( $collection_id );
+
+		$response = $this->restore( $parent_id );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'cortext_document_archived_container', $response->get_data()['code'] );
+		$this->assertSame( $collection_id, $response->get_data()['data']['container_id'] );
+		$this->assertSame( Documents::STATUS_TRASH, get_post_status( $parent_id ) );
+		$this->assertSame( Documents::STATUS_TRASH, get_post_status( $row_id ) );
+	}
+
 	public function test_core_rest_archive_checks_every_page_in_the_cascade(): void {
 		$author_id = $this->create_user( 'contributor' );
 		$other_id  = $this->create_user( 'contributor' );

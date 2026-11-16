@@ -55,7 +55,7 @@ jobs:
               with:
                   ref: ${{ inputs.ref || github.sha }}
 
-            - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+            - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
               with:
                   version: 11.0.8
                   standalone: true
@@ -65,7 +65,7 @@ jobs:
                   node-version: '24.15'
                   cache: 'pnpm'
 
-            - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+            - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
               with:
                   php-version: '8.1'
                   tools: composer:v2
@@ -251,7 +251,7 @@ jobs:
 
             - name: Create or update draft GitHub Release
               if: ${{ ! inputs.dry_run }}
-              uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+              uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
               with:
                   tag_name: ${{ steps.milestone.outputs.version }}
                   # Empty when run standalone without a ref: creation then

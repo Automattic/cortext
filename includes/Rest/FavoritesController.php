@@ -88,9 +88,9 @@ final class FavoritesController {
 			);
 		}
 
-		$user_id          = get_current_user_id();
-		$existing_slots   = $this->stored_favorite_slots( $user_id );
-		$existing_hidden  = array_fill_keys(
+		$user_id         = get_current_user_id();
+		$existing_slots  = $this->stored_favorite_slots( $user_id );
+		$existing_hidden = array_fill_keys(
 			array_column(
 				array_filter(
 					$existing_slots,
@@ -100,10 +100,9 @@ final class FavoritesController {
 			),
 			true
 		);
-		$formatted        = array();
-		$requested        = array();
-		$requested_hidden = array();
-		$seen             = array();
+		$formatted       = array();
+		$requested       = array();
+		$seen            = array();
 
 		foreach ( $favorites as $favorite ) {
 			if ( ! is_array( $favorite ) ) {
@@ -125,8 +124,7 @@ final class FavoritesController {
 					if ( ! isset( $existing_hidden[ $id ] ) ) {
 						return $target;
 					}
-					$seen[ $id ]        = true;
-					$requested_hidden[] = $id;
+					$seen[ $id ] = true;
 					continue;
 				}
 				return $target;
@@ -137,11 +135,7 @@ final class FavoritesController {
 			$formatted[] = $target;
 		}
 
-		$stored = $this->merge_with_hidden_favorites(
-			$existing_slots,
-			$requested,
-			$requested_hidden
-		);
+		$stored = $this->merge_with_hidden_favorites( $existing_slots, $requested );
 		update_user_meta( $user_id, self::META_KEY, $stored );
 
 		return new WP_REST_Response(
@@ -158,14 +152,9 @@ final class FavoritesController {
 	 *
 	 * @param array<int, array{id: int, hidden: bool}> $slots Existing valid slots.
 	 * @param array<int, int>                          $requested Requested visible IDs.
-	 * @param array<int, int>                          $requested_hidden Requested hidden IDs.
 	 * @return array<int, int>
 	 */
-	private function merge_with_hidden_favorites(
-		array $slots,
-		array $requested,
-		array $requested_hidden
-	): array {
+	private function merge_with_hidden_favorites( array $slots, array $requested ): array {
 		$stored          = array();
 		$emitted         = array();
 		$requested_index = 0;
@@ -200,15 +189,6 @@ final class FavoritesController {
 			$stored[]       = $id;
 			$emitted[ $id ] = true;
 		}
-
-		foreach ( $requested_hidden as $id ) {
-			if ( isset( $emitted[ $id ] ) ) {
-				continue;
-			}
-			$stored[]       = $id;
-			$emitted[ $id ] = true;
-		}
-
 		return $stored;
 	}
 
