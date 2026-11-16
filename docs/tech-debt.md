@@ -376,7 +376,9 @@ Reads have not moved. `useCollectionRows` still fetches full rows from `/cortext
 
 Every mutation still triggers `refresh()` and the row and trash invalidation events. `RowProperties` keeps optimistic values because its REST row can be stale after `core-data` saves a change.
 
-The row editor mounts inside a subregistry, which makes it look like row saves are split across two stores. They are not. `withRegistryProvider` in `@wordpress/editor` builds that subregistry with only `core/block-editor` and `core/editor` and passes the root registry as its fallback, so `core` resolves to the root. Property saves, editor autosave, and inline grid saves all reach the same entity store and share its per-record lock, so they serialize against each other. This is worth stating because the subregistry suggests the opposite. There is also a WordPress upgrade risk: if the post-type pre-persist hook starts adding sync metadata, every partial cell save will include it.
+`saveEntityRecord` also invalidates every resolved `getEntityRecords` query for `crtxt_document`, including the ones that hold no rows. Each field save and row creation refetches the document lists mounted at the time: the workspace page list, the collections list, and the home fallback. The first save of a row that `core-data` has not loaded also fetches that row. Editor saves cost the same, because `savePost` goes through `saveEntityRecord` too. Duplicate, trash, and restore avoid it: they receive the record without invalidation and then invalidate only the lists in `src/documents/invalidation.js`.
+
+The row editor mounts inside a subregistry, which makes it look like row saves are split across two stores. They are not. `withRegistryProvider` in `@wordpress/editor` builds that subregistry with only `core/block-editor` and `core/editor` and passes the root registry as its fallback, so `core` resolves to the root. Property saves, editor autosave, and inline grid saves all reach the same entity store and share its per-record lock, so they serialize against each other. This is worth stating because the subregistry suggests the opposite. Real-time collaboration changes what a partial save sends: when a sync document exists for the row, the post-type pre-persist hook adds it to `meta`, so every partial cell save carries it too.
 
 **Where.** Writes are in `src/components/rowDocumentMutations.js`, `src/components/rowDocumentCreation.js`, and `src/documents/mutations.js`. Custom reads and manual cache synchronization remain in `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, `src/hooks/useTrashedDocuments.js`, `src/components/CollectionDataViews.js`, `src/components/RowProperties.js`, `src/components/relations/RelationEditor.js`, `src/components/SidebarTrash.js`, and `src/router/EntityRoute.js`.
 
@@ -387,6 +389,8 @@ The row editor mounts inside a subregistry, which makes it look like row saves a
 -   Replace the optimistic `lastPage = ceil((totalItems+1)/perPage)` calculation in `onCreated` with the reactive `totalPages` value.
 -   Limit the server/client planner to deciding how to query IDs instead of using it as a record cache too.
 -   Resolve relation labels through the standard entity-record resolver instead of a one-off include query.
+
+Moving row reads does not remove the list refetch after each save. Its cost depends on how heavy the mounted list queries are.
 
 The record query must request `draft`, `private`, and `publish` explicitly. WordPress otherwise returns only published rows. Cross-document views such as Trash can stay behind `/cortext/v1/documents/*` endpoints.
 
