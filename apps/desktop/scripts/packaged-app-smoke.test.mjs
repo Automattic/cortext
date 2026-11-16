@@ -240,15 +240,42 @@ test( 'shell wait skips the runtime probe when the renderer never got there', as
 
 test( 'shell wait keeps the timeout when the report itself fails', async () => {
 	const page = fakePage( 2 );
-	page.evaluate = async () => {
-		throw new Error( 'Execution context was destroyed.' );
+	page.url = () => {
+		throw new Error( 'Target page has been closed.' );
 	};
 
 	await assert.rejects( waitForCortextShell( page ), ( error ) => {
 		assert.match( error.message, /Timeout 120000ms exceeded/ );
 		assert.match(
 			error.message,
-			/Could not describe the renderer: Execution context was destroyed\./
+			/Could not describe the renderer: Target page has been closed\./
+		);
+		return true;
+	} );
+} );
+
+// What the renderer logged is the best lead on why it stopped answering, so a
+// workspace that cannot be read must not take the rest of the report with it.
+test( 'shell wait keeps the rest of the report when the workspace cannot be read', async () => {
+	const page = fakePage( 2 );
+	page.on = ( event, handler ) => {
+		if ( event === 'pageerror' ) {
+			handler( new Error( 'Maximum call stack size exceeded' ) );
+		}
+	};
+	page.evaluate = async () => {
+		throw new Error( 'Execution context was destroyed.' );
+	};
+
+	await assert.rejects( waitForCortextShell( page ), ( error ) => {
+		assert.match( error.message, /No requests failed\./ );
+		assert.match(
+			error.message,
+			/Could not read the workspace: Execution context was destroyed\./
+		);
+		assert.match(
+			error.message,
+			/Renderer console:\n\s+pageerror: Maximum call stack size exceeded/
 		);
 		return true;
 	} );
@@ -266,7 +293,7 @@ test( 'shell wait gives up on a renderer that never answers', async ( t ) => {
 		assert.match( error.message, /Timeout 120000ms exceeded/ );
 		assert.match(
 			error.message,
-			/Could not describe the renderer: The renderer did not answer within 5000ms\./
+			/Could not read the workspace: The renderer did not answer within 5000ms\./
 		);
 		return true;
 	} );

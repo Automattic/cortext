@@ -423,6 +423,56 @@ function recordRendererActivity( page ) {
 	return { openedAt, inFlight, settled, messages };
 }
 
+async function describeWorkspace( page ) {
+	// Every pane stays mounted, active or not, so a canvas sitting in an
+	// inactive pane means the editor loaded and the workspace never switched to
+	// it. That is a different bug from a canvas that never mounted at all, and
+	// the active pane alone cannot tell the two apart. A renderer with a blocked
+	// main thread never answers, so the question gets a deadline of its own.
+	const dom = await answerWithin(
+		RENDERER_PROBE_TIMEOUT_MS,
+		'The renderer',
+		page.evaluate(
+			( selectors ) => ( {
+				// The workspace publishes the route it is on. A document target with
+				// no document pane below means the id never resolved.
+				targetKind:
+					document.querySelector( selectors.workspace )?.dataset
+						.targetKind ?? null,
+				panes: [ ...document.querySelectorAll( selectors.pane ) ].map(
+					( pane ) => ( {
+						active: pane.dataset.active === 'true',
+						canvases: pane.querySelectorAll( selectors.canvas ).length,
+						content: pane.firstElementChild?.className || '(empty)',
+					} )
+				),
+				markup:
+					document.querySelector( selectors.activePane )?.innerHTML ?? null,
+			} ),
+			{
+				workspace: WORKSPACE_SELECTOR,
+				pane: PANE_SELECTOR,
+				activePane: ACTIVE_PANE_SELECTOR,
+				canvas: CANVAS_SELECTOR,
+			}
+		)
+	);
+	const panes = dom.panes.map(
+		( pane, index ) =>
+			`  ${ index } ${ pane.active ? 'active  ' : 'inactive' } ` +
+			`canvases=${ pane.canvases }  ${ truncate( pane.content, 80 ) }`
+	);
+	return [
+		`Workspace target: ${ dom.targetKind ?? '(not rendered)' }`,
+		`Panes:\n${ panes.join( '\n' ) || '  (none)' }\n` +
+			`Active pane markup: ${
+				dom.markup === null
+					? '(no active pane)'
+					: truncate( dom.markup, REPORTED_MARKUP_LENGTH )
+			}`,
+	];
+}
+
 // Answers the question the milestones cannot: whether the renderer is still
 // waiting on the runtime, gave up on a request, or rendered a pane that never
 // swapped in a canvas.
@@ -502,53 +552,13 @@ async function describeStalledRenderer( page, activity ) {
 		}
 	}
 
-	// Every pane stays mounted, active or not, so a canvas sitting in an
-	// inactive pane means the editor loaded and the workspace never switched to
-	// it. That is a different bug from a canvas that never mounted at all, and
-	// the active pane alone cannot tell the two apart. A renderer with a blocked
-	// main thread never answers, so the question gets a deadline of its own.
-	const dom = await answerWithin(
-		RENDERER_PROBE_TIMEOUT_MS,
-		'The renderer',
-		page.evaluate(
-			( selectors ) => ( {
-				// The workspace publishes the route it is on. A document target with
-				// no document pane below means the id never resolved.
-				targetKind:
-					document.querySelector( selectors.workspace )?.dataset
-						.targetKind ?? null,
-				panes: [ ...document.querySelectorAll( selectors.pane ) ].map(
-					( pane ) => ( {
-						active: pane.dataset.active === 'true',
-						canvases: pane.querySelectorAll( selectors.canvas ).length,
-						content: pane.firstElementChild?.className || '(empty)',
-					} )
-				),
-				markup:
-					document.querySelector( selectors.activePane )?.innerHTML ?? null,
-			} ),
-			{
-				workspace: WORKSPACE_SELECTOR,
-				pane: PANE_SELECTOR,
-				activePane: ACTIVE_PANE_SELECTOR,
-				canvas: CANVAS_SELECTOR,
-			}
-		)
-	);
-	sections.push( `Workspace target: ${ dom.targetKind ?? '(not rendered)' }` );
-	const panes = dom.panes.map(
-		( pane, index ) =>
-			`  ${ index } ${ pane.active ? 'active  ' : 'inactive' } ` +
-			`canvases=${ pane.canvases }  ${ truncate( pane.content, 80 ) }`
-	);
-	sections.push(
-		`Panes:\n${ panes.join( '\n' ) || '  (none)' }\n` +
-			`Active pane markup: ${
-				dom.markup === null
-					? '(no active pane)'
-					: truncate( dom.markup, REPORTED_MARKUP_LENGTH )
-			}`
-	);
+	// Everything else in the report is already in hand, so a renderer that
+	// cannot answer costs this section and nothing more.
+	try {
+		sections.push( ...( await describeWorkspace( page ) ) );
+	} catch ( error ) {
+		sections.push( `Could not read the workspace: ${ error.message }` );
+	}
 
 	const messages = activity.messages.slice( -REPORTED_MESSAGES );
 	if ( messages.length ) {
