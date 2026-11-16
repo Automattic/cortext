@@ -310,7 +310,7 @@ final class RestoreRevisionController {
 				'collection_id' => $collection_id,
 			);
 			if ( 'relation' === $field_type ) {
-				$prepared = Relations::prepare_relation_update( $post_id, $field_id, $values );
+				$prepared = $this->prepare_relation_restore( $post_id, $field_id, $values );
 				if ( $prepared instanceof WP_Error ) {
 					return $prepared;
 				}
@@ -320,6 +320,41 @@ final class RestoreRevisionController {
 		}
 
 		return $plan;
+	}
+
+	/**
+	 * Prepares a relation field for restore without letting stale targets block it.
+	 *
+	 * A revision can point at rows that have since been trashed or deleted, and
+	 * those fail relation validation. Only the targets that still validate are
+	 * linked. A target the live row already links to stays linked, so a restore
+	 * never drops a link just because its row sits in Trash.
+	 *
+	 * @param int     $post_id  Document being restored.
+	 * @param int     $field_id Relation field ID.
+	 * @param mixed[] $values   Row IDs stored on the revision.
+	 * @return array|WP_Error Output of Relations::prepare_relation_update().
+	 */
+	private function prepare_relation_restore( int $post_id, int $field_id, array $values ): array|WP_Error {
+		$historical = Relations::normalize_row_ids( $values );
+		$linkable   = Relations::rows_in_target_collection(
+			Relations::trait_term_id_for_collection( (int) get_post_meta( $field_id, 'related_collection_id', true ) ),
+			$historical
+		);
+
+		$prepared = Relations::prepare_relation_update( $post_id, $field_id, $linkable );
+		if ( $prepared instanceof WP_Error ) {
+			return $prepared;
+		}
+
+		$restorable          = array_filter(
+			$historical,
+			static fn( int $row_id ): bool => in_array( $row_id, $linkable, true )
+				|| in_array( $row_id, $prepared['current'], true )
+		);
+		$prepared['desired'] = Relations::normalize_row_ids( $restorable, $prepared['multiple'] );
+
+		return $prepared;
 	}
 
 	/**

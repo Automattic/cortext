@@ -313,6 +313,75 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 		$this->assertCount( $revision_count, wp_get_post_revisions( $row_id ) );
 	}
 
+	public function test_restore_drops_relation_targets_that_were_deleted(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		[ $row_id, $relation_id, $target_collection_id ] = $this->create_relation_fixture();
+		$kept_id     = $this->create_row( $target_collection_id );
+		$deleted_id  = $this->create_row( $target_collection_id );
+		$revision_id = $this->create_revision(
+			$row_id,
+			array( 'post_title' => 'Old title' )
+		);
+		$this->add_revision_meta( $revision_id, Relations::meta_key( $relation_id ), (string) $kept_id );
+		$this->add_revision_meta( $revision_id, Relations::meta_key( $relation_id ), (string) $deleted_id );
+		wp_delete_post( $deleted_id, true );
+
+		$response = $this->restore_revision( $row_id, $revision_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Old title', get_post( $row_id )->post_title );
+		$this->assertSame(
+			array( (string) $kept_id ),
+			get_post_meta( $row_id, Relations::meta_key( $relation_id ), false )
+		);
+	}
+
+	public function test_restore_keeps_a_trashed_relation_target_the_row_still_links(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		[ $row_id, $relation_id, $target_collection_id ] = $this->create_relation_fixture();
+		$target_id                                       = $this->create_row( $target_collection_id );
+		update_post_meta( $row_id, Relations::meta_key( $relation_id ), (string) $target_id );
+		$revision_id = $this->create_revision(
+			$row_id,
+			array( 'post_title' => 'Old title' )
+		);
+		$this->add_revision_meta( $revision_id, Relations::meta_key( $relation_id ), (string) $target_id );
+		wp_trash_post( $target_id );
+
+		$response = $this->restore_revision( $row_id, $revision_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Old title', get_post( $row_id )->post_title );
+		$this->assertSame(
+			array( (string) $target_id ),
+			get_post_meta( $row_id, Relations::meta_key( $relation_id ), false )
+		);
+	}
+
+	public function test_restore_does_not_relink_a_trashed_relation_target(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		[ $row_id, $relation_id, $target_collection_id ] = $this->create_relation_fixture();
+		$target_id                                       = $this->create_row( $target_collection_id );
+		$revision_id                                     = $this->create_revision(
+			$row_id,
+			array( 'post_title' => 'Old title' )
+		);
+		$this->add_revision_meta( $revision_id, Relations::meta_key( $relation_id ), (string) $target_id );
+		wp_trash_post( $target_id );
+
+		$response = $this->restore_revision( $row_id, $revision_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Old title', get_post( $row_id )->post_title );
+		$this->assertSame(
+			array(),
+			get_post_meta( $row_id, Relations::meta_key( $relation_id ), false )
+		);
+	}
+
 	public function test_restore_filters_deleted_fields_from_historical_collection_schema(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 
@@ -598,6 +667,34 @@ final class Test_Rest_Restore_Revision_Controller extends BaseTestCase {
 		);
 		$this->assertGreaterThan( 0, $field_id );
 		return $field_id;
+	}
+
+	/**
+	 * Creates a two-way relation between two collections and a row on the source side.
+	 *
+	 * @return array{0:int,1:int,2:int} Source row ID, relation field ID, target collection ID.
+	 */
+	private function create_relation_fixture(): array {
+		$source_collection_id = $this->create_collection();
+		$target_collection_id = $this->create_collection();
+		$relation_id          = $this->create_field(
+			'Relation',
+			'relation',
+			array( 'related_collection_id' => (string) $target_collection_id )
+		);
+		$reverse_id           = $this->create_field(
+			'Reverse',
+			'relation',
+			array(
+				'related_collection_id'     => (string) $source_collection_id,
+				'relation_reverse_field_id' => (string) $relation_id,
+			)
+		);
+		update_post_meta( $relation_id, 'relation_reverse_field_id', (string) $reverse_id );
+		add_post_meta( $source_collection_id, 'cortext_fields', (string) $relation_id );
+		add_post_meta( $target_collection_id, 'cortext_fields', (string) $reverse_id );
+
+		return array( $this->create_row( $source_collection_id ), $relation_id, $target_collection_id );
 	}
 
 	private function create_row( int $collection_id ): int {
