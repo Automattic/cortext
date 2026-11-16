@@ -198,8 +198,7 @@ describe( 'DocumentPublishToggle', () => {
 		expect( coreResolve.getEntityRecord ).toHaveBeenCalledWith(
 			'postType',
 			'crtxt_document',
-			44,
-			{ context: 'edit' }
+			44
 		);
 		expect( editorDispatch.editPost ).toHaveBeenCalledWith( {
 			status: 'publish',

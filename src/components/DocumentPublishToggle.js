@@ -132,8 +132,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 							core.getEntityRecord(
 								'postType',
 								'crtxt_document',
-								id,
-								{ context: 'edit' }
+								id
 							)
 						)
 					);
