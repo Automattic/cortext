@@ -281,4 +281,44 @@ describe( 'useRecents', () => {
 		} );
 		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
 	} );
+
+	it( 'applies a lifecycle refresh when a touch queued behind it fails', async () => {
+		const recent = {
+			id: 7,
+			title: 'Notes',
+			path: 'notes-7',
+			updatedAt: '2026-05-07T12:00:00+00:00',
+		};
+		const refresh = createDeferred();
+		apiFetch
+			.mockResolvedValueOnce( { recents: [ recent ] } )
+			.mockReturnValueOnce( refresh.promise )
+			.mockRejectedValueOnce( new Error( 'hidden' ) );
+
+		const { result } = renderHook( () => useRecents(), { wrapper } );
+		await waitFor( () => {
+			expect( result.current.recents ).toEqual( [ recent ] );
+		} );
+
+		act( () => {
+			window.dispatchEvent(
+				new CustomEvent( DOCUMENT_ARCHIVE_CHANGED_EVENT, {
+					detail: { action: 'archive' },
+				} )
+			);
+		} );
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+
+		let touch;
+		act( () => {
+			touch = result.current.touchRecent( { id: 7 } );
+		} );
+		await act( async () => {
+			refresh.resolve( { recents: [] } );
+			await touch;
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
+		expect( result.current.recents ).toEqual( [] );
+	} );
 } );

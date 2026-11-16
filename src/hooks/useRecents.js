@@ -142,16 +142,12 @@ export function RecentsProvider( { children } ) {
 		const refresh = async () => {
 			const readRequest = latestReadRequest.current + 1;
 			latestReadRequest.current = readRequest;
-			const touchRequest = latestTouchRequest.current;
 			setError( null );
 			try {
 				const response = await apiFetch( {
 					path: '/cortext/v1/recents',
 				} );
-				if (
-					readRequest === latestReadRequest.current &&
-					touchRequest === latestTouchRequest.current
-				) {
+				if ( readRequest === latestReadRequest.current ) {
 					applyRecents( setRecents, recentsFromResponse( response ) );
 					setIsResolving( false );
 				}
