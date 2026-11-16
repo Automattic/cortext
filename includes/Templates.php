@@ -272,13 +272,25 @@ final class Templates {
 	}
 
 	private function instantiate_page( WP_Post $template, array $args ) {
+		$parent_id = max( 0, (int) ( $args['parent'] ?? 0 ) );
+		if ( $parent_id > 0 ) {
+			$parent = get_post( $parent_id );
+			if ( ! $parent instanceof WP_Post || Document::POST_TYPE !== $parent->post_type ) {
+				return new WP_Error(
+					'cortext_template_parent_invalid',
+					__( "Couldn't find the parent document.", 'cortext' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
+
 		$post_id = wp_insert_post(
 			array(
 				'post_type'    => Document::POST_TYPE,
 				'post_status'  => 'draft',
 				'post_title'   => $template->post_title,
 				'post_content' => $this->starter_content( $template->post_content ),
-				'post_parent'  => max( 0, (int) ( $args['parent'] ?? 0 ) ),
+				'post_parent'  => $parent_id,
 			),
 			true
 		);

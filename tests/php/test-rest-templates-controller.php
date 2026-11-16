@@ -173,6 +173,34 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->assertStringNotContainsString( 'document-icon', $document->post_content );
 	}
 
+	public function test_instantiate_page_template_rejects_parent_that_is_not_a_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$template_id = $this->create_template(
+			array(
+				'kind'  => Templates::KIND_PAGE,
+				'title' => 'Project brief',
+			)
+		);
+		$other_id    = wp_insert_post(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+				'post_title'  => 'Blog post',
+			)
+		);
+
+		foreach ( array( $other_id, 999999 ) as $parent_id ) {
+			$response = $this->request(
+				'POST',
+				'/cortext/v1/templates/' . $template_id . '/instantiate',
+				array( 'parent' => $parent_id )
+			);
+
+			$this->assertSame( 400, $response->get_status() );
+			$this->assertSame( 'cortext_template_parent_invalid', $response->get_data()['code'] );
+		}
+	}
+
 	public function test_instantiate_row_template_applies_defaults_with_request_prefills_taking_priority(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'Tasks' );
