@@ -36,7 +36,6 @@ import {
 	ComplementaryArea,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import apiFetch from '@wordpress/api-fetch';
 
 import CanvasOwnerInspector, {
 	useIsCanvasOwnerSelected,
@@ -54,21 +53,13 @@ import useDelayedFlag, {
 } from '../hooks/useDelayedFlag';
 import { POST_TYPE } from './page-queries';
 import { definesTrait } from '../documents/capabilities';
-import {
-	afterDocumentTrash,
-	applyInvalidationPack,
-} from '../documents/invalidation';
 import { unlock } from '../lock-unlock';
-import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
-import { notifyDocumentArchiveChanged } from '../hooks/documentArchiveInvalidation';
-import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
-import { filterFavoritesByDeletedIds } from '../documents/favorites';
 import {
 	archiveDocument,
 	archiveSaveFailureMessage,
-	syncLifecycleEntityRecords,
+	trashDocument,
 } from '../documents/actions';
 import { useActiveEditor } from './ActiveEditorContext';
 
@@ -94,14 +85,6 @@ export function getActiveInspectorArea( select ) {
 
 export function InspectorSidebarSlot( props ) {
 	return <ComplementaryArea.Slot scope={ INSPECTOR_SCOPE } { ...props } />;
-}
-
-export function collectTrashCascadeIds( rootId, response ) {
-	const ids = new Set( [ Number( rootId ) ] );
-	if ( Array.isArray( response?.cascade_deleted ) ) {
-		response.cascade_deleted.forEach( ( id ) => ids.add( Number( id ) ) );
-	}
-	return ids;
 }
 
 function useRestoreDefaultInspectorAfterSmallMount( {
@@ -570,33 +553,15 @@ export function PageActionsPanel( { postId } ) {
 		setError( null );
 		setIsTrashing( true );
 		try {
-			const deleted = await apiFetch( {
-				path: `/wp/v2/crtxt_documents/${ postId }`,
-				method: 'DELETE',
-			} );
-			syncLifecycleEntityRecords(
-				deleted,
-				{ invalidateResolution, receiveEntityRecords },
-				'cascade_deleted'
+			await trashDocument(
+				{ id: postId },
+				{
+					invalidateResolution,
+					receiveEntityRecords,
+					setFavorites,
+					onFavoritesError: setError,
+				}
 			);
-			applyInvalidationPack( invalidateResolution, afterDocumentTrash );
-			notifySidebarTreeChanged();
-			notifyDocumentTrashChanged();
-			notifyDocumentArchiveChanged( { action: 'trash' } );
-			try {
-				const deletedIds = collectTrashCascadeIds( postId, deleted );
-				await setFavorites( ( current ) =>
-					filterFavoritesByDeletedIds( current, deletedIds )
-				);
-			} catch ( err ) {
-				setError(
-					err?.message ??
-						__(
-							'Document moved to Trash, but Favorites could not be updated.',
-							'cortext'
-						)
-				);
-			}
 		} catch ( err ) {
 			setError(
 				err?.message ??

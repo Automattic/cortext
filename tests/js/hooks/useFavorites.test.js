@@ -195,4 +195,38 @@ describe( 'useFavorites', () => {
 			path: '/cortext/v1/favorites',
 		} );
 	} );
+
+	it( 'keeps loaded favorites resolved while a lifecycle refetch is pending', async () => {
+		const refetch = deferred();
+		apiFetch
+			.mockResolvedValueOnce( { favorites: [ { id: 1 }, { id: 2 } ] } )
+			.mockReturnValueOnce( refetch.promise );
+
+		const { result } = renderHook( () => useFavorites(), { wrapper } );
+		await waitFor( () => {
+			expect( result.current.isResolving ).toBe( false );
+		} );
+
+		act( () => {
+			window.dispatchEvent(
+				new CustomEvent( DOCUMENT_ARCHIVE_CHANGED_EVENT, {
+					detail: { action: 'trash' },
+				} )
+			);
+		} );
+		await waitFor( () => {
+			expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		} );
+
+		expect( result.current.isResolving ).toBe( false );
+		expect( result.current.favorites ).toEqual( [ { id: 1 }, { id: 2 } ] );
+
+		await act( async () => {
+			refetch.resolve( { favorites: [ { id: 2 } ] } );
+			await refetch.promise;
+		} );
+
+		expect( result.current.isResolving ).toBe( false );
+		expect( result.current.favorites ).toEqual( [ { id: 2 } ] );
+	} );
 } );

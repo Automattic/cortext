@@ -14,7 +14,6 @@ jest.mock( '@wordpress/core-data', () => ( {
 } ) );
 
 import SidebarFavorites, {
-	filterFavoritesByHiddenIds,
 	moveFavorite,
 	resolveFavoriteItems,
 } from '../../../src/components/SidebarFavorites';
@@ -74,19 +73,6 @@ describe( 'SidebarFavorites helpers', () => {
 			favorites
 		);
 		expect( moveFavorite( favorites, 'favorite:1', 'favorite:999' ) ).toBe(
-			favorites
-		);
-	} );
-
-	it( 'hides archived favorites without removing them from the source list', () => {
-		const favorites = [ { id: 1 }, { id: 2 } ];
-		const hiddenDocumentIds = new Set( [ 1 ] );
-
-		expect(
-			filterFavoritesByHiddenIds( favorites, hiddenDocumentIds )
-		).toEqual( [ { id: 2 } ] );
-		expect( favorites ).toEqual( [ { id: 1 }, { id: 2 } ] );
-		expect( filterFavoritesByHiddenIds( favorites, new Set() ) ).toBe(
 			favorites
 		);
 	} );

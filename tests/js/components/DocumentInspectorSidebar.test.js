@@ -157,8 +157,8 @@ jest.mock( '../../../src/components/ActiveEditorContext', () => ( {
 	} ),
 } ) );
 
+import apiFetch from '@wordpress/api-fetch';
 import {
-	collectTrashCascadeIds,
 	DOCUMENT_INSPECTOR,
 	InspectorComplementaryArea,
 	PageActionsPanel,
@@ -171,21 +171,37 @@ const defaultProps = {
 	title: 'Document',
 };
 
-describe( 'collectTrashCascadeIds', () => {
-	it( 'includes the root and archived descendants returned by Trash', () => {
-		expect(
-			Array.from(
-				collectTrashCascadeIds( 7, { cascade_deleted: [ 8, 9 ] } )
-			)
-		).toEqual( [ 7, 8, 9 ] );
-	} );
-} );
-
 describe( 'PageActionsPanel', () => {
 	beforeEach( () => {
+		apiFetch.mockReset();
 		mockFlushActiveEditor.mockReset();
 		mockSetFavorites.mockReset();
 		mockSetHome.mockReset();
+	} );
+
+	it( 'removes the trashed page and its cascade from Favorites', async () => {
+		apiFetch.mockResolvedValueOnce( {
+			id: 7,
+			status: 'trash',
+			cascade_deleted: [ 8 ],
+		} );
+		mockSetFavorites.mockResolvedValue( [] );
+		render( <PageActionsPanel postId={ 7 } /> );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Move to Trash' } )
+		);
+
+		await waitFor( () => expect( mockSetFavorites ).toHaveBeenCalled() );
+		const updateFavorites = mockSetFavorites.mock.calls[ 0 ][ 0 ];
+		expect(
+			updateFavorites( [ { id: 7 }, { id: 8 }, { id: 9 } ] )
+		).toEqual( [ { id: 9 } ] );
+		await waitFor( () =>
+			expect(
+				screen.getByRole( 'button', { name: 'Move to Trash' } )
+			).toBeEnabled()
+		);
 	} );
 
 	it( 'explains when Archive is canceled because saving failed', async () => {

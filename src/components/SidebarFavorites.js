@@ -28,6 +28,7 @@ import {
 	documentTitle,
 	documentUri,
 	favoriteKey,
+	filterFavoritesByDeletedIds,
 	useDocumentRecord,
 } from '../documents';
 import useDelayedFlag, {
@@ -65,15 +66,6 @@ export function moveFavorite( favorites, activeId, overId ) {
 	}
 
 	return arrayMove( favorites, from, to );
-}
-
-export function filterFavoritesByHiddenIds( favorites, hiddenDocumentIds ) {
-	if ( ! hiddenDocumentIds?.size ) {
-		return favorites;
-	}
-	return favorites.filter(
-		( favorite ) => ! hiddenDocumentIds.has( Number( favorite.id ) )
-	);
 }
 
 export function resolveFavoriteItems( favorites, pages, collections ) {
@@ -280,7 +272,7 @@ export default function SidebarFavorites( {
 	onReorder,
 } ) {
 	const visibleFavorites = useMemo(
-		() => filterFavoritesByHiddenIds( favorites, hiddenDocumentIds ),
+		() => filterFavoritesByDeletedIds( favorites, hiddenDocumentIds ),
 		[ favorites, hiddenDocumentIds ]
 	);
 	const [ displayFavorites, setDisplayFavorites ] =

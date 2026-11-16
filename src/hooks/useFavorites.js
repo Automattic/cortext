@@ -163,7 +163,6 @@ export function FavoritesProvider( { children } ) {
 				return;
 			}
 
-			setIsResolving( true );
 			setError( null );
 			const refresh = async () => {
 				if (
@@ -185,8 +184,6 @@ export function FavoritesProvider( { children } ) {
 				} catch ( nextError ) {
 					setError( nextError );
 					return null;
-				} finally {
-					setIsResolving( false );
 				}
 			};
 
