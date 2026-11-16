@@ -355,6 +355,36 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->assertArrayNotHasKey( 'field-' . $status_id, $template['field_values'] );
 	}
 
+	public function test_update_with_only_defaults_does_not_rewrite_title_or_content(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'Tasks' );
+		$status_id     = $this->attach_field( $collection_id, 'Status', 'text' );
+		$template_id   = $this->create_template(
+			array(
+				'kind'          => Templates::KIND_ROW,
+				'collection_id' => $collection_id,
+				'title'         => 'Task starter',
+			)
+		);
+
+		$post_writes = 0;
+		$count       = static function ( array $data ) use ( &$post_writes ): array {
+			++$post_writes;
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $count );
+		$response = $this->request(
+			'POST',
+			'/cortext/v1/templates/' . $template_id,
+			array( 'field_values' => array( 'field-' . $status_id => 'todo' ) )
+		);
+		remove_filter( 'wp_insert_post_data', $count );
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'todo', $response->get_data()['template']['field_values'][ 'field-' . $status_id ] );
+		$this->assertSame( 0, $post_writes );
+	}
+
 	private function request( string $method, string $path, array $params = array() ) {
 		$request = new WP_REST_Request( $method, $path );
 		foreach ( $params as $key => $value ) {

@@ -175,18 +175,20 @@ final class Templates {
 			return $normalized;
 		}
 
-		$result = wp_update_post(
-			wp_slash(
-				array(
-					'ID'           => $id,
-					'post_title'   => $normalized['title'],
-					'post_content' => $normalized['content'],
-				)
-			),
-			true
-		);
-		if ( $result instanceof WP_Error ) {
-			return $result;
+		// The editor saves the title and content on its own. Writing back the
+		// values read above would undo a save that lands during this request.
+		$post_fields = array();
+		if ( array_key_exists( 'title', $payload ) ) {
+			$post_fields['post_title'] = $normalized['title'];
+		}
+		if ( array_key_exists( 'content', $payload ) ) {
+			$post_fields['post_content'] = $normalized['content'];
+		}
+		if ( count( $post_fields ) > 0 ) {
+			$result = wp_update_post( wp_slash( array( 'ID' => $id ) + $post_fields ), true );
+			if ( $result instanceof WP_Error ) {
+				return $result;
+			}
 		}
 
 		update_post_meta( $id, TemplatePostType::META_KIND, $normalized['kind'] );
