@@ -32,7 +32,9 @@ import {
 
 import './Sidebar.scss';
 
-// The aria-label, rather than the icon, communicates the collapsed state.
+// Sidebar toggle: panel outline with a vertical accent on
+// the left side. Same icon for both states; the aria-label tells the
+// user what the toggle will do.
 const sidebarToggleIcon = (
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
@@ -282,7 +284,8 @@ export default function Sidebar( {
 	);
 	const selectFavorite = useCallback(
 		( favorite ) => {
-			// Post IDs are global, so a shared predicate cannot select two records.
+			// Use `isRowSelected` as the shared selected-state check. Post IDs
+			// are globally unique, so the same id cannot point at two documents.
 			if ( isRowSelected( favorite ) ) {
 				return false;
 			}
@@ -295,8 +298,10 @@ export default function Sidebar( {
 		[ isRowSelected, navigate ]
 	);
 
-	// These values appear in dependency arrays below, so initialize them before
-	// React evaluates those arrays and hits their temporal dead zone.
+	// `draggedId` and `activeDrop` flow into the per-row callbacks below, so
+	// the DnD hook has to resolve before any `useCallback` that lists them as
+	// deps. Otherwise their `const` bindings sit in the temporal dead zone
+	// when the callback's dep array is evaluated and React throws on render.
 	const { sensors, draggedId, draggedPage, activeDrop, handlers } =
 		useSidebarDnd( {
 			pages,
@@ -368,6 +373,8 @@ export default function Sidebar( {
 		};
 	}, [ closeSettings, isSettingsMode ] );
 
+	// --- Per-row selection helpers --------------------------------------
+
 	const onSetRowHome = useCallback(
 		async ( record ) => {
 			const ident = favoriteIdentForRecord( record );
@@ -391,6 +398,9 @@ export default function Sidebar( {
 		[ home ]
 	);
 
+	// Wire callbacks that `useDocumentActions` needs (rename, trash, duplicate)
+	// from DocumentRow / SidebarTrash. Create goes through `useCreateDocument`
+	// at the top of Sidebar and bypasses the provider.
 	const documentsHandlers = useMemo(
 		() => ( {
 			selectedCollectionId,
@@ -406,6 +416,8 @@ export default function Sidebar( {
 
 	const create = useCreateDocument();
 	const createCollection = useCreateCollectionDocument();
+	// After creating a page or collection, open it and put its sidebar row into
+	// rename mode.
 	const openAfterCreate = useCallback(
 		( created ) => {
 			if ( created?.id ) {
@@ -494,6 +506,7 @@ export default function Sidebar( {
 		}
 	}, [] );
 
+	// Props shared by every DocumentRow in the Pages tree.
 	const rowChrome = {
 		expandedIds,
 		draggedId,
@@ -523,6 +536,8 @@ export default function Sidebar( {
 			: {} ),
 		onCreateChildCollection: createChildCollection,
 	};
+
+	// --- Render ------------------------------------------------------------
 
 	return (
 		<aside
