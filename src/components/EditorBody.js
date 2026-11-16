@@ -513,15 +513,21 @@ export function areCanvasReadyRequirementsMet( {
 	needsOwner = false,
 	hasOwner = false,
 	isOwnerContentReady = true,
+	canRepairHeader = true,
 } ) {
+	// Trashed and archived documents skip header repair, so a block that only
+	// repair would insert cannot hold back the ready signal.
+	const isBlockReady = ( needsBlock, hasBlock ) =>
+		! needsBlock || hasBlock || ! canRepairHeader;
 	return (
 		hasTitle &&
-		( ! needsCover || hasCover ) &&
-		( ! needsIcon || hasIcon ) &&
+		isBlockReady( needsCover, hasCover ) &&
+		isBlockReady( needsIcon, hasIcon ) &&
 		isCoverRecordReady &&
 		! isPropertiesResolving &&
-		( ! needsProperties || hasProperties ) &&
-		( ! needsOwner || ( hasOwner && isOwnerContentReady ) )
+		isBlockReady( needsProperties, hasProperties ) &&
+		isBlockReady( needsOwner, hasOwner ) &&
+		( ! needsOwner || ! hasOwner || isOwnerContentReady )
 	);
 }
 
@@ -2009,6 +2015,7 @@ function CanvasReadyEffect( {
 	postType,
 	canvasRootRef,
 	ownerContentReady = true,
+	isReadOnlyLifecycle = false,
 	onReady,
 } ) {
 	const [ featuredId ] = useEntityProp(
@@ -2080,6 +2087,7 @@ function CanvasReadyEffect( {
 		needsOwner,
 		hasOwner,
 		isOwnerContentReady: ownerContentReady,
+		canRepairHeader: ! isReadOnlyLifecycle,
 	} );
 
 	useLayoutEffect( () => {
@@ -2312,6 +2320,7 @@ export default function EditorBody( {
 							postType={ postType }
 							canvasRootRef={ blockCanvasRef }
 							ownerContentReady={ ownerContentReady }
+							isReadOnlyLifecycle={ isTrashed || isArchived }
 							onReady={ onReady }
 						/>
 					</BlockCanvasStyleProvider>
