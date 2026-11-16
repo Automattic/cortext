@@ -50,7 +50,6 @@ final class Template {
 				'supports'              => array(
 					'title',
 					'editor',
-					'revisions',
 					'custom-fields',
 				),
 				'capability_type'       => 'post',

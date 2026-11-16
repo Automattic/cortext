@@ -95,7 +95,7 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->assertTrue( $object->show_in_rest );
 		$this->assertTrue( post_type_supports( TemplatePostType::POST_TYPE, 'title' ) );
 		$this->assertTrue( post_type_supports( TemplatePostType::POST_TYPE, 'editor' ) );
-		$this->assertTrue( post_type_supports( TemplatePostType::POST_TYPE, 'revisions' ) );
+		$this->assertFalse( post_type_supports( TemplatePostType::POST_TYPE, 'revisions' ) );
 	}
 
 	public function test_requires_edit_posts_capability(): void {
