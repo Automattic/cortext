@@ -1258,6 +1258,10 @@ export default function CollectionDataViews( {
 		]
 	);
 
+	const requestArchiveSelectedRows = useCallback( () => {
+		requestArchiveRows( selectedRows, { clearSelectionOnSuccess: true } );
+	}, [ requestArchiveRows, selectedRows ] );
+
 	const requestDeleteSelectedRows = useCallback( () => {
 		requestDeleteRows( selectedRows, { clearSelectionOnSuccess: true } );
 	}, [ requestDeleteRows, selectedRows ] );
@@ -1763,6 +1767,7 @@ export default function CollectionDataViews( {
 				className="dataviews-bulk-actions-footer__container cortext-table-calculations__bulk-actions"
 				selectedIds={ selectedRowIds }
 				visibleIds={ visibleRowIds }
+				onArchiveSelected={ requestArchiveSelectedRows }
 				onClearSelection={ clearSelection }
 				onDeleteSelected={ requestDeleteSelectedRows }
 				onToggleVisibleSelection={ toggleVisibleRows }
@@ -1775,6 +1780,7 @@ export default function CollectionDataViews( {
 			visibleIds={ visibleRowIds }
 			totalItems={ activePaginationInfo?.totalItems ?? 0 }
 			totalPages={ activePaginationInfo?.totalPages ?? 0 }
+			onArchiveSelected={ requestArchiveSelectedRows }
 			onClearSelection={ clearSelection }
 			onDeleteSelected={ requestDeleteSelectedRows }
 			onToggleVisibleSelection={ toggleVisibleRows }
