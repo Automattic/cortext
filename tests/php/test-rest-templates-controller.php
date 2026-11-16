@@ -9,11 +9,13 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Plugin;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\PostType\Template as TemplatePostType;
 use Cortext\Relations;
 use Cortext\Rest\TemplatesController;
+use Cortext\Runtime\Experiments;
 use Cortext\Taxonomy\TraitTaxonomy;
 use Cortext\Templates;
 use WorDBless\BaseTestCase;
@@ -39,6 +41,9 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		add_action( 'deleted_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
 		add_action( 'before_delete_post', array( $trait_taxonomy, 'sync_term_on_delete' ), 10, 2 );
 
+		add_filter( 'cortext_experiments', array( Plugin::instance(), 'register_experiments' ) );
+		update_option( Experiments::OPTION, array( Templates::EXPERIMENT_ID => true ), false );
+
 		$this->template_post_type = new TemplatePostType();
 		$this->template_post_type->register_post_type();
 		$this->template_post_type->register_meta();
@@ -55,6 +60,8 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->uninstall_in_memory_posts_query();
 		$this->uninstall_in_memory_term_store();
 		wp_set_current_user( 0 );
+		remove_filter( 'cortext_experiments', array( Plugin::instance(), 'register_experiments' ) );
+		delete_option( Experiments::OPTION );
 
 		parent::tear_down();
 	}
@@ -64,6 +71,18 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 
 		$this->assertArrayHasKey( '/cortext/v1/templates', $routes );
 		$this->assertArrayHasKey( '/cortext/v1/templates/(?P<id>\d+)/instantiate', $routes );
+	}
+
+	public function test_skips_registration_when_experiment_is_disabled(): void {
+		update_option( Experiments::OPTION, array( Templates::EXPERIMENT_ID => false ), false );
+		unregister_post_type( TemplatePostType::POST_TYPE );
+		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
+
+		$this->template_post_type->register_post_type();
+		( new TemplatesController() )->register_routes();
+
+		$this->assertFalse( post_type_exists( TemplatePostType::POST_TYPE ) );
+		$this->assertArrayNotHasKey( '/cortext/v1/templates', rest_get_server()->get_routes() );
 	}
 
 	public function test_registers_hidden_template_post_type_with_rest_support(): void {

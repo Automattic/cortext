@@ -31,6 +31,9 @@ final class TemplatesController {
 	}
 
 	public function register_routes(): void {
+		if ( ! Templates::is_enabled() ) {
+			return;
+		}
 		register_rest_route(
 			self::NAMESPACE,
 			'/templates',

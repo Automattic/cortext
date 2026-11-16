@@ -15,7 +15,23 @@ async function deleteIfCreated( requestUtils, path ) {
 	}
 }
 
+async function setTemplatesExperiment( requestUtils, enabled ) {
+	await requestUtils.rest( {
+		method: 'PUT',
+		path: '/cortext/v1/experiments',
+		data: { enabled: { templates: enabled } },
+	} );
+}
+
 test.describe( 'Templates', () => {
+	test.beforeAll( async ( { requestUtils } ) => {
+		await setTemplatesExperiment( requestUtils, true );
+	} );
+
+	test.afterAll( async ( { requestUtils } ) => {
+		await setTemplatesExperiment( requestUtils, false );
+	} );
+
 	test( 'instantiates page and row templates as snapshots', async ( {
 		requestUtils,
 	} ) => {

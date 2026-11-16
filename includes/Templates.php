@@ -14,6 +14,7 @@ defined( 'ABSPATH' ) || exit;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\PostType\Document;
 use Cortext\PostType\Template as TemplatePostType;
+use Cortext\Runtime\Experiments;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
@@ -30,6 +31,10 @@ final class Templates {
 		'cortext/document-icon',
 		'cortext/document-properties',
 	);
+
+	public static function is_enabled(): bool {
+		return ( new Experiments() )->is_enabled( self::EXPERIMENT_ID );
+	}
 
 	public static function sanitize_kind( $value ): string {
 		$kind = is_string( $value ) ? sanitize_key( $value ) : '';

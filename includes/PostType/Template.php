@@ -27,6 +27,9 @@ final class Template {
 	}
 
 	public function register_post_type(): void {
+		if ( ! Templates::is_enabled() ) {
+			return;
+		}
 		register_post_type(
 			self::POST_TYPE,
 			array(
@@ -59,6 +62,9 @@ final class Template {
 	}
 
 	public function register_meta(): void {
+		if ( ! Templates::is_enabled() ) {
+			return;
+		}
 		register_post_meta(
 			self::POST_TYPE,
 			self::META_KIND,
