@@ -53,6 +53,19 @@ export const afterDocumentTrash = [
 export const afterRowLifecycle = [ PUBLISHED_DOCUMENTS ];
 
 /**
+ * Picks the pack for a row lifecycle change. A row can own nested documents,
+ * such as a collection created from a data view block in its content, and the
+ * server trashes and restores them with the row. Those descendants do appear
+ * in the tree and collection lists, so a cascade needs the full pack.
+ *
+ * @param {boolean} didCascade Whether the server moved other documents with the row.
+ * @return {Array<Array>} Invalidation pack.
+ */
+export function rowLifecyclePack( didCascade ) {
+	return didCascade ? afterDocumentTrash : afterRowLifecycle;
+}
+
+/**
  * Apply an invalidation pack with `invalidateResolution`.
  *
  * @param {Function}     dispatcher `invalidateResolution` from `useDispatch( 'core' )`.

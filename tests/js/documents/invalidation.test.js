@@ -13,6 +13,7 @@ import {
 	afterDocumentTrash,
 	afterRowLifecycle,
 	applyInvalidationPack,
+	rowLifecyclePack,
 } from '../../../src/documents/invalidation';
 
 describe( 'document lifecycle invalidation', () => {
@@ -48,6 +49,11 @@ describe( 'document lifecycle invalidation', () => {
 				[ 'postType', DOCUMENT_POST_TYPE, PUBLISHED_DOCUMENTS_QUERY ],
 			],
 		] );
+	} );
+
+	it( 'uses the full pack when a row lifecycle change cascades to other documents', () => {
+		expect( rowLifecyclePack( false ) ).toBe( afterRowLifecycle );
+		expect( rowLifecyclePack( true ) ).toBe( afterDocumentTrash );
 	} );
 
 	it( 'dispatches each targeted invalidation once', () => {

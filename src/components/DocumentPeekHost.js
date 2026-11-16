@@ -22,8 +22,8 @@ import useCollectionFields from '../hooks/useCollectionFields';
 import { adjacentRowId } from './rowDetailUtils';
 import { parseIdFromUri } from '../router/useResolveEntity';
 import {
-	afterRowLifecycle,
 	applyInvalidationPack,
+	rowLifecyclePack,
 } from '../documents/invalidation';
 
 // EntityRoute adds this title field for full-page rows. Do the same here so
@@ -192,8 +192,11 @@ export default function DocumentPeekHost() {
 		( candidate ) => String( candidate?.id ) === String( peek.docId )
 	);
 	const handleSaved = () => peek.source?.refresh?.();
-	const handleRestored = () => {
-		applyInvalidationPack( invalidateResolution, afterRowLifecycle );
+	const handleRestored = ( _postId, _postType, response ) => {
+		applyInvalidationPack(
+			invalidateResolution,
+			rowLifecyclePack( response?.restored?.length > 1 )
+		);
 		peek.source?.refresh?.();
 	};
 

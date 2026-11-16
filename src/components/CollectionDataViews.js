@@ -93,6 +93,7 @@ import {
 import {
 	afterRowLifecycle,
 	applyInvalidationPack,
+	rowLifecyclePack,
 } from '../documents/invalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { elementsFromOptions } from '../hooks/optionElements';
@@ -1059,10 +1060,14 @@ export default function CollectionDataViews( {
 
 			const deletedIds = [];
 			const failedRows = [];
+			let didCascade = false;
 			results.forEach( ( result, index ) => {
 				const row = nextRows[ index ];
 				if ( result.status === 'fulfilled' ) {
 					deletedIds.push( normalizeRowId( row.id ) );
+					if ( result.value?.cascade_deleted?.length > 0 ) {
+						didCascade = true;
+					}
 				} else {
 					failedRows.push( row );
 				}
@@ -1071,7 +1076,7 @@ export default function CollectionDataViews( {
 			if ( deletedIds.length > 0 ) {
 				applyInvalidationPack(
 					invalidateResolution,
-					afterRowLifecycle
+					rowLifecyclePack( didCascade )
 				);
 				const deleted = new Set( deletedIds );
 				if ( openRowId && deleted.has( normalizeRowId( openRowId ) ) ) {

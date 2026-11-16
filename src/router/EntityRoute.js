@@ -41,8 +41,8 @@ import WorkspaceTopBar from '../components/WorkspaceTopBar';
 import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../components/page-queries';
 import {
 	afterDocumentTrash,
-	afterRowLifecycle,
 	applyInvalidationPack,
+	rowLifecyclePack,
 } from '../documents/invalidation';
 import { firstDocumentInTree } from '../components/document-tree';
 import { isPublicWebAffordancesEnabled } from '../settings';
@@ -490,7 +490,9 @@ export default function EntityRoute( { history } ) {
 		( postId, _postType, response ) => {
 			applyInvalidationPack(
 				invalidateResolution,
-				isRow ? afterRowLifecycle : afterDocumentTrash
+				isRow
+					? rowLifecyclePack( response?.restored?.length > 1 )
+					: afterDocumentTrash
 			);
 			notifySidebarTreeChanged( {
 				parentId: Number( response?.post?.parent ?? 0 ),

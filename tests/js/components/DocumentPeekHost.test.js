@@ -55,8 +55,13 @@ jest.mock( '../../../src/components/RowDetailView', () => ( {
 } ) );
 
 import DocumentPeekHost from '../../../src/components/DocumentPeekHost';
-import { PUBLISHED_DOCUMENTS_QUERY } from '../../../src/components/page-queries';
+import {
+	ACTIVE_PAGES_QUERY,
+	POST_TYPE,
+	PUBLISHED_DOCUMENTS_QUERY,
+} from '../../../src/components/page-queries';
 import { DOCUMENT_POST_TYPE } from '../../../src/collections';
+import { afterDocumentTrash } from '../../../src/documents/invalidation';
 import {
 	DocumentPeekProvider,
 	useDocumentPeekActions,
@@ -131,15 +136,7 @@ describe( 'DocumentPeekHost', () => {
 		);
 	} );
 
-	it( 'refreshes the row lists affected by a restore', async () => {
-		const refresh = jest.fn();
-		const source = {
-			kind: 'collection',
-			collectionId: 44,
-			getRowList: () => [ { id: 99 } ],
-			refresh,
-		};
-
+	async function openRowPeek( refresh ) {
 		renderHost();
 
 		await act( async () => {
@@ -148,9 +145,19 @@ describe( 'DocumentPeekHost', () => {
 				postType: 'crtxt_document',
 				collectionId: 44,
 				preferredMode: 'side',
-				source,
+				source: {
+					kind: 'collection',
+					collectionId: 44,
+					getRowList: () => [ { id: 99 } ],
+					refresh,
+				},
 			} );
 		} );
+	}
+
+	it( 'refreshes the row lists affected by a restore', async () => {
+		const refresh = jest.fn();
+		await openRowPeek( refresh );
 
 		act( () => {
 			screen.getByRole( 'button', { name: 'Restore' } ).click();
@@ -160,6 +167,28 @@ describe( 'DocumentPeekHost', () => {
 		expect( mockInvalidateResolution ).toHaveBeenCalledWith(
 			'getEntityRecords',
 			[ 'postType', DOCUMENT_POST_TYPE, PUBLISHED_DOCUMENTS_QUERY ]
+		);
+		expect( refresh ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'refreshes the document lists when a restore brings back nested documents', async () => {
+		const refresh = jest.fn();
+		await openRowPeek( refresh );
+
+		act( () => {
+			mockRowDetailView.mock.lastCall[ 0 ].onRestored(
+				99,
+				'crtxt_document',
+				{ restored: [ 99, 120 ] }
+			);
+		} );
+
+		expect( mockInvalidateResolution ).toHaveBeenCalledTimes(
+			afterDocumentTrash.length
+		);
+		expect( mockInvalidateResolution ).toHaveBeenCalledWith(
+			'getEntityRecords',
+			[ 'postType', POST_TYPE, ACTIVE_PAGES_QUERY ]
 		);
 		expect( refresh ).toHaveBeenCalledTimes( 1 );
 	} );
