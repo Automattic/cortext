@@ -6,6 +6,7 @@ import {
 	MenuItem,
 	TextControl,
 } from '@wordpress/components';
+import { useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import {
 	archive as archiveIcon,
@@ -16,6 +17,7 @@ import {
 	starEmpty,
 	starFilled,
 } from '@wordpress/icons';
+import { store as noticesStore } from '@wordpress/notices';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 import { collectionIcon } from '../cortextIcons';
@@ -85,6 +87,7 @@ export default function DocumentRow( {
 	const { requestFromActivation } = useSurfaceFocusIntent();
 	const { title, icon, features } = useDocumentRecord( record );
 	const { rename, duplicate, archive, trash } = useDocumentActions();
+	const { createErrorNotice } = useDispatch( noticesStore );
 
 	const recordId = record.id;
 	const hasLoadedChildren = features.hierarchy && childNodes.length > 0;
@@ -407,7 +410,20 @@ export default function DocumentRow( {
 									<MenuItem
 										icon={ archiveIcon }
 										onClick={ () => {
-											archive( record );
+											archive( record ).catch(
+												( error ) =>
+													createErrorNotice(
+														error?.message ??
+															__(
+																'Could not archive this document.',
+																'cortext'
+															),
+														{
+															id: 'cortext-document-archive-error',
+															type: 'snackbar',
+														}
+													)
+											);
 											onClose();
 										} }
 									>

@@ -10,7 +10,9 @@
  * The `documents` module is mocked so tests can inspect actions and feature
  * resolution without mounting the full sidebar provider stack each time.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { select } from '@wordpress/data';
+import { store as noticesStore } from '@wordpress/notices';
 import { DndContext } from '@dnd-kit/core';
 
 const mockRename = jest.fn();
@@ -138,6 +140,7 @@ beforeEach( () => {
 	mockRename.mockReset();
 	mockDuplicate.mockReset();
 	mockArchive.mockReset();
+	mockArchive.mockResolvedValue( null );
 	mockTrash.mockReset();
 	mockRequestFromActivation.mockReset();
 	jest.spyOn( console, 'error' ).mockImplementation( ( ...args ) => {
@@ -416,6 +419,24 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 		);
 		fireEvent.click( archiveItem );
 		expect( mockArchive ).toHaveBeenCalledWith( props.record );
+	} );
+
+	it( 'shows an error notice when the archive action fails', async () => {
+		mockArchive.mockRejectedValueOnce( new Error( 'Archive failed.' ) );
+		const { container } = renderRow();
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Archive' } ) );
+
+		await waitFor( () =>
+			expect( select( noticesStore ).getNotices() ).toEqual( [
+				expect.objectContaining( {
+					id: 'cortext-document-archive-error',
+					status: 'error',
+					type: 'snackbar',
+					content: 'Archive failed.',
+				} ),
+			] )
+		);
 	} );
 
 	it( 'invokes the document layer rename action when the inline editor commits', () => {
