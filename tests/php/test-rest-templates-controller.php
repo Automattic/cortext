@@ -173,6 +173,33 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->assertStringNotContainsString( 'document-icon', $document->post_content );
 	}
 
+	public function test_preserves_backslashes_in_template_and_instantiated_content(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		// WorDBless stores posts from `wp_insert_post_data` at priority 10,
+		// before core unslashes them. Unslash first so it keeps what a real
+		// database would.
+		add_filter( 'wp_insert_post_data', 'wp_unslash', 9 );
+
+		$content     = '<!-- wp:embed {"url":"https://example.com/?a=1\\u0026b=2"} /--><!-- wp:paragraph --><p>C:\\path</p><!-- /wp:paragraph -->';
+		$template_id = $this->create_template(
+			array(
+				'kind'    => Templates::KIND_PAGE,
+				'title'   => 'Brief',
+				'content' => $content,
+			)
+		);
+		$this->assertSame( $content, get_post( $template_id )->post_content );
+
+		$this->request( 'POST', '/cortext/v1/templates/' . $template_id, array( 'title' => 'Renamed' ) );
+		$this->assertSame( $content, get_post( $template_id )->post_content );
+
+		$response = $this->request( 'POST', '/cortext/v1/templates/' . $template_id . '/instantiate' );
+		$document = get_post( (int) $response->get_data()['document']['id'] );
+		remove_filter( 'wp_insert_post_data', 'wp_unslash', 9 );
+
+		$this->assertSame( $content, $document->post_content );
+	}
+
 	public function test_instantiate_page_template_rejects_parent_that_is_not_a_document(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$template_id = $this->create_template(

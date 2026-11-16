@@ -129,16 +129,18 @@ final class Templates {
 		}
 
 		$post_id = wp_insert_post(
-			array(
-				'post_type'    => TemplatePostType::POST_TYPE,
-				'post_status'  => 'private',
-				'post_title'   => $normalized['title'],
-				'post_content' => $normalized['content'],
-				'meta_input'   => array(
-					TemplatePostType::META_KIND          => $normalized['kind'],
-					TemplatePostType::META_COLLECTION_ID => $normalized['collection_id'],
-					TemplatePostType::META_FIELD_VALUES  => $normalized['field_values'],
-				),
+			wp_slash(
+				array(
+					'post_type'    => TemplatePostType::POST_TYPE,
+					'post_status'  => 'private',
+					'post_title'   => $normalized['title'],
+					'post_content' => $normalized['content'],
+					'meta_input'   => array(
+						TemplatePostType::META_KIND => $normalized['kind'],
+						TemplatePostType::META_COLLECTION_ID => $normalized['collection_id'],
+						TemplatePostType::META_FIELD_VALUES => $normalized['field_values'],
+					),
+				)
 			),
 			true
 		);
@@ -174,10 +176,12 @@ final class Templates {
 		}
 
 		$result = wp_update_post(
-			array(
-				'ID'           => $id,
-				'post_title'   => $normalized['title'],
-				'post_content' => $normalized['content'],
+			wp_slash(
+				array(
+					'ID'           => $id,
+					'post_title'   => $normalized['title'],
+					'post_content' => $normalized['content'],
+				)
 			),
 			true
 		);
@@ -187,7 +191,7 @@ final class Templates {
 
 		update_post_meta( $id, TemplatePostType::META_KIND, $normalized['kind'] );
 		update_post_meta( $id, TemplatePostType::META_COLLECTION_ID, $normalized['collection_id'] );
-		update_post_meta( $id, TemplatePostType::META_FIELD_VALUES, $normalized['field_values'] );
+		update_post_meta( $id, TemplatePostType::META_FIELD_VALUES, wp_slash( $normalized['field_values'] ) );
 
 		$post = get_post( $id );
 		return $post instanceof WP_Post ? $this->format_template( $post ) : $this->template_not_found_error();
@@ -285,12 +289,14 @@ final class Templates {
 		}
 
 		$post_id = wp_insert_post(
-			array(
-				'post_type'    => Document::POST_TYPE,
-				'post_status'  => 'draft',
-				'post_title'   => $template->post_title,
-				'post_content' => $this->starter_content( $template->post_content ),
-				'post_parent'  => $parent_id,
+			wp_slash(
+				array(
+					'post_type'    => Document::POST_TYPE,
+					'post_status'  => 'draft',
+					'post_title'   => $template->post_title,
+					'post_content' => $this->starter_content( $template->post_content ),
+					'post_parent'  => $parent_id,
+				)
 			),
 			true
 		);
@@ -314,11 +320,13 @@ final class Templates {
 		$field_values    = array_merge( $template_values, $override_values );
 
 		$post_id = wp_insert_post(
-			array(
-				'post_type'    => Document::POST_TYPE,
-				'post_status'  => 'private',
-				'post_title'   => $template->post_title,
-				'post_content' => $this->starter_content( $template->post_content ),
+			wp_slash(
+				array(
+					'post_type'    => Document::POST_TYPE,
+					'post_status'  => 'private',
+					'post_title'   => $template->post_title,
+					'post_content' => $this->starter_content( $template->post_content ),
+				)
 			),
 			true
 		);
@@ -419,7 +427,7 @@ final class Templates {
 				delete_post_meta( $row_id, $meta_key );
 				foreach ( $value as $entry ) {
 					if ( '' !== $entry && null !== $entry ) {
-						add_post_meta( $row_id, $meta_key, $entry );
+						add_post_meta( $row_id, $meta_key, wp_slash( $entry ) );
 					}
 				}
 				$index->index_row_field( $row_id, $field_id, $collection_id );
@@ -427,7 +435,7 @@ final class Templates {
 			}
 
 			if ( '' !== $value && null !== $value ) {
-				update_post_meta( $row_id, $meta_key, $value );
+				update_post_meta( $row_id, $meta_key, wp_slash( $value ) );
 			}
 			$index->index_row_field( $row_id, $field_id, $collection_id );
 		}
