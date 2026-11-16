@@ -109,7 +109,6 @@ export default function OptionMenu( {
 				ref={ renameRef }
 			>
 				<TextControl
-					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 					hideLabelFromVision
 					label={ __( 'Option label', 'cortext' ) }

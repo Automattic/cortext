@@ -46,7 +46,6 @@ export default function TypeToConfirmDialog( {
 			<p>{ message }</p>
 			<div ref={ inputWrapperRef }>
 				<TextControl
-					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 					label={ confirmPhrase }
 					hideLabelFromVision

@@ -419,6 +419,9 @@ export function CanvasEditor( {
 	const postLock = usePostLock( {
 		postId: post.id,
 		postType: post.type ?? postType,
+		// The lock endpoint rejects trashed and archived posts. Disable the lock
+		// as soon as the status changes; the restore notices handle the
+		// read-only state from there.
 		enabled: isActive && ! isLifecycleReadOnly,
 	} );
 	const isReadOnly = isLifecycleReadOnly || postLock.isReadOnly;

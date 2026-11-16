@@ -49,7 +49,7 @@ $list-row-open-background: #f3f3f3;
 		padding: $grid-unit-10 $grid-unit-20 $grid-unit-10;
 	}
 
-	// DataViews 17 adds an extra gap and a 24px inset to grouped rows. Remove both
+	// DataViews 18 adds an extra gap and a 24px inset to grouped rows. Remove both
 	// so grouped and ungrouped lists line up.
 	.dataviews-view-list > :has(> .dataviews-view-list__group-header) {
 		gap: 0 !important;

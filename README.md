@@ -35,7 +35,7 @@ The easiest way to try Cortext is from the WordPress plugin directory.
 
 New to Cortext? [Using Cortext](docs/using-cortext.md) walks through the main pieces and the basic tasks.
 
-Cortext needs WordPress 7.0+ and PHP 8.1+. If you prefer a ZIP, download it from the [WordPress.org plugin page](https://wordpress.org/plugins/cortext/) or from [GitHub Releases](https://github.com/Automattic/cortext/releases).
+Cortext needs WordPress 7.1+ and PHP 8.1+. If you prefer a ZIP, download it from the [WordPress.org plugin page](https://wordpress.org/plugins/cortext/) or from [GitHub Releases](https://github.com/Automattic/cortext/releases).
 
 ## Docs
 
@@ -52,7 +52,7 @@ Cortext needs WordPress 7.0+ and PHP 8.1+. If you prefer a ZIP, download it from
 
 ## Requirements
 
--   WordPress 7.0+
+-   WordPress 7.1+
 -   PHP 8.1+
 -   A recent block theme is recommended but not required.
 

@@ -1,4 +1,4 @@
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import {
 	Button,
 	Icon,
@@ -487,19 +487,16 @@ export default function FieldActionsMenu( {
 					</p>
 					{ dependentRollups.length > 0 ? (
 						<p>
-							{ dependentRollups.length === 1
-								? __(
-										'This also deletes 1 rollup that uses it:',
-										'cortext'
-								  )
-								: sprintf(
-										/* translators: %d: number of dependent rollup fields */
-										__(
-											'This also deletes %d rollups that use it:',
-											'cortext'
-										),
-										dependentRollups.length
-								  ) }{ ' ' }
+							{ sprintf(
+								/* translators: %d: number of dependent rollup fields */
+								_n(
+									'This also deletes %d rollup that uses it:',
+									'This also deletes %d rollups that use it:',
+									dependentRollups.length,
+									'cortext'
+								),
+								dependentRollups.length
+							) }{ ' ' }
 							{ dependentRollups
 								.map( ( candidate ) => candidate.label )
 								.join( ', ' ) }
@@ -507,19 +504,16 @@ export default function FieldActionsMenu( {
 					) : null }
 					{ dependentFormulas.length > 0 ? (
 						<p>
-							{ dependentFormulas.length === 1
-								? __(
-										'This also deletes 1 formula that uses it:',
-										'cortext'
-								  )
-								: sprintf(
-										/* translators: %d: number of dependent formula fields */
-										__(
-											'This also deletes %d formulas that use it:',
-											'cortext'
-										),
-										dependentFormulas.length
-								  ) }{ ' ' }
+							{ sprintf(
+								/* translators: %d: number of dependent formula fields */
+								_n(
+									'This also deletes %d formula that uses it:',
+									'This also deletes %d formulas that use it:',
+									dependentFormulas.length,
+									'cortext'
+								),
+								dependentFormulas.length
+							) }{ ' ' }
 							{ dependentFormulas
 								.map( ( candidate ) => candidate.label )
 								.join( ', ' ) }

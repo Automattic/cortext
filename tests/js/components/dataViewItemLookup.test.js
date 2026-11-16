@@ -59,7 +59,7 @@ describe( 'findDataViewItemFromEvent', () => {
 		} );
 	} );
 
-	it( 'resolves rows nested inside DataViews 17 list groups', () => {
+	it( 'resolves rows nested inside DataViews 18 list groups', () => {
 		const wrapper = document.createElement( 'div' );
 		wrapper.innerHTML = `
 			<div class="dataviews-view-list">

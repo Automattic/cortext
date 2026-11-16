@@ -156,7 +156,6 @@ export default function DeleteOptionDialog( {
 				</label>
 				{ action === ACTION_REPLACE && canReplace ? (
 					<SelectControl
-						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 						label={ __( 'Replacement', 'cortext' ) }
 						value={ replacement }

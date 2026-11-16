@@ -144,7 +144,6 @@ function RelationConfig( {
 				options={ options }
 				onChange={ setTargetCollectionId }
 				disabled={ isBusy }
-				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
 			<SelectControl
@@ -153,7 +152,6 @@ function RelationConfig( {
 				options={ RELATION_LIMIT_OPTIONS }
 				onChange={ ( next ) => setRelationMultiple( next === 'many' ) }
 				disabled={ isBusy }
-				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
 			<ToggleControl
@@ -171,7 +169,6 @@ function RelationConfig( {
 						value={ reverseTitle }
 						onChange={ setReverseTitle }
 						disabled={ isBusy }
-						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 					/>
 					<SelectControl
@@ -182,7 +179,6 @@ function RelationConfig( {
 							setReverseMultiple( next === 'many' )
 						}
 						disabled={ isBusy }
-						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 					/>
 				</>
@@ -384,7 +380,6 @@ function RollupConfig( {
 					setAggregator( 'count' );
 				} }
 				disabled={ isBusy || relationFields.length === 0 }
-				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
 			<SelectControl
@@ -398,7 +393,6 @@ function RollupConfig( {
 				disabled={
 					isBusy || ! relationFieldId || targetOptions.length <= 1
 				}
-				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
 			<SelectControl
@@ -407,7 +401,6 @@ function RollupConfig( {
 				options={ aggregatorOptions }
 				onChange={ setAggregator }
 				disabled={ isBusy || ! relationFieldId }
-				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
 			<div className="cortext-add-field-popover__actions">
@@ -570,7 +563,6 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 				} }
 				disabled={ isBusy }
 				hideLabelFromVision={ Boolean( configType ) }
-				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
 			{ configuration ? (

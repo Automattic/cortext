@@ -4,7 +4,7 @@
  * Plugin URI:        https://github.com/Automattic/cortext
  * Description:       Build a WordPress-native knowledge base with pages, typed collections, views, and public publishing.
  * Version:           0.2.0
- * Requires at least: 7.0
+ * Requires at least: 7.1
  * Requires PHP:      8.1
  * Author:            Héctor Prieto, Miguel Fonseca
  * License:           GPL-2.0-or-later

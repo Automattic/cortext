@@ -41,7 +41,7 @@ function getListRowTarget( root ) {
  * Find the preferred focus target in a rendered collection.
  *
  * Cortext data attributes mark stable toolbar regions. Row selectors follow
- * the DataViews 17 markup until it exposes a public focus API.
+ * the DataViews 18 markup until it exposes a public focus API.
  *
  * @param {Element} root                 Collection wrapper.
  * @param {Object}  options              Target selection options.

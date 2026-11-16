@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 jest.mock( '@wordpress/i18n', () => ( {
 	__: ( value ) => value,
 	_n: ( single, plural, count ) => ( count === 1 ? single : plural ),
+	_x: ( value ) => value,
 	sprintf: ( value ) => value,
 } ) );
 
@@ -155,7 +156,7 @@ describe( 'PublishedDocumentsPane', () => {
 		);
 	} );
 
-	it( 'passes DataViews 17 layout defaults to the published documents table', () => {
+	it( 'passes DataViews 18 layout defaults to the published documents table', () => {
 		render( <PublishedDocumentsPane /> );
 
 		expect( DataViews ).toHaveBeenCalledTimes( 1 );

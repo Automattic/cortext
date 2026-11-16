@@ -231,7 +231,7 @@ describe( 'PublicDataView', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'passes nested layout defaults to DataViews 17', () => {
+	it( 'passes nested layout defaults to DataViews 18', () => {
 		renderPublicDataView( {
 			type: 'table',
 			fields: [ 'title' ],

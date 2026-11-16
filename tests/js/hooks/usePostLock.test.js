@@ -332,6 +332,43 @@ it( 'releases its lock on unmount', async () => {
 	expect( body.get( 'active_post_lock' ) ).toBe( '100:1' );
 } );
 
+it( 'releases its lock when editing becomes disabled', async () => {
+	const sendBeacon = jest.fn();
+	Object.defineProperty( window.navigator, 'sendBeacon', {
+		configurable: true,
+		value: sendBeacon,
+	} );
+	apiFetch.mockResolvedValue( {
+		postLock: { isLocked: false, activePostLock: '100:1' },
+		postLockUtils,
+	} );
+
+	const { rerender } = renderHook(
+		( { enabled } ) =>
+			usePostLock( {
+				postId: 7,
+				postType: 'crtxt_document',
+				enabled,
+			} ),
+		{ initialProps: { enabled: true } }
+	);
+
+	await waitFor( () =>
+		expect( mockUpdatePostLock ).toHaveBeenCalledWith( {
+			isLocked: false,
+			activePostLock: '100:1',
+		} )
+	);
+
+	await act( async () => rerender( { enabled: false } ) );
+
+	expect( sendBeacon ).toHaveBeenCalledTimes( 1 );
+	expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+	expect( mockUpdatePostLock ).toHaveBeenLastCalledWith( {
+		isLocked: false,
+	} );
+} );
+
 it( "releases the previous document's lock when navigating", async () => {
 	const sendBeacon = jest.fn();
 	Object.defineProperty( window.navigator, 'sendBeacon', {
