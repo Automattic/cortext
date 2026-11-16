@@ -9,7 +9,9 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
 use Cortext\Plugin;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\PostType\Template as TemplatePostType;
@@ -225,6 +227,48 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 
 			$this->assertSame( 400, $response->get_status() );
 			$this->assertSame( 'cortext_template_parent_invalid', $response->get_data()['code'] );
+		}
+	}
+
+	public function test_instantiate_rejects_archived_parent_and_archived_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		( new ArchiveCascade() )->register_status();
+		$parent_id     = $this->create_document( 'Parent' );
+		$collection_id = $this->create_collection( 'Tasks' );
+		$page_template = $this->create_template(
+			array(
+				'kind'  => Templates::KIND_PAGE,
+				'title' => 'Project brief',
+			)
+		);
+		$row_template  = $this->create_template(
+			array(
+				'kind'          => Templates::KIND_ROW,
+				'collection_id' => $collection_id,
+				'title'         => 'Task starter',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'          => $parent_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'          => $collection_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$responses = array(
+			$this->request( 'POST', '/cortext/v1/templates/' . $page_template . '/instantiate', array( 'parent' => $parent_id ) ),
+			$this->request( 'POST', '/cortext/v1/templates/' . $row_template . '/instantiate' ),
+		);
+
+		foreach ( $responses as $response ) {
+			$this->assertSame( 409, $response->get_status(), wp_json_encode( $response->get_data() ) );
+			$this->assertSame( 'cortext_document_archived_container', $response->get_data()['code'] );
 		}
 	}
 

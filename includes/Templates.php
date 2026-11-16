@@ -12,6 +12,7 @@ namespace Cortext;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\FieldValues\FieldValueIndex;
+use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\Template as TemplatePostType;
 use Cortext\Runtime\Experiments;
@@ -288,6 +289,10 @@ final class Templates {
 					array( 'status' => 400 )
 				);
 			}
+			$archived = ( new ArchiveCascade() )->archived_container_error( array( $parent_id ) );
+			if ( $archived instanceof WP_Error ) {
+				return $archived;
+			}
 		}
 
 		$post_id = wp_insert_post(
@@ -314,6 +319,10 @@ final class Templates {
 		$collection    = $this->validate_collection( $collection_id );
 		if ( $collection instanceof WP_Error ) {
 			return $collection;
+		}
+		$archived = ( new ArchiveCascade() )->archived_container_error( array( $collection_id ) );
+		if ( $archived instanceof WP_Error ) {
+			return $archived;
 		}
 
 		$override_values = self::sanitize_field_values( $args['field_values'] ?? array() );
