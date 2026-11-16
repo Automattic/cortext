@@ -25,6 +25,7 @@ const START_TIMEOUT_MS = 120_000;
 const EXIT_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 250;
 const RUNTIME_PROBE_TIMEOUT_MS = 2_000;
+const RENDERER_PROBE_TIMEOUT_MS = 5_000;
 const REPORTED_URL_LENGTH = 140;
 const REPORTED_REQUESTS = 80;
 const ASSET_PATTERN =
@@ -348,12 +349,36 @@ function elapsed( milliseconds ) {
 	return `${ milliseconds ?? '?' }ms`;
 }
 
+// Rejects when a promise that has no timeout of its own outlasts the deadline.
+async function answerWithin( milliseconds, label, promise ) {
+	let timer = null;
+	try {
+		return await Promise.race( [
+			promise,
+			new Promise( ( resolve, reject ) => {
+				timer = setTimeout(
+					() =>
+						reject(
+							new Error(
+								`${ label } did not answer within ${ milliseconds }ms.`
+							)
+						),
+					milliseconds
+				);
+			} ),
+		] );
+	} finally {
+		clearTimeout( timer );
+	}
+}
+
 // Watches the renderer so a timeout can name what it was waiting on. Playwright
 // only reports the selector it gave up on, which is the one thing we already
 // know.
 function recordRendererActivity( page ) {
 	const openedAt = Date.now();
 	const inFlight = new Map();
+	const statuses = new Map();
 	const settled = [];
 	const messages = [];
 
@@ -364,20 +389,35 @@ function recordRendererActivity( page ) {
 		messages.push( `pageerror: ${ error.message }` )
 	);
 	page.on( 'request', ( pending ) => inFlight.set( pending, Date.now() ) );
+	page.on( 'response', ( response ) =>
+		statuses.set( response.request(), response.status() )
+	);
 
-	const settle = ( pending, outcome ) => {
+	const settle = ( pending, outcome, failed ) => {
 		const startedAt = inFlight.get( pending );
 		inFlight.delete( pending );
+		statuses.delete( pending );
 		settled.push( {
 			outcome,
+			failed,
 			url: pending.url(),
 			offset: startedAt === undefined ? null : startedAt - openedAt,
 			milliseconds: startedAt === undefined ? null : Date.now() - startedAt,
 		} );
 	};
-	page.on( 'requestfinished', ( pending ) => settle( pending, 'ok' ) );
+	// A request that got any response counts as finished, so a 500 lands here
+	// and only its status says it went wrong. One that was already answered
+	// when the recorder attached has no status to report.
+	page.on( 'requestfinished', ( pending ) => {
+		const status = statuses.get( pending );
+		settle(
+			pending,
+			status === undefined ? 'ok' : `HTTP ${ status }`,
+			status >= 400
+		);
+	} );
 	page.on( 'requestfailed', ( pending ) =>
-		settle( pending, pending.failure()?.errorText || 'failed' )
+		settle( pending, pending.failure()?.errorText || 'failed', true )
 	);
 
 	return { openedAt, inFlight, settled, messages };
@@ -400,10 +440,10 @@ async function describeStalledRenderer( page, activity ) {
 			: 'No requests were still in flight.'
 	);
 
-	// Kept separate from the slowest list because a request that fails usually
-	// fails fast, so ranking by duration hides exactly the ones worth seeing.
+	// Listed apart from the timeline below, which hides assets and keeps only
+	// the latest requests, so a failure can never drop out of the report.
 	const failed = activity.settled
-		.filter( ( entry ) => entry.outcome !== 'ok' )
+		.filter( ( entry ) => entry.failed )
 		.map(
 			( entry ) =>
 				`  ${ elapsed( entry.milliseconds ) } ${ entry.outcome } ` +
@@ -465,30 +505,35 @@ async function describeStalledRenderer( page, activity ) {
 	// Every pane stays mounted, active or not, so a canvas sitting in an
 	// inactive pane means the editor loaded and the workspace never switched to
 	// it. That is a different bug from a canvas that never mounted at all, and
-	// the active pane alone cannot tell the two apart.
-	const dom = await page.evaluate(
-		( selectors ) => ( {
-			// The workspace publishes the route it is on. A document target with
-			// no document pane below means the id never resolved.
-			targetKind:
-				document.querySelector( selectors.workspace )?.dataset
-					.targetKind ?? null,
-			panes: [ ...document.querySelectorAll( selectors.pane ) ].map(
-				( pane ) => ( {
-					active: pane.dataset.active === 'true',
-					canvases: pane.querySelectorAll( selectors.canvas ).length,
-					content: pane.firstElementChild?.className || '(empty)',
-				} )
-			),
-			markup:
-				document.querySelector( selectors.activePane )?.innerHTML ?? null,
-		} ),
-		{
-			workspace: WORKSPACE_SELECTOR,
-			pane: PANE_SELECTOR,
-			activePane: ACTIVE_PANE_SELECTOR,
-			canvas: CANVAS_SELECTOR,
-		}
+	// the active pane alone cannot tell the two apart. A renderer with a blocked
+	// main thread never answers, so the question gets a deadline of its own.
+	const dom = await answerWithin(
+		RENDERER_PROBE_TIMEOUT_MS,
+		'The renderer',
+		page.evaluate(
+			( selectors ) => ( {
+				// The workspace publishes the route it is on. A document target with
+				// no document pane below means the id never resolved.
+				targetKind:
+					document.querySelector( selectors.workspace )?.dataset
+						.targetKind ?? null,
+				panes: [ ...document.querySelectorAll( selectors.pane ) ].map(
+					( pane ) => ( {
+						active: pane.dataset.active === 'true',
+						canvases: pane.querySelectorAll( selectors.canvas ).length,
+						content: pane.firstElementChild?.className || '(empty)',
+					} )
+				),
+				markup:
+					document.querySelector( selectors.activePane )?.innerHTML ?? null,
+			} ),
+			{
+				workspace: WORKSPACE_SELECTOR,
+				pane: PANE_SELECTOR,
+				activePane: ACTIVE_PANE_SELECTOR,
+				canvas: CANVAS_SELECTOR,
+			}
+		)
 	);
 	sections.push( `Workspace target: ${ dom.targetKind ?? '(not rendered)' }` );
 	const panes = dom.panes.map(

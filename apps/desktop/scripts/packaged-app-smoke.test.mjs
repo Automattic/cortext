@@ -195,6 +195,38 @@ test( 'shell wait lists the latest requests when there are too many', async () =
 	} );
 } );
 
+// A 500 is a finished request as far as the browser is concerned, so only the
+// status can tell it apart from one that worked.
+test( 'shell wait counts an HTTP error response as a failed request', async () => {
+	const page = fakePage( 2 );
+	const handlers = {};
+	page.on = ( event, handler ) => {
+		handlers[ event ] = handler;
+	};
+	const answer = ( url, status ) => {
+		const pending = { url: () => url };
+		handlers.request( pending );
+		handlers.response( { request: () => pending, status: () => status } );
+		handlers.requestfinished( pending );
+	};
+
+	const waiting = assert.rejects( waitForCortextShell( page ), ( error ) => {
+		assert.match(
+			error.message,
+			/Failed requests:\n\s+\d+ms HTTP 500 http:\/\/127\.0\.0\.1:1\/wp-json\/broken\n/
+		);
+		assert.doesNotMatch(
+			error.message,
+			/Failed requests:[^]*working[^]*Requests \(/
+		);
+		assert.match( error.message, /ms HTTP 200 http:\/\/127\.0\.0\.1:1\/wp-json\/working/ );
+		return true;
+	} );
+	answer( 'http://127.0.0.1:1/wp-json/working', 200 );
+	answer( 'http://127.0.0.1:1/wp-json/broken', 500 );
+	await waiting;
+} );
+
 test( 'shell wait skips the runtime probe when the renderer never got there', async () => {
 	const page = fakePage( 0 );
 	page.url = () => 'about:blank';
@@ -220,6 +252,27 @@ test( 'shell wait keeps the timeout when the report itself fails', async () => {
 		);
 		return true;
 	} );
+} );
+
+// A blocked main thread never answers, and without a deadline the smoke test
+// would hang on the report instead of failing with the timeout.
+test( 'shell wait gives up on a renderer that never answers', async ( t ) => {
+	const page = fakePage( 0 );
+	page.url = () => 'about:blank';
+	page.evaluate = () => new Promise( () => {} );
+	t.mock.timers.enable( { apis: [ 'setTimeout' ] } );
+
+	const waiting = assert.rejects( waitForCortextShell( page ), ( error ) => {
+		assert.match( error.message, /Timeout 120000ms exceeded/ );
+		assert.match(
+			error.message,
+			/Could not describe the renderer: The renderer did not answer within 5000ms\./
+		);
+		return true;
+	} );
+	await new Promise( setImmediate );
+	t.mock.timers.tick( 5_000 );
+	await waiting;
 } );
 
 async function listen( handler ) {
