@@ -432,7 +432,17 @@ export default function Sidebar( {
 			if ( ! template?.id ) {
 				return createAndOpen( input );
 			}
-			const created = await instantiateTemplate( template.id, input );
+			setTemplateNotice( null );
+			let created;
+			try {
+				created = await instantiateTemplate( template.id, input );
+			} catch ( error ) {
+				setTemplateNotice(
+					error?.message ??
+						__( "Couldn't create the document.", 'cortext' )
+				);
+				return null;
+			}
 			refreshBranch( created?.parent ?? input?.parent ?? ROOT_PARENT_ID );
 			return openAfterCreate( created );
 		},
