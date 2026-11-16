@@ -26,6 +26,21 @@ export const TRASHED_PAGES_QUERY = {
 	cortext_no_collections: 1,
 };
 
+// Only the first root document is needed as a home fallback when no explicit
+// home is set, so this stays a single-record request rather than loading the
+// whole tree. It mirrors the sidebar tree's root query so the fallback matches
+// the first row the sidebar shows.
+export const HOME_FALLBACK_QUERY = {
+	parent: 0,
+	per_page: 1,
+	status: [ 'draft', 'private', 'publish' ],
+	context: 'edit',
+	cortext_no_trait: 1,
+	cortext_tree_order: 1,
+	orderby: 'menu_order',
+	order: 'asc',
+};
+
 // The Published documents screen needs every published document, including
 // collection items, so leave trait and collection filters off.
 export const PUBLISHED_DOCUMENTS_QUERY = {
