@@ -1624,12 +1624,8 @@ function HeaderAwareRootAppender( { ownerBlockName, postId, record } ) {
 	);
 }
 
-function TrashedNotice( {
-	postId,
-	postType,
-	onRestored,
-	receiveEntityRecords,
-} ) {
+function TrashedNotice( { postId, postType, onRestored } ) {
+	const { receiveEntityRecords } = useDispatch( coreStore );
 	const [ isRestoring, setIsRestoring ] = useState( false );
 	const [ error, setError ] = useState( null );
 
@@ -2053,12 +2049,7 @@ export default function EditorBody( {
 	completeSurfaceFocus = null,
 	onReady,
 	onRestored,
-	receiveEntityRecords,
 } ) {
-	const { receiveEntityRecords: registryReceiveEntityRecords } =
-		useDispatch( coreStore );
-	const receiveRestoredRecords =
-		receiveEntityRecords ?? registryReceiveEntityRecords;
 	const baseStyles = useSelect(
 		( select ) => select( editorStore ).getEditorSettings().styles,
 		[]
@@ -2245,7 +2236,6 @@ export default function EditorBody( {
 					postId={ postId }
 					postType={ postType }
 					onRestored={ onRestored }
-					receiveEntityRecords={ receiveRestoredRecords }
 				/>
 			) }
 			{ isReadOnly ? (

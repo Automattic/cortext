@@ -4,21 +4,12 @@ import RowEditor from '../../../src/components/RowEditor';
 import EditorBody from '../../../src/components/EditorBody';
 import usePostLock from '../../../src/hooks/usePostLock';
 
-const mockReceiveEntityRecords = jest.fn();
-
 jest.mock( '@wordpress/components', () => ( {
 	SlotFillProvider: ( { children } ) => <>{ children }</>,
 } ) );
 
 jest.mock( '@wordpress/data', () => ( {
-	useDispatch: () => ( {
-		receiveEntityRecords: mockReceiveEntityRecords,
-		resetPost: jest.fn(),
-	} ),
-} ) );
-
-jest.mock( '@wordpress/core-data', () => ( {
-	store: { name: 'core' },
+	useDispatch: () => ( { resetPost: jest.fn() } ),
 } ) );
 
 jest.mock( '@wordpress/editor', () => ( {
@@ -119,17 +110,8 @@ function renderRowEditor( overrides = {} ) {
 describe( 'RowEditor', () => {
 	beforeEach( () => {
 		EditorBody.mockClear();
-		mockReceiveEntityRecords.mockClear();
 		usePostLock.mockReturnValue( unlockedPostLock );
 		window.cortextEditorSettings = {};
-	} );
-
-	it( 'uses the parent core-data receiver inside the editor subregistry', () => {
-		renderRowEditor();
-
-		expect( EditorBody.mock.calls[ 0 ][ 0 ].receiveEntityRecords ).toBe(
-			mockReceiveEntityRecords
-		);
 	} );
 
 	it( 'marks the pane ready after the editor body has painted', () => {
