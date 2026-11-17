@@ -11,11 +11,19 @@
 
 export const POST_TYPE = 'crtxt_document';
 
+// core-data refetches this list after every document save, so it asks only for
+// what its consumers read. Records come back with these fields and nothing
+// else, even when the store holds more: add a field here before reading it.
+// Keep entries top-level (`meta`, not `meta.some_key`), because core-data
+// merges list records into the store one top-level key at a time.
+const ACTIVE_PAGES_FIELDS = [ 'id', 'parent', 'menu_order', 'slug', 'title' ];
+
 export const ACTIVE_PAGES_QUERY = {
 	per_page: 100,
 	status: [ 'draft', 'private', 'publish' ],
 	context: 'edit',
 	cortext_no_trait: 1,
+	_fields: ACTIVE_PAGES_FIELDS.join( ',' ),
 };
 
 export const TRASHED_PAGES_QUERY = {

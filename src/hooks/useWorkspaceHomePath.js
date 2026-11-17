@@ -9,7 +9,8 @@ import { useWorkspaceHome } from './useWorkspaceHome';
 // Only the first root document is needed as a home fallback when no explicit
 // home is set, so this stays a single-record request rather than loading the
 // whole tree. It mirrors the sidebar tree's root query so the fallback matches
-// the first row the sidebar shows.
+// the first row the sidebar shows. `_fields` covers what the fallback path is
+// built from; the record carries nothing else.
 const HOME_FALLBACK_QUERY = {
 	parent: 0,
 	per_page: 1,
@@ -19,6 +20,7 @@ const HOME_FALLBACK_QUERY = {
 	cortext_tree_order: 1,
 	orderby: 'menu_order',
 	order: 'asc',
+	_fields: 'id,parent,menu_order,slug',
 };
 
 export function useWorkspaceHomePath() {
