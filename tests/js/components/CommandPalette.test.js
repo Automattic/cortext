@@ -711,6 +711,49 @@ describe( 'CommandPalette preview pane', () => {
 		expect( previewDocId() ).toBe( 7 );
 	} );
 
+	it( 'keeps the highlight when recents change while the palette is open', () => {
+		mockIsPaletteOpen = true;
+		const notes = { id: 7, title: 'Notes', path: 'notes-7' };
+		const people = { id: 12, title: 'People', path: 'people-12' };
+		const roadmap = { id: 30, title: 'Roadmap', path: 'roadmap-30' };
+		mockRecents = [ notes, people ];
+		const canvasRef = { current: null };
+
+		const { rerender } = render(
+			<CommandPalette canvasRef={ canvasRef } />
+		);
+
+		act( () => {
+			mockMenu.onSelectedValueChange( 'recent-cortext/recent/12' );
+		} );
+
+		// A recents refresh reorders the list but keeps the highlighted one.
+		mockRecents = [ roadmap, notes, people ];
+		rerender( <CommandPalette canvasRef={ canvasRef } /> );
+
+		expect( mockMenu.selectedValue ).toBe( 'recent-cortext/recent/12' );
+		expect( previewDocId() ).toBe( 12 );
+
+		// A highlighted command survives a refresh too.
+		act( () => {
+			mockMenu.onSelectedValueChange( 'Go to home' );
+		} );
+		mockRecents = [ notes, roadmap ];
+		rerender( <CommandPalette canvasRef={ canvasRef } /> );
+
+		expect( mockMenu.selectedValue ).toBe( 'Go to home' );
+
+		// A highlighted recent that drops out of the list falls back to the
+		// first one.
+		act( () => {
+			mockMenu.onSelectedValueChange( 'recent-cortext/recent/30' );
+		} );
+		mockRecents = [ people, notes ];
+		rerender( <CommandPalette canvasRef={ canvasRef } /> );
+
+		expect( mockMenu.selectedValue ).toBe( 'recent-cortext/recent/12' );
+	} );
+
 	it( 'hands the listed documents to the preview for prefetching', () => {
 		mockIsPaletteOpen = true;
 		mockRecents = [

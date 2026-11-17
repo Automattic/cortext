@@ -315,14 +315,23 @@ function CommandPaletteContents( {
 
 	// cmdk does not call `onValueChange` for its initial uncontrolled selection.
 	// Select the first recent explicitly on every open so its preview is
-	// available.
+	// available. Recents can be replaced while the palette is open, so keep a
+	// highlight that is still listed: a current recent, or a command.
 	useEffect( () => {
 		if ( ! isPaletteOpen || search ) {
 			return;
 		}
-		setSelectedValue(
-			recents.length ? recentCommandValue( recents[ 0 ] ) : undefined
-		);
+		const recentValues = recents.map( recentCommandValue );
+		setSelectedValue( ( current ) => {
+			const isListedCommand =
+				Boolean( current ) &&
+				! current.startsWith( DOCUMENT_COMMAND_VALUE_PREFIX ) &&
+				! current.startsWith( RECENT_COMMAND_VALUE_PREFIX );
+			if ( isListedCommand || recentValues.includes( current ) ) {
+				return current;
+			}
+			return recentValues[ 0 ];
+		} );
 	}, [ isPaletteOpen, search, recents ] );
 
 	// Reset the input and the controlled selection whenever the palette
