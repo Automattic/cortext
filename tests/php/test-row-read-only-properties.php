@@ -67,6 +67,7 @@ final class Test_Row_Read_Only_Properties extends BaseTestCase {
 		add_filter( 'wp_insert_post_data', array( Posts::init(), 'insert_post' ), 10, 3 );
 		$this->uninstall_in_memory_posts_query();
 		$this->uninstall_in_memory_term_store();
+		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
 
@@ -96,6 +97,36 @@ final class Test_Row_Read_Only_Properties extends BaseTestCase {
 
 		$this->assertSame(
 			DocumentIdentity::header_blocks_markup() . DocumentIdentity::properties_block_markup() . $body,
+			get_post_field( 'post_content', $row_id, 'raw' )
+		);
+	}
+
+	public function test_content_around_the_title_is_kept_byte_for_byte(): void {
+		$this->act_as_unfiltered_html_user();
+		$title  = '<!-- wp:core/post-title {"level":1,"lock":{"move":true,"remove":true}} /-->';
+		$body   = "\n\n" . '<!-- wp:group {"style":{},"ratio":1.0,"note":"a\\/b<c"} --><div class="wp-block-group"></div><!-- /wp:group -->';
+		$row_id = $this->create_row( $this->create_collection() );
+		$this->set_raw_content( $row_id, $title . $body );
+
+		wp_trash_post( $row_id );
+
+		$this->assertSame(
+			$title . DocumentIdentity::properties_block_markup() . $body,
+			get_post_field( 'post_content', $row_id, 'raw' )
+		);
+	}
+
+	public function test_properties_go_after_a_title_with_a_closing_comment(): void {
+		$this->act_as_unfiltered_html_user();
+		$title  = '<!-- wp:post-title {"level":1} --><!-- /wp:post-title -->';
+		$body   = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
+		$row_id = $this->create_row( $this->create_collection() );
+		$this->set_raw_content( $row_id, $title . $body );
+
+		$this->archive_cascade->archive( $row_id );
+
+		$this->assertSame(
+			$title . DocumentIdentity::properties_block_markup() . $body,
 			get_post_field( 'post_content', $row_id, 'raw' )
 		);
 	}
@@ -209,6 +240,21 @@ final class Test_Row_Read_Only_Properties extends BaseTestCase {
 		$stored     = Posts::init()->insert_post( wp_unslash( $data ), $postarr, $unsanitized_postarr );
 		$data['ID'] = $stored['ID'];
 		return $data;
+	}
+
+	/**
+	 * Logs in an administrator so kses does not rewrite block markup on save.
+	 */
+	private function act_as_unfiltered_html_user(): void {
+		$user_id = (int) wp_insert_user(
+			array(
+				'user_login' => uniqid( 'cortext_read_only_', false ),
+				'user_pass'  => 'password',
+				'role'       => 'administrator',
+			)
+		);
+		wp_set_current_user( $user_id );
+		$this->assertTrue( current_user_can( 'unfiltered_html' ) );
 	}
 
 	private function assertHeaderIsTitleThenProperties( int $post_id ): void {

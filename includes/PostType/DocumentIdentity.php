@@ -117,21 +117,14 @@ final class DocumentIdentity {
 	 * right after the title on rows.
 	 */
 	public static function properties_block_markup(): string {
-		return serialize_block( self::properties_block() );
-	}
-
-	/**
-	 * Parsed-block shape of the locked properties block.
-	 *
-	 * @return array<string,mixed>
-	 */
-	private static function properties_block(): array {
-		return array(
-			'blockName'    => DocumentPropertiesBlock::BLOCK_NAME,
-			'attrs'        => array( 'lock' => self::HEADER_LOCK ),
-			'innerBlocks'  => array(),
-			'innerHTML'    => '',
-			'innerContent' => array(),
+		return serialize_block(
+			array(
+				'blockName'    => DocumentPropertiesBlock::BLOCK_NAME,
+				'attrs'        => array( 'lock' => self::HEADER_LOCK ),
+				'innerBlocks'  => array(),
+				'innerHTML'    => '',
+				'innerContent' => array(),
+			)
 		);
 	}
 
@@ -140,7 +133,8 @@ final class DocumentIdentity {
 	 *
 	 * The editor skips header repair on trashed and locked documents, so a row
 	 * that was never opened would otherwise show no field values there. The block goes
-	 * right after the title; a row without a title gets both.
+	 * right after the title, leaving the rest of the content as stored; a row
+	 * without a title gets both.
 	 *
 	 * @param array $data    Slashed post data about to be saved.
 	 * @param array $postarr Original input passed to wp_insert_post.
@@ -166,25 +160,40 @@ final class DocumentIdentity {
 			return $data;
 		}
 
-		$blocks      = parse_blocks( $content );
-		$title_index = null;
-		foreach ( $blocks as $index => $block ) {
-			if ( 'core/post-title' === ( $block['blockName'] ?? null ) ) {
-				$title_index = $index;
-				break;
-			}
-		}
-
-		if ( null === $title_index ) {
+		$title_end = self::title_block_end( $content );
+		if ( null === $title_end ) {
 			$content = self::header_blocks_markup() . self::properties_block_markup() . $content;
 		} else {
-			array_splice( $blocks, $title_index + 1, 0, array( self::properties_block() ) );
-			$content = serialize_blocks( $blocks );
+			$content = substr( $content, 0, $title_end ) . self::properties_block_markup() . substr( $content, $title_end );
 		}
 
 		$data['post_content'] = wp_slash( $content );
 
 		return $data;
+	}
+
+	/**
+	 * Byte offset right after the first `core/post-title` block in serialized
+	 * content, or null when there is none. Splicing at this offset leaves the
+	 * rest of the content byte for byte as stored.
+	 *
+	 * The serializer escapes `--` inside block attributes, so the first `-->`
+	 * after the opener always closes the block comment.
+	 *
+	 * @param string $content Unslashed post content.
+	 */
+	private static function title_block_end( string $content ): ?int {
+		if ( ! preg_match( '#<!--\s+wp:(?:core/)?post-title(?=[\s/]).*?(/)?-->#s', $content, $opener, PREG_OFFSET_CAPTURE ) ) {
+			return null;
+		}
+		$opener_end = $opener[0][1] + strlen( $opener[0][0] );
+		if ( ! empty( $opener[1][0] ) ) {
+			return $opener_end;
+		}
+		if ( ! preg_match( '#<!--\s+/wp:(?:core/)?post-title\s+-->#', $content, $closer, PREG_OFFSET_CAPTURE, $opener_end ) ) {
+			return null;
+		}
+		return $closer[0][1] + strlen( $closer[0][0] );
 	}
 
 	/**
