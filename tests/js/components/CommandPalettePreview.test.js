@@ -2,6 +2,8 @@ import { act, render, screen } from '@testing-library/react';
 
 const mockUseEntityRecord = jest.fn();
 const mockDocumentRecord = jest.fn();
+const mockHasEntityRecord = jest.fn();
+const mockGetEntityRecords = jest.fn();
 const mockBlockPreview = jest.fn();
 const mockParse = jest.fn();
 
@@ -12,7 +14,17 @@ jest.mock( '@wordpress/core-data', () => ( {
 
 // The document record comes through `useSelect`; `mockDocumentRecord` returns
 // `{ record, hasResolved }` for the selector arguments.
+const mockRegistry = {
+	select: () => ( {
+		hasEntityRecord: ( ...args ) => mockHasEntityRecord( ...args ),
+	} ),
+	resolveSelect: () => ( {
+		getEntityRecords: ( ...args ) => mockGetEntityRecords( ...args ),
+	} ),
+};
+
 jest.mock( '@wordpress/data', () => ( {
+	useRegistry: () => mockRegistry,
 	useSelect: ( mapSelect ) =>
 		mapSelect( () => ( {
 			getEntityRecord: ( ...args ) =>
@@ -76,10 +88,12 @@ function recordFor( id, extra = {} ) {
 }
 
 // Wait for the dynamically imported editor chunk before checking the body.
-async function renderPreview( doc = PAGE_DOC ) {
+async function renderPreview( doc = PAGE_DOC, documents ) {
 	let result;
 	await act( async () => {
-		result = render( <CommandPalettePreview doc={ doc } /> );
+		result = render(
+			<CommandPalettePreview doc={ doc } documents={ documents } />
+		);
 	} );
 	return result;
 }
@@ -90,6 +104,10 @@ beforeEach( () => {
 	mockUseEntityRecord.mockReturnValue( { record: null, hasResolved: false } );
 	mockDocumentRecord.mockReset();
 	mockDocumentRecord.mockReturnValue( { record: null, hasResolved: false } );
+	mockHasEntityRecord.mockReset();
+	mockHasEntityRecord.mockReturnValue( false );
+	mockGetEntityRecords.mockReset();
+	mockGetEntityRecords.mockResolvedValue( [] );
 	mockBlockPreview.mockReset();
 	mockParse.mockReset();
 	mockParse.mockReturnValue( [ block( 'core/paragraph' ) ] );
@@ -257,5 +275,46 @@ describe( 'CommandPalettePreview', () => {
 			77,
 			query
 		);
+	} );
+
+	it( 'prefetches the listed documents it does not have in one idle request', async () => {
+		mockHasEntityRecord.mockImplementation(
+			( kind, name, id ) => id === 77
+		);
+
+		await renderPreview( PAGE_DOC, [
+			PAGE_DOC,
+			{ id: 77, title: 'Bob' },
+			{ id: 91, title: 'Carol' },
+		] );
+
+		expect( mockGetEntityRecords ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			jest.runOnlyPendingTimers();
+		} );
+
+		expect( mockGetEntityRecords ).toHaveBeenCalledTimes( 1 );
+		expect( mockGetEntityRecords ).toHaveBeenCalledWith(
+			'postType',
+			'crtxt_document',
+			{
+				_fields: 'id,content.raw,featured_media,modified',
+				include: [ 42, 91 ],
+				per_page: 2,
+				status: [ 'draft', 'private', 'publish' ],
+			}
+		);
+	} );
+
+	it( 'skips the prefetch when every listed document is already loaded', async () => {
+		mockHasEntityRecord.mockReturnValue( true );
+
+		await renderPreview( PAGE_DOC, [ PAGE_DOC ] );
+		await act( async () => {
+			jest.runOnlyPendingTimers();
+		} );
+
+		expect( mockGetEntityRecords ).not.toHaveBeenCalled();
 	} );
 } );

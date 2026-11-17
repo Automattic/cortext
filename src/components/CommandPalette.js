@@ -409,7 +409,10 @@ function CommandPaletteContents( {
 					// The preview needs the app registry, where the block editor
 					// store and its private actions are registered.
 					<RegistryProvider value={ appRegistry }>
-						<CommandPalettePreview doc={ previewDoc } />
+						<CommandPalettePreview
+							doc={ previewDoc }
+							documents={ search ? resolvedDocuments : recents }
+						/>
 					</RegistryProvider>
 				}
 			/>

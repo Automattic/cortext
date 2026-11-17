@@ -89,23 +89,50 @@ test.describe( 'Command palette search', () => {
 	test( 'previews the first recent document on open', async ( {
 		admin,
 		page,
+		requestUtils,
 	} ) => {
-		// Load Cortext once to populate the recent list.
-		await admin.visitAdminPage( 'admin.php', 'page=cortext' );
+		const suffix = Date.now().toString( 36 ).slice( -4 );
+		let seededPage;
 
-		await openPalette( page );
+		try {
+			// Put a document in recents so the list is never empty.
+			seededPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: `Palette recent ${ suffix }`,
+					status: 'private',
+				},
+			} );
+			await requestUtils.rest( {
+				method: 'POST',
+				path: '/cortext/v1/recents',
+				data: { id: seededPage.id },
+			} );
 
-		const firstRecent = page
-			.getByRole( 'option' )
-			.first()
-			.locator( '.commands-command-menu__item-label' );
-		await expect( firstRecent ).toBeVisible( { timeout: 5000 } );
+			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 
-		const preview = page.locator( '.cortext-command-palette__preview' );
-		await expect( preview ).toBeVisible();
-		await expect(
-			preview.locator( '.cortext-command-palette__preview-title' )
-		).toHaveText( await firstRecent.innerText() );
+			await openPalette( page );
+
+			// Opening Cortext can touch the home document, so the first recent
+			// is not necessarily the seeded one.
+			const firstRecent = page
+				.getByRole( 'option' )
+				.first()
+				.locator( '.commands-command-menu__item-label' );
+			await expect( firstRecent ).toBeVisible( { timeout: 5000 } );
+
+			const preview = page.locator( '.cortext-command-palette__preview' );
+			await expect( preview ).toBeVisible();
+			await expect(
+				preview.locator( '.cortext-command-palette__preview-title' )
+			).toHaveText( await firstRecent.innerText() );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				seededPage && `/wp/v2/crtxt_documents/${ seededPage.id }`
+			);
+		}
 	} );
 
 	test( 'updates the preview when the highlighted result changes', async ( {
@@ -117,41 +144,59 @@ test.describe( 'Command palette search', () => {
 		const token = `palprev${ suffix }`;
 		const bodyText = `Preview body for ${ token }.`;
 		const seeded = [];
+		const idsByTitle = {};
 
 		try {
 			for ( const name of [ 'alpha', 'beta' ] ) {
-				seeded.push(
-					await requestUtils.rest( {
-						method: 'POST',
-						path: '/wp/v2/crtxt_documents',
-						data: {
-							title: `${ token } ${ name }`,
-							status: 'private',
-							content: `<!-- wp:paragraph --><p>${ bodyText }</p><!-- /wp:paragraph -->`,
-						},
-					} )
-				);
+				const title = `${ token } ${ name }`;
+				const document = await requestUtils.rest( {
+					method: 'POST',
+					path: '/wp/v2/crtxt_documents',
+					data: {
+						title,
+						status: 'private',
+						content: `<!-- wp:paragraph --><p>${ bodyText }</p><!-- /wp:paragraph -->`,
+					},
+				} );
+				seeded.push( document );
+				idsByTitle[ title ] = document.id;
 			}
 
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 
-			// The preview fetches each highlighted document once. Decode the
-			// URL because plain permalinks send the route in `rest_route`.
+			// The preview prefetches the listed documents in one request, so
+			// moving the highlight needs no request of its own. Count only the
+			// preview's single-document requests: on an empty site the canvas
+			// opens a seeded document as home and loads it too. Decode the URL
+			// because plain permalinks send the route in `rest_route`.
 			const recordRequests = [];
 			const seededIds = seeded.map( ( document ) => document.id );
 			page.on( 'request', ( request ) => {
 				if ( request.method() !== 'GET' ) {
 					return;
 				}
-				const match = decodeURIComponent( request.url() ).match(
-					/crtxt_documents\/(\d+)/
-				);
-				if ( match && seededIds.includes( Number( match[ 1 ] ) ) ) {
+				const url = decodeURIComponent( request.url() );
+				const match = url.match( /crtxt_documents\/(\d+)/ );
+				if (
+					match &&
+					url.includes( 'content.raw' ) &&
+					seededIds.includes( Number( match[ 1 ] ) )
+				) {
 					recordRequests.push( Number( match[ 1 ] ) );
 				}
 			} );
 
 			await openPalette( page );
+			const prefetched = page.waitForResponse( ( response ) => {
+				const url = decodeURIComponent( response.url() );
+				// The first result can land before the prefetch, which then
+				// asks only for the rest.
+				return (
+					/crtxt_documents(?!\/)/.test( url ) &&
+					url.includes( 'include' ) &&
+					seededIds.some( ( id ) => url.includes( `${ id }` ) )
+				);
+			} );
 			await page
 				.getByPlaceholder( 'Search or run a command' )
 				.fill( token );
@@ -181,6 +226,7 @@ test.describe( 'Command palette search', () => {
 				.nth( 1 )
 				.locator( '.commands-command-menu__item-label' )
 				.innerText();
+			expect( ( await prefetched ).ok() ).toBe( true );
 			await page.keyboard.press( 'ArrowDown' );
 
 			await expect( previewTitle ).toHaveText( secondLabel );
@@ -196,9 +242,9 @@ test.describe( 'Command palette search', () => {
 				preview.frameLocator( 'iframe' ).getByText( bodyText )
 			).toBeVisible( { timeout: 15000 } );
 
-			expect( [ ...recordRequests ].sort() ).toEqual(
-				[ ...seededIds ].sort()
-			);
+			// Only the first preview may race the prefetch.
+			expect( recordRequests ).not.toContain( idsByTitle[ secondLabel ] );
+			expect( recordRequests.length ).toBeLessThanOrEqual( 1 );
 
 			// The preview stores a partial record. Opening the document must
 			// still load the full one into the editor.

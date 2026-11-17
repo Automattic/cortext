@@ -67,7 +67,16 @@ const mockMenu = {
 // Mock the preview so these tests only track which document it receives.
 jest.mock( '../../../src/components/CommandPalettePreview', () => ( {
 	__esModule: true,
-	default: ( { doc } ) => <div data-testid="preview">{ doc?.id ?? '' }</div>,
+	default: ( { doc, documents } ) => (
+		<div
+			data-testid="preview"
+			data-documents={ ( documents ?? [] )
+				.map( ( entry ) => entry.id )
+				.join( ',' ) }
+		>
+			{ doc?.id ?? '' }
+		</div>
+	),
 } ) );
 
 jest.mock( '../../../src/components/CortextCommandMenu', () => {
@@ -700,6 +709,30 @@ describe( 'CommandPalette preview pane', () => {
 
 		expect( mockMenu.selectedValue ).toBe( 'recent-cortext/recent/7' );
 		expect( previewDocId() ).toBe( 7 );
+	} );
+
+	it( 'hands the listed documents to the preview for prefetching', () => {
+		mockIsPaletteOpen = true;
+		mockRecents = [
+			{ id: 7, title: 'Notes', path: 'notes-7' },
+			{ id: 12, title: 'People', path: 'people-12' },
+		];
+		resolveWith( results );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		const listed = () =>
+			screen.getByTestId( 'preview' ).getAttribute( 'data-documents' );
+		expect( listed() ).toBe( '7,12' );
+
+		act( () => {
+			mockMenu.setSearch( 'ali' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		expect( listed() ).toBe( '42,77' );
 	} );
 
 	it( 'waits for search results before showing a preview', () => {
