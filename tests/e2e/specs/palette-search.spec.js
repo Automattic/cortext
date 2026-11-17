@@ -199,6 +199,15 @@ test.describe( 'Command palette search', () => {
 			expect( [ ...recordRequests ].sort() ).toEqual(
 				[ ...seededIds ].sort()
 			);
+
+			// The preview stores a partial record. Opening the document must
+			// still load the full one into the editor.
+			await page.keyboard.press( 'Enter' );
+			await expect(
+				page
+					.frameLocator( 'iframe[name="editor-canvas"]' )
+					.getByText( bodyText )
+			).toBeVisible( { timeout: 15000 } );
 		} finally {
 			for ( const document of seeded ) {
 				await deleteIfCreated(

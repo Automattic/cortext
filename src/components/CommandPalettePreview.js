@@ -9,7 +9,8 @@ import {
 	privateApis as blockEditorPrivateApis,
 } from '@wordpress/block-editor';
 import { parse } from '@wordpress/blocks';
-import { useEntityRecord } from '@wordpress/core-data';
+import { store as coreStore, useEntityRecord } from '@wordpress/core-data';
+import { useSelect } from '@wordpress/data';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
@@ -35,6 +36,11 @@ const MAX_PREVIEW_BLOCKS = 40;
 const SKELETON_DELAY_MS = 120;
 const SKELETON_LINE_WIDTHS = [ '92%', '84%', '96%', '61%', '88%', '73%' ];
 const EMPTY_BLOCKS = [];
+// Only the fields the pane reads. Asking for `content.raw` alone also spares
+// the server from rendering the content.
+const PREVIEW_RECORD_QUERY = {
+	_fields: 'id,content.raw,featured_media,modified',
+};
 
 // The preview header replaces these blocks. Exclude the data view to avoid
 // mounting the collection UI.
@@ -194,20 +200,27 @@ function PreviewBody( { content, postId, getEditorSettings } ) {
 export default function CommandPalettePreview( { doc } ) {
 	const docId = doc?.id ?? 0;
 	const { module: editorModule, error: editorError } = useEditorModule();
-	// The shell lists only carry a few fields, so fetch the full record when a
-	// document is highlighted. Core-data keeps it, so returning to it, or to a
-	// document already open in the canvas, needs no request.
-	const { record: currentRecord, hasResolved } = useEntityRecord(
-		'postType',
-		POST_TYPE,
-		docId,
-		{ enabled: docId > 0 }
+	// The shell lists carry only a few fields, so fetch the preview fields when
+	// a document is highlighted. Core-data skips the request when the store
+	// already has them, for example for a document open in the canvas.
+	const { currentRecord, hasResolved } = useSelect(
+		( select ) => {
+			if ( ! docId ) {
+				return { currentRecord: null, hasResolved: false };
+			}
+			const args = [ 'postType', POST_TYPE, docId, PREVIEW_RECORD_QUERY ];
+			const { getEntityRecord, hasFinishedResolution } =
+				select( coreStore );
+			return {
+				currentRecord: getEntityRecord( ...args ) ?? null,
+				hasResolved: hasFinishedResolution( 'getEntityRecord', args ),
+			};
+		},
+		[ docId ]
 	);
-	const canRenderBody =
-		Boolean( editorModule ) &&
-		typeof currentRecord?.content?.raw === 'string';
-	const hasFailed =
-		Boolean( editorError ) || ( hasResolved && ! currentRecord );
+	const hasContent = typeof currentRecord?.content?.raw === 'string';
+	const canRenderBody = Boolean( editorModule ) && hasContent;
+	const hasFailed = Boolean( editorError ) || ( hasResolved && ! hasContent );
 	const isLoading = Boolean( doc ) && ! canRenderBody && ! hasFailed;
 	const showSkeleton = useDelayedFlag(
 		isLoading,

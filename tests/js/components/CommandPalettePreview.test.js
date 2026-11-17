@@ -1,11 +1,25 @@
 import { act, render, screen } from '@testing-library/react';
 
 const mockUseEntityRecord = jest.fn();
+const mockDocumentRecord = jest.fn();
 const mockBlockPreview = jest.fn();
 const mockParse = jest.fn();
 
 jest.mock( '@wordpress/core-data', () => ( {
+	store: { name: 'core' },
 	useEntityRecord: ( ...args ) => mockUseEntityRecord( ...args ),
+} ) );
+
+// The document record comes through `useSelect`; `mockDocumentRecord` returns
+// `{ record, hasResolved }` for the selector arguments.
+jest.mock( '@wordpress/data', () => ( {
+	useSelect: ( mapSelect ) =>
+		mapSelect( () => ( {
+			getEntityRecord: ( ...args ) =>
+				mockDocumentRecord( ...args ).record,
+			hasFinishedResolution: ( selector, args ) =>
+				mockDocumentRecord( ...args ).hasResolved,
+		} ) ),
 } ) );
 
 jest.mock( '../../../src/lock-unlock', () => ( {
@@ -74,6 +88,8 @@ beforeEach( () => {
 	jest.useFakeTimers();
 	mockUseEntityRecord.mockReset();
 	mockUseEntityRecord.mockReturnValue( { record: null, hasResolved: false } );
+	mockDocumentRecord.mockReset();
+	mockDocumentRecord.mockReturnValue( { record: null, hasResolved: false } );
 	mockBlockPreview.mockReset();
 	mockParse.mockReset();
 	mockParse.mockReturnValue( [ block( 'core/paragraph' ) ] );
@@ -138,7 +154,7 @@ describe( 'CommandPalettePreview', () => {
 	} );
 
 	it( 'renders the filtered body and edit date after the record loads', async () => {
-		mockUseEntityRecord.mockReturnValue( recordFor( 42 ) );
+		mockDocumentRecord.mockReturnValue( recordFor( 42 ) );
 		mockParse.mockReturnValue( [
 			block( 'core/post-title' ),
 			block( 'core/paragraph' ),
@@ -156,7 +172,7 @@ describe( 'CommandPalettePreview', () => {
 	} );
 
 	it( 'renders at most 40 top-level blocks', async () => {
-		mockUseEntityRecord.mockReturnValue( recordFor( 42 ) );
+		mockDocumentRecord.mockReturnValue( recordFor( 42 ) );
 		mockParse.mockReturnValue(
 			Array.from( { length: 60 }, () => block( 'core/paragraph' ) )
 		);
@@ -169,7 +185,7 @@ describe( 'CommandPalettePreview', () => {
 	} );
 
 	it( 'shows only the header when the document has no previewable blocks', async () => {
-		mockUseEntityRecord.mockReturnValue( recordFor( 42 ) );
+		mockDocumentRecord.mockReturnValue( recordFor( 42 ) );
 		mockParse.mockReturnValue( [ block( 'cortext/data-view' ) ] );
 
 		const { container } = await renderPreview();
@@ -181,20 +197,18 @@ describe( 'CommandPalettePreview', () => {
 	} );
 
 	it( "uses the document's featured image as the cover", async () => {
-		mockUseEntityRecord.mockImplementation( ( kind, name, id ) => {
-			if ( kind === 'root' ) {
-				return {
-					record: {
-						id,
-						media_details: {
-							sizes: { large: { source_url: 'https://x/l.jpg' } },
-						},
-					},
-					hasResolved: true,
-				};
-			}
-			return recordFor( id, { featured_media: 7 } );
-		} );
+		mockDocumentRecord.mockReturnValue(
+			recordFor( 42, { featured_media: 7 } )
+		);
+		mockUseEntityRecord.mockImplementation( ( kind, name, id ) => ( {
+			record: {
+				id,
+				media_details: {
+					sizes: { large: { source_url: 'https://x/l.jpg' } },
+				},
+			},
+			hasResolved: true,
+		} ) );
 
 		const { container } = await renderPreview();
 
@@ -209,8 +223,9 @@ describe( 'CommandPalettePreview', () => {
 	} );
 
 	it( 'falls back to the search excerpt when the record cannot be loaded', async () => {
-		mockUseEntityRecord.mockReturnValue( {
-			record: null,
+		// A failed fetch can still leave the shell list's partial record.
+		mockDocumentRecord.mockReturnValue( {
+			record: { id: 42, content: { raw: undefined } },
 			hasResolved: true,
 		} );
 
@@ -219,27 +234,28 @@ describe( 'CommandPalettePreview', () => {
 		expect( screen.getByText( 'Quarterly themes.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'loads the highlighted document through core-data', async () => {
-		mockUseEntityRecord.mockReturnValue( recordFor( 42 ) );
+	it( 'asks core-data for only the preview fields of the highlighted document', async () => {
+		mockDocumentRecord.mockReturnValue( recordFor( 42 ) );
 
 		const { rerender } = await renderPreview();
 
-		expect( mockUseEntityRecord ).toHaveBeenLastCalledWith(
+		const query = { _fields: 'id,content.raw,featured_media,modified' };
+		expect( mockDocumentRecord ).toHaveBeenCalledWith(
 			'postType',
 			'crtxt_document',
 			42,
-			{ enabled: true }
+			query
 		);
 
 		// Request the next document immediately so a cached record can resolve
 		// in the same render.
 		rerender( <CommandPalettePreview doc={ { id: 77, title: 'Bob' } } /> );
 
-		expect( mockUseEntityRecord ).toHaveBeenLastCalledWith(
+		expect( mockDocumentRecord ).toHaveBeenLastCalledWith(
 			'postType',
 			'crtxt_document',
 			77,
-			{ enabled: true }
+			query
 		);
 	} );
 } );
