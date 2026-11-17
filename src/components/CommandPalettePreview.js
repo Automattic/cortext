@@ -9,7 +9,7 @@ import {
 	privateApis as blockEditorPrivateApis,
 } from '@wordpress/block-editor';
 import { parse } from '@wordpress/blocks';
-import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
+import { useEntityRecord } from '@wordpress/core-data';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
@@ -19,7 +19,7 @@ import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
 import { unlock } from '../lock-unlock';
-import { ACTIVE_PAGES_QUERY, POST_TYPE } from './page-queries';
+import { POST_TYPE } from './page-queries';
 import { SkeletonLine } from './Skeleton';
 
 // The public provider removes the theme and layout settings that the preview
@@ -194,33 +194,20 @@ function PreviewBody( { content, postId, getEditorSettings } ) {
 export default function CommandPalettePreview( { doc } ) {
 	const docId = doc?.id ?? 0;
 	const { module: editorModule, error: editorError } = useEditorModule();
-	// Reuse pages and collections from the shell query. Rows fall back to an
-	// individual core-data lookup, which may resolve from cache.
-	const { records: pooledDocuments } = useEntityRecords(
-		'postType',
-		POST_TYPE,
-		ACTIVE_PAGES_QUERY
-	);
-	const pooledRecord = useMemo(
-		() =>
-			( pooledDocuments ?? [] ).find( ( entry ) => entry.id === docId ) ??
-			null,
-		[ pooledDocuments, docId ]
-	);
-
-	const { record: fetchedRecord, hasResolved } = useEntityRecord(
+	// The shell lists only carry a few fields, so fetch the full record when a
+	// document is highlighted. Core-data keeps it, so returning to it, or to a
+	// document already open in the canvas, needs no request.
+	const { record: currentRecord, hasResolved } = useEntityRecord(
 		'postType',
 		POST_TYPE,
 		docId,
-		{ enabled: docId > 0 && ! pooledRecord }
+		{ enabled: docId > 0 }
 	);
-	const currentRecord = pooledRecord ?? fetchedRecord;
 	const canRenderBody =
 		Boolean( editorModule ) &&
 		typeof currentRecord?.content?.raw === 'string';
 	const hasFailed =
-		Boolean( editorError ) ||
-		( ! currentRecord && hasResolved && ! fetchedRecord );
+		Boolean( editorError ) || ( hasResolved && ! currentRecord );
 	const isLoading = Boolean( doc ) && ! canRenderBody && ! hasFailed;
 	const showSkeleton = useDelayedFlag(
 		isLoading,

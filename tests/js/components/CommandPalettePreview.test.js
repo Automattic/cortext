@@ -1,13 +1,11 @@
 import { act, render, screen } from '@testing-library/react';
 
 const mockUseEntityRecord = jest.fn();
-const mockUseEntityRecords = jest.fn();
 const mockBlockPreview = jest.fn();
 const mockParse = jest.fn();
 
 jest.mock( '@wordpress/core-data', () => ( {
 	useEntityRecord: ( ...args ) => mockUseEntityRecord( ...args ),
-	useEntityRecords: ( ...args ) => mockUseEntityRecords( ...args ),
 } ) );
 
 jest.mock( '../../../src/lock-unlock', () => ( {
@@ -76,8 +74,6 @@ beforeEach( () => {
 	jest.useFakeTimers();
 	mockUseEntityRecord.mockReset();
 	mockUseEntityRecord.mockReturnValue( { record: null, hasResolved: false } );
-	mockUseEntityRecords.mockReset();
-	mockUseEntityRecords.mockReturnValue( { records: [] } );
 	mockBlockPreview.mockReset();
 	mockParse.mockReset();
 	mockParse.mockReturnValue( [ block( 'core/paragraph' ) ] );
@@ -182,25 +178,6 @@ describe( 'CommandPalettePreview', () => {
 			container.querySelector( '[data-testid="block-preview"]' )
 		).toBeNull();
 		expect( screen.getByText( 'Roadmap' ) ).toBeInTheDocument();
-	} );
-
-	it( 'uses the shell query result without fetching the document again', async () => {
-		mockUseEntityRecords.mockReturnValue( {
-			records: [
-				{ id: 1, content: { raw: 'other' } },
-				{ id: 42, content: { raw: 'blocks' } },
-			],
-		} );
-
-		await renderPreview();
-
-		expect( screen.getByTestId( 'block-preview' ) ).toBeInTheDocument();
-		expect( mockUseEntityRecord ).toHaveBeenCalledWith(
-			'postType',
-			'crtxt_document',
-			42,
-			{ enabled: false }
-		);
 	} );
 
 	it( "uses the document's featured image as the cover", async () => {

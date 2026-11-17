@@ -135,14 +135,19 @@ test.describe( 'Command palette search', () => {
 
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 
-			// The shell query already includes page content, so the preview
-			// should not fetch it again.
+			// The preview fetches each highlighted document once. Decode the
+			// URL because plain permalinks send the route in `rest_route`.
 			const recordRequests = [];
 			const seededIds = seeded.map( ( document ) => document.id );
 			page.on( 'request', ( request ) => {
-				const match = request.url().match( /crtxt_documents\/(\d+)/ );
+				if ( request.method() !== 'GET' ) {
+					return;
+				}
+				const match = decodeURIComponent( request.url() ).match(
+					/crtxt_documents\/(\d+)/
+				);
 				if ( match && seededIds.includes( Number( match[ 1 ] ) ) ) {
-					recordRequests.push( match[ 1 ] );
+					recordRequests.push( Number( match[ 1 ] ) );
 				}
 			} );
 
@@ -183,7 +188,17 @@ test.describe( 'Command palette search', () => {
 				preview.frameLocator( 'iframe' ).getByText( bodyText )
 			).toBeVisible( { timeout: 15000 } );
 
-			expect( recordRequests ).toEqual( [] );
+			// Going back to a document already previewed reuses the record.
+			await page.keyboard.press( 'ArrowUp' );
+
+			await expect( previewTitle ).toHaveText( firstLabel );
+			await expect(
+				preview.frameLocator( 'iframe' ).getByText( bodyText )
+			).toBeVisible( { timeout: 15000 } );
+
+			expect( [ ...recordRequests ].sort() ).toEqual(
+				[ ...seededIds ].sort()
+			);
 		} finally {
 			for ( const document of seeded ) {
 				await deleteIfCreated(
