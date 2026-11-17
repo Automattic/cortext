@@ -182,6 +182,10 @@ Cortext app menu includes "Check for Updates..." and a toggle for automatic
 installs. In-place updates require the signed, notarized app running from
 Applications.
 
+Branch builds are versioned `<version>-<sha>` and skip electron-updater. They
+check once on launch and, if a newer Release exists, offer to open the Releases
+page. "Check for Updates..." tells the user to install a release instead.
+
 In desktop, WordPress is bundled runtime code, not a site the user maintains
 through wp-admin. The snapshot disables core, plugin, and theme updates. Each
 launch refreshes the update-lock mu-plugin in the extracted site. New WordPress

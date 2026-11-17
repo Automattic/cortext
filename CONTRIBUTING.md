@@ -8,6 +8,12 @@ Start with [Getting started](docs/getting-started.md) for setup, local developme
 
 Use a short, self-explanatory branch name. Prefixes like `add/`, `fix/`, or `docs/` are fine, but clarity matters more than strict naming.
 
+## Pull request titles
+
+Start the title with a [Conventional Commits](https://www.conventionalcommits.org/) type, capitalized, then a short sentence: `Perf: Fetch only the fields the shell's document lists use`. Squash merges use the title as the commit subject on `main`, and the release notes drop the prefix.
+
+Use `Feat`, `Fix`, `Perf`, `Refactor`, `Docs`, `Test`, `Build`, `CI`, `Chore`, `Style`, or `Revert`. A scope is optional, as in `Build(deps):`. Areas like `Desktop:` or `tooling:` are not types; use the `area:` and `type:` labels for those.
+
 ## Checks
 
 Before asking for review, run the checks that match your change:
