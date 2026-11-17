@@ -1,7 +1,9 @@
 <?php
 /**
  * Per-document icon (emoji or uploaded image) for any post type that opts into
- * the `cortext-document` capability.
+ * the `cortext-document` capability, plus the server-seeded header blocks:
+ * the locked title on create and the row properties block before a row
+ * becomes read-only.
  *
  * `Document::register_post_type()` calls `register_for_post_type()` right after
  * `register_post_type()` so the `crtxt_document` type opts in. The helper stays
@@ -16,6 +18,10 @@ declare( strict_types=1 );
 namespace Cortext\PostType;
 
 defined( 'ABSPATH' ) || exit;
+
+use Cortext\Documents;
+use Cortext\Editor\DocumentPropertiesBlock;
+use WP_Post;
 
 final class DocumentIdentity {
 
@@ -44,6 +50,10 @@ final class DocumentIdentity {
 		// Add the locked title block on create so the first editor render
 		// already has it.
 		add_filter( 'wp_insert_post_data', array( $this, 'prepend_header_blocks' ), 10, 2 );
+		// The editor adds the properties block when a row is first opened,
+		// but not while it is read-only. Add it when the row becomes read-only
+		// so its field values still show.
+		add_filter( 'wp_insert_post_data', array( $this, 'add_properties_block_before_read_only' ), 10, 2 );
 	}
 
 	/**
@@ -100,6 +110,81 @@ final class DocumentIdentity {
 		);
 
 		return serialize_blocks( $blocks );
+	}
+
+	/**
+	 * Returns the locked `cortext/document-properties` block markup that sits
+	 * right after the title on rows.
+	 */
+	public static function properties_block_markup(): string {
+		return serialize_block( self::properties_block() );
+	}
+
+	/**
+	 * Parsed-block shape of the locked properties block.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function properties_block(): array {
+		return array(
+			'blockName'    => DocumentPropertiesBlock::BLOCK_NAME,
+			'attrs'        => array( 'lock' => self::HEADER_LOCK ),
+			'innerBlocks'  => array(),
+			'innerHTML'    => '',
+			'innerContent' => array(),
+		);
+	}
+
+	/**
+	 * Adds the properties block to a row as it moves into Trash or Archived.
+	 *
+	 * The editor skips header repair on trashed and locked documents, so a row
+	 * that was never opened would otherwise show no field values there. The block goes
+	 * right after the title; a row without a title gets both.
+	 *
+	 * @param array $data    Slashed post data about to be saved.
+	 * @param array $postarr Original input passed to wp_insert_post.
+	 */
+	public function add_properties_block_before_read_only( array $data, array $postarr ): array {
+		$read_only = array( Documents::STATUS_TRASH, Documents::STATUS_ARCHIVED );
+		$post_id   = (int) ( $postarr['ID'] ?? 0 );
+		if ( $post_id < 1 || ! in_array( $data['post_status'] ?? '', $read_only, true ) ) {
+			return $data;
+		}
+
+		$post = get_post( $post_id );
+		if (
+			! $post instanceof WP_Post
+			|| in_array( $post->post_status, $read_only, true )
+			|| Documents::KIND_ROW !== Documents::kind_for_document( $post )
+		) {
+			return $data;
+		}
+
+		$content = wp_unslash( (string) ( $data['post_content'] ?? '' ) );
+		if ( has_block( DocumentPropertiesBlock::BLOCK_NAME, $content ) ) {
+			return $data;
+		}
+
+		$blocks      = parse_blocks( $content );
+		$title_index = null;
+		foreach ( $blocks as $index => $block ) {
+			if ( 'core/post-title' === ( $block['blockName'] ?? null ) ) {
+				$title_index = $index;
+				break;
+			}
+		}
+
+		if ( null === $title_index ) {
+			$content = self::header_blocks_markup() . self::properties_block_markup() . $content;
+		} else {
+			array_splice( $blocks, $title_index + 1, 0, array( self::properties_block() ) );
+			$content = serialize_blocks( $blocks );
+		}
+
+		$data['post_content'] = wp_slash( $content );
+
+		return $data;
 	}
 
 	/**
