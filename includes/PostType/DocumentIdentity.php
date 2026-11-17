@@ -20,6 +20,14 @@ defined( 'ABSPATH' ) || exit;
 final class DocumentIdentity {
 
 	/**
+	 * Lock shared by the header blocks so they cannot be moved or removed.
+	 */
+	private const HEADER_LOCK = array(
+		'move'   => true,
+		'remove' => true,
+	);
+
+	/**
 	 * Stored as a JSON string. Three shapes:
 	 *   - emoji: {"type":"emoji","value":"📘"}
 	 *   - image: {"type":"image","id":123}
@@ -78,10 +86,7 @@ final class DocumentIdentity {
 		$attrs = array(
 			// Render the title as the page <h1>; the block defaults to <h2>.
 			'level' => 1,
-			'lock'  => array(
-				'move'   => true,
-				'remove' => true,
-			),
+			'lock'  => self::HEADER_LOCK,
 		);
 
 		$blocks = array(
