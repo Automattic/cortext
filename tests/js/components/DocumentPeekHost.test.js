@@ -15,6 +15,21 @@ jest.mock( '@tanstack/react-router', () => ( {
 	useParams: () => ( { _splat: '' } ),
 } ) );
 
+const mockNotifyDocumentTrashChanged = jest.fn();
+const mockNotifyCollectionRowsChanged = jest.fn();
+const mockNotifySidebarTreeChanged = jest.fn();
+jest.mock( '../../../src/hooks/documentTrashInvalidation', () => ( {
+	notifyDocumentTrashChanged: () => mockNotifyDocumentTrashChanged(),
+} ) );
+jest.mock( '../../../src/hooks/rowInvalidation', () => ( {
+	notifyCollectionRowsChanged: ( ...args ) =>
+		mockNotifyCollectionRowsChanged( ...args ),
+} ) );
+jest.mock( '../../../src/hooks/sidebarTreeInvalidation', () => ( {
+	notifySidebarTreeChanged: ( ...args ) =>
+		mockNotifySidebarTreeChanged( ...args ),
+} ) );
+
 jest.mock( '../../../src/hooks/useCollectionFields', () => () => ( {
 	detailFields: [
 		{
@@ -87,6 +102,9 @@ describe( 'DocumentPeekHost', () => {
 		capturedActions = null;
 		mockNavigate.mockReset();
 		mockInvalidateResolution.mockReset();
+		mockNotifyDocumentTrashChanged.mockReset();
+		mockNotifyCollectionRowsChanged.mockReset();
+		mockNotifySidebarTreeChanged.mockReset();
 		mockRowDetailView.mockClear();
 	} );
 
@@ -169,6 +187,11 @@ describe( 'DocumentPeekHost', () => {
 			[ 'postType', DOCUMENT_POST_TYPE, PUBLISHED_DOCUMENTS_QUERY ]
 		);
 		expect( refresh ).toHaveBeenCalledTimes( 1 );
+		// The row leaves Trash, and other collections can relate to it.
+		expect( mockNotifyDocumentTrashChanged ).toHaveBeenCalledTimes( 1 );
+		expect( mockNotifyCollectionRowsChanged ).toHaveBeenCalledTimes( 1 );
+		expect( mockNotifyCollectionRowsChanged ).toHaveBeenCalledWith();
+		expect( mockNotifySidebarTreeChanged ).not.toHaveBeenCalled();
 	} );
 
 	it( 'refreshes the document lists when a restore brings back nested documents', async () => {
@@ -191,5 +214,8 @@ describe( 'DocumentPeekHost', () => {
 			[ 'postType', POST_TYPE, ACTIVE_PAGES_QUERY ]
 		);
 		expect( refresh ).toHaveBeenCalledTimes( 1 );
+		expect( mockNotifySidebarTreeChanged ).toHaveBeenCalledTimes( 1 );
+		expect( mockNotifyDocumentTrashChanged ).toHaveBeenCalledTimes( 1 );
+		expect( mockNotifyCollectionRowsChanged ).toHaveBeenCalledTimes( 1 );
 	} );
 } );
