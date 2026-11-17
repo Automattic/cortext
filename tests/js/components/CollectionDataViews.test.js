@@ -11,6 +11,11 @@ const mockDataViewRowReorder = jest.fn( () => null );
 const mockSetFavorites = jest.fn();
 const mockOpenDocument = jest.fn();
 const mockCloseDocument = jest.fn();
+const mockFlushActiveEditor = jest.fn( async () => true );
+
+jest.mock( '../../../src/components/ActiveEditorContext', () => ( {
+	useActiveEditor: () => ( { flushActiveEditor: mockFlushActiveEditor } ),
+} ) );
 
 jest.mock( '@wordpress/dataviews/wp', () => {
 	const actual = jest.requireActual( '@wordpress/dataviews/wp' );
@@ -790,6 +795,43 @@ describe( 'CollectionDataViews archive actions', () => {
 		} );
 
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect(
+			await findAllByText(
+				'Could not save changes. Archive was canceled.'
+			)
+		).not.toHaveLength( 0 );
+	} );
+
+	it( 'keeps the peek open when its pending property saves fail', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		useDocumentPeekState.mockReturnValue( {
+			peek: { docId: 1, mode: 'side' },
+		} );
+		mockFlushActiveEditor.mockResolvedValueOnce( false );
+
+		const { findAllByText } = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		const archiveAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'archive-row' );
+		await act( async () => {
+			await archiveAction.callback( [ row ] );
+		} );
+
+		expect( mockCloseDocument ).not.toHaveBeenCalled();
+		expect( apiFetch ).not.toHaveBeenCalled();
 		expect(
 			await findAllByText(
 				'Could not save changes. Archive was canceled.'

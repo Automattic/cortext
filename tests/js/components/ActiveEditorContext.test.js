@@ -44,4 +44,23 @@ describe( 'ActiveEditorProvider', () => {
 		);
 		expect( flushNow ).toHaveBeenCalledTimes( 1 );
 	} );
+
+	it( 'waits for registered pending saves and reports their failure', async () => {
+		const flushSaves = jest.fn().mockResolvedValue( false );
+		const { result } = renderHook( () => useActiveEditor(), { wrapper } );
+
+		let unregister;
+		act( () => {
+			unregister = result.current.registerPendingSaves( flushSaves );
+		} );
+		await expect( result.current.flushActiveEditor() ).resolves.toBe(
+			false
+		);
+
+		act( () => unregister() );
+		await expect( result.current.flushActiveEditor() ).resolves.toBe(
+			true
+		);
+		expect( flushSaves ).toHaveBeenCalledTimes( 1 );
+	} );
 } );

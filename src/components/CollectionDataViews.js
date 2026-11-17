@@ -70,6 +70,7 @@ import {
 } from './dataViewItemLookup';
 import { scrollToEndQuickly } from './dataViewScroll';
 import { saveRowDocumentField } from './rowDocumentMutations';
+import { useActiveEditor } from './ActiveEditorContext';
 import { getRowDetailMode, withRowDetailMode } from './rowDetailUtils';
 import {
 	applyVisibleSelectionChange,
@@ -582,6 +583,7 @@ export default function CollectionDataViews( {
 	// Inline field saves still in flight, keyed by row id, so archiving a row
 	// can wait for them instead of racing them to the server.
 	const pendingRowFieldSaves = useRef( new Map() );
+	const { flushActiveEditor } = useActiveEditor();
 	const saveRowField = useCallback(
 		async ( rowId, fieldId, value ) => {
 			if ( ! collectionId || ! rowId ) {
@@ -1193,7 +1195,11 @@ export default function CollectionDataViews( {
 			if ( closesOpenRow ) {
 				let didClose = false;
 				try {
-					didClose = await closeDocument();
+					// Row properties save outside the peek's editor, so wait
+					// for them before the close flushes the rest.
+					didClose =
+						( await flushActiveEditor() ) &&
+						( await closeDocument() );
 				} catch {}
 				if ( ! didClose ) {
 					setRowActionError( archiveSaveFailureMessage() );
@@ -1279,6 +1285,7 @@ export default function CollectionDataViews( {
 		},
 		[
 			closeDocument,
+			flushActiveEditor,
 			forgetLifecycleRows,
 			invalidateResolution,
 			openRowId,
