@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 const mockUseCommand = jest.fn();
 const mockCreateRegistry = jest.fn( () => ( { register: jest.fn() } ) );
@@ -61,7 +61,23 @@ const mockMenu = {
 	descriptions: new Map(),
 	selectedValue: undefined,
 	onSelectedValueChange: () => {},
+	previewPane: null,
 };
+
+// Mock the preview so these tests only track which document it receives.
+jest.mock( '../../../src/components/CommandPalettePreview', () => ( {
+	__esModule: true,
+	default: ( { doc, documents } ) => (
+		<div
+			data-testid="preview"
+			data-documents={ ( documents ?? [] )
+				.map( ( entry ) => entry.id )
+				.join( ',' ) }
+		>
+			{ doc?.id ?? '' }
+		</div>
+	),
+} ) );
 
 jest.mock( '../../../src/components/CortextCommandMenu', () => {
 	const { createContext, useContext } = require( '@wordpress/element' );
@@ -73,7 +89,8 @@ jest.mock( '../../../src/components/CortextCommandMenu', () => {
 		mockMenu.descriptions = useContext( CommandDescriptionContext );
 		mockMenu.selectedValue = props.selectedValue;
 		mockMenu.onSelectedValueChange = props.onSelectedValueChange;
-		return null;
+		mockMenu.previewPane = props.previewPane;
+		return props.previewPane ?? null;
 	};
 	return {
 		__esModule: true,
@@ -104,7 +121,13 @@ beforeEach( () => {
 	mockRecents = [];
 	mockIsPaletteOpen = false;
 	mockMenu.descriptions = new Map();
+	mockMenu.previewPane = null;
 } );
+
+function previewDocId() {
+	const pane = screen.queryByTestId( 'preview' );
+	return pane?.textContent ? Number( pane.textContent ) : null;
+}
 
 afterEach( () => {
 	jest.useRealTimers();
@@ -584,5 +607,224 @@ describe( 'CommandPalette document search', () => {
 				.map( ( [ c ] ) => c )
 				.some( ( c ) => c.name === 'cortext/document/1' )
 		).toBe( false );
+	} );
+} );
+
+describe( 'CommandPalette preview pane', () => {
+	const results = [
+		{ id: 42, title: 'Alice', path: 'alice-42' },
+		{ id: 77, title: 'Bob', path: 'bob-77' },
+	];
+
+	function resolveWith( documents, error = null ) {
+		mockUseDocuments.mockReturnValue( {
+			documents,
+			total: documents.length,
+			isLoading: false,
+			hasResolved: true,
+			error,
+			refresh: jest.fn(),
+		} );
+	}
+
+	it( 'updates the preview when the selected result changes', () => {
+		mockIsPaletteOpen = true;
+		resolveWith( results );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		// With no search and no recents, there is nothing to preview.
+		expect( previewDocId() ).toBeNull();
+
+		act( () => {
+			mockMenu.setSearch( 'ali' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		expect( previewDocId() ).toBe( 42 );
+
+		act( () => {
+			mockMenu.onSelectedValueChange( 'document-cortext/document/77' );
+		} );
+
+		expect( previewDocId() ).toBe( 77 );
+
+		act( () => {
+			mockMenu.setSearch( '' );
+		} );
+
+		expect( previewDocId() ).toBeNull();
+	} );
+
+	it( 'previews the highlighted recent while the input is empty', () => {
+		mockIsPaletteOpen = true;
+		mockRecents = [
+			{ id: 7, title: 'Notes', path: 'notes-7' },
+			{ id: 12, title: 'People', path: 'people-12' },
+		];
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		// Simulate cmdk highlighting the first item.
+		act( () => {
+			mockMenu.onSelectedValueChange( 'recent-cortext/recent/7' );
+		} );
+
+		expect( previewDocId() ).toBe( 7 );
+
+		// A command clears the document preview but keeps the pane mounted.
+		act( () => {
+			mockMenu.onSelectedValueChange( 'Go to home' );
+		} );
+
+		expect( previewDocId() ).toBeNull();
+		expect( mockMenu.previewPane ).not.toBeNull();
+	} );
+
+	it( 'previews the first recent again after closing and reopening', () => {
+		mockIsPaletteOpen = true;
+		mockRecents = [
+			{ id: 7, title: 'Notes', path: 'notes-7' },
+			{ id: 12, title: 'People', path: 'people-12' },
+		];
+		const canvasRef = { current: null };
+
+		const { rerender } = render(
+			<CommandPalette canvasRef={ canvasRef } />
+		);
+
+		expect( previewDocId() ).toBe( 7 );
+
+		// Closing with an empty input changes neither the search nor the
+		// recents.
+		mockIsPaletteOpen = false;
+		rerender( <CommandPalette canvasRef={ canvasRef } /> );
+
+		expect( mockMenu.selectedValue ).toBeUndefined();
+
+		mockIsPaletteOpen = true;
+		rerender( <CommandPalette canvasRef={ canvasRef } /> );
+
+		expect( mockMenu.selectedValue ).toBe( 'recent-cortext/recent/7' );
+		expect( previewDocId() ).toBe( 7 );
+	} );
+
+	it( 'keeps the highlight when recents change while the palette is open', () => {
+		mockIsPaletteOpen = true;
+		const notes = { id: 7, title: 'Notes', path: 'notes-7' };
+		const people = { id: 12, title: 'People', path: 'people-12' };
+		const roadmap = { id: 30, title: 'Roadmap', path: 'roadmap-30' };
+		mockRecents = [ notes, people ];
+		const canvasRef = { current: null };
+
+		const { rerender } = render(
+			<CommandPalette canvasRef={ canvasRef } />
+		);
+
+		act( () => {
+			mockMenu.onSelectedValueChange( 'recent-cortext/recent/12' );
+		} );
+
+		// A recents refresh reorders the list but keeps the highlighted one.
+		mockRecents = [ roadmap, notes, people ];
+		rerender( <CommandPalette canvasRef={ canvasRef } /> );
+
+		expect( mockMenu.selectedValue ).toBe( 'recent-cortext/recent/12' );
+		expect( previewDocId() ).toBe( 12 );
+
+		// A highlighted command survives a refresh too.
+		act( () => {
+			mockMenu.onSelectedValueChange( 'Go to home' );
+		} );
+		mockRecents = [ notes, roadmap ];
+		rerender( <CommandPalette canvasRef={ canvasRef } /> );
+
+		expect( mockMenu.selectedValue ).toBe( 'Go to home' );
+
+		// A highlighted recent that drops out of the list falls back to the
+		// first one.
+		act( () => {
+			mockMenu.onSelectedValueChange( 'recent-cortext/recent/30' );
+		} );
+		mockRecents = [ people, notes ];
+		rerender( <CommandPalette canvasRef={ canvasRef } /> );
+
+		expect( mockMenu.selectedValue ).toBe( 'recent-cortext/recent/12' );
+	} );
+
+	it( 'hands the listed documents to the preview for prefetching', () => {
+		mockIsPaletteOpen = true;
+		mockRecents = [
+			{ id: 7, title: 'Notes', path: 'notes-7' },
+			{ id: 12, title: 'People', path: 'people-12' },
+		];
+		resolveWith( results );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		const listed = () =>
+			screen.getByTestId( 'preview' ).getAttribute( 'data-documents' );
+		expect( listed() ).toBe( '7,12' );
+
+		act( () => {
+			mockMenu.setSearch( 'ali' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		expect( listed() ).toBe( '42,77' );
+	} );
+
+	it( 'waits for search results before showing a preview', () => {
+		mockIsPaletteOpen = true;
+		mockUseDocuments.mockReturnValue( {
+			documents: [],
+			total: 0,
+			isLoading: true,
+			hasResolved: false,
+			error: null,
+			refresh: jest.fn(),
+		} );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		act( () => {
+			mockMenu.setSearch( 'ali' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		expect( previewDocId() ).toBeNull();
+	} );
+
+	it( 'clears the preview when the next query fails', () => {
+		mockIsPaletteOpen = true;
+		resolveWith( results );
+
+		render( <CommandPalette canvasRef={ { current: null } } /> );
+
+		act( () => {
+			mockMenu.setSearch( 'first' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+		expect( previewDocId() ).toBe( 42 );
+
+		// A failed query clears the stale results and their preview.
+		resolveWith( results, new Error( 'network' ) );
+
+		act( () => {
+			mockMenu.setSearch( 'second' );
+		} );
+		act( () => {
+			jest.advanceTimersByTime( 150 );
+		} );
+
+		expect( previewDocId() ).toBeNull();
 	} );
 } );

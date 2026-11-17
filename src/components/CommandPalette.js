@@ -22,6 +22,7 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import CommandPalettePreview from './CommandPalettePreview';
 import CortextCommandMenu, {
 	CommandDescriptionContext,
 } from './CortextCommandMenu';
@@ -29,10 +30,14 @@ import useDebouncedValue from '../hooks/useDebouncedValue';
 import useDocuments from '../hooks/useDocuments';
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHomePath } from '../hooks/useWorkspaceHomePath';
-import { listIconForRecord } from '../documents';
+import { collectionHint, listIconForRecord } from '../documents';
 
 const OPEN_COMMAND_PALETTE_EVENT = 'cortext:open-command-palette';
 const DEFAULT_COMMAND_CONTEXT = 'root';
+// cmdk derives item values from the command names in CortextCommandMenu.
+const DOCUMENT_COMMAND_VALUE_PREFIX = 'document-cortext/document/';
+const RECENT_COMMAND_VALUE_PREFIX = 'recent-cortext/recent/';
+const EMPTY_DOCUMENTS = [];
 
 export function openCommandPalette() {
 	window.dispatchEvent( new Event( OPEN_COMMAND_PALETTE_EVENT ) );
@@ -74,18 +79,6 @@ function documentTitle( doc ) {
 		/* translators: 1: row title, 2: collection title */
 		__( '%1$s in %2$s', 'cortext' ),
 		title,
-		collectionTitle
-	);
-}
-
-function collectionHint( doc ) {
-	const collectionTitle = doc?.collection?.title?.trim?.();
-	if ( ! collectionTitle ) {
-		return '';
-	}
-	return sprintf(
-		/* translators: %s: parent collection title */
-		__( 'in %s', 'cortext' ),
 		collectionTitle
 	);
 }
@@ -191,8 +184,16 @@ function DocumentCommandRegistration( { canvasRef, document } ) {
 	return null;
 }
 
+function documentCommandValue( doc ) {
+	return `${ DOCUMENT_COMMAND_VALUE_PREFIX }${ doc.id }`;
+}
+
 function documentCommandValues( documents ) {
-	return documents.map( ( doc ) => `document-cortext/document/${ doc.id }` );
+	return documents.map( documentCommandValue );
+}
+
+function recentCommandValue( recent ) {
+	return `${ RECENT_COMMAND_VALUE_PREFIX }${ recent.id }`;
 }
 
 function DocumentResultsRegistration( {
@@ -230,8 +231,20 @@ function DocumentResultsRegistration( {
 			return;
 		}
 		setHasEverResolved( true );
-		onDocumentsResolved( documentCommandValues( documents ) );
+		onDocumentsResolved( documents );
 	}, [ hasFreshDocuments, documents, onDocumentsResolved ] );
+
+	// Clear resolved documents when the request fails or this list unmounts so
+	// the preview cannot point to a stale result.
+	useEffect( () => {
+		if ( error ) {
+			onDocumentsResolved( EMPTY_DOCUMENTS );
+		}
+	}, [ error, onDocumentsResolved ] );
+
+	useEffect( () => {
+		return () => onDocumentsResolved( EMPTY_DOCUMENTS );
+	}, [ onDocumentsResolved ] );
 
 	useEffect( () => {
 		if ( ! hasFreshDocuments ) {
@@ -269,6 +282,7 @@ function DocumentResultsRegistration( {
 }
 
 function CommandPaletteContents( {
+	appRegistry,
 	canvasRef,
 	homePath,
 	isResolvingHomePath,
@@ -280,6 +294,8 @@ function CommandPaletteContents( {
 	const [ documentDescriptions, setDocumentDescriptions ] = useState(
 		() => new Map()
 	);
+	const [ resolvedDocuments, setResolvedDocuments ] =
+		useState( EMPTY_DOCUMENTS );
 	// Controlled cmdk selection. When the first batch of documents arrives,
 	// anchor the selection on the first result so it doesn't sit on whatever
 	// recent/static command was selected before. After that cmdk owns the
@@ -297,11 +313,26 @@ function CommandPaletteContents( {
 	const isDocumentSearchPending =
 		Boolean( search ) && ( isDebouncing || isFetchingDocuments );
 
+	// cmdk does not call `onValueChange` for its initial uncontrolled selection.
+	// Select the first recent explicitly on every open so its preview is
+	// available. Recents can be replaced while the palette is open, so keep a
+	// highlight that is still listed: a current recent, or a command.
 	useEffect( () => {
-		if ( ! search ) {
-			setSelectedValue( undefined );
+		if ( ! isPaletteOpen || search ) {
+			return;
 		}
-	}, [ search ] );
+		const recentValues = recents.map( recentCommandValue );
+		setSelectedValue( ( current ) => {
+			const isListedCommand =
+				Boolean( current ) &&
+				! current.startsWith( DOCUMENT_COMMAND_VALUE_PREFIX ) &&
+				! current.startsWith( RECENT_COMMAND_VALUE_PREFIX );
+			if ( isListedCommand || recentValues.includes( current ) ) {
+				return current;
+			}
+			return recentValues[ 0 ];
+		} );
+	}, [ isPaletteOpen, search, recents ] );
 
 	// Reset the input and the controlled selection whenever the palette
 	// closes, regardless of how it closed. Picking a result calls
@@ -315,10 +346,12 @@ function CommandPaletteContents( {
 		}
 	}, [ isPaletteOpen ] );
 
-	const handleDocumentsResolved = useCallback( ( values ) => {
-		if ( values.length === 0 ) {
+	const handleDocumentsResolved = useCallback( ( documents ) => {
+		setResolvedDocuments( documents );
+		if ( documents.length === 0 ) {
 			return;
 		}
+		const values = documentCommandValues( documents );
 		setSelectedValue( ( current ) => {
 			// If the user's current selection survived into the new
 			// result set, keep it. Otherwise jump to the first new doc so
@@ -330,6 +363,26 @@ function CommandPaletteContents( {
 			return values[ 0 ];
 		} );
 	}, [] );
+
+	// Show previews for search results and recents. Other commands leave the
+	// pane empty.
+	const previewDoc = useMemo( () => {
+		if ( ! selectedValue ) {
+			return null;
+		}
+		if ( search ) {
+			return (
+				resolvedDocuments.find(
+					( doc ) => documentCommandValue( doc ) === selectedValue
+				) ?? null
+			);
+		}
+		return (
+			recents.find(
+				( recent ) => recentCommandValue( recent ) === selectedValue
+			) ?? null
+		);
+	}, [ search, selectedValue, resolvedDocuments, recents ] );
 
 	return (
 		<CommandDescriptionContext.Provider value={ documentDescriptions }>
@@ -361,6 +414,16 @@ function CommandPaletteContents( {
 				isDocumentSearchPending={ isDocumentSearchPending }
 				selectedValue={ selectedValue }
 				onSelectedValueChange={ setSelectedValue }
+				previewPane={
+					// The preview needs the app registry, where the block editor
+					// store and its private actions are registered.
+					<RegistryProvider value={ appRegistry }>
+						<CommandPalettePreview
+							doc={ previewDoc }
+							documents={ search ? resolvedDocuments : recents }
+						/>
+					</RegistryProvider>
+				}
 			/>
 		</CommandDescriptionContext.Provider>
 	);
@@ -368,15 +431,16 @@ function CommandPaletteContents( {
 
 export default function CommandPalette( { canvasRef } ) {
 	const { homePath, isResolvingHomePath } = useWorkspaceHomePath();
-	const parentRegistry = useRegistry();
+	const appRegistry = useRegistry();
 	const registry = useMemo(
-		() => createCommandPaletteRegistry( parentRegistry ),
-		[ parentRegistry ]
+		() => createCommandPaletteRegistry( appRegistry ),
+		[ appRegistry ]
 	);
 
 	return (
 		<RegistryProvider value={ registry }>
 			<CommandPaletteContents
+				appRegistry={ appRegistry }
 				canvasRef={ canvasRef }
 				homePath={ homePath }
 				isResolvingHomePath={ isResolvingHomePath }
