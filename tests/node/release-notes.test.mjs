@@ -111,6 +111,30 @@ describe( 'release notes', () => {
 		);
 	} );
 
+	it( 'drops any conventional commit type from titles', () => {
+		const notes = buildReleaseNotes(
+			[
+				pullRequest( 30, 'perf: fetch only the fields lists use', [
+					'type: enhancement',
+					'area: performance',
+				] ),
+				pullRequest( 31, 'refactor(shell)!: split the sidebar', [
+					'type: enhancement',
+					'area: shell',
+				] ),
+				pullRequest( 32, 'Desktop: keep the window size', [
+					'type: bug',
+					'area: desktop',
+				] ),
+			],
+			baseOptions
+		);
+
+		assert.match( notes, /^- Fetch only the fields lists use\. /m );
+		assert.match( notes, /^- Split the sidebar\. /m );
+		assert.match( notes, /^- Desktop: keep the window size\. /m );
+	} );
+
 	it( 'uses product order for areas', () => {
 		const notes = buildReleaseNotes(
 			[

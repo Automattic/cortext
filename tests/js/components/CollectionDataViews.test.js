@@ -501,7 +501,7 @@ describe( 'CollectionDataViews surface focus', () => {
 	} );
 } );
 
-describe( 'CollectionDataViews with DataViews 17', () => {
+describe( 'CollectionDataViews with DataViews 18', () => {
 	const groupedRows = [
 		{ id: 1, status: 'B' },
 		{ id: 2, status: 'A' },

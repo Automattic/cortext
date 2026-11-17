@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 jest.mock( '@wordpress/i18n', () => ( {
 	__: ( value ) => value,
 	_n: ( single, plural, count ) => ( count === 1 ? single : plural ),
+	_x: ( value ) => value,
 	sprintf: ( value ) => value,
 } ) );
 
@@ -125,19 +126,20 @@ beforeEach( () => {
 	useNavigate.mockReturnValue( navigate );
 	useEntityRecords.mockReturnValue( {
 		records: [],
-		isResolving: false,
+		hasResolved: true,
 	} );
 } );
 
 describe( 'PublishedDocumentsPane', () => {
 	it( 'loads the panel with one published document query', () => {
-		render( <PublishedDocumentsPane /> );
+		render( <PublishedDocumentsPane isActive /> );
 
 		expect( useEntityRecords ).toHaveBeenCalledTimes( 1 );
 		expect( useEntityRecords ).toHaveBeenCalledWith(
 			'postType',
 			POST_TYPE,
-			PUBLISHED_DOCUMENTS_QUERY
+			PUBLISHED_DOCUMENTS_QUERY,
+			{ enabled: true }
 		);
 		expect( PUBLISHED_DOCUMENTS_QUERY ).toEqual( {
 			per_page: 100,
@@ -155,8 +157,82 @@ describe( 'PublishedDocumentsPane', () => {
 		);
 	} );
 
-	it( 'passes DataViews 17 layout defaults to the published documents table', () => {
-		render( <PublishedDocumentsPane /> );
+	it( 'skips the query while the pane is inactive', () => {
+		render( <PublishedDocumentsPane isActive={ false } /> );
+
+		expect( useEntityRecords ).toHaveBeenCalledWith(
+			'postType',
+			POST_TYPE,
+			PUBLISHED_DOCUMENTS_QUERY,
+			{ enabled: false }
+		);
+	} );
+
+	it( 'waits briefly, then shows the spinner instead of the empty message until the list resolves', () => {
+		jest.useFakeTimers();
+		useEntityRecords.mockReturnValue( {
+			records: null,
+			isResolving: false,
+			hasResolved: false,
+		} );
+
+		try {
+			render( <PublishedDocumentsPane isActive /> );
+
+			expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
+			expect( DataViews ).not.toHaveBeenCalled();
+
+			act( () => {
+				jest.advanceTimersByTime( 120 );
+			} );
+
+			expect( screen.getByTestId( 'spinner' ) ).toBeInTheDocument();
+			expect( DataViews ).not.toHaveBeenCalled();
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	it( 'does not prepare the spinner while the pane is hidden', () => {
+		jest.useFakeTimers();
+		useEntityRecords.mockReturnValue( {
+			records: [],
+			hasResolved: false,
+		} );
+
+		try {
+			const { rerender } = render(
+				<PublishedDocumentsPane isActive={ false } />
+			);
+			act( () => {
+				jest.advanceTimersByTime( 1000 );
+			} );
+
+			rerender( <PublishedDocumentsPane isActive /> );
+
+			expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	it( 'keeps the cached list on screen while it refreshes', () => {
+		useEntityRecords.mockReturnValue( {
+			records: [
+				documentRecord( { id: 10, title: { raw: 'Public Page' } } ),
+			],
+			hasResolved: false,
+		} );
+
+		render( <PublishedDocumentsPane isActive /> );
+
+		expect( screen.queryByTestId( 'spinner' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Public Page' ) ).toBeInTheDocument();
+		expect( DataViews.mock.calls[ 0 ][ 0 ].isLoading ).toBe( true );
+	} );
+
+	it( 'passes DataViews 18 layout defaults to the published documents table', () => {
+		render( <PublishedDocumentsPane isActive /> );
 
 		expect( DataViews ).toHaveBeenCalledTimes( 1 );
 		expect( DataViews.mock.calls[ 0 ][ 0 ].defaultLayouts ).toEqual( {
@@ -190,10 +266,10 @@ describe( 'PublishedDocumentsPane', () => {
 					cortext_defines_trait: true,
 				} ),
 			],
-			isResolving: false,
+			hasResolved: true,
 		} );
 
-		render( <PublishedDocumentsPane /> );
+		render( <PublishedDocumentsPane isActive /> );
 
 		expect( DataViews ).toHaveBeenCalledTimes( 1 );
 		expect( screen.getByText( 'Public Page' ) ).toBeInTheDocument();

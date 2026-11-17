@@ -21,12 +21,14 @@ use WP_REST_Server;
 
 final class Test_Rest_Fields_Controller extends BaseTestCase {
 
+	use InMemoryPostsQuery;
 	use InMemoryTermStore;
 
 	public function set_up(): void {
 		parent::set_up();
 
 		( new Document() )->register_post_type();
+		( new ArchiveCascade() )->register_status();
 		( new TraitTaxonomy() )->register_taxonomy();
 		$trait_taxonomy = new TraitTaxonomy();
 		add_action( 'added_post_meta', array( $trait_taxonomy, 'sync_term_on_meta_change' ), 10, 4 );
@@ -177,7 +179,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 					array(
 						'value' => 'doing',
 						'label' => 'Doing',
-						'color' => 'neon-magenta', // not in palette
+						'color' => 'neon-magenta', // Not in palette.
 					),
 				),
 			)
@@ -319,6 +321,289 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
+	public function test_archived_collection_blocks_field_mutations_but_allows_reads(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection_with_slug( 'Archived schema', 'archived-schema' );
+
+		$text_response     = $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Notes',
+				'type'  => 'text',
+			)
+		);
+		$select_response   = $this->create_field(
+			$collection_id,
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'open',
+						'label' => 'Open',
+					),
+				),
+			)
+		);
+		$formula_response  = $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'Score',
+				'type'       => 'formula',
+				'expression' => '1',
+			)
+		);
+		$text_id           = (int) $text_response->get_data()['id'];
+		$select_id         = (int) $select_response->get_data()['id'];
+		$formula_id        = (int) $formula_response->get_data()['id'];
+		$stored_field_ids  = $this->stored_collection_field_ids( $collection_id );
+		$stored_options    = get_post_meta( $select_id, 'options', true );
+		$stored_expression = get_post_meta( $formula_id, 'expression', true );
+
+		wp_update_post(
+			array(
+				'ID'          => $collection_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$core_update = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $text_id );
+		$core_update->set_param( 'title', 'Changed notes' );
+		$core_trash  = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_fields/' . $text_id );
+		$core_delete = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_fields/' . $text_id );
+		$core_delete->set_param( 'force', true );
+
+		$responses = array(
+			$this->create_field(
+				$collection_id,
+				array(
+					'title' => 'Blocked field',
+					'type'  => 'text',
+				)
+			),
+			$this->duplicate_field( $collection_id, $text_id ),
+			$this->update_formula( $formula_id, array( 'expression' => '2' ) ),
+			$this->update_options(
+				$select_id,
+				array(
+					'options' => array(
+						array(
+							'value' => 'closed',
+							'label' => 'Closed',
+						),
+					),
+				)
+			),
+			$this->convert_field( $text_id, 'number' ),
+			rest_do_request( $core_update ),
+			rest_do_request( $core_trash ),
+			rest_do_request( $core_delete ),
+		);
+
+		foreach ( $responses as $response ) {
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'cortext_collection_archived', $response->get_data()['code'] );
+		}
+		$this->assertSame( $stored_field_ids, $this->stored_collection_field_ids( $collection_id ) );
+		$this->assertSame( 'Notes', get_post( $text_id )->post_title );
+		$this->assertSame( 'text', get_post_meta( $text_id, 'type', true ) );
+		$this->assertSame( $stored_options, get_post_meta( $select_id, 'options', true ) );
+		$this->assertSame( $stored_expression, get_post_meta( $formula_id, 'expression', true ) );
+
+		$usage_request = new WP_REST_Request(
+			'GET',
+			"/cortext/v1/fields/{$select_id}/options/open/usage"
+		);
+		$this->assertSame( 200, rest_do_request( $usage_request )->get_status() );
+		$usage_head = new WP_REST_Request(
+			'HEAD',
+			"/cortext/v1/fields/{$select_id}/options/open/usage"
+		);
+		$this->assertSame( 200, rest_do_request( $usage_head )->get_status() );
+		$core_read = new WP_REST_Request( 'GET', '/wp/v2/crtxt_fields/' . $text_id );
+		$this->assertSame( 200, rest_do_request( $core_read )->get_status() );
+
+		wp_trash_post( $collection_id );
+		$this->assertSame( Documents::STATUS_TRASH, get_post_status( $collection_id ) );
+		$this->assertSame(
+			Documents::STATUS_ARCHIVED,
+			get_post_meta( $collection_id, '_wp_trash_meta_status', true )
+		);
+		$trashed_core_update = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $text_id );
+		$trashed_core_update->set_param( 'title', 'Changed in Trash' );
+		foreach (
+			array(
+				rest_do_request( $trashed_core_update ),
+				$this->update_formula( $formula_id, array( 'expression' => '3' ) ),
+			) as $response
+		) {
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'cortext_collection_archived', $response->get_data()['code'] );
+		}
+		$this->assertSame( 'Notes', get_post( $text_id )->post_title );
+		$this->assertSame( $stored_expression, get_post_meta( $formula_id, 'expression', true ) );
+	}
+
+	public function test_relation_mutations_cannot_change_an_archived_target_schema(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Active source', 'active-source' );
+		$target_collection_id = $this->create_collection_with_slug( 'Archived target', 'archived-target' );
+
+		$relation_response = $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Target',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		);
+		$source_field_id   = (int) $relation_response->get_data()['id'];
+		$reverse_field_id  = (int) get_post_meta( $source_field_id, 'relation_reverse_field_id', true );
+		$source_fields     = $this->stored_collection_field_ids( $source_collection_id );
+		$target_fields     = $this->stored_collection_field_ids( $target_collection_id );
+
+		wp_update_post(
+			array(
+				'ID'          => $target_collection_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$create_response    = $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Another target',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		);
+		$duplicate_response = $this->duplicate_field( $source_collection_id, $source_field_id );
+		$delete_request     = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_fields/' . $source_field_id );
+		$delete_request->set_param( 'force', true );
+		$delete_response = rest_do_request( $delete_request );
+
+		foreach ( array( $create_response, $duplicate_response, $delete_response ) as $response ) {
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'cortext_collection_archived', $response->get_data()['code'] );
+		}
+		$this->assertSame( $source_fields, $this->stored_collection_field_ids( $source_collection_id ) );
+		$this->assertSame( $target_fields, $this->stored_collection_field_ids( $target_collection_id ) );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $source_field_id ) );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $reverse_field_id ) );
+	}
+
+	public function test_core_delete_is_blocked_by_dependents_in_archived_collections(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$active_collection_id   = $this->create_collection_with_slug( 'Active fields', 'active-fields' );
+		$archived_collection_id = $this->create_collection_with_slug( 'Archived dependents', 'archived-dependents' );
+
+		$rollup_source_id  = (int) $this->create_field(
+			$active_collection_id,
+			array(
+				'title' => 'Rollup source',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		$formula_source_id = (int) $this->create_field(
+			$active_collection_id,
+			array(
+				'title' => 'Formula source',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		$stale_source_id   = (int) $this->create_field(
+			$active_collection_id,
+			array(
+				'title' => 'Stale source',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+
+		$rollup_id  = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Dependent rollup',
+				'meta_input'  => array(
+					'type'                   => 'rollup',
+					'rollup_target_field_id' => (string) $rollup_source_id,
+				),
+			)
+		);
+		$formula_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Dependent formula',
+				'meta_input'  => array(
+					'type'                  => 'formula',
+					'formula_dep_field_ids' => wp_json_encode( array( $formula_source_id ) ),
+				),
+			)
+		);
+		$stale_id   = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Stale metadata',
+				'meta_input'  => array(
+					'type'                   => 'text',
+					'rollup_target_field_id' => (string) $stale_source_id,
+				),
+			)
+		);
+		foreach ( array( $rollup_id, $formula_id, $stale_id ) as $field_id ) {
+			add_post_meta( $archived_collection_id, 'cortext_fields', (string) $field_id );
+		}
+		wp_update_post(
+			array(
+				'ID'          => $archived_collection_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$this->install_in_memory_posts_query();
+		try {
+			$responses = array();
+			foreach ( array( $rollup_source_id, $formula_source_id, $stale_source_id ) as $source_id ) {
+				$request = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_fields/' . $source_id );
+				$request->set_param( 'force', true );
+				$responses[] = rest_do_request( $request );
+			}
+		} finally {
+			$this->uninstall_in_memory_posts_query();
+		}
+
+		$this->assertSame( 409, $responses[0]->get_status() );
+		$this->assertSame( 409, $responses[1]->get_status() );
+		$this->assertSame( 200, $responses[2]->get_status() );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $rollup_source_id ) );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $formula_source_id ) );
+		$this->assertNull( get_post( $stale_source_id ) );
+		foreach ( array( $rollup_id, $formula_id, $stale_id ) as $field_id ) {
+			$this->assertInstanceOf( \WP_Post::class, get_post( $field_id ) );
+		}
+	}
+
+	public function test_core_rest_updates_an_unattached_field(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$field_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Loose field',
+				'meta_input'  => array( 'type' => 'text' ),
+			)
+		);
+		$request  = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $field_id );
+		$request->set_param( 'title', 'Updated loose field' );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Updated loose field', get_post( $field_id )->post_title );
+	}
+
 	public function test_create_rolls_back_field_when_attach_fails(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$collection_id = $this->create_collection_with_slug( 'Attach Fails', 'attach' );
@@ -455,7 +740,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-roll' );
 		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-roll' );
 
-		$relation_id = (int) $this->create_field(
+		$relation_id   = (int) $this->create_field(
 			$source_collection_id,
 			array(
 				'title'                 => 'Invoices',
@@ -463,7 +748,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 				'related_collection_id' => $target_collection_id,
 			)
 		)->get_data()['id'];
-		$amount_id   = (int) $this->create_field(
+		$amount_id     = (int) $this->create_field(
 			$target_collection_id,
 			array(
 				'title' => 'Amount',
@@ -826,7 +1111,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$collection_id = $this->create_collection_with_slug( 'Items', 'form-rename' );
 
-		$price_id = (int) $this->create_field(
+		$price_id   = (int) $this->create_field(
 			$collection_id,
 			array(
 				'title' => 'Price',
@@ -1375,8 +1660,6 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 
 	public function test_update_options_migrates_and_counts_an_archived_row(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
-		( new ArchiveCascade() )->register_status();
-
 		$collection_id = $this->create_collection_with_slug( 'Archived options', 'archived-options' );
 		$field_id      = (int) $this->create_field(
 			$collection_id,
@@ -1664,8 +1947,6 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 
 	public function test_convert_collects_option_tokens_from_an_archived_row(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
-		( new ArchiveCascade() )->register_status();
-
 		[ , $field_id, $row_ids ] = $this->fixture_text_field_with_rows(
 			'archived-token',
 			array( 'Waiting' )
@@ -2069,6 +2350,10 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 	}
 
 	/**
+	 * Creates a text field and rows with the supplied values.
+	 *
+	 * @param string   $slug   Collection slug.
+	 * @param string[] $values Row values.
 	 * @return array{0:int,1:int,2:int[]} Collection id, field id, row ids.
 	 */
 	private function fixture_text_field_with_rows( string $slug, array $values ): array {
@@ -2218,5 +2503,4 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		}
 		return $stored;
 	}
-
 }

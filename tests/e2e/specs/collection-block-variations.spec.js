@@ -86,6 +86,11 @@ async function openDocument( admin, page, postId ) {
 		postId,
 		{ timeout: 15_000 }
 	);
+	// `getCurrentPostId()` changes before the cross-document view transition
+	// releases its old canvas snapshot.
+	await page.waitForFunction(
+		() => ! document.documentElement.dataset.cortextViewTransition
+	);
 }
 
 async function dataViewCollectionId( page ) {
@@ -131,7 +136,13 @@ test.describe( 'Collection block creation variations', () => {
 				canvas.getByPlaceholder( 'Search collections' )
 			).toHaveCount( 0 );
 
-			await canvas.getByLabel( 'Name' ).fill( 'Inline Variation Books' );
+			const nameInput = canvas.getByLabel( 'Name' );
+			// `fill()` can change an iframe control without a pointer hit test.
+			// Click first so the test waits for the live canvas instead of writing
+			// into the outgoing one.
+			await nameInput.click();
+			await nameInput.fill( 'Inline Variation Books' );
+			await expect( nameInput ).toHaveValue( 'Inline Variation Books' );
 			await canvas
 				.getByRole( 'button', { name: 'Create collection' } )
 				.click();

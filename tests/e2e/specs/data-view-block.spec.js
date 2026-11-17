@@ -1127,6 +1127,17 @@ test.describe( 'Collection view block', () => {
 							)
 							?.getBoundingClientRect();
 						const firstCardRect = cardRects[ 0 ];
+						const columnStep =
+							cardRects.length > 1
+								? cardRects[ 1 ].left - firstCardRect.left
+								: 0;
+						const newCardTrackIndex =
+							newRect && columnStep > 0
+								? Math.round(
+										( newRect.left - firstCardRect.left ) /
+											columnStep
+								  )
+								: null;
 						const allRects = [ ...cardRects, newRect ].filter(
 							Boolean
 						);
@@ -1140,13 +1151,14 @@ test.describe( 'Collection view block', () => {
 											rect.top - firstCardRect.top
 										) <= 2
 								),
-							newCardAlignsToColumn:
+							newCardAlignsToGridTrack:
 								Boolean( newRect && firstCardRect ) &&
-								cardRects.some(
-									( rect ) =>
-										Math.abs( rect.left - newRect.left ) <=
-										2
-								),
+								newCardTrackIndex !== null &&
+								Math.abs(
+									newRect.left -
+										( firstCardRect.left +
+											newCardTrackIndex * columnStep )
+								) <= 2,
 							newCardMatchesWidth:
 								Boolean( newRect && firstCardRect ) &&
 								Math.abs(
@@ -1170,7 +1182,7 @@ test.describe( 'Collection view block', () => {
 
 			await expect.poll( getGridMetrics ).toEqual( {
 				cardsShareRow: true,
-				newCardAlignsToColumn: true,
+				newCardAlignsToGridTrack: true,
 				newCardMatchesWidth: true,
 				itemsDoNotOverlap: true,
 			} );
@@ -1263,14 +1275,19 @@ test.describe( 'Collection view block', () => {
 			await expect( viewOptionsButton ).toBeFocused();
 			await expect
 				.poll( () =>
-					viewOptionsButton.evaluate(
-						( button ) =>
+					viewOptionsButton.evaluate( ( button ) => {
+						const style =
 							button.ownerDocument.defaultView.getComputedStyle(
 								button
-							).boxShadow
-					)
+							);
+						return (
+							style.boxShadow !== 'none' ||
+							( style.outlineStyle !== 'none' &&
+								Number.parseFloat( style.outlineWidth ) > 0 )
+						);
+					} )
 				)
-				.not.toBe( 'none' );
+				.toBe( true );
 			await viewOptionsButton.click();
 			const viewOptionsPopover = page.locator(
 				'.dataviews-config__popover:visible'
@@ -1300,7 +1317,13 @@ test.describe( 'Collection view block', () => {
 			await page.keyboard.press( 'Escape' );
 
 			await selectParentDataViewBlock( page );
-			await page.getByRole( 'tab', { name: 'Block' } ).click();
+			const blockTab = page.getByRole( 'tab', { name: 'Block' } );
+			if ( ! ( await blockTab.isVisible() ) ) {
+				await page
+					.locator( '.cortext-document-actions__settings' )
+					.click();
+			}
+			await blockTab.click();
 
 			const viewPanel = page.getByRole( 'button', {
 				name: 'View',
@@ -1336,12 +1359,32 @@ test.describe( 'Collection view block', () => {
 				)
 				.toBe( '32px' );
 
-			await page.evaluate( async () => {
-				await window.wp.data.dispatch( 'core/editor' ).savePost();
-			} );
-			await page.waitForFunction(
-				() => ! window.wp.data.select( 'core/editor' ).isSavingPost()
-			);
+			// Cortext already schedules an autosave for this block update. Wait for
+			// it instead of starting a second save that can restore an older view.
+			await expect
+				.poll( async () => {
+					const attributes =
+						await getParentDataViewAttributes( page );
+					return {
+						active: attributes.view?.layout?.density,
+						stored: attributes.view?.layoutByType?.grid?.density,
+					};
+				} )
+				.toEqual( { active: 'comfortable', stored: 'comfortable' } );
+			await expect
+				.poll(
+					async () => {
+						const saved = await requestUtils.rest( {
+							path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
+							params: { context: 'edit' },
+						} );
+						return saved.content.raw.includes(
+							'"density":"comfortable"'
+						);
+					},
+					{ timeout: 15_000 }
+				)
+				.toBe( true );
 			await page.reload();
 			await expect( canvas.getByText( 'Alpha Manual' ) ).toBeVisible();
 			await expect(

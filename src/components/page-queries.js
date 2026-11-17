@@ -11,11 +11,19 @@
 
 export const POST_TYPE = 'crtxt_document';
 
+// core-data refetches this list after every document save, so it asks only for
+// what its consumers read. Records come back with these fields and nothing
+// else, even when the store holds more: add a field here before reading it.
+// Keep entries top-level (`meta`, not `meta.some_key`), because core-data
+// merges list records into the store one top-level key at a time.
+const ACTIVE_PAGES_FIELDS = [ 'id', 'parent', 'menu_order', 'slug', 'title' ];
+
 export const ACTIVE_PAGES_QUERY = {
 	per_page: 100,
 	status: [ 'draft', 'private', 'publish' ],
 	context: 'edit',
 	cortext_no_trait: 1,
+	_fields: ACTIVE_PAGES_FIELDS.join( ',' ),
 };
 
 export const TRASHED_PAGES_QUERY = {
@@ -35,8 +43,11 @@ export const PUBLISHED_DOCUMENTS_QUERY = {
 };
 
 // Only the first root document is needed as a home fallback when no explicit
-// home is set. Keep this query shared with lifecycle invalidation so removing
-// or restoring the first document cannot leave the command palette stale.
+// home is set. It mirrors the sidebar tree's root query so the fallback matches
+// the first row the sidebar shows. `_fields` covers what the fallback path is
+// built from; the record carries nothing else. Keep this query shared with
+// lifecycle invalidation so removing or restoring the first document cannot
+// leave the command palette stale.
 export const HOME_FALLBACK_QUERY = {
 	parent: 0,
 	per_page: 1,
@@ -46,4 +57,5 @@ export const HOME_FALLBACK_QUERY = {
 	cortext_tree_order: 1,
 	orderby: 'menu_order',
 	order: 'asc',
+	_fields: 'id,parent,menu_order,slug',
 };

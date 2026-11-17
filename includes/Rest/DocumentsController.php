@@ -349,7 +349,21 @@ final class DocumentsController {
 		// `untrashed_post` action fires synchronously inside `wp_untrash_post`,
 		// so a post-call query alone could not tell which descendants this
 		// restore brought back versus which were already out of trash.
-		$candidates = $this->cascade->descendants_for_root( $id );
+		$candidates           = $this->cascade->descendants_for_root( $id );
+		$restoring_active_ids = array_values(
+			array_filter(
+				array_merge( array( $id ), $candidates ),
+				static fn( int $post_id ): bool => Documents::STATUS_ARCHIVED
+					!== (string) get_post_meta( $post_id, '_wp_trash_meta_status', true )
+			)
+		);
+		$container_error      = $this->archive_cascade->container_error_for_documents(
+			$restoring_active_ids,
+			$restoring_active_ids
+		);
+		if ( $container_error instanceof WP_Error ) {
+			return $container_error;
+		}
 
 		$result = wp_untrash_post( $id );
 		if ( ! $result ) {

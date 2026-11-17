@@ -566,7 +566,9 @@ export default function EntityRoute( { history } ) {
 				) }
 				{ publicWebAffordances ? (
 					<WorkspacePane active={ active.kind === 'published' }>
-						<PublishedDocumentsPane />
+						<PublishedDocumentsPane
+							isActive={ active.kind === 'published' }
+						/>
 					</WorkspacePane>
 				) : null }
 				<WorkspacePane active={ active.kind === 'experiments' }>
