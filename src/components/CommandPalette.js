@@ -34,7 +34,7 @@ import { collectionHint, listIconForRecord } from '../documents';
 
 const OPEN_COMMAND_PALETTE_EVENT = 'cortext:open-command-palette';
 const DEFAULT_COMMAND_CONTEXT = 'root';
-// cmdk item values, as CortextCommandMenu builds them from the command name.
+// cmdk derives item values from the command names in CortextCommandMenu.
 const DOCUMENT_COMMAND_VALUE_PREFIX = 'document-cortext/document/';
 const RECENT_COMMAND_VALUE_PREFIX = 'recent-cortext/recent/';
 const EMPTY_DOCUMENTS = [];
@@ -234,9 +234,8 @@ function DocumentResultsRegistration( {
 		onDocumentsResolved( documents );
 	}, [ hasFreshDocuments, documents, onDocumentsResolved ] );
 
-	// The list drops its results on a failed fetch (below), and unmounts when
-	// the input goes empty. Report that too, so the preview pane cannot keep
-	// showing a document the list no longer offers.
+	// Clear resolved documents when the request fails or this list unmounts so
+	// the preview cannot point to a stale result.
 	useEffect( () => {
 		if ( error ) {
 			onDocumentsResolved( EMPTY_DOCUMENTS );
@@ -314,19 +313,17 @@ function CommandPaletteContents( {
 	const isDocumentSearchPending =
 		Boolean( search ) && ( isDebouncing || isFetchingDocuments );
 
-	// cmdk only reports its pick through `onValueChange` while the value is
-	// controlled. Left to itself with an empty input it highlights the first
-	// recent without telling anyone, and the preview pane has nothing to show.
-	// Anchoring on that same first recent keeps the highlight where cmdk would
-	// have put it and makes it visible to the pane.
+	// cmdk does not call `onValueChange` for its initial uncontrolled selection.
+	// Select the first recent explicitly on every open so its preview is
+	// available.
 	useEffect( () => {
-		if ( search ) {
+		if ( ! isPaletteOpen || search ) {
 			return;
 		}
 		setSelectedValue(
 			recents.length ? recentCommandValue( recents[ 0 ] ) : undefined
 		);
-	}, [ search, recents ] );
+	}, [ isPaletteOpen, search, recents ] );
 
 	// Reset the input and the controlled selection whenever the palette
 	// closes, regardless of how it closed. Picking a result calls
@@ -358,8 +355,8 @@ function CommandPaletteContents( {
 		} );
 	}, [] );
 
-	// Recents and search results are both documents, so both preview. Commands
-	// have nothing to show and leave the pane empty rather than closing it.
+	// Show previews for search results and recents. Other commands leave the
+	// pane empty.
 	const previewDoc = useMemo( () => {
 		if ( ! selectedValue ) {
 			return null;
@@ -409,9 +406,8 @@ function CommandPaletteContents( {
 				selectedValue={ selectedValue }
 				onSelectedValueChange={ setSelectedValue }
 				previewPane={
-					// Back on the app registry. The block editor store only
-					// lives there, and the preview's provider reads that
-					// store's private actions off its parent.
+					// The preview needs the app registry, where the block editor
+					// store and its private actions are registered.
 					<RegistryProvider value={ appRegistry }>
 						<CommandPalettePreview doc={ previewDoc } />
 					</RegistryProvider>

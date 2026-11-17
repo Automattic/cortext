@@ -18,6 +18,14 @@ class ResizeObserverMock {
 	disconnect() {}
 }
 
+function mockViewport( { isWide } ) {
+	window.matchMedia = jest.fn( () => ( {
+		matches: isWide,
+		addEventListener: jest.fn(),
+		removeEventListener: jest.fn(),
+	} ) );
+}
+
 function createCommandPaletteRegistry() {
 	const registry = createRegistry();
 	registry.register( commandsStore );
@@ -207,9 +215,10 @@ describe( 'CortextCommandMenu', () => {
 		expect( screen.queryByText( 'Go to home' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'puts the preview pane beside the list and keeps it out of the keyboard flow', async () => {
+	it( 'renders the preview beside the list and keeps it unfocusable', async () => {
 		global.ResizeObserver = ResizeObserverMock;
 		window.Element.prototype.scrollIntoView = jest.fn();
+		mockViewport( { isWide: true } );
 		const registry = createCommandPaletteRegistry();
 		registry.dispatch( commandsStore ).registerCommand( {
 			name: 'cortext/document/page-1',
@@ -242,13 +251,12 @@ describe( 'CortextCommandMenu', () => {
 
 		expect( screen.getByText( 'Preview body' ) ).toBeInTheDocument();
 
-		// The modal widens for the second column.
 		const frame = document.querySelector( '.components-modal__frame' );
 		expect( frame ).toHaveClass( 'is-previewing' );
 		expect( frame ).toHaveClass( 'has-size-large' );
 
-		// The pane sits next to the list inside the cmdk root, and stays out
-		// of both the listbox and the focus order.
+		// The preview shares the cmdk root with the list but stays outside the
+		// listbox and focus order.
 		const pane = document.querySelector(
 			'.cortext-command-palette__preview'
 		);
@@ -258,6 +266,37 @@ describe( 'CortextCommandMenu', () => {
 		expect( pane ).toHaveAttribute( 'aria-hidden', 'true' );
 		expect( pane ).toHaveAttribute( 'inert' );
 		expect( screen.getAllByRole( 'option' ) ).toHaveLength( 1 );
+	} );
+
+	it( 'skips the preview on narrow viewports', async () => {
+		global.ResizeObserver = ResizeObserverMock;
+		window.Element.prototype.scrollIntoView = jest.fn();
+		mockViewport( { isWide: false } );
+		const registry = createCommandPaletteRegistry();
+		registry.dispatch( commandsStore ).registerCommand( {
+			name: 'cortext/document/page-1',
+			label: 'Roadmap',
+			context: 'root',
+			callback: jest.fn(),
+		} );
+		registry.dispatch( commandsStore ).open();
+
+		render(
+			<RegistryProvider value={ registry }>
+				<CortextCommandMenu
+					search="road"
+					setSearch={ () => {} }
+					previewPane={ <div>Preview body</div> }
+				/>
+			</RegistryProvider>
+		);
+
+		await screen.findByRole( 'option' );
+
+		expect( screen.queryByText( 'Preview body' ) ).not.toBeInTheDocument();
+		const frame = document.querySelector( '.components-modal__frame' );
+		expect( frame ).not.toHaveClass( 'is-previewing' );
+		expect( frame ).toHaveClass( 'has-size-medium' );
 	} );
 
 	it( 'hides the recent group while the search input is non-empty', async () => {

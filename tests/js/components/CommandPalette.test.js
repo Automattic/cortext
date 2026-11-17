@@ -64,8 +64,7 @@ const mockMenu = {
 	previewPane: null,
 };
 
-// The preview mounts a block editor. This suite only cares about which
-// document reaches it.
+// Mock the preview so these tests only track which document it receives.
 jest.mock( '../../../src/components/CommandPalettePreview', () => ( {
 	__esModule: true,
 	default: ( { doc } ) => <div data-testid="preview">{ doc?.id ?? '' }</div>,
@@ -619,13 +618,13 @@ describe( 'CommandPalette preview pane', () => {
 		} );
 	}
 
-	it( 'previews the anchored result and follows the selection', () => {
+	it( 'updates the preview when the selected result changes', () => {
 		mockIsPaletteOpen = true;
 		resolveWith( results );
 
 		render( <CommandPalette canvasRef={ { current: null } } /> );
 
-		// An empty input lists recents and commands, which have no preview.
+		// With no search and no recents, there is nothing to preview.
 		expect( previewDocId() ).toBeNull();
 
 		act( () => {
@@ -659,14 +658,14 @@ describe( 'CommandPalette preview pane', () => {
 
 		render( <CommandPalette canvasRef={ { current: null } } /> );
 
-		// cmdk highlights the first item as soon as the list renders.
+		// Simulate cmdk highlighting the first item.
 		act( () => {
 			mockMenu.onSelectedValueChange( 'recent-cortext/recent/7' );
 		} );
 
 		expect( previewDocId() ).toBe( 7 );
 
-		// A command has nothing to preview, and the pane stays mounted.
+		// A command clears the document preview but keeps the pane mounted.
 		act( () => {
 			mockMenu.onSelectedValueChange( 'Go to home' );
 		} );
@@ -675,7 +674,35 @@ describe( 'CommandPalette preview pane', () => {
 		expect( mockMenu.previewPane ).not.toBeNull();
 	} );
 
-	it( 'has nothing to preview until the first response arrives', () => {
+	it( 'previews the first recent again after closing and reopening', () => {
+		mockIsPaletteOpen = true;
+		mockRecents = [
+			{ id: 7, title: 'Notes', path: 'notes-7' },
+			{ id: 12, title: 'People', path: 'people-12' },
+		];
+		const canvasRef = { current: null };
+
+		const { rerender } = render(
+			<CommandPalette canvasRef={ canvasRef } />
+		);
+
+		expect( previewDocId() ).toBe( 7 );
+
+		// Closing with an empty input changes neither the search nor the
+		// recents.
+		mockIsPaletteOpen = false;
+		rerender( <CommandPalette canvasRef={ canvasRef } /> );
+
+		expect( mockMenu.selectedValue ).toBeUndefined();
+
+		mockIsPaletteOpen = true;
+		rerender( <CommandPalette canvasRef={ canvasRef } /> );
+
+		expect( mockMenu.selectedValue ).toBe( 'recent-cortext/recent/7' );
+		expect( previewDocId() ).toBe( 7 );
+	} );
+
+	it( 'waits for search results before showing a preview', () => {
 		mockIsPaletteOpen = true;
 		mockUseDocuments.mockReturnValue( {
 			documents: [],
@@ -698,7 +725,7 @@ describe( 'CommandPalette preview pane', () => {
 		expect( previewDocId() ).toBeNull();
 	} );
 
-	it( 'drops the preview when the next query fails', () => {
+	it( 'clears the preview when the next query fails', () => {
 		mockIsPaletteOpen = true;
 		resolveWith( results );
 
@@ -712,8 +739,7 @@ describe( 'CommandPalette preview pane', () => {
 		} );
 		expect( previewDocId() ).toBe( 42 );
 
-		// The list hides the stale results on a failed fetch, so the pane
-		// must let go of the document it was showing.
+		// A failed query clears the stale results and their preview.
 		resolveWith( results, new Error( 'network' ) );
 
 		act( () => {

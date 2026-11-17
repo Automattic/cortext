@@ -1,7 +1,6 @@
 /**
- * Read-only preview of the highlighted search result, next to the command
- * palette list. The body renders real blocks through BlockPreview so it looks
- * like the editor canvas.
+ * Renders a read-only preview of the highlighted document beside the command
+ * list.
  */
 
 import {
@@ -23,25 +22,22 @@ import { unlock } from '../lock-unlock';
 import { ACTIVE_PAGES_QUERY, POST_TYPE } from './page-queries';
 import { SkeletonLine } from './Skeleton';
 
-// The public BlockEditorProvider strips `__experimental` settings, which is
-// where theme.json presets and the layout content width live. The preview
-// needs them to match the canvas.
+// The public provider removes the theme and layout settings that the preview
+// needs to match the canvas.
 const { ExperimentalBlockEditorProvider } = unlock( blockEditorPrivateApis );
 
 const PREVIEW_ICON_SIZE = 24;
-// The pane is narrower than this, so BlockPreview scales the page down a
-// little. Keeping it wide leaves multi-column and wide-aligned blocks with
-// the proportions they have on the canvas.
+// BlockPreview scales this viewport to fit the pane while preserving wide and
+// multi-column layouts.
 const PREVIEW_VIEWPORT_WIDTH = 640;
-// A preview only has to show enough of a document to recognize it.
+// Show only enough blocks to identify the document.
 const MAX_PREVIEW_BLOCKS = 40;
 const SKELETON_DELAY_MS = 120;
 const SKELETON_LINE_WIDTHS = [ '92%', '84%', '96%', '61%', '88%', '73%' ];
 const EMPTY_BLOCKS = [];
 
-// The header blocks repeat the icon, cover and title the pane already shows,
-// and the data view would mount the whole collection surface. Both come out
-// of the parsed block list before it reaches BlockPreview.
+// The preview header replaces these blocks. Exclude the data view to avoid
+// mounting the collection UI.
 const EXCLUDED_PREVIEW_BLOCKS = [
 	'core/post-title',
 	'cortext/document-cover',
@@ -62,10 +58,8 @@ function loadEditorModule() {
 }
 
 /**
- * Resolves the editor chunk, which registers the blocks and owns the canvas
- * settings. The palette can open before any editor surface has mounted, and
- * parsing content without registered blocks would render a wall of
- * unsupported-block placeholders.
+ * Loads the editor before parsing so custom blocks and editor settings are
+ * available.
  *
  * @return {{module: ?Object, error: ?unknown}} Loaded module or load failure.
  */
@@ -95,10 +89,11 @@ function useEditorModule() {
 }
 
 /**
- * Drops the blocks the preview does not render, at every depth.
+ * Removes blocks that should not appear in the preview, including nested
+ * blocks.
  *
  * @param {Object[]} blocks Parsed blocks.
- * @return {Object[]} Blocks safe to hand to BlockPreview.
+ * @return {Object[]} Filtered blocks.
  */
 export function stripPreviewBlocks( blocks ) {
 	return blocks
@@ -125,9 +120,8 @@ function editedLabel( record ) {
 	);
 }
 
-// Documents keep their cover in `featured_media`. The `cover` REST field
-// would be handier, but it only ever reaches rows, so pages and collections
-// would come up empty.
+// Pages and collections expose covers through `featured_media`; the `cover`
+// REST field is available only on rows.
 function PreviewCover( { mediaId } ) {
 	const { record } = useEntityRecord( 'root', 'media', mediaId );
 	const url =
@@ -167,9 +161,8 @@ function PreviewBody( { content, postId, getEditorSettings } ) {
 			),
 		[ content ]
 	);
-	// The provider re-applies settings whenever this object changes identity.
-	// `isPreviewMode` keeps it from registering the editor's keyboard
-	// shortcuts, which a read-only pane has no use for.
+	// Memoize settings because the provider reapplies them when the object
+	// changes. Preview mode disables editor shortcuts.
 	const settings = useMemo(
 		() => ( { ...getEditorSettings(), isPreviewMode: true } ),
 		[ getEditorSettings ]
@@ -179,9 +172,8 @@ function PreviewBody( { content, postId, getEditorSettings } ) {
 		return null;
 	}
 
-	// Cortext blocks and the core post-* blocks read the document they belong
-	// to from block context, which reaches the preview iframe through the
-	// portal.
+	// Pass the document context through the preview iframe for post-aware
+	// blocks.
 	return (
 		<ExperimentalBlockEditorProvider
 			value={ EMPTY_BLOCKS }
@@ -197,17 +189,13 @@ function PreviewBody( { content, postId, getEditorSettings } ) {
 	);
 }
 
-// `doc` is null while the highlight sits on a command rather than a document.
-// The pane stays mounted through that so moving between the two does not tear
-// down the editor provider and its iframe.
+// `doc` is null when the selected command has no document preview. The outer
+// pane remains mounted.
 export default function CommandPalettePreview( { doc } ) {
 	const docId = doc?.id ?? 0;
 	const { module: editorModule, error: editorError } = useEditorModule();
-	// The shell already subscribes to this query and it includes page and
-	// collection content, so most previews come straight from it with no
-	// request at all. Rows sit outside the query (see page-queries) and fall
-	// through to the fetch below, which serves them from the core-data cache
-	// once they have been looked at.
+	// Reuse pages and collections from the shell query. Rows fall back to an
+	// individual core-data lookup, which may resolve from cache.
 	const { records: pooledDocuments } = useEntityRecords(
 		'postType',
 		POST_TYPE,
@@ -253,8 +241,7 @@ export default function CommandPalettePreview( { doc } ) {
 		<div className="cortext-command-palette__preview-inner">
 			{ coverId > 0 && <PreviewCover mediaId={ coverId } /> }
 			<div className="cortext-command-palette__preview-header">
-				{ /* Same source as the list item, so one document never shows
-				     two different glyphs on screen. */ }
+				{ /* Match the icon used in the result list. */ }
 				{ listIconForRecord( doc, PREVIEW_ICON_SIZE ) }
 				<span className="cortext-command-palette__preview-title">
 					{ documentTitle( doc ) }
@@ -279,9 +266,8 @@ export default function CommandPalettePreview( { doc } ) {
 						{ excerpt }
 					</p>
 				) }
-				{ /* `showSkeleton` stays true for a minimum duration once
-				     raised, so hide it as soon as there is something real to
-				     show instead. */ }
+				{ /* Do not let the minimum skeleton duration cover loaded
+					     content. */ }
 				{ isLoading && showSkeleton && <PreviewSkeleton /> }
 			</div>
 		</div>

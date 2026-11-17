@@ -86,11 +86,11 @@ test.describe( 'Command palette search', () => {
 		}
 	} );
 
-	test( 'previews the first recent as soon as it opens', async ( {
+	test( 'previews the first recent document on open', async ( {
 		admin,
 		page,
 	} ) => {
-		// Opening a document is what puts it in recents.
+		// Load Cortext once to populate the recent list.
 		await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 
 		await openPalette( page );
@@ -108,7 +108,7 @@ test.describe( 'Command palette search', () => {
 		).toHaveText( await firstRecent.innerText() );
 	} );
 
-	test( 'previews the highlighted result and follows the selection', async ( {
+	test( 'updates the preview when the highlighted result changes', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -135,14 +135,12 @@ test.describe( 'Command palette search', () => {
 
 			await admin.visitAdminPage( 'admin.php', 'page=cortext' );
 
-			// Pages come with their content in the query the shell already
-			// runs, so previewing one should cost no request of its own.
+			// The shell query already includes page content, so the preview
+			// should not fetch it again.
 			const recordRequests = [];
 			const seededIds = seeded.map( ( document ) => document.id );
 			page.on( 'request', ( request ) => {
-				const match = request
-					.url()
-					.match( /crtxt_documents\/(\d+)/ );
+				const match = request.url().match( /crtxt_documents\/(\d+)/ );
 				if ( match && seededIds.includes( Number( match[ 1 ] ) ) ) {
 					recordRequests.push( match[ 1 ] );
 				}
@@ -162,14 +160,14 @@ test.describe( 'Command palette search', () => {
 			);
 			await expect( preview ).toBeVisible();
 
-			// The pane follows whatever the list anchored the highlight on.
+			// The preview starts with the first highlighted result.
 			const firstLabel = await options
 				.first()
 				.locator( '.commands-command-menu__item-label' )
 				.innerText();
 			await expect( previewTitle ).toHaveText( firstLabel );
 
-			// The body renders as real blocks, inside the preview iframe.
+			// BlockPreview renders the body inside an iframe.
 			await expect(
 				preview.frameLocator( 'iframe' ).getByText( bodyText )
 			).toBeVisible( { timeout: 15000 } );

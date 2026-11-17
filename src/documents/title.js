@@ -24,12 +24,10 @@ export function documentTitle( record ) {
 }
 
 /**
- * Secondary line for a row in the compact lists: the collection it belongs to.
- * Only rows carry a parent collection on the wire, so pages and collections
- * get an empty string.
+ * Returns the collection label shown under a row title.
  *
  * @param {?Object} doc Document summary from `/cortext/v1/documents`.
- * @return {string} `in <Collection>`, or an empty string.
+ * @return {string} Localized collection label, or an empty string.
  */
 export function collectionHint( doc ) {
 	const collectionTitle = doc?.collection?.title?.trim?.();

@@ -1,8 +1,3 @@
-/**
- * Covers the command palette preview pane: what it shows before the record
- * arrives, which blocks reach BlockPreview, and where its records come from.
- */
-
 import { act, render, screen } from '@testing-library/react';
 
 const mockUseEntityRecord = jest.fn();
@@ -68,8 +63,7 @@ function recordFor( id, extra = {} ) {
 	};
 }
 
-// The editor chunk loads through a dynamic import, so let its promise settle
-// before asserting on the body.
+// Wait for the dynamically imported editor chunk before checking the body.
 async function renderPreview( doc = PAGE_DOC ) {
 	let result;
 	await act( async () => {
@@ -94,7 +88,7 @@ afterEach( () => {
 } );
 
 describe( 'stripPreviewBlocks', () => {
-	it( 'drops the header blocks and the data view at every depth', () => {
+	it( 'removes header and data-view blocks recursively', () => {
 		const blocks = [
 			block( 'core/post-title' ),
 			block( 'cortext/document-icon' ),
@@ -115,7 +109,7 @@ describe( 'stripPreviewBlocks', () => {
 } );
 
 describe( 'CommandPalettePreview', () => {
-	it( 'shows the title and collection from the search result before the record lands', async () => {
+	it( 'uses the search result title and collection while the record loads', async () => {
 		const { container } = await renderPreview( {
 			id: 77,
 			title: 'Ship the thing',
@@ -129,7 +123,7 @@ describe( 'CommandPalettePreview', () => {
 			container.querySelector( '[data-testid="block-preview"]' )
 		).toBeNull();
 
-		// The skeleton waits out the delay so a cached record never flashes one.
+		// Delay the skeleton so cached records do not flash a loading state.
 		expect(
 			container.querySelector(
 				'.cortext-command-palette__preview-skeleton'
@@ -147,7 +141,7 @@ describe( 'CommandPalettePreview', () => {
 		).not.toBeNull();
 	} );
 
-	it( 'renders the stripped body and the edited date once the record resolves', async () => {
+	it( 'renders the filtered body and edit date after the record loads', async () => {
 		mockUseEntityRecord.mockReturnValue( recordFor( 42 ) );
 		mockParse.mockReturnValue( [
 			block( 'core/post-title' ),
@@ -165,7 +159,7 @@ describe( 'CommandPalettePreview', () => {
 		);
 	} );
 
-	it( 'caps how much of a long document it renders', async () => {
+	it( 'renders at most 40 top-level blocks', async () => {
 		mockUseEntityRecord.mockReturnValue( recordFor( 42 ) );
 		mockParse.mockReturnValue(
 			Array.from( { length: 60 }, () => block( 'core/paragraph' ) )
@@ -178,7 +172,7 @@ describe( 'CommandPalettePreview', () => {
 		);
 	} );
 
-	it( 'renders nothing but the header for a document with no previewable blocks', async () => {
+	it( 'shows only the header when the document has no previewable blocks', async () => {
 		mockUseEntityRecord.mockReturnValue( recordFor( 42 ) );
 		mockParse.mockReturnValue( [ block( 'cortext/data-view' ) ] );
 
@@ -190,7 +184,7 @@ describe( 'CommandPalettePreview', () => {
 		expect( screen.getByText( 'Roadmap' ) ).toBeInTheDocument();
 	} );
 
-	it( 'paints straight from the shell document query, without a request', async () => {
+	it( 'uses the shell query result without fetching the document again', async () => {
 		mockUseEntityRecords.mockReturnValue( {
 			records: [
 				{ id: 1, content: { raw: 'other' } },
@@ -209,7 +203,7 @@ describe( 'CommandPalettePreview', () => {
 		);
 	} );
 
-	it( 'shows the cover from the document featured image', async () => {
+	it( "uses the document's featured image as the cover", async () => {
 		mockUseEntityRecord.mockImplementation( ( kind, name, id ) => {
 			if ( kind === 'root' ) {
 				return {
@@ -248,7 +242,7 @@ describe( 'CommandPalettePreview', () => {
 		expect( screen.getByText( 'Quarterly themes.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'asks core-data for the highlighted document and lets it serve the cache', async () => {
+	it( 'loads the highlighted document through core-data', async () => {
 		mockUseEntityRecord.mockReturnValue( recordFor( 42 ) );
 
 		const { rerender } = await renderPreview();
@@ -260,9 +254,8 @@ describe( 'CommandPalettePreview', () => {
 			{ enabled: true }
 		);
 
-		// Moving the highlight asks for the new document straight away. A
-		// document already in the store comes back in the same render, so the
-		// pane has nothing to wait for.
+		// Request the next document immediately so a cached record can resolve
+		// in the same render.
 		rerender( <CommandPalettePreview doc={ { id: 77, title: 'Bob' } } /> );
 
 		expect( mockUseEntityRecord ).toHaveBeenLastCalledWith(
