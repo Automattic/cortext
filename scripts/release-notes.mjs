@@ -112,7 +112,7 @@ function ghJson( args ) {
 function normalizeTitle( title ) {
 	const normalized = title
 		.replace(
-			/^(feat|feature|fix|bugfix|docs|build|chore|internal)(\([^)]+\))?!?:\s*/i,
+			/^(feat|feature|fix|bugfix|perf|refactor|docs|test|build|ci|chore|style|revert|internal)(\([^)]+\))?!?:\s*/i,
 			''
 		)
 		.trim();
