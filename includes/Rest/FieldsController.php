@@ -821,13 +821,19 @@ final class FieldsController {
 	private function collection_id_for_field( int $field_id ): int {
 		$field_id_str = (string) $field_id;
 
+		// A collection's revisions carry copies of its `cortext_fields`, so the
+		// lookup is limited to documents.
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Looks up a field's collection and returns at most one row.
 		$collection_id = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s LIMIT 1",
+				"SELECT meta.post_id FROM {$wpdb->postmeta} AS meta
+				INNER JOIN {$wpdb->posts} AS posts ON posts.ID = meta.post_id
+				WHERE meta.meta_key = %s AND meta.meta_value = %s AND posts.post_type = %s
+				LIMIT 1",
 				'cortext_fields',
-				$field_id_str
+				$field_id_str,
+				Document::POST_TYPE
 			)
 		);
 		if ( $collection_id > 0 ) {
@@ -836,6 +842,9 @@ final class FieldsController {
 
 		if ( self::is_wordbless_active() ) {
 			foreach ( \WorDBless\PostMeta::init()->meta as $post_id => $rows ) {
+				if ( Document::POST_TYPE !== get_post_type( (int) $post_id ) ) {
+					continue;
+				}
 				foreach ( $rows as $row ) {
 					if (
 							isset( $row['meta_key'], $row['meta_value'] ) &&

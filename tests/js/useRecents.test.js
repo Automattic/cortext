@@ -10,6 +10,7 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 } ) );
 
 import apiFetch from '@wordpress/api-fetch';
+import { DOCUMENT_RECORD_CHANGED_EVENT } from '../../src/hooks/documentRecordInvalidation';
 import { RecentsProvider, useRecents } from '../../src/hooks/useRecents';
 
 function wrapper( { children } ) {
@@ -238,5 +239,45 @@ describe( 'useRecents', () => {
 		} );
 
 		expect( result.current.recents ).toBe( recentsBeforeTouch );
+	} );
+
+	it( 'refreshes the restored document descriptor after a revision restore', async () => {
+		const previous = {
+			id: 7,
+			title: 'New title',
+			path: 'notes-7',
+		};
+		const restored = { ...previous, title: 'Restored title' };
+		apiFetch
+			.mockResolvedValueOnce( { recents: [ previous ] } )
+			.mockResolvedValueOnce( { recents: [ restored ] } );
+
+		const { result } = renderHook( () => useRecents(), { wrapper } );
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+
+		act( () => {
+			window.dispatchEvent(
+				new CustomEvent( DOCUMENT_RECORD_CHANGED_EVENT, {
+					detail: {
+						id: 7,
+						postType: 'page',
+						reason: 'revision-restore',
+					},
+				} )
+			);
+		} );
+
+		await waitFor( () =>
+			expect( result.current.recents[ 0 ]?.title ).toBe(
+				'Restored title'
+			)
+		);
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/cortext/v1/recents',
+			method: 'POST',
+			data: { id: 7 },
+		} );
 	} );
 } );

@@ -37,6 +37,11 @@ jest.mock( '@wordpress/editor', () => ( {
 	store: {},
 } ) );
 
+jest.mock( '@wordpress/notices', () => ( {
+	__esModule: true,
+	store: {},
+} ) );
+
 jest.mock( '@wordpress/blocks', () => ( {
 	__esModule: true,
 	createBlock: () => null,
@@ -81,6 +86,7 @@ const {
 	collectCollectionBodyClientIdsToRemove,
 	collectDuplicateHeaderClientIds,
 	getDocumentSurfaceFocusClientId,
+	getEditorBodyMutationPermissions,
 	isEditorPostReadyForHeaderRepair,
 	projectIframeRectToParent,
 	rectsOverlap,
@@ -407,6 +413,38 @@ describe( 'collectCollectionBodyClientIdsToRemove', () => {
 				removedClientIds
 			)
 		).toEqual( [ 'new-paragraph' ] );
+	} );
+} );
+
+describe( 'getEditorBodyMutationPermissions', () => {
+	it( 'keeps lock-safe structural maintenance active during an external post lock', () => {
+		expect(
+			getEditorBodyMutationPermissions( { isLocked: true } )
+		).toEqual( {
+			canMaintainBodyStructure: true,
+			canRepairUnlockedStructure: false,
+		} );
+	} );
+
+	it( 'prevents every body mutation while previewing a revision', () => {
+		expect(
+			getEditorBodyMutationPermissions( {
+				isLocked: true,
+				isRevisionsMode: true,
+			} )
+		).toEqual( {
+			canMaintainBodyStructure: false,
+			canRepairUnlockedStructure: false,
+		} );
+	} );
+
+	it( 'prevents every body mutation for trashed documents', () => {
+		expect(
+			getEditorBodyMutationPermissions( { isTrashed: true } )
+		).toEqual( {
+			canMaintainBodyStructure: false,
+			canRepairUnlockedStructure: false,
+		} );
 	} );
 } );
 

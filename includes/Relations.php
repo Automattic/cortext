@@ -139,6 +139,43 @@ final class Relations {
 	}
 
 	/**
+	 * Returns the ids from `$row_ids` that are rows of the collection behind
+	 * `$target_term_id`. Trashed rows are left out.
+	 *
+	 * One `tax_query` with `post__in` covers the whole list; checking each id
+	 * with `has_term()` would cost a query per target on large relations.
+	 *
+	 * @param int   $target_term_id Mirror term id of the target collection.
+	 * @param int[] $row_ids        Candidate row ids.
+	 * @return int[]
+	 */
+	public static function rows_in_target_collection( int $target_term_id, array $row_ids ): array {
+		if ( $target_term_id < 1 || count( $row_ids ) === 0 ) {
+			return array();
+		}
+
+		return array_map(
+			'intval',
+			get_posts(
+				array(
+					'post_type'      => Document::POST_TYPE,
+					'post_status'    => 'any',
+					'post__in'       => $row_ids,
+					'fields'         => 'ids',
+					'posts_per_page' => -1,
+					'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+						array(
+							'taxonomy' => TraitTaxonomy::TAXONOMY,
+							'field'    => 'term_id',
+							'terms'    => array( $target_term_id ),
+						),
+					),
+				)
+			)
+		);
+	}
+
+	/**
 	 * Validates a relation update without writing anything. Returns the
 	 * resolved configuration (reverse field, multiplicity, normalized desired
 	 * ids, and the current stored value) so callers can perform the meta
@@ -191,34 +228,14 @@ final class Relations {
 		$reverse_multiple = self::relation_is_multiple( $reverse_id );
 		$desired          = self::normalize_row_ids( $value, $multiple );
 
-		// Validate all desired targets in a single query: every target must be
-		// a `crtxt_document` with the target trait's mirror term. Doing this
-		// per-target with `has_term()` makes large relation updates pay N
-		// extra queries; the batch query is one tax_query with `post__in`.
-		if ( count( $desired ) > 0 ) {
-			$valid_ids = get_posts(
-				array(
-					'post_type'      => Document::POST_TYPE,
-					'post_status'    => 'any',
-					'post__in'       => $desired,
-					'fields'         => 'ids',
-					'posts_per_page' => -1,
-					'tax_query'      => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
-						array(
-							'taxonomy' => TraitTaxonomy::TAXONOMY,
-							'field'    => 'term_id',
-							'terms'    => array( $target_term_id ),
-						),
-					),
-				)
+		// Every target must be a `crtxt_document` with the target trait's
+		// mirror term.
+		if ( count( self::rows_in_target_collection( $target_term_id, $desired ) ) !== count( $desired ) ) {
+			return new WP_Error(
+				'cortext_relation_target_row_invalid',
+				__( 'Relation target row is invalid.', 'cortext' ),
+				array( 'status' => 400 )
 			);
-			if ( count( $valid_ids ) !== count( $desired ) ) {
-				return new WP_Error(
-					'cortext_relation_target_row_invalid',
-					__( 'Relation target row is invalid.', 'cortext' ),
-					array( 'status' => 400 )
-				);
-			}
 		}
 
 		return array(

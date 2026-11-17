@@ -12,21 +12,44 @@ import {
 	ToolbarGroup,
 } from '@wordpress/components';
 import { useEntityProp, store as coreStore } from '@wordpress/core-data';
-import { useDispatch } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { replace, trash } from '@wordpress/icons';
 
 import DocumentIcon from '../../components/DocumentIcon';
 import DocumentIdentityControls from '../../components/DocumentIdentityControls';
+import { useRevisionedDocumentIdentity } from '../../hooks/useRevisions';
 
 export default function Edit( { context, clientId } ) {
 	const postId = context?.postId;
 	const postType = context?.postType;
-	const blockProps = useBlockProps( {
-		className: 'cortext-document-icon-block',
-	} );
 
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
-	const iconMeta = meta?.cortext_document_icon ?? '';
+	const revisionDiffStatus = useSelect(
+		( select ) => {
+			const block = clientId
+				? select( blockEditorStore ).getBlock( clientId )
+				: null;
+			return (
+				block?.__revisionDiffStatus?.status ??
+				block?.attributes?.__revisionDiffStatus?.status
+			);
+		},
+		[ clientId ]
+	);
+	const { iconChanged, iconMeta } = useRevisionedDocumentIdentity( {
+		postId,
+		postType,
+		meta,
+		revisionDiffStatus,
+	} );
+	const blockProps = useBlockProps( {
+		className: [
+			'cortext-document-icon-block',
+			iconChanged ? 'is-revision-modified' : '',
+		]
+			.filter( Boolean )
+			.join( ' ' ),
+	} );
 	const hasIcon = !! iconMeta;
 	const { removeBlock, updateBlockAttributes } =
 		useDispatch( blockEditorStore );

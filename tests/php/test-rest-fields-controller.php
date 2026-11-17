@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Cortext\Tests;
 
 use Cortext\Documents;
+use Cortext\Editor\RevisionMetaFormat;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
@@ -1045,6 +1046,48 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( 'text', get_post_meta( $a_id, 'formula_result_type', true ) );
 		$this->assertSame( 'text', get_post_meta( $b_id, 'formula_result_type', true ) );
 		$this->assertSame( 'item-1', get_post_meta( $row_id, "field-{$b_id}", true ) );
+	}
+
+	public function test_formula_update_resolves_the_collection_past_revision_schema_copies(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$collection_id = $this->create_collection_with_slug( 'Revisioned', 'frevisioned' );
+
+		// Revisions copy `cortext_fields`. This one gets its meta before the
+		// collection has any, so its copy is the first match a lookup meets.
+		$revision_id = (int) wp_insert_post(
+			array(
+				'post_type'   => 'revision',
+				'post_status' => 'inherit',
+				'post_parent' => $collection_id,
+				'post_title'  => 'Revisioned',
+			)
+		);
+		add_metadata( 'post', $revision_id, RevisionMetaFormat::META_KEY, RevisionMetaFormat::VERSION );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'publish',
+				'post_title'  => 'Row A',
+			)
+		);
+		wp_set_object_terms( $row_id, array( TraitTaxonomy::term_id_for_trait( $collection_id ) ), TraitTaxonomy::TAXONOMY, false );
+
+		$formula_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'      => 'Label',
+				'type'       => 'formula',
+				'expression' => '"before"',
+			)
+		)->get_data()['id'];
+		add_metadata( 'post', $revision_id, 'cortext_fields', (string) $formula_id );
+
+		$response = $this->update_formula( $formula_id, array( 'expression' => '"after"' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		// Recomputing reaches the row only when the lookup lands on the collection.
+		$this->assertSame( 'after', get_post_meta( $row_id, "field-{$formula_id}", true ) );
 	}
 
 	public function test_formula_update_rejects_invalid_dependent_formula(): void {

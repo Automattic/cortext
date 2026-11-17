@@ -9,6 +9,8 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import { useDocumentRecordInvalidation } from './documentRecordInvalidation';
+
 const RecentsContext = createContext( null );
 
 function recentFingerprint( recent ) {
@@ -132,6 +134,15 @@ export function RecentsProvider( { children } ) {
 		touchQueue.current = queuedTouch.catch( () => null );
 		return queuedTouch;
 	}, [] );
+	const refreshRestoredRecent = useCallback(
+		( detail ) => {
+			if ( detail?.reason === 'revision-restore' && detail?.id ) {
+				void touchRecent( { id: detail.id } );
+			}
+		},
+		[ touchRecent ]
+	);
+	useDocumentRecordInvalidation( refreshRestoredRecent );
 
 	const value = useMemo(
 		() => ( { recents, isResolving, isUpdating, error, touchRecent } ),

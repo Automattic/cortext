@@ -95,10 +95,15 @@ import {
 	useDocumentSelection,
 	useFavoriteToggle,
 } from '../documents';
+import {
+	afterDocumentIdentityChange,
+	applyInvalidationPack,
+} from '../documents/invalidation';
 import useSidebarDnd from './sidebar/useSidebarDnd';
 import useSidebarNavigation from './sidebar/useSidebarNavigation';
 import useSidebarTree, { ROOT_PARENT_ID } from './sidebar/useSidebarTree';
 import DocumentRow from './sidebar/DocumentRow';
+import { useDocumentRecordInvalidation } from '../hooks/documentRecordInvalidation';
 import { isWordPressAffordancesEnabled } from '../settings';
 import { useSurfaceFocusIntent } from './SurfaceFocusContext';
 
@@ -146,7 +151,7 @@ export default function Sidebar( {
 		setFavorites,
 		isResolving: isResolvingFavorites,
 	} = useFavorites();
-	const { saveEntityRecord } = useDispatch( 'core' );
+	const { saveEntityRecord, invalidateResolution } = useDispatch( 'core' );
 	const {
 		tree,
 		pages,
@@ -158,11 +163,22 @@ export default function Sidebar( {
 		loadBranch,
 		loadMore,
 		refreshBranch,
+		refreshLoadedBranches,
 		getBranch,
 	} = useSidebarTree( {
 		selectedId: routeSelectedId,
 		selectedCollectionId: routeSelectedCollectionId,
 	} );
+	const refreshDocumentLists = useCallback( () => {
+		applyInvalidationPack(
+			invalidateResolution,
+			afterDocumentIdentityChange
+		);
+		// A restored revision can move a document between parents. Refresh every
+		// loaded lazy-tree branch so both its old and new locations stay accurate.
+		refreshLoadedBranches();
+	}, [ invalidateResolution, refreshLoadedBranches ] );
+	useDocumentRecordInvalidation( refreshDocumentLists );
 	const fallbackHomePage = tree[ 0 ]?.page ?? null;
 	const homePath =
 		home?.path ??

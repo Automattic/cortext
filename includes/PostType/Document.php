@@ -212,6 +212,7 @@ final class Document {
 				'type'              => 'string',
 				'single'            => false,
 				'show_in_rest'      => true,
+				'revisions_enabled' => true,
 				'sanitize_callback' => 'sanitize_text_field',
 			)
 		);
@@ -247,6 +248,7 @@ final class Document {
 						'additionalProperties' => false,
 					),
 				),
+				'revisions_enabled' => true,
 				'sanitize_callback' => array( self::class, 'sanitize_detail_layout' ),
 				'auth_callback'     => static function ( $allowed, $meta_key, $post_id ): bool {
 					return current_user_can( 'edit_post', (int) $post_id );
@@ -554,9 +556,10 @@ final class Document {
 				$wp_meta = 'integer';
 			}
 			$config = array(
-				'type'         => $wp_meta,
-				'single'       => ! $is_multi,
-				'show_in_rest' => 'formula' !== $type,
+				'type'              => $wp_meta,
+				'single'            => ! $is_multi,
+				'show_in_rest'      => 'formula' !== $type,
+				'revisions_enabled' => true,
 			);
 			if ( 'string' === $wp_meta ) {
 				$config['sanitize_callback'] = 'sanitize_text_field';
