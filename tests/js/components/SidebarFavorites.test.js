@@ -160,6 +160,33 @@ describe( 'SidebarFavorites helpers', () => {
 		] );
 	} );
 
+	it( 'resolves a collection favorite from the collections list fields', () => {
+		const items = resolveFavoriteItems(
+			[ { id: 2, path: 'old-2', icon: 'stale' } ],
+			[],
+			[
+				{
+					id: 2,
+					parent: 0,
+					slug: 'books',
+					title: { rendered: 'Books', raw: 'Books' },
+					meta: { cortext_document_icon: 'library' },
+					cortext_defines_trait: true,
+					crtxt_trait: [],
+				},
+			]
+		);
+
+		expect( items ).toMatchObject( [
+			{
+				id: 2,
+				title: 'Books',
+				path: 'books-2',
+				icon: 'library',
+			},
+		] );
+	} );
+
 	it( 'uses stored paths when sidebar records are missing', () => {
 		const favorites = [
 			{
