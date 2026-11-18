@@ -1668,6 +1668,7 @@ function TrashedNotice( { postId, postType, onRestored } ) {
 	const [ error, setError ] = useState( null );
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
+	const { createSuccessNotice } = useDispatch( 'core/notices' );
 
 	const restore = async () => {
 		setError( null );
@@ -1675,7 +1676,11 @@ function TrashedNotice( { postId, postType, onRestored } ) {
 		try {
 			const response = await restoreDocument(
 				{ id: postId },
-				{ invalidateResolution, receiveEntityRecords }
+				{
+					createSuccessNotice,
+					invalidateResolution,
+					receiveEntityRecords,
+				}
 			);
 			onRestored?.( postId, postType, response );
 		} catch ( err ) {
