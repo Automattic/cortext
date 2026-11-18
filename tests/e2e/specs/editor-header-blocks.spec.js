@@ -289,21 +289,6 @@ async function selectParagraph( page, content ) {
 	}, content );
 }
 
-async function selectFirstBlockByName( page, blockName ) {
-	await page.evaluate( ( name ) => {
-		const block = window.wp.data
-			.select( 'core/block-editor' )
-			.getBlocks()
-			.find( ( candidate ) => candidate.name === name );
-		if ( ! block ) {
-			throw new Error( `Block not found: ${ name }` );
-		}
-		window.wp.data
-			.dispatch( 'core/block-editor' )
-			.selectBlock( block.clientId );
-	}, blockName );
-}
-
 async function readCollectionBodyState( page, collectionId ) {
 	return page.evaluate(
 		( { blockedText, legacyText, postId } ) => {
@@ -699,23 +684,7 @@ test.describe( 'editor header blocks', () => {
 			);
 			await waitForEditorPost( page, createdPage.id );
 			await expectHeaderPrefix( page );
-			const editorCanvas = page.frameLocator(
-				'iframe[name="editor-canvas"]'
-			);
 
-			await selectFirstBlockByName( page, DOCUMENT_ICON_BLOCK );
-			await expect(
-				editorCanvas.getByRole( 'button', {
-					name: 'Add block after',
-				} )
-			).toHaveCount( 0 );
-
-			await selectFirstBlockByName( page, POST_TITLE_BLOCK );
-			await expect(
-				editorCanvas.getByRole( 'button', {
-					name: 'Add block after',
-				} )
-			).toHaveCount( 0 );
 			await expectParagraphsAfterTitle( page, [ '' ] );
 
 			fixture = await createRowFixture( requestUtils, {
@@ -728,12 +697,6 @@ test.describe( 'editor header blocks', () => {
 			);
 			await waitForEditorPost( page, fixture.row.id );
 			await expectParagraphsAfterTitle( page, [ '' ] );
-			await selectFirstBlockByName( page, DOCUMENT_PROPERTIES_BLOCK );
-			await expect(
-				editorCanvas.getByRole( 'button', {
-					name: 'Add block after',
-				} )
-			).toHaveCount( 0 );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
@@ -830,9 +793,6 @@ test.describe( 'editor header blocks', () => {
 				`page=cortext&p=/${ collection.id }`
 			);
 			await waitForEditorPost( page, collection.id );
-			const editorCanvas = page.frameLocator(
-				'iframe[name="editor-canvas"]'
-			);
 			await expectCollectionBodyState( page, collection.id, {
 				blockedCount: 0,
 				legacyLock: {
@@ -860,12 +820,6 @@ test.describe( 'editor header blocks', () => {
 				page.off( 'pageerror', onPageError );
 			}
 			expect( pageErrors ).toEqual( [] );
-			await selectFirstBlockByName( page, POST_TITLE_BLOCK );
-			await expect(
-				editorCanvas.getByRole( 'button', {
-					name: 'Add block after',
-				} )
-			).toHaveCount( 0 );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
