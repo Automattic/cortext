@@ -72,9 +72,39 @@ final class RowsManualOrder {
 			return $tt_id;
 		}
 
-		$row = $this->row_in_collection( $row_id, $collection_id );
+		if ( $this->is_hidden( get_post( $collection_id ) ) ) {
+			return new WP_Error(
+				'cortext_reorder_collection_hidden',
+				__( 'Restore this collection before reordering its rows.', 'cortext' ),
+				array( 'status' => 409 )
+			);
+		}
+
+		$row = $this->row_in_collection(
+			$row_id,
+			$collection_id,
+			new WP_Error(
+				'cortext_reorder_row_hidden',
+				__( 'Restore this row before moving it.', 'cortext' ),
+				array( 'status' => 409 )
+			)
+		);
 		if ( is_wp_error( $row ) ) {
 			return $row;
+		}
+
+		$hidden_neighbor = new WP_Error(
+			'cortext_reorder_neighbor_hidden',
+			__( 'Restore the neighboring row before moving a row next to it.', 'cortext' ),
+			array( 'status' => 409 )
+		);
+		$before          = null === $before_id ? null : $this->row_in_collection( $before_id, $collection_id, $hidden_neighbor );
+		if ( is_wp_error( $before ) ) {
+			return $before;
+		}
+		$after = null === $after_id ? null : $this->row_in_collection( $after_id, $collection_id, $hidden_neighbor );
+		if ( is_wp_error( $after ) ) {
+			return $after;
 		}
 
 		$manual_seeded = false;
@@ -89,26 +119,17 @@ final class RowsManualOrder {
 			$reseeded      = true;
 		}
 
-		$before = null === $before_id ? null : $this->row_in_collection( $before_id, $collection_id );
-		if ( is_wp_error( $before ) ) {
-			return $before;
-		}
-		$after = null === $after_id ? null : $this->row_in_collection( $after_id, $collection_id );
-		if ( is_wp_error( $after ) ) {
-			return $after;
-		}
-
 		$before_order = $before instanceof WP_Post ? TraitTaxonomy::member_order( $before->ID, $tt_id ) : null;
 		$after_order  = $after instanceof WP_Post ? TraitTaxonomy::member_order( $after->ID, $tt_id ) : null;
 
-		if ( null !== $before_order && null !== $after_order && $before_order <= $after_order ) {
-			return new WP_Error(
-				'cortext_reorder_invalid_neighbors',
-				__( 'Those row positions are no longer valid.', 'cortext' ),
-				array( 'status' => 400 )
-			);
+		if ( null !== $before_order && null !== $after_order && $before_order < $after_order ) {
+			return $this->invalid_neighbors_error();
 		}
 
+		// Neighbors that share a position (a row restored onto a slot another
+		// row took meanwhile) or sit too close get renumbered first. Lists
+		// break position ties by ID, and so does densify, so the renumbered
+		// order matches what the user saw.
 		if ( null !== $before_order && null !== $after_order && ( $before_order - $after_order ) < 2 ) {
 			$densified = $this->densify( $collection_id );
 			if ( is_wp_error( $densified ) ) {
@@ -118,6 +139,9 @@ final class RowsManualOrder {
 
 			$before_order = null === $before_id ? null : TraitTaxonomy::member_order( $before_id, $tt_id );
 			$after_order  = null === $after_id ? null : TraitTaxonomy::member_order( $after_id, $tt_id );
+			if ( $before_order <= $after_order ) {
+				return $this->invalid_neighbors_error();
+			}
 		}
 
 		$menu_order = $this->menu_order_between( $before_order, $after_order );
@@ -269,7 +293,14 @@ final class RowsManualOrder {
 		return $tt_id;
 	}
 
-	private function row_in_collection( int $row_id, int $collection_id ): WP_Post|WP_Error {
+	/**
+	 * Loads a row of the collection, rejecting archived and trashed rows.
+	 *
+	 * @param int      $row_id        Row post ID.
+	 * @param int      $collection_id Collection post ID.
+	 * @param WP_Error $hidden_error  Error returned when the row is archived or trashed.
+	 */
+	private function row_in_collection( int $row_id, int $collection_id, WP_Error $hidden_error ): WP_Post|WP_Error {
 		$row = get_post( $row_id );
 		if (
 			! $row instanceof WP_Post
@@ -283,7 +314,24 @@ final class RowsManualOrder {
 			);
 		}
 
+		if ( $this->is_hidden( $row ) ) {
+			return $hidden_error;
+		}
+
 		return $row;
+	}
+
+	private function invalid_neighbors_error(): WP_Error {
+		return new WP_Error(
+			'cortext_reorder_invalid_neighbors',
+			__( 'Those row positions are no longer valid.', 'cortext' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	private function is_hidden( ?WP_Post $post ): bool {
+		return $post instanceof WP_Post
+			&& in_array( $post->post_status, array( Documents::STATUS_ARCHIVED, Documents::STATUS_TRASH ), true );
 	}
 
 	/**

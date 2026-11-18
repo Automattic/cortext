@@ -102,6 +102,13 @@ export async function runImport( key, dataSourceId, onProgress ) {
 			continue;
 		}
 
+		// The server stops a job with `status: 'error'` and a message, for
+		// example when its collection is archived or trashed mid-import.
+		if ( next.status === 'error' ) {
+			finishImport( key, next.job_id ).catch( () => {} );
+			throw new Error( next.message );
+		}
+
 		// A tick that left `processed` unchanged while still claiming
 		// `has_more` is a stall signal: either the server didn't fetch
 		// new rows from Notion, or `import_rows` inserted zero. One
