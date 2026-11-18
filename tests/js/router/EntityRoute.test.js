@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 
 import EntityRoute from '../../../src/router/EntityRoute';
 
@@ -78,6 +78,13 @@ jest.mock( '../../../src/components/WorkspaceTopBar', () => () => null );
 jest.mock( '../../../src/components/CortextSnackbars', () => () => null );
 jest.mock( '../../../src/components/ExperimentsPane', () => () => null );
 jest.mock( '../../../src/components/ImportPane', () => () => null );
+const mockTrashView = jest.fn( () => null );
+jest.mock(
+	'../../../src/components/trash/TrashView',
+	() =>
+		( ...args ) =>
+			mockTrashView( ...args )
+);
 jest.mock( '../../../src/router/EmptyState', () => () => null );
 
 const resolved = ( id ) => ( {
@@ -145,5 +152,56 @@ describe( 'EntityRoute', () => {
 				'.cortext-workspace__pane[data-active="true"] [data-testid="canvas"]'
 			)
 		).not.toBeNull();
+	} );
+
+	it( 'stops the Trash pane as soon as the URL leaves Trash', () => {
+		mockSplat = 'trash';
+		const { rerender } = render( <EntityRoute /> );
+		expect( mockTrashView ).toHaveBeenLastCalledWith(
+			{ isActive: true },
+			expect.anything()
+		);
+
+		// Opening a document changes the URL before the Trash pane fades out.
+		mockSplat = 'old-draft-722';
+		mockResolution = { ...resolved( 722 ), isResolving: true };
+		rerender( <EntityRoute /> );
+
+		expect( mockTrashView ).toHaveBeenLastCalledWith(
+			{ isActive: false },
+			expect.anything()
+		);
+	} );
+
+	it( 'opens the item Trash selects while the switch to Trash still waits on its transition', async () => {
+		mockSplat = 'welcome-to-cortext-284';
+		mockResolution = resolved( 284 );
+		holdTransitions = false;
+		const { rerender } = render( <EntityRoute /> );
+		expect( await screen.findByTestId( 'canvas' ) ).toHaveTextContent(
+			'284'
+		);
+
+		// Trash opens, and before its pane transition runs the sidebar selects
+		// the first item, which opens that document from Trash.
+		holdTransitions = true;
+		mockSplat = 'trash';
+		rerender( <EntityRoute /> );
+		mockSplat = 'trash/722';
+		mockResolution = resolved( 722 );
+		rerender( <EntityRoute /> );
+
+		holdTransitions = false;
+		act( () => heldTransitions.forEach( ( callback ) => callback() ) );
+
+		// The held switch to Trash must not win over the newer document: the
+		// document pane is the one showing.
+		await waitFor( () =>
+			expect(
+				document.querySelector(
+					'.cortext-workspace__pane[data-active="true"] [data-testid="canvas"]'
+				)
+			).toHaveTextContent( '722' )
+		);
 	} );
 } );

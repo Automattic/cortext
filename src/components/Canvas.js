@@ -89,6 +89,7 @@ function InserterToggle( { disabled = false } ) {
 
 function DocumentActions( {
 	disabled = false,
+	isTrashed = false,
 	canInsertBlocks = true,
 	isActive,
 	postId,
@@ -120,15 +121,19 @@ function DocumentActions( {
 	return (
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
-				{ canInsertBlocks ? (
+				{ /* Adding blocks, publishing, and the properties layout don't
+				apply to a document in Trash, so only Settings stays. */ }
+				{ canInsertBlocks && ! isTrashed ? (
 					<InserterToggle disabled={ disabled } />
 				) : null }
-				{ topBarActions }
-				<DocumentPublishToggle
-					postId={ postId }
-					disabled={ disabled }
-				/>
-				{ hasProperties ? (
+				{ ! isTrashed && topBarActions }
+				{ ! isTrashed && (
+					<DocumentPublishToggle
+						postId={ postId }
+						disabled={ disabled }
+					/>
+				) }
+				{ hasProperties && ! isTrashed ? (
 					<>
 						<Button
 							className="cortext-document-actions__fields"
@@ -369,8 +374,8 @@ export function CanvasEditor( {
 	recentTarget,
 } ) {
 	const isCollection = definesTrait( post );
-	const isLifecycleReadOnly =
-		post?.status === 'trash' || post?.status === 'crtxt_archived';
+	const isTrashed = post?.status === 'trash';
+	const isLifecycleReadOnly = isTrashed || post?.status === 'crtxt_archived';
 	const hasTrait =
 		Array.isArray( post?.crtxt_trait ) && post.crtxt_trait.length > 0;
 	const autosaveRecentTarget =
@@ -520,6 +525,7 @@ export function CanvasEditor( {
 			<CortextMentions />
 			<DocumentActions
 				disabled={ isReadOnly }
+				isTrashed={ isTrashed }
 				canInsertBlocks={ ! isCollection }
 				isActive={ isActive }
 				postId={ post.id }
@@ -531,7 +537,9 @@ export function CanvasEditor( {
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
 			<CanvasInterfaceSkeleton
-				className="cortext-canvas"
+				className={
+					isTrashed ? 'cortext-canvas is-trashed' : 'cortext-canvas'
+				}
 				content={
 					<>
 						{ notice }

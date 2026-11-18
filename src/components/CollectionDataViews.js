@@ -54,7 +54,6 @@ import { nextViewAfterRowCreated } from './dataViewCreation';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
-import { ROW_DETAIL_MODE_ICONS, ROW_DETAIL_MODE_LABELS } from './RowDetailView';
 import {
 	GHOST_FIELD_ID,
 	MANUAL_SORT_ID,
@@ -71,7 +70,12 @@ import {
 import { scrollToEndQuickly } from './dataViewScroll';
 import { saveRowDocumentField } from './rowDocumentMutations';
 import { useActiveEditor } from './ActiveEditorContext';
-import { getRowDetailMode, withRowDetailMode } from './rowDetailUtils';
+import {
+	ROW_DETAIL_MODE_ICONS,
+	ROW_DETAIL_MODE_LABELS,
+	getRowDetailMode,
+	withRowDetailMode,
+} from './rowDetailUtils';
 import {
 	applyVisibleSelectionChange,
 	mergeVisibleSelection,
@@ -89,9 +93,12 @@ import { useRecents } from '../hooks/useRecents';
 import { filterFavoritesByDeletedIds, useFavoriteToggle } from '../documents';
 import {
 	archiveSaveFailureMessage,
+	movedToTrashMessage,
+	restoreDocuments,
 	runWithEditorsLocked,
 	syncLifecycleEntityRecords,
 	trashSaveFailureMessage,
+	undoAction,
 } from '../documents/actions';
 import { duplicateDocumentRecord } from '../documents/mutations';
 import {
@@ -140,6 +147,8 @@ export default function CollectionDataViews( {
 		useCollectionFieldsContext();
 	const { invalidateResolution, receiveEntityRecords, saveEntityRecord } =
 		useDispatch( 'core' );
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch( 'core/notices' );
 	const { touchRecent } = useRecents();
 	// Field IDs from the last schema sync. We use this to auto-show fields
 	// the user just created. `null` on first run means the saved view should
@@ -1211,6 +1220,39 @@ export default function CollectionDataViews( {
 					// Keep this quiet. The next favorites read asks the server to
 					// prune stale documents anyway.
 				} );
+
+				const trashedRows = nextRows.filter(
+					( row ) => ! failedRows.includes( row )
+				);
+				const noticeCtx = {
+					createErrorNotice,
+					createSuccessNotice,
+					invalidateResolution,
+					receiveEntityRecords,
+				};
+				createSuccessNotice(
+					trashedRows.length === 1
+						? movedToTrashMessage( deletedIds.length - 1 )
+						: sprintf(
+								/* translators: %d: number of documents moved to Trash */
+								_n(
+									'%d document moved to Trash.',
+									'%d documents moved to Trash.',
+									trashedRows.length,
+									'cortext'
+								),
+								trashedRows.length
+						  ),
+					{
+						id: 'cortext-document-trash-success',
+						type: 'snackbar',
+						actions: undoAction(
+							noticeCtx,
+							() => restoreDocuments( trashedRows, noticeCtx ),
+							'cortext-document-trash-success'
+						),
+					}
+				);
 			}
 
 			if ( failedRows.length > 0 ) {
@@ -1242,12 +1284,15 @@ export default function CollectionDataViews( {
 		},
 		[
 			closeDocument,
+			createErrorNotice,
+			createSuccessNotice,
 			flushActiveEditor,
 			forgetLifecycleRows,
 			invalidateResolution,
 			lockEditors,
 			openRowId,
 			postType,
+			receiveEntityRecords,
 			refresh,
 			setFavorites,
 			syncSettledLifecycleRecords,

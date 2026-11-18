@@ -45,12 +45,10 @@ import { GHOST_FIELD_ID } from '../../components/dataViewColumns';
 import {
 	DEFAULT_ROW_DETAIL_MODE,
 	ROW_DETAIL_MODES,
-} from '../../components/rowDetailUtils';
-import { DEFAULT_GRID_PREVIEW_SIZE } from '../../components/dataViewAdapter';
-import {
 	ROW_DETAIL_MODE_ICONS,
 	ROW_DETAIL_MODE_LABELS,
-} from '../../components/RowDetailView';
+} from '../../components/rowDetailUtils';
+import { DEFAULT_GRID_PREVIEW_SIZE } from '../../components/dataViewAdapter';
 
 const DENSITY_OPTIONS = [
 	{ value: 'compact', label: __( 'Compact', 'cortext' ) },

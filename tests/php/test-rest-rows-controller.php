@@ -165,6 +165,50 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_trashed_collection_still_lists_its_trashed_rows(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$fixture = $this->create_collection_fixture( 'trashed-rows' );
+		$row_id  = $this->create_row_fixture( $fixture['collection_id'], 'Trashed row', 'private' );
+		wp_update_post(
+			array(
+				'ID'          => $row_id,
+				'post_status' => 'trash',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'          => $fixture['collection_id'],
+				'post_status' => 'trash',
+			)
+		);
+
+		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $response->get_data()['total'] );
+		$this->assertSame( 'Trashed row', $response->get_data()['rows'][0]['title']['raw'] );
+	}
+
+	public function test_active_collection_leaves_trashed_rows_out(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$fixture = $this->create_collection_fixture( 'active-with-trashed-row' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Kept row', 'private' );
+		$trashed = $this->create_row_fixture( $fixture['collection_id'], 'Trashed row', 'private' );
+		wp_update_post(
+			array(
+				'ID'          => $trashed,
+				'post_status' => 'trash',
+			)
+		);
+
+		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
+
+		$this->assertSame( 1, $response->get_data()['total'] );
+		$this->assertSame( 'Kept row', $response->get_data()['rows'][0]['title']['raw'] );
+	}
+
 	public function test_view_context_rejects_unpublished_collection(): void {
 		wp_set_current_user( 0 );
 

@@ -23,14 +23,14 @@ export const EMPTY_LIFECYCLE_DOCUMENTS_STATE = {
 
 export const EMPTY_COUNTS = Object.freeze( { total: 0 } );
 
-function optionalTitleText( title ) {
+export function optionalTitleText( title ) {
 	if ( typeof title === 'string' && title.trim() ) {
 		return title.trim();
 	}
 	return title?.rendered?.trim() || title?.raw?.trim() || '';
 }
 
-function buildBreadcrumb( record, ancestorById ) {
+export function buildBreadcrumb( record, ancestorById ) {
 	const ancestors = [];
 	let current = record.parent ? ancestorById.get( record.parent ) : null;
 	const seen = new Set( [ record.id ] );
@@ -99,7 +99,7 @@ export function useSidebarLifecycleList(
 
 	// Roots are documents with no marker, plus documents whose marker points
 	// at a parent that's no longer in this list.
-	const { roots, descendantCountById } = useMemo(
+	const { roots, descendantCountById, descendantsById } = useMemo(
 		() => computeCascadeRoots( visibleDocuments, markerKeys ),
 		[ markerKeys, visibleDocuments ]
 	);
@@ -133,6 +133,7 @@ export function useSidebarLifecycleList(
 		ancestorById,
 		busyId,
 		descendantCountById,
+		descendantsById,
 		hasError: Boolean( error && ! hasCache ),
 		isLoading,
 		roots,

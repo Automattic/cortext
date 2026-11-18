@@ -4,6 +4,7 @@ import { useCallback } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 
 import { DOCUMENT_POST_TYPE } from '../collections';
+import allSettledWithConcurrency from '../components/allSettledWithConcurrency';
 import { computeDocumentUri } from '../router/useResolveEntity';
 import { notifyDocumentArchiveChanged } from '../hooks/documentArchiveInvalidation';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
@@ -126,7 +127,7 @@ function restoredRootStatusMessage( status ) {
 	);
 }
 
-function notifyRestored( response, ctx, noticeId ) {
+function notifyRestored( response, ctx, noticeId, actions ) {
 	const publicDescendantCount = ( response?.published ?? [] ).filter(
 		( id ) => id !== response?.post?.id
 	).length;
@@ -138,7 +139,102 @@ function notifyRestored( response, ctx, noticeId ) {
 		{
 			id: noticeId,
 			type: 'snackbar',
+			...( actions ? { actions } : {} ),
 		}
+	);
+}
+
+// Snackbar action that reverses a lifecycle change. A failed undo reports
+// itself in the same snackbar slot, since the snackbar that offered it is gone.
+export function undoAction( ctx, run, noticeId ) {
+	return [
+		{
+			label: __( 'Undo', 'cortext' ),
+			onClick: () =>
+				run().catch( ( error ) =>
+					ctx.createErrorNotice?.(
+						error?.message ?? __( 'Could not undo.', 'cortext' ),
+						{ id: noticeId, type: 'snackbar' }
+					)
+				),
+		},
+	];
+}
+
+// How many restores run at once when undoing a bulk trash, matching the cap
+// the bulk trash itself uses.
+const RESTORE_CONCURRENCY = 4;
+
+// Restores documents trashed together, such as a bulk row selection. The
+// lists refresh and the snackbar reports once for the whole batch, and a row
+// that fails does not hide the ones that came back.
+export async function restoreDocuments( records, ctx ) {
+	const results = await allSettledWithConcurrency(
+		records,
+		RESTORE_CONCURRENCY,
+		( record ) =>
+			apiFetch( {
+				path: `/cortext/v1/documents/${ record.id }/restore`,
+				method: 'POST',
+			} )
+	);
+	results.forEach( ( result ) => {
+		if ( result.status === 'fulfilled' ) {
+			syncLifecycleEntityRecords( result.value, ctx, 'restored' );
+		}
+	} );
+	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+	notifySidebarTreeChanged();
+	notifyDocumentTrashChanged();
+	notifyDocumentArchiveChanged( { action: 'restore' } );
+	notifyCollectionRowsChanged();
+
+	const failed = results.filter(
+		( result ) => result.status === 'rejected'
+	).length;
+	if ( failed > 0 ) {
+		ctx.createErrorNotice?.(
+			sprintf(
+				/* translators: 1: number of documents that could not be restored, 2: number of documents in the batch */
+				__(
+					'%1$d of %2$d documents could not be restored.',
+					'cortext'
+				),
+				failed,
+				records.length
+			),
+			{ id: 'cortext-document-restore-success', type: 'snackbar' }
+		);
+		return;
+	}
+	ctx.createSuccessNotice?.(
+		sprintf(
+			/* translators: %d: number of documents restored from Trash */
+			_n(
+				'%d document restored.',
+				'%d documents restored.',
+				records.length,
+				'cortext'
+			),
+			records.length
+		),
+		{ id: 'cortext-document-restore-success', type: 'snackbar' }
+	);
+}
+
+export function movedToTrashMessage( nestedCount = 0 ) {
+	if ( nestedCount < 1 ) {
+		return __( 'Document moved to Trash.', 'cortext' );
+	}
+	return sprintf(
+		/* translators: %d: number of nested documents moved to Trash along with the document */
+		_n(
+			'Document and %d nested document moved to Trash.',
+			'Document and %d nested documents moved to Trash.',
+			nestedCount,
+			'cortext'
+		),
+		nestedCount
 	);
 }
 
@@ -331,6 +427,18 @@ export async function trashDocument( record, ctx ) {
 		)
 	);
 	ctx.onAfterTrash?.( { record, lifecycleFocusIntent } );
+	ctx.createSuccessNotice?.(
+		movedToTrashMessage( deleted?.cascade_deleted?.length ?? 0 ),
+		{
+			id: 'cortext-document-trash-success',
+			type: 'snackbar',
+			actions: undoAction(
+				ctx,
+				() => restoreDocument( record, ctx ),
+				'cortext-document-trash-success'
+			),
+		}
+	);
 	return deleted;
 }
 
@@ -345,7 +453,16 @@ export async function restoreDocument( record, ctx ) {
 	notifyDocumentTrashChanged();
 	notifyDocumentArchiveChanged( { action: 'restore' } );
 	notifyCollectionRowsChanged();
-	notifyRestored( response, ctx, 'cortext-document-restore-success' );
+	notifyRestored(
+		response,
+		ctx,
+		'cortext-document-restore-success',
+		undoAction(
+			ctx,
+			() => trashDocument( record, ctx ),
+			'cortext-document-restore-success'
+		)
+	);
 	return response;
 }
 
@@ -379,6 +496,18 @@ export async function unarchiveDocument( record, ctx ) {
 	invalidateDocumentLifecycle( ctx );
 	notifyDocumentArchiveChanged( { action: 'unarchive' } );
 	notifyRestored( response, ctx, 'cortext-document-unarchive-success' );
+	return response;
+}
+
+export async function emptyTrash( ctx ) {
+	const response = await apiFetch( {
+		path: '/cortext/v1/documents/empty-trash',
+		method: 'POST',
+	} );
+	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+	notifySidebarTreeChanged();
+	notifyDocumentTrashChanged();
+	notifyCollectionRowsChanged();
 	return response;
 }
 

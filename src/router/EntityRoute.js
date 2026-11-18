@@ -31,6 +31,7 @@ import { RowMutationContext } from '../components/EditableCell';
 import ExperimentsPane from '../components/ExperimentsPane';
 import ImportPane from '../components/ImportPane';
 import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
+import TrashView from '../components/trash/TrashView';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import CortextSnackbars from '../components/CortextSnackbars';
@@ -217,7 +218,21 @@ export default function EntityRoute( { history } ) {
 	// even when the visible pane stayed put.
 	const stateRef = useRef( state );
 	stateRef.current = state;
+	// A target change can wait inside a view transition while the URL moves on,
+	// for example when Trash opens and then selects its first item. When the
+	// held change finally runs it must apply the newest target, or it would
+	// overwrite the one dispatched after it.
+	const latestTargetRef = useRef( target );
 	const dispatch = useCallback( ( action ) => {
+		if ( action.type === 'TARGET_CHANGED' ) {
+			latestTargetRef.current = action.target;
+		}
+		const deferredDispatch = () =>
+			rawDispatch(
+				action.type === 'TARGET_CHANGED'
+					? { ...action, target: latestTargetRef.current }
+					: action
+			);
 		const before = stateRef.current;
 		const after = reducer( before, action );
 		const visualChanged =
@@ -241,24 +256,25 @@ export default function EntityRoute( { history } ) {
 			return;
 		}
 		if ( isContentPane( before.active ) && isContentPane( after.active ) ) {
-			withViewTransition( () => rawDispatch( action ), {
+			withViewTransition( deferredDispatch, {
 				mode: 'hold-old-canvas',
 			} );
 			return;
 		}
-		// Settings panes are lightweight and mostly static. A plain fade keeps
+		// Settings and Trash panes are lightweight. A plain fade keeps
 		// Chrome's default blend from washing out the transition to white.
 		if (
 			after.active.kind === 'experiments' ||
 			after.active.kind === 'import' ||
-			after.active.kind === 'published'
+			after.active.kind === 'published' ||
+			after.active.kind === 'trash'
 		) {
-			withViewTransition( () => rawDispatch( action ), {
+			withViewTransition( deferredDispatch, {
 				mode: 'pane-crossfade',
 			} );
 			return;
 		}
-		withViewTransition( () => rawDispatch( action ) );
+		withViewTransition( deferredDispatch );
 	}, [] );
 
 	const documentResolution = useResolveDocument(
@@ -409,7 +425,12 @@ export default function EntityRoute( { history } ) {
 			// Rows touch recents in the row-specific effect below, which has
 			// the parent collection id ready as breadcrumb context. Everything
 			// else (pages, collections) just records the open document by id.
-			if ( ( documentResolution.traitIds?.length ?? 0 ) === 0 ) {
+			// Browsing Trash opens trashed documents; they don't belong in
+			// Recents.
+			if (
+				! target.inTrash &&
+				( documentResolution.traitIds?.length ?? 0 ) === 0
+			) {
 				touchRecent( { id: entity.id } );
 			}
 			return;
@@ -432,6 +453,7 @@ export default function EntityRoute( { history } ) {
 		if (
 			target.kind !== 'document' ||
 			target.id === null ||
+			target.inTrash ||
 			mountedDocumentId !== target.id ||
 			! rowParentCollectionId
 		) {
@@ -444,6 +466,7 @@ export default function EntityRoute( { history } ) {
 	}, [
 		target.kind,
 		target.id,
+		target.inTrash,
 		mountedDocumentId,
 		rowParentCollectionId,
 		touchRecent,
@@ -567,6 +590,13 @@ export default function EntityRoute( { history } ) {
 				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'import' }>
 					<ImportPane />
+				</WorkspacePane>
+				<WorkspacePane active={ active.kind === 'trash' }>
+					<TrashView
+						isActive={
+							active.kind === 'trash' && target.kind === 'trash'
+						}
+					/>
 				</WorkspacePane>
 				<WorkspacePane active={ active.kind === 'empty' }>
 					<EmptyState isWorkspaceEmpty={ isWorkspaceEmpty } />

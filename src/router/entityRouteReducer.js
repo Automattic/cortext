@@ -5,7 +5,9 @@ import {
 	SETTINGS_IMPORT_URI,
 	SETTINGS_PUBLISHED_URI,
 	SETTINGS_URI,
+	isTrashUri,
 	parseIdFromUri,
+	parseSplatUri,
 } from './useResolveEntity';
 
 export function parseTarget( splat, options = {} ) {
@@ -30,6 +32,15 @@ export function parseTarget( splat, options = {} ) {
 			return { kind: 'redirect', to: SETTINGS_IMPORT_URI, tail: '' };
 		}
 		return { kind: 'published', tail: '' };
+	}
+	if ( isTrashUri( splat ) ) {
+		// `trash/<id>` opens that trashed document in the canvas while the
+		// sidebar lists Trash. `trash` alone is the Trash pane itself.
+		const id = Number( parseSplatUri( splat ).tail ) || null;
+		if ( id ) {
+			return { kind: 'document', id, tail: `${ id }`, inTrash: true };
+		}
+		return { kind: 'trash', tail: '' };
 	}
 	if ( ! splat ) {
 		return { kind: 'empty', tail: '' };
@@ -58,6 +69,8 @@ export function reducer( state, action ) {
 				active = { kind: 'experiments' };
 			} else if ( target.kind === 'import' ) {
 				active = { kind: 'import' };
+			} else if ( target.kind === 'trash' ) {
+				active = { kind: 'trash' };
 			} else if ( target.kind === 'document' ) {
 				if ( target.id === null ) {
 					active = { kind: 'document-not-found' };
@@ -131,6 +144,8 @@ export function init( target ) {
 		active = { kind: 'experiments' };
 	} else if ( target.kind === 'import' ) {
 		active = { kind: 'import' };
+	} else if ( target.kind === 'trash' ) {
+		active = { kind: 'trash' };
 	} else if ( target.kind === 'redirect' ) {
 		active = { kind: 'loading' };
 	} else if ( target.kind === 'document' && target.id === null ) {
