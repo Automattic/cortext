@@ -378,8 +378,18 @@ export default function EntityRoute( { history } ) {
 		} );
 	}, [ target, navigate ] );
 
+	// The reducer drops a resolution for a document it isn't targeting yet. That
+	// happens when TARGET_CHANGED waits inside a view transition while the fetch
+	// finishes first, so hold off until the reducer has the same target.
+	const committedDocumentId =
+		state.target.kind === 'document' ? state.target.id : null;
+
 	useEffect( () => {
-		if ( target.kind !== 'document' || target.id === null ) {
+		if (
+			target.kind !== 'document' ||
+			target.id === null ||
+			committedDocumentId !== target.id
+		) {
 			return;
 		}
 		const {
@@ -410,7 +420,13 @@ export default function EntityRoute( { history } ) {
 				id: target.id,
 			} );
 		}
-	}, [ target, documentResolution, dispatch, touchRecent ] );
+	}, [
+		target,
+		committedDocumentId,
+		documentResolution,
+		dispatch,
+		touchRecent,
+	] );
 
 	useEffect( () => {
 		if (
