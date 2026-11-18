@@ -1,6 +1,13 @@
 import { createRoot } from '@wordpress/element';
 
 import './index.scss';
+// Register every block type before the shell can fetch a document. WP 7.1's
+// core-data parses `content` when a full record arrives and caches the
+// result; parsed with no block types registered, the cache holds an empty
+// block list, the editor opens blank, and the next autosave erases the page.
+// Sidebar lists such as Recents fetch full records before the lazy editor
+// chunk loads. Upstream fix: WordPress/gutenberg#81809 (not in WP 7.1).
+import './components/initEditor';
 
 import { router, RouterProvider } from './router';
 

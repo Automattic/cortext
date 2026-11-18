@@ -25,9 +25,6 @@ import {
 // CSS bundle, off the initial CSS path.
 import './Canvas.scss';
 
-// Registers core + Cortext blocks before any editor renders. Shared with
-// RowEditor so opening a row peek first (without a document open) still
-// gets the blocks registered.
 import { getEditorSettings } from './initEditor';
 import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';

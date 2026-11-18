@@ -1,9 +1,7 @@
 // Registers the core and Cortext blocks for every editor surface in the
-// shell. Canvas (full document editor) and RowEditor (row peek, modal,
-// and full-page row editor) both mount EditorProvider, so each one
-// imports this module to make sure registration runs before any editor
-// renders blocks. The guard makes the side effect idempotent: whichever
-// surface loads first wins, the second is a no-op.
+// shell. The shell entry (`src/index.js`) imports this module first, so the
+// block types exist before core-data parses any document it fetches. The
+// guard keeps the side effect idempotent across bundles.
 //
 // `ALLOWED_BLOCK_TYPES` is the editor's block list. `getEditorSettings()`
 // passes it to Gutenberg as `allowedBlockTypes`, which the editor checks for
