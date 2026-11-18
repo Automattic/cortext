@@ -75,12 +75,16 @@ async function loadMoreUntilVisible( target, loadMoreButton, maxClicks = 10 ) {
 				if ( await target.isVisible().catch( () => false ) ) {
 					return true;
 				}
+				// The button goes away once the last page loads. Without a
+				// short timeout, evaluate waits for it to come back and the
+				// poll never rechecks the target.
 				return loadMoreButton
 					.evaluate(
 						( button, previousCount ) =>
 							( button.closest( 'ul' )?.children.length ?? 0 ) >
 							previousCount,
-						itemCount
+						itemCount,
+						{ timeout: 500 }
 					)
 					.catch( () => false );
 			} )
