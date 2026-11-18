@@ -32,6 +32,7 @@ namespace Cortext\Rest;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\Notion\Client;
 use Cortext\Notion\Importer;
 use WP_Error;
@@ -227,7 +228,9 @@ final class NotionController {
 	 * POST /cortext/v1/notion/import/{job_id}/tick
 	 *
 	 * Pulls one page of rows from Notion and writes them. Returns the
-	 * updated job state so the client knows whether to call again.
+	 * updated job state so the client knows whether to call again. When
+	 * the collection is archived or trashed, the job stops with an
+	 * `error` status and a message instead of writing rows.
 	 *
 	 * @param WP_REST_Request $request Incoming request.
 	 */
@@ -270,6 +273,15 @@ final class NotionController {
 		$results  = is_array( $response['results'] ?? null ) ? $response['results'] : array();
 		$has_more = ! empty( $response['has_more'] );
 		$cursor   = $has_more ? ( $response['next_cursor'] ?? null ) : null;
+
+		$stopped_message = $this->hidden_collection_message( (int) $job['collection_id'] );
+		if ( null !== $stopped_message ) {
+			$job['status']  = 'error';
+			$job['message'] = $stopped_message;
+			$this->save_job( $job_id, $job );
+
+			return $this->job_response( $job_id, $job );
+		}
 
 		$importer = new Importer();
 		$inserted = $importer->import_rows( (int) $job['collection_id'], $results );
@@ -371,6 +383,24 @@ final class NotionController {
 			),
 			200
 		);
+	}
+
+	/**
+	 * Explains why an import stops when its collection is archived or
+	 * trashed, or returns null while the collection is active.
+	 *
+	 * @param int $collection_id Collection the import writes into.
+	 */
+	private function hidden_collection_message( int $collection_id ): ?string {
+		$status = get_post_status( $collection_id );
+		if ( Documents::STATUS_ARCHIVED === $status ) {
+			return __( 'The collection was archived, so the import stopped.', 'cortext' );
+		}
+		if ( Documents::STATUS_TRASH === $status ) {
+			return __( 'The collection was moved to Trash, so the import stopped.', 'cortext' );
+		}
+
+		return null;
 	}
 
 	private function load_job( string $job_id ): ?array {
