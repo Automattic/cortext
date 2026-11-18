@@ -111,6 +111,9 @@ import {
 } from './collectionSurfaceFocus';
 
 const BULK_LIFECYCLE_CONCURRENCY = 4;
+// Cell saves patch their row from the save response, then the page is read
+// again once edits pause, so totals, order, formulas and other rows catch up.
+const ROW_SAVE_REFRESH_DELAY_MS = 400;
 // tech-debt.md#td-dataviews-list-row-hooks: DataViews ties list focus to its own selection. Cortext
 // uses blank-row clicks and keyboard activation to open the row instead.
 const EMPTY_DATA_VIEW_SELECTION = [];
@@ -205,6 +208,7 @@ export default function CollectionDataViews( {
 		error: rowError,
 		refresh,
 		mutateRows,
+		patchRow,
 		queryMode,
 	} = useCollectionRows(
 		isResolving ? null : collectionId,
@@ -605,6 +609,31 @@ export default function CollectionDataViews( {
 			} ),
 		[ registerPendingSaves ]
 	);
+	const rowSaveRefreshTimer = useRef( null );
+	const scheduleRowSaveRefresh = useCallback( () => {
+		clearTimeout( rowSaveRefreshTimer.current );
+		rowSaveRefreshTimer.current = setTimeout( () => {
+			rowSaveRefreshTimer.current = null;
+			// The last save to settle schedules the refresh again.
+			if ( pendingRowFieldSaves.current.size > 0 ) {
+				return;
+			}
+			refresh();
+			notifyCollectionRowsChanged( collectionId );
+		}, ROW_SAVE_REFRESH_DELAY_MS );
+	}, [ collectionId, refresh ] );
+	useEffect(
+		() => () => {
+			// Other views of this collection still need the refresh this one
+			// was holding back.
+			if ( rowSaveRefreshTimer.current ) {
+				clearTimeout( rowSaveRefreshTimer.current );
+				rowSaveRefreshTimer.current = null;
+				notifyCollectionRowsChanged( collectionId );
+			}
+		},
+		[ collectionId ]
+	);
 	const saveRowField = useCallback(
 		async ( rowId, fieldId, value ) => {
 			if ( ! collectionId || ! rowId ) {
@@ -617,20 +646,27 @@ export default function CollectionDataViews( {
 				value
 			);
 			pendingRowFieldSaves.current.add( save );
-			const forgetSave = () =>
+			const settleSave = () => {
 				pendingRowFieldSaves.current.delete( save );
-			save.then( forgetSave, forgetSave );
+				scheduleRowSaveRefresh();
+			};
+			save.then( settleSave, settleSave );
 			const updated = await save;
+			patchRow( updated );
 			touchRecent( {
 				kind: 'row',
 				id: updated?.id ?? rowId,
 				collectionId,
 			} );
-			refresh();
-			notifyCollectionRowsChanged( collectionId );
 			return updated;
 		},
-		[ collectionId, refresh, saveEntityRecord, touchRecent ]
+		[
+			collectionId,
+			patchRow,
+			saveEntityRecord,
+			scheduleRowSaveRefresh,
+			touchRecent,
+		]
 	);
 
 	let dataViewLayoutType = 'table';
@@ -678,8 +714,7 @@ export default function CollectionDataViews( {
 			// sorts make that guess unsafe; refresh in place instead.
 			//
 			// tech-debt.md#td-rows-not-in-core-data: lastPage arithmetic is optimistic against
-			// possibly stale paginationInfo. With rows in core-data this
-			// becomes a useEffect on totalPages.
+			// possibly stale paginationInfo.
 			const nextView = nextViewAfterRowCreated(
 				view,
 				activePaginationInfo

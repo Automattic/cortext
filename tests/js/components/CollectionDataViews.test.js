@@ -154,6 +154,7 @@ import { RowMutationContext } from '../../../src/components/EditableCell';
 import { scrollToEndQuickly } from '../../../src/components/dataViewScroll';
 import { whenViewTransitionsSettled } from '../../../src/hooks/viewTransition';
 import useCollectionRows from '../../../src/hooks/useCollectionRows';
+import { COLLECTION_ROWS_CHANGED_EVENT } from '../../../src/hooks/rowInvalidation';
 import { useFavorites } from '../../../src/hooks/useFavorites';
 import { filterFavoritesByDeletedIds } from '../../../src/documents';
 import apiFetch from '@wordpress/api-fetch';
@@ -195,6 +196,7 @@ function collectionRowsState( overrides = {} ) {
 		error: null,
 		refresh: jest.fn(),
 		mutateRows: jest.fn(),
+		patchRow: jest.fn(),
 		queryMode: 'server',
 		...overrides,
 	};
@@ -737,12 +739,11 @@ describe( 'CollectionDataViews archive actions', () => {
 	} );
 
 	function renderWithMutationContext( row ) {
-		useCollectionRows.mockReturnValue(
-			collectionRowsState( {
-				data: [ row ],
-				paginationInfo: { totalItems: 1, totalPages: 1 },
-			} )
-		);
+		const rowsState = collectionRowsState( {
+			data: [ row ],
+			paginationInfo: { totalItems: 1, totalPages: 1 },
+		} );
+		useCollectionRows.mockReturnValue( rowsState );
 		const captured = {};
 		function CaptureMutationContext() {
 			captured.saveRowField =
@@ -762,7 +763,7 @@ describe( 'CollectionDataViews archive actions', () => {
 		const archiveAction = mockDataViews.mock.calls
 			.at( -1 )[ 0 ]
 			.actions.find( ( action ) => action.id === 'archive-row' );
-		return { ...view, archiveAction, captured };
+		return { ...view, archiveAction, captured, rowsState };
 	}
 
 	it( 'waits for a pending field save before archiving the row', async () => {
@@ -903,6 +904,108 @@ describe( 'CollectionDataViews archive actions', () => {
 			await savePromise;
 		} );
 		await expect( flushPromise ).resolves.toBe( false );
+	} );
+
+	describe( 'cell saves', () => {
+		let rowsChangedEvents;
+		const onRowsChanged = ( event ) =>
+			rowsChangedEvents.push( event.detail.collectionId );
+
+		beforeEach( () => {
+			jest.useFakeTimers();
+			rowsChangedEvents = [];
+			window.addEventListener(
+				COLLECTION_ROWS_CHANGED_EVENT,
+				onRowsChanged
+			);
+		} );
+
+		afterEach( () => {
+			window.removeEventListener(
+				COLLECTION_ROWS_CHANGED_EVENT,
+				onRowsChanged
+			);
+			jest.useRealTimers();
+		} );
+
+		it( 'patches the row from the save response and refreshes once edits pause', async () => {
+			const row = { id: 1, title: { raw: 'One' } };
+			const record = { id: 1, meta: { 'field-9': true } };
+			mockSaveRowDocumentField.mockResolvedValue( record );
+			const { captured, rowsState } = renderWithMutationContext( row );
+
+			await act( async () => {
+				await captured.saveRowField( 1, 'field-9', true );
+			} );
+			expect( rowsState.patchRow ).toHaveBeenCalledWith( record );
+			expect( rowsState.refresh ).not.toHaveBeenCalled();
+			expect( rowsChangedEvents ).toEqual( [] );
+
+			await act( async () => {
+				await captured.saveRowField( 1, 'field-9', false );
+			} );
+			act( () => jest.advanceTimersByTime( 399 ) );
+			expect( rowsState.refresh ).not.toHaveBeenCalled();
+
+			act( () => jest.advanceTimersByTime( 1 ) );
+			expect( rowsState.refresh ).toHaveBeenCalledTimes( 1 );
+			expect( rowsChangedEvents ).toEqual( [ 7 ] );
+		} );
+
+		it( 'holds the refresh while another save is in flight', async () => {
+			const row = { id: 1, title: { raw: 'One' } };
+			const slowSave = deferred();
+			mockSaveRowDocumentField
+				.mockResolvedValueOnce( { id: 1 } )
+				.mockReturnValueOnce( slowSave.promise );
+			const { captured, rowsState } = renderWithMutationContext( row );
+
+			let slowSavePromise;
+			await act( async () => {
+				await captured.saveRowField( 1, 'field-9', true );
+				slowSavePromise = captured.saveRowField( 1, 'field-9', false );
+			} );
+			act( () => jest.advanceTimersByTime( 1000 ) );
+			expect( rowsState.refresh ).not.toHaveBeenCalled();
+
+			await act( async () => {
+				slowSave.resolve( { id: 1 } );
+				await slowSavePromise;
+			} );
+			act( () => jest.advanceTimersByTime( 400 ) );
+			expect( rowsState.refresh ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'still refreshes after a failed save', async () => {
+			const row = { id: 1, title: { raw: 'One' } };
+			mockSaveRowDocumentField.mockRejectedValue(
+				new Error( 'offline' )
+			);
+			const { captured, rowsState } = renderWithMutationContext( row );
+
+			await act( async () => {
+				await captured
+					.saveRowField( 1, 'field-9', true )
+					.catch( () => null );
+			} );
+			expect( rowsState.patchRow ).not.toHaveBeenCalled();
+			act( () => jest.advanceTimersByTime( 400 ) );
+			expect( rowsState.refresh ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'tells other views about a pending refresh when it unmounts', async () => {
+			const row = { id: 1, title: { raw: 'One' } };
+			mockSaveRowDocumentField.mockResolvedValue( { id: 1 } );
+			const { captured, unmount } = renderWithMutationContext( row );
+
+			await act( async () => {
+				await captured.saveRowField( 1, 'field-9', true );
+			} );
+			unmount();
+			expect( rowsChangedEvents ).toEqual( [ 7 ] );
+			act( () => jest.advanceTimersByTime( 400 ) );
+			expect( rowsChangedEvents ).toEqual( [ 7 ] );
+		} );
 	} );
 
 	it( 'locks the editors from the flush until the archive request settles', async () => {

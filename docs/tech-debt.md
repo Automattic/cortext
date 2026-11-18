@@ -372,31 +372,33 @@ Edits made while `savePost()` is in flight can disappear. When the request finis
 
 <a id="td-rows-not-in-core-data"></a>
 
-**Row writes use `core-data`, but row lists do not.**
+**Collection views read rows outside `core-data`.**
 
-**What.** Field saves and row creation now use `saveEntityRecord`. Duplicate, trash, and restore responses also update `core-data` with the server's canonical REST record.
+**What.** Collection views (table, grid, and list layouts) read their rows from `/cortext/v1/rows`, not from `core-data`. That endpoint is the cheaper read: 25 rows take about 7 ms, while the same 25 `/wp/v2` records take about 35 to 43 ms, even with REST `meta` limited to each document's own fields. Most of that difference is `content.rendered`, which a collection view never shows, and the per-row enrichment in `RowsController::filter_rest_prepare_row`, which the rows endpoint does once per page. Moving the view onto `core-data` would not make its rows collaborative either: records primed from a `getEntityRecords` list do not join real-time sync, and a row opened after being primed that way does not join it at all.
 
-Reads have not moved. `useCollectionRows` still fetches full rows from `/cortext/v1/rows` and manages fetch state, its `requestId` race guard, the manual `refresh()` counter, and server/client mode. Relation chips have their own read path through `useCollectionRowsByIds` and `include[]`.
+The document someone has open reads through `core-data`, loaded on its own with `getEntityRecord`, which is the load that joins sync. Field saves and row creation go through `saveEntityRecord`; duplicate, trash, and restore put the server's canonical record into `core-data` too.
 
-Every mutation still triggers `refresh()` and the row and trash invalidation events. `RowProperties` keeps optimistic values because its REST row can be stale after `core-data` saves a change.
+`useCollectionRows` owns the fetch state, its `requestId` race guard, the manual `refresh()` counter, and the server/client query planner. After a cell save, the view replaces that row with the save response (the REST record, with `meta` merged with `cortext_hydrated_meta`), so the new value shows as soon as the save returns. It then reads the page again in the background, about 400 ms after the last save and never while a cell save is in flight, so footer calculations, order, filters, formulas, and other rows catch up. A read that started before a save returned keeps the saved row.
 
-`saveEntityRecord` also invalidates every resolved `getEntityRecords` query for `crtxt_document`, including the ones that hold no rows. Each field save and row creation refetches the document lists mounted at the time: the workspace page list, the collections list, and the home fallback. Those lists request only the fields their consumers read, so each refetch is small, but it still adds three requests per save and delays the grid's own refresh behind them. Editor saves cost the same, because `savePost` goes through `saveEntityRecord` too. Duplicate, trash, and restore avoid it: they receive the record without invalidation and then invalidate only the lists in `src/documents/invalidation.js`.
+What is left of the manual synchronization:
+
+-   `refresh()` handles, called after row creation, duplicate, trash, archive, select option changes, and the batched refresh after cell saves.
+-   The row, trash, and archive invalidation events in `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, and `src/hooks/documentArchiveInvalidation.js`. They only reach views in the same tab. Another session's edits, including rollups fed by rows in other collections, show up after a reload. A per-collection "collection changed" signal from the server, checked cheaply by the client, would cover those and replace the events.
+-   `RowMutationContext`, which carries the save callback and refresh handle to cells (also driven by [td-dataviews-inline-editing](#td-dataviews-inline-editing)).
+-   The optimistic `lastPage = ceil((totalItems+1)/perPage)` calculation in `onCreated`, which can use stale pagination totals.
+-   `RowProperties` keeps optimistic values because the row it receives can be stale after `core-data` saves a change.
+
+`saveEntityRecord` also invalidates every resolved `getEntityRecords` query for `crtxt_document`, including the ones that hold no rows. Each field save and row creation refetches the document lists mounted at the time: the workspace page list, the collections list, and the home fallback. That adds three requests per save, but the cell no longer waits for them. Editor saves cost the same, because `savePost` goes through `saveEntityRecord` too. Duplicate, trash, and restore avoid it: they receive the record without invalidation and then invalidate only the lists in `src/documents/invalidation.js`.
 
 The row editor mounts inside a subregistry, which makes it look like row saves are split across two stores. They are not. `withRegistryProvider` in `@wordpress/editor` builds that subregistry with only `core/block-editor` and `core/editor` and passes the root registry as its fallback, so `core` resolves to the root. Property saves, editor autosave, and inline grid saves all reach the same entity store and share its per-record lock, so they serialize against each other. This is worth stating because the subregistry suggests the opposite. Real-time collaboration changes what a partial save sends: when a sync document exists for the row, the post-type pre-persist hook adds it to `meta`, so every partial cell save carries it too.
 
-**Where.** Writes are in `src/components/rowDocumentMutations.js`, `src/components/rowDocumentCreation.js`, and `src/documents/mutations.js`. Custom reads and manual cache synchronization remain in `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, `src/hooks/useTrashedDocuments.js`, `src/components/CollectionDataViews.js`, `src/components/RowProperties.js`, `src/components/relations/RelationEditor.js`, `src/components/SidebarTrash.js`, and `src/router/EntityRoute.js`.
+**Where.** Writes are in `src/components/rowDocumentMutations.js`, `src/components/rowDocumentCreation.js`, and `src/documents/mutations.js`. The row patch and background refresh are `patchRow` in `src/hooks/useCollectionRows.js` and `saveRowField` in `src/components/CollectionDataViews.js`. Custom reads and manual cache synchronization remain in `src/hooks/useCollectionRows.js`, `src/hooks/useCollectionRowsByIds.js`, `src/hooks/rowInvalidation.js`, `src/hooks/documentTrashInvalidation.js`, `src/hooks/useTrashedDocuments.js`, `src/components/CollectionDataViews.js`, `src/components/RowProperties.js`, `src/components/relations/RelationEditor.js`, `src/components/SidebarTrash.js`, and `src/router/EntityRoute.js`.
 
-**Solution.** Fetch the ordered IDs with `/cortext/v1/rows?shape=ids`, load the shared `crtxt_document` records through `core-data` in stable `include` chunks, then put them back in ID order. Once the grid and relation picker use those records, `core-data` can handle record caching, race protection, and updates after a mutation. That change would let Cortext:
+**Solution.** Keep collection views on `/cortext/v1/rows` and keep the open document on `core-data`. Add a per-collection "collection changed" signal (a last-changed stamp on the server that views check cheaply), and refresh a view's page when it moves. That removes the invalidation events and most `refresh()` calls, and it brings other sessions' edits and cross-collection rollups into open views without a reload. A row that is open renders from its `core-data` record, so local and remote edits to it show up right away.
 
--   Remove the `refresh()` handles and invalidation events that compensate for non-reactive rows.
--   Drop half of `RowMutationContext` (also driven by [td-dataviews-inline-editing](#td-dataviews-inline-editing)), because cells would have access to the records in `core-data`.
--   Replace the optimistic `lastPage = ceil((totalItems+1)/perPage)` calculation in `onCreated` with the reactive `totalPages` value.
--   Limit the server/client planner to deciding how to query IDs instead of using it as a record cache too.
--   Resolve relation labels through the standard entity-record resolver instead of a one-off include query.
+The list refetch after each save needs a `core-data` change upstream (WordPress/gutenberg#81321), not a change here. Revisit `/wp/v2` reads for views only if records can skip `content.rendered` without becoming incomplete in `core-data`, the per-row enrichment is batched across a page, and list-loaded records can join sync.
 
-Moving row reads does not remove the list refetch after each save. Its cost depends on how heavy the mounted list queries are.
-
-The record query must request `draft`, `private`, and `publish` explicitly. WordPress otherwise returns only published rows. Cross-document views such as Trash can stay behind `/cortext/v1/documents/*` endpoints.
+Cross-document views such as Trash can stay behind `/cortext/v1/documents/*` endpoints.
 
 <a id="td-modified-by-plugin-stored"></a>
 
@@ -596,7 +598,7 @@ Keep this local for now, but treat it as custom drag-and-drop code. It measures 
 
 **Where.** `src/router/EntityRoute.js`, `src/hooks/useAutosave.js`, `src/components/Sidebar.js`, `src/components/CollectionDataViews.js`, and `src/components/relations/RelationEditor.js`.
 
-**Solution.** If more activity surfaces appear, move this behind a small workspace activity helper or event. Route visits can stay in the router, but writes should eventually report through the same mutation path instead of each component remembering to call `touchRecent`. If rows move into `core-data` ([td-rows-not-in-core-data](#td-rows-not-in-core-data)), that would be a natural time to centralize row touches too.
+**Solution.** If more activity surfaces appear, move this behind a small workspace activity helper or event. Route visits can stay in the router, but writes should eventually report through the same mutation path instead of each component remembering to call `touchRecent`. If row mutations get a single shared path ([td-rows-not-in-core-data](#td-rows-not-in-core-data)), that would be a natural time to centralize row touches too.
 
 <a id="td-document-layer-thin"></a>
 

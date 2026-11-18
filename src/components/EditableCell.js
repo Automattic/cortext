@@ -46,8 +46,8 @@ function siteLocale() {
 // so we mount this component from `field.render` (a display renderer in
 // the docs) and treat the click-to-edit + commit/cancel state as our own.
 // tech-debt.md#td-rows-not-in-core-data: the save callback comes through context because
-// `field.render` only receives `{ item }`. Once rows live in core-data
-// the cell could call `saveEntityRecord` directly.
+// `field.render` only receives `{ item }`, and the view has to patch its own
+// rows from the save response.
 export const RowMutationContext = createContext( {
 	saveRowField: null,
 	canEditCells: true,
