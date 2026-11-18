@@ -11,13 +11,17 @@ const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
 const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
 
+function isReadOnlyLifecycleStatus( status ) {
+	return status === 'trash' || status === 'crtxt_archived';
+}
+
 function canSavePost( state ) {
 	return (
 		state.isDirty &&
 		state.isSaveable &&
 		! state.isSaving &&
 		! state.isPostLocked &&
-		state.postStatus !== 'trash'
+		! isReadOnlyLifecycleStatus( state.postStatus )
 	);
 }
 
@@ -175,7 +179,7 @@ export default function useAutosave( options = {} ) {
 				hasPendingEdits &&
 				current.isSaveable &&
 				! current.isPostLocked &&
-				current.postStatus !== 'trash'
+				! isReadOnlyLifecycleStatus( current.postStatus )
 			) {
 				// tech-debt.md#td-autosave-save-completion: WordPress 7.1 may
 				// mark a client edit made during this request as saved. Read the
@@ -284,10 +288,10 @@ export default function useAutosave( options = {} ) {
 		if ( ! isDirty || ! isSaveable || isPostLocked ) {
 			return undefined;
 		}
-		// Trashed pages are read-only in the canvas; never autosave them.
+		// Trashed and archived documents are read-only in the canvas.
 		// The UI is locked via `<Disabled>`, but a stray edit through any
 		// other path (drag-drop, programmatic) shouldn't persist either.
-		if ( postStatus === 'trash' ) {
+		if ( isReadOnlyLifecycleStatus( postStatus ) ) {
 			return undefined;
 		}
 		if ( failedEditsReferenceRef.current === editsReference ) {
@@ -314,7 +318,7 @@ export default function useAutosave( options = {} ) {
 				s &&
 				! saving &&
 				! locked &&
-				ps !== 'trash' &&
+				! isReadOnlyLifecycleStatus( ps ) &&
 				failedEditsReferenceRef.current !== editsRef
 			) {
 				saveCurrentPost();

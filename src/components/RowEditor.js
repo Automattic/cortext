@@ -125,16 +125,23 @@ function DetailPaneContent( {
 	rowId,
 	shouldAcquirePostLock,
 } ) {
+	const lifecycleStatus = row?.status;
+	const isLifecycleReadOnly =
+		lifecycleStatus === 'trash' || lifecycleStatus === 'crtxt_archived';
 	const postLock = usePostLock( {
 		postId: row?.id ?? rowId,
 		postType,
-		enabled: shouldAcquirePostLock,
+		enabled: shouldAcquirePostLock && ! isLifecycleReadOnly,
 	} );
+	const isReadOnly = isLifecycleReadOnly || postLock.isReadOnly;
 	const [ isEditorReady, setIsEditorReady ] = useState( false );
 	const notifiedReadyKeyRef = useRef( null );
 	const handleReady = useCallback( () => setIsEditorReady( true ), [] );
 	const isPostLockSettled =
-		! postLock.isReadOnly || postLock.isFailed || postLock.isLocked;
+		isLifecycleReadOnly ||
+		! postLock.isReadOnly ||
+		postLock.isFailed ||
+		postLock.isLocked;
 
 	useEffect( () => {
 		setIsEditorReady( false );
@@ -169,13 +176,13 @@ function DetailPaneContent( {
 			onToggleVisible={ onTogglePropertiesVisible }
 		>
 			<PostLockFailureNotice
-				error={ postLock.error }
+				error={ isLifecycleReadOnly ? null : postLock.error }
 				isRetrying={ postLock.isAcquiring }
 				onRetry={ postLock.retry }
 			/>
 			<EditorBody
 				isActive={ isActive && ! isHidden }
-				isLocked={ postLock.isReadOnly }
+				isLocked={ isReadOnly }
 				postId={ row?.id }
 				postType={ postType }
 				extraStyles={ ROW_DETAIL_EXTRA_STYLES }
@@ -183,7 +190,7 @@ function DetailPaneContent( {
 				onRestored={ onRestored }
 			/>
 			<PostLockModal
-				isOpen={ postLock.isLocked }
+				isOpen={ ! isLifecycleReadOnly && postLock.isLocked }
 				isTakeover={ postLock.isTakeover }
 				isTakingOver={ postLock.isTakingOver }
 				onTakeOver={ postLock.takeOver }

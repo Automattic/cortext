@@ -1,6 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEntityRecords } from '@wordpress/core-data';
-import { useDispatch } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
 import {
 	lazy,
@@ -36,13 +35,10 @@ import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import CortextSnackbars from '../components/CortextSnackbars';
 import { useSurfaceFocusIntent } from '../components/SurfaceFocusContext';
+import { useActiveEditor } from '../components/ActiveEditorContext';
 import { isSurfaceFocusOriginCurrent } from '../components/collectionSurfaceFocus';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
-import {
-	ACTIVE_PAGES_QUERY,
-	POST_TYPE,
-	TRASHED_PAGES_QUERY,
-} from '../components/page-queries';
+import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../components/page-queries';
 import { firstDocumentInTree } from '../components/document-tree';
 import { isPublicWebAffordancesEnabled } from '../settings';
 import afterNextPaint from '../hooks/afterNextPaint';
@@ -53,8 +49,6 @@ import {
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import useCollectionFields from '../hooks/useCollectionFields';
-import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
-import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import EmptyState from './EmptyState';
 import { computeDocumentUri, useResolveDocument } from './useResolveEntity';
@@ -182,6 +176,7 @@ export default function EntityRoute( { history } ) {
 	);
 	const { home, isResolving: isResolvingHome } = useWorkspaceHome();
 	const { touchRecent } = useRecents();
+	const { registerActiveEditor } = useActiveEditor();
 	const { records: pages, isResolving: isResolvingPages } = useEntityRecords(
 		'postType',
 		POST_TYPE,
@@ -479,43 +474,14 @@ export default function EntityRoute( { history } ) {
 	);
 	const isRow = Boolean( editorRowContext );
 
-	const { invalidateResolution, receiveEntityRecords } =
-		useDispatch( 'core' );
-
-	// Restore still has two cache paths: pages use core-data for the tree, rows
-	// use collection-scoped queries. Both refresh the Trash list; rows also
-	// notify open collections because relations and rollups can change elsewhere.
-	const onRestoreDocument = useCallback(
-		( postId, postType, response ) => {
-			if ( response?.post && postType ) {
-				receiveEntityRecords( 'postType', postType, [ response.post ] );
-			}
-			// Every document shares one post type, so a restore always re-enters
-			// the workspace tree and leaves the Trash list.
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				ACTIVE_PAGES_QUERY,
-			] );
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				TRASHED_PAGES_QUERY,
-			] );
-			notifySidebarTreeChanged( {
-				parentId: Number( response?.post?.parent ?? 0 ),
-				revealId: Number( postId ),
-			} );
-			notifyDocumentTrashChanged();
-			// A restored row lives inside a collection's data view rather than
-			// the tree, and can change rollups and relations elsewhere, so
-			// refresh any open collection views too.
-			if ( isRow ) {
-				notifyCollectionRowsChanged();
-			}
-		},
-		[ invalidateResolution, receiveEntityRecords, isRow ]
-	);
+	// The lifecycle actions synchronize entity records and invalidate every
+	// affected list. The route adds reveal context for the restored document.
+	const onRestoreDocument = useCallback( ( postId, _postType, response ) => {
+		notifySidebarTreeChanged( {
+			parentId: Number( response?.post?.parent ?? 0 ),
+			revealId: Number( postId ),
+		} );
+	}, [] );
 
 	const editorRecentTarget =
 		isRow && editorPostId !== null && editorRowContext?.collectionId
@@ -545,6 +511,7 @@ export default function EntityRoute( { history } ) {
 					isEditorSurfaceDisplayed={ isEditorSurfaceDisplayed }
 					surfaceFocusRequest={ editorSurfaceFocusRequest }
 					completeSurfaceFocus={ completeSurfaceFocus }
+					onApi={ registerActiveEditor }
 					onRestored={ onRestoreDocument }
 					recentTarget={ editorRecentTarget }
 				/>

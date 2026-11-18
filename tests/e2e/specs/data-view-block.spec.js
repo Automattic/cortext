@@ -2893,7 +2893,10 @@ test.describe( 'Collection view block', () => {
 
 			const sidebar = page.locator( '.cortext-sidebar' );
 			await sidebar.locator( '.cortext-sidebar__trash-footer' ).click();
-			const trashPanel = page.locator( '#cortext-sidebar-trash-panel' );
+			await page.locator( '#cortext-sidebar-trash-tab' ).click();
+			const trashPanel = page.locator(
+				'#cortext-sidebar-trash-tabpanel'
+			);
 			await expect( trashPanel ).toContainText(
 				'The Left Hand of Darkness'
 			);

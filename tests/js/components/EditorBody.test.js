@@ -37,6 +37,11 @@ jest.mock( '@wordpress/editor', () => ( {
 	store: {},
 } ) );
 
+jest.mock( '@wordpress/notices', () => ( {
+	__esModule: true,
+	store: {},
+} ) );
+
 jest.mock( '@wordpress/blocks', () => ( {
 	__esModule: true,
 	createBlock: () => null,
@@ -454,6 +459,38 @@ describe( 'areCanvasReadyRequirementsMet', () => {
 			areCanvasReadyRequirementsMet( {
 				hasTitle: true,
 				isPropertiesResolving: true,
+			} )
+		).toBe( false );
+	} );
+
+	it( 'does not wait for missing header blocks when the header cannot be repaired', () => {
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: true,
+				needsCover: true,
+				needsIcon: true,
+				needsProperties: true,
+				needsOwner: true,
+				canRepairHeader: false,
+			} )
+		).toBe( true );
+	} );
+
+	it( 'still waits for the title and for owner content that is present', () => {
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: false,
+				canRepairHeader: false,
+			} )
+		).toBe( false );
+
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: true,
+				needsOwner: true,
+				hasOwner: true,
+				isOwnerContentReady: false,
+				canRepairHeader: false,
 			} )
 		).toBe( false );
 	} );

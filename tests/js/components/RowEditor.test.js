@@ -176,4 +176,54 @@ describe( 'RowEditor', () => {
 
 		expect( onPaneReady ).toHaveBeenCalledWith( 'crtxt_tasks:20' );
 	} );
+
+	it( 'skips locking archived rows and enables locking after restore', () => {
+		const { rerender } = renderRowEditor( {
+			post: {
+				id: 20,
+				status: 'crtxt_archived',
+				type: 'crtxt_tasks',
+			},
+			row: { id: 20, status: 'crtxt_archived' },
+		} );
+
+		expect( usePostLock ).toHaveBeenLastCalledWith( {
+			postId: 20,
+			postType: 'crtxt_tasks',
+			enabled: false,
+		} );
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( true );
+
+		rerender(
+			<RowEditor
+				collectionId={ 10 }
+				detailKey="crtxt_tasks:20"
+				fields={ [] }
+				isActive
+				isHidden={ false }
+				onApi={ jest.fn() }
+				onPaneReady={ jest.fn() }
+				onRestored={ jest.fn() }
+				onSaved={ jest.fn() }
+				onTogglePropertiesVisible={ jest.fn() }
+				post={ {
+					id: 20,
+					status: 'draft',
+					type: 'crtxt_tasks',
+				} }
+				postType="crtxt_tasks"
+				propertiesVisible
+				row={ { id: 20, status: 'draft' } }
+				rowId={ 20 }
+				shouldAcquirePostLock
+			/>
+		);
+
+		expect( usePostLock ).toHaveBeenLastCalledWith( {
+			postId: 20,
+			postType: 'crtxt_tasks',
+			enabled: true,
+		} );
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( false );
+	} );
 } );

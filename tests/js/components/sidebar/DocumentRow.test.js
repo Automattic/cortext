@@ -10,11 +10,14 @@
  * The `documents` module is mocked so tests can inspect actions and feature
  * resolution without mounting the full sidebar provider stack each time.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { select } from '@wordpress/data';
+import { store as noticesStore } from '@wordpress/notices';
 import { DndContext } from '@dnd-kit/core';
 
 const mockRename = jest.fn();
 const mockDuplicate = jest.fn();
+const mockArchive = jest.fn();
 const mockTrash = jest.fn();
 const mockRequestFromActivation = jest.fn();
 
@@ -31,6 +34,7 @@ jest.mock( '../../../../src/documents', () => {
 		useDocumentActions: () => ( {
 			rename: mockRename,
 			duplicate: mockDuplicate,
+			archive: mockArchive,
 			trash: mockTrash,
 		} ),
 		useDocumentRecord: ( record ) => {
@@ -135,6 +139,8 @@ const originalError = console.error;
 beforeEach( () => {
 	mockRename.mockReset();
 	mockDuplicate.mockReset();
+	mockArchive.mockReset();
+	mockArchive.mockResolvedValue( null );
 	mockTrash.mockReset();
 	mockRequestFromActivation.mockReset();
 	jest.spyOn( console, 'error' ).mockImplementation( ( ...args ) => {
@@ -389,11 +395,48 @@ describe( 'DocumentRow (hierarchical mode)', () => {
 
 	it( 'invokes the document layer trash action from the menu', () => {
 		const { container, props } = renderRow();
+		expect(
+			container.querySelector( '[data-cortext-document-id="1"]' )
+		).toBeInTheDocument();
 		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
 		fireEvent.click(
 			screen.getByRole( 'menuitem', { name: 'Move to Trash' } )
 		);
 		expect( mockTrash ).toHaveBeenCalledWith( props.record );
+	} );
+
+	it( 'invokes the document layer archive action before Trash', () => {
+		const { container, props } = renderRow();
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		const items = screen.getAllByRole( 'menuitem' );
+		const archiveItem = screen.getByRole( 'menuitem', { name: 'Archive' } );
+		const trashItem = screen.getByRole( 'menuitem', {
+			name: 'Move to Trash',
+		} );
+
+		expect( items.indexOf( archiveItem ) ).toBeLessThan(
+			items.indexOf( trashItem )
+		);
+		fireEvent.click( archiveItem );
+		expect( mockArchive ).toHaveBeenCalledWith( props.record );
+	} );
+
+	it( 'shows an error notice when the archive action fails', async () => {
+		mockArchive.mockRejectedValueOnce( new Error( 'Archive failed.' ) );
+		const { container } = renderRow();
+		fireEvent.click( container.querySelector( '.cortext-sidebar__menu' ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Archive' } ) );
+
+		await waitFor( () =>
+			expect( select( noticesStore ).getNotices() ).toEqual( [
+				expect.objectContaining( {
+					id: 'cortext-document-archive-error',
+					status: 'error',
+					type: 'snackbar',
+					content: 'Archive failed.',
+				} ),
+			] )
+		);
 	} );
 
 	it( 'invokes the document layer rename action when the inline editor commits', () => {

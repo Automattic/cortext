@@ -14,7 +14,6 @@ jest.mock( '@wordpress/core-data', () => ( {
 } ) );
 
 import SidebarFavorites, {
-	filterFavoritesForTrashedPage,
 	moveFavorite,
 	resolveFavoriteItems,
 } from '../../../src/components/SidebarFavorites';
@@ -78,44 +77,39 @@ describe( 'SidebarFavorites helpers', () => {
 		);
 	} );
 
-	it( 'removes a trashed page and loaded descendants from favorites', () => {
-		const favorites = [
-			{ id: 1 },
-			{ id: 2 },
-			{ id: 3 },
-			{ id: 4 },
-			{ id: 5 },
-		];
+	it( 'shows a preserved favorite again when it is no longer archived', () => {
+		const favorite = { id: 1 };
 		const pages = [
-			{ id: 1, parent: 0 },
-			{ id: 2, parent: 1 },
-			{ id: 3, parent: 2 },
-			{ id: 4, parent: 0 },
+			{
+				id: 1,
+				slug: 'notes',
+				title: { rendered: 'Notes', raw: 'Notes' },
+			},
 		];
+		const { rerender } = renderFavorites( {
+			favorites: [ favorite ],
+			pages,
+			hiddenDocumentIds: new Set( [ 1 ] ),
+		} );
 
-		expect( filterFavoritesForTrashedPage( favorites, 1, pages ) ).toEqual(
-			[ { id: 4 }, { id: 5 } ]
+		expect( screen.queryByText( 'Notes' ) ).not.toBeInTheDocument();
+
+		rerender(
+			<SidebarFavorites
+				favorites={ [ favorite ] }
+				hiddenDocumentIds={ new Set() }
+				pages={ pages }
+				collections={ [] }
+				isResolving={ false }
+				isResolvingItems={ false }
+				isDisabled={ false }
+				onSelect={ jest.fn( () => false ) }
+				onRemove={ jest.fn() }
+				onReorder={ jest.fn() }
+			/>
 		);
-	} );
 
-	it( 'drops row favorites whose collection fell with the trashed page', () => {
-		// Trashing page 1 cascades into collection 5 (nested under it).
-		// Row 6 lives in that collection, so its favorite must come out of the
-		// list too; otherwise the next save would replay a now-trashed row.
-		const favorites = [
-			{ id: 1 },
-			{ id: 6, collection: { id: 5 } },
-			{ id: 7, collection: { id: 9 } },
-		];
-		const pages = [ { id: 1, parent: 0 } ];
-		const collections = [
-			{ id: 5, parent: 1 },
-			{ id: 9, parent: 0 },
-		];
-
-		expect(
-			filterFavoritesForTrashedPage( favorites, 1, pages, collections )
-		).toEqual( [ { id: 7, collection: { id: 9 } } ] );
+		expect( screen.getByText( 'Notes' ) ).toBeInTheDocument();
 	} );
 
 	it( 'resolves page and collection favorites from loaded records', () => {

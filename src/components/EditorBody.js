@@ -11,7 +11,6 @@
 
 import createEmotionCache from '@emotion/cache';
 import { CacheProvider } from '@emotion/react';
-import apiFetch from '@wordpress/api-fetch';
 import {
 	BlockCanvas,
 	BlockList,
@@ -48,6 +47,7 @@ import { parseDocumentIcon } from './DocumentIcon';
 import { isSurfaceFocusOriginCurrent } from './collectionSurfaceFocus';
 import afterNextPaint from '../hooks/afterNextPaint';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
+import { restoreDocument, unarchiveDocument } from '../documents/actions';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
@@ -513,15 +513,21 @@ export function areCanvasReadyRequirementsMet( {
 	needsOwner = false,
 	hasOwner = false,
 	isOwnerContentReady = true,
+	canRepairHeader = true,
 } ) {
+	// Trashed and archived documents skip header repair, so a block that only
+	// repair would insert cannot hold back the ready signal.
+	const isBlockReady = ( needsBlock, hasBlock ) =>
+		! needsBlock || hasBlock || ! canRepairHeader;
 	return (
 		hasTitle &&
-		( ! needsCover || hasCover ) &&
-		( ! needsIcon || hasIcon ) &&
+		isBlockReady( needsCover, hasCover ) &&
+		isBlockReady( needsIcon, hasIcon ) &&
 		isCoverRecordReady &&
 		! isPropertiesResolving &&
-		( ! needsProperties || hasProperties ) &&
-		( ! needsOwner || ( hasOwner && isOwnerContentReady ) )
+		isBlockReady( needsProperties, hasProperties ) &&
+		isBlockReady( needsOwner, hasOwner ) &&
+		( ! needsOwner || ! hasOwner || isOwnerContentReady )
 	);
 }
 
@@ -748,8 +754,8 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 	const actionsRef = useRef( null );
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
 	const iconMeta = meta?.cortext_document_icon ?? '';
-	const { hasIcon, hasCover, isTrashed, selectedBlockName } = useSelect(
-		( select ) => {
+	const { hasIcon, hasCover, isArchived, isTrashed, selectedBlockName } =
+		useSelect( ( select ) => {
 			const store = select( blockEditorStore );
 			const blocks = store.getBlocks();
 			const selectedClientId = store.getSelectedBlockClientId();
@@ -764,18 +770,20 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 					select( editorStore ).getCurrentPostAttribute(
 						'status'
 					) === 'trash',
+				isArchived:
+					select( editorStore ).getCurrentPostAttribute(
+						'status'
+					) === 'crtxt_archived',
 				selectedBlockName: selectedClientId
 					? store.getBlockName( selectedClientId )
 					: null,
 			};
-		},
-		[]
-	);
+		}, [] );
 	const { insertBlocks } = useDispatch( blockEditorStore );
 	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
 
 	useEffect( () => {
-		if ( isTrashed || isLocked || hasCover ) {
+		if ( isTrashed || isArchived || isLocked || hasCover ) {
 			return undefined;
 		}
 		const node = actionsRef.current;
@@ -827,9 +835,9 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 				focusFirstActionFromTitle,
 				true
 			);
-	}, [ hasCover, isLocked, isTrashed, selectedBlockName ] );
+	}, [ hasCover, isArchived, isLocked, isTrashed, selectedBlockName ] );
 
-	if ( isTrashed || isLocked || hasCover ) {
+	if ( isTrashed || isArchived || isLocked || hasCover ) {
 		return null;
 	}
 
@@ -953,6 +961,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		protectedLockRepairs,
 		collectionBodyClientIds,
 		lockedCollectionBodyClientIds,
+		isArchived,
 		isTrashed,
 	} = useSelect(
 		( select ) => {
@@ -1081,6 +1090,10 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 					select( editorStore ).getCurrentPostAttribute(
 						'status'
 					) === 'trash',
+				isArchived:
+					select( editorStore ).getCurrentPostAttribute(
+						'status'
+					) === 'crtxt_archived',
 				protectedLockRepairs: lockRepairs,
 				collectionBodyClientIds: bodyClientIds,
 				lockedCollectionBodyClientIds: lockedBodyClientIds,
@@ -1115,7 +1128,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	}, [ postId, postType ] );
 
 	useLayoutEffect( () => {
-		if ( isTrashed ) {
+		if ( isTrashed || isArchived ) {
 			return;
 		}
 
@@ -1185,6 +1198,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasOwner,
 		hasTitle,
 		isLocked,
+		isArchived,
 		isTrashed,
 		lockedCollectionBodyClientIds,
 		ownerBlockName,
@@ -1198,12 +1212,18 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	] );
 
 	useLayoutEffect( () => {
-		if ( isTrashed || isLocked || ! shouldHideHeaderInsertionPoint ) {
+		if (
+			isTrashed ||
+			isArchived ||
+			isLocked ||
+			! shouldHideHeaderInsertionPoint
+		) {
 			return;
 		}
 		hideInsertionPoint();
 	}, [
 		hideInsertionPoint,
+		isArchived,
 		isLocked,
 		isTrashed,
 		shouldHideHeaderInsertionPoint,
@@ -1212,6 +1232,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	useLayoutEffect( () => {
 		if (
 			isTrashed ||
+			isArchived ||
 			ownerBlockName ||
 			! shouldSeedEmptyBodyBlock ||
 			duplicateHeaderIds.length > 0 ||
@@ -1240,6 +1261,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		iconMeta,
 		insertBlocks,
+		isArchived,
 		isTrashed,
 		ownerBlockName,
 		shouldSeedEmptyBodyBlock,
@@ -1261,7 +1283,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		// post before EditorProvider hydrates it into core/editor. Header blocks
 		// inserted during that gap are overwritten, so wait for the store to
 		// identify the target post.
-		if ( ! isEditorPostReady || isTrashed || isLocked ) {
+		if ( ! isEditorPostReady || isTrashed || isArchived || isLocked ) {
 			return;
 		}
 
@@ -1370,6 +1392,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		iconMeta,
 		insertBlocks,
+		isArchived,
 		isEditorPostReady,
 		isLocked,
 		isTrashed,
@@ -1384,6 +1407,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	useLayoutEffect( () => {
 		if (
 			isTrashed ||
+			isArchived ||
 			isLocked ||
 			! bodyBlockBeforeTitleId ||
 			headerEndIndex < 0 ||
@@ -1417,6 +1441,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		headerEndIndex,
 		iconMeta,
+		isArchived,
 		isLocked,
 		isTrashed,
 		moveBlocksToPosition,
@@ -1641,15 +1666,17 @@ function HeaderAwareRootAppender( { ownerBlockName, postId, record } ) {
 function TrashedNotice( { postId, postType, onRestored } ) {
 	const [ isRestoring, setIsRestoring ] = useState( false );
 	const [ error, setError ] = useState( null );
+	const { invalidateResolution, receiveEntityRecords } =
+		useDispatch( 'core' );
 
 	const restore = async () => {
 		setError( null );
 		setIsRestoring( true );
 		try {
-			const response = await apiFetch( {
-				path: `/cortext/v1/documents/${ postId }/restore`,
-				method: 'POST',
-			} );
+			const response = await restoreDocument(
+				{ id: postId },
+				{ invalidateResolution, receiveEntityRecords }
+			);
 			onRestored?.( postId, postType, response );
 		} catch ( err ) {
 			setError(
@@ -1678,6 +1705,57 @@ function TrashedNotice( { postId, postType, onRestored } ) {
 			{ error
 				? error
 				: __( 'This document is in the Trash.', 'cortext' ) }
+		</Notice>
+	);
+}
+
+function ArchivedNotice( { postId, postType, onRestored } ) {
+	const [ isRestoring, setIsRestoring ] = useState( false );
+	const [ error, setError ] = useState( null );
+	const { invalidateResolution, receiveEntityRecords } =
+		useDispatch( 'core' );
+	const { createSuccessNotice } = useDispatch( 'core/notices' );
+
+	const restore = async () => {
+		setError( null );
+		setIsRestoring( true );
+		try {
+			const response = await unarchiveDocument(
+				{ id: postId },
+				{
+					createSuccessNotice,
+					invalidateResolution,
+					receiveEntityRecords,
+				}
+			);
+			onRestored?.( postId, postType, response );
+		} catch ( err ) {
+			setError(
+				err?.message ??
+					__( 'Could not restore this document.', 'cortext' )
+			);
+		} finally {
+			setIsRestoring( false );
+		}
+	};
+
+	return (
+		<Notice
+			className="cortext-canvas__notice"
+			status="warning"
+			isDismissible={ false }
+			actions={ [
+				{
+					label: __( 'Restore', 'cortext' ),
+					onClick: restore,
+					disabled: isRestoring,
+					variant: 'primary',
+				},
+			] }
+		>
+			{ error
+				? error
+				: __( 'This document is archived and read only.', 'cortext' ) }
 		</Notice>
 	);
 }
@@ -1937,6 +2015,7 @@ function CanvasReadyEffect( {
 	postType,
 	canvasRootRef,
 	ownerContentReady = true,
+	isReadOnlyLifecycle = false,
 	onReady,
 } ) {
 	const [ featuredId ] = useEntityProp(
@@ -2008,6 +2087,7 @@ function CanvasReadyEffect( {
 		needsOwner,
 		hasOwner,
 		isOwnerContentReady: ownerContentReady,
+		canRepairHeader: ! isReadOnlyLifecycle,
 	} );
 
 	useLayoutEffect( () => {
@@ -2106,7 +2186,13 @@ export default function EditorBody( {
 			'trash',
 		[]
 	);
-	const isReadOnly = isTrashed || isLocked;
+	const isArchived = useSelect(
+		( select ) =>
+			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
+			'crtxt_archived',
+		[]
+	);
+	const isReadOnly = isTrashed || isArchived || isLocked;
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const ownerKey = ownerBlockName ? `${ postType }:${ postId }` : null;
@@ -2234,6 +2320,7 @@ export default function EditorBody( {
 							postType={ postType }
 							canvasRootRef={ blockCanvasRef }
 							ownerContentReady={ ownerContentReady }
+							isReadOnlyLifecycle={ isTrashed || isArchived }
 							onReady={ onReady }
 						/>
 					</BlockCanvasStyleProvider>
@@ -2244,6 +2331,13 @@ export default function EditorBody( {
 
 	return (
 		<div className="cortext-canvas__visual">
+			{ isArchived && (
+				<ArchivedNotice
+					postId={ postId }
+					postType={ postType }
+					onRestored={ onRestored }
+				/>
+			) }
 			{ isTrashed && (
 				<TrashedNotice
 					postId={ postId }
