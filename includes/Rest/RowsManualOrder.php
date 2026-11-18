@@ -72,9 +72,39 @@ final class RowsManualOrder {
 			return $tt_id;
 		}
 
-		$row = $this->row_in_collection( $row_id, $collection_id );
+		if ( $this->is_hidden( get_post( $collection_id ) ) ) {
+			return new WP_Error(
+				'cortext_reorder_collection_hidden',
+				__( 'Restore this collection before reordering its rows.', 'cortext' ),
+				array( 'status' => 409 )
+			);
+		}
+
+		$row = $this->row_in_collection(
+			$row_id,
+			$collection_id,
+			new WP_Error(
+				'cortext_reorder_row_hidden',
+				__( 'Restore this row before moving it.', 'cortext' ),
+				array( 'status' => 409 )
+			)
+		);
 		if ( is_wp_error( $row ) ) {
 			return $row;
+		}
+
+		$hidden_neighbor = new WP_Error(
+			'cortext_reorder_neighbor_hidden',
+			__( 'Restore the neighboring row before moving a row next to it.', 'cortext' ),
+			array( 'status' => 409 )
+		);
+		$before          = null === $before_id ? null : $this->row_in_collection( $before_id, $collection_id, $hidden_neighbor );
+		if ( is_wp_error( $before ) ) {
+			return $before;
+		}
+		$after = null === $after_id ? null : $this->row_in_collection( $after_id, $collection_id, $hidden_neighbor );
+		if ( is_wp_error( $after ) ) {
+			return $after;
 		}
 
 		$manual_seeded = false;
@@ -87,15 +117,6 @@ final class RowsManualOrder {
 			}
 			$manual_seeded = ! $is_seeded;
 			$reseeded      = true;
-		}
-
-		$before = null === $before_id ? null : $this->row_in_collection( $before_id, $collection_id );
-		if ( is_wp_error( $before ) ) {
-			return $before;
-		}
-		$after = null === $after_id ? null : $this->row_in_collection( $after_id, $collection_id );
-		if ( is_wp_error( $after ) ) {
-			return $after;
 		}
 
 		$before_order = $before instanceof WP_Post ? TraitTaxonomy::member_order( $before->ID, $tt_id ) : null;
@@ -269,7 +290,14 @@ final class RowsManualOrder {
 		return $tt_id;
 	}
 
-	private function row_in_collection( int $row_id, int $collection_id ): WP_Post|WP_Error {
+	/**
+	 * Loads a row of the collection, rejecting archived and trashed rows.
+	 *
+	 * @param int      $row_id        Row post ID.
+	 * @param int      $collection_id Collection post ID.
+	 * @param WP_Error $hidden_error  Error returned when the row is archived or trashed.
+	 */
+	private function row_in_collection( int $row_id, int $collection_id, WP_Error $hidden_error ): WP_Post|WP_Error {
 		$row = get_post( $row_id );
 		if (
 			! $row instanceof WP_Post
@@ -283,7 +311,16 @@ final class RowsManualOrder {
 			);
 		}
 
+		if ( $this->is_hidden( $row ) ) {
+			return $hidden_error;
+		}
+
 		return $row;
+	}
+
+	private function is_hidden( ?WP_Post $post ): bool {
+		return $post instanceof WP_Post
+			&& in_array( $post->post_status, array( Documents::STATUS_ARCHIVED, Documents::STATUS_TRASH ), true );
 	}
 
 	/**
