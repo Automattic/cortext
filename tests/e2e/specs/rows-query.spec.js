@@ -88,16 +88,8 @@ async function createRowsQueryFixture( requestUtils ) {
 	} );
 
 	const rows = {};
+	// Create rows out of title order so ID order never matches a sorted result.
 	for ( const spec of [
-		{
-			key: 'alpha',
-			title: 'Alpha',
-			status: 'red',
-			notes: 'ordinary note',
-			score: '9',
-			due: '2026-02-01',
-			phase: 'beta',
-		},
 		{
 			key: 'bravo',
 			title: 'Bravo',
@@ -115,6 +107,15 @@ async function createRowsQueryFixture( requestUtils ) {
 			score: '2',
 			due: '2026-01-01',
 			phase: 'alpha',
+		},
+		{
+			key: 'alpha',
+			title: 'Alpha',
+			status: 'red',
+			notes: 'ordinary note',
+			score: '9',
+			due: '2026-02-01',
+			phase: 'beta',
 		},
 	] ) {
 		rows[ spec.key ] = await requestUtils.rest( {

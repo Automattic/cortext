@@ -6,10 +6,8 @@ on:
         paths:
             - includes/**
             - src/**
-            - tests/e2e/specs/perf-ui.spec.js
             - .github/workflows/perf-bench.yml
             - .github/scripts/write-perf-bench-summary.php
-            - .github/scripts/write-perf-ui-summary.php
     workflow_dispatch:
 
 permissions:
@@ -116,33 +114,12 @@ jobs:
                   fi
 
                   exit "$status"
-            - name: Run UI benchmark
-              if: ${{ false }}
-              env:
-                  CORTEXT_PERF_UI: '1'
-                  # wp-env serves WordPress on 8888.
-                  WP_BASE_URL: http://localhost:8888
-              run: |
-                  set -euo pipefail
-
-                  if [ ! -f tests/e2e/specs/perf-ui.spec.js ]; then
-                    echo "No UI performance spec found."
-                    exit 0
-                  fi
-
-                  pnpm exec playwright install --with-deps chromium
-                  pnpm run build
-                  pnpm exec wp-scripts test-playwright --config playwright.config.js tests/e2e/specs/perf-ui.spec.js
-
             - name: Write benchmark summaries
               if: always()
               run: |
                   mkdir -p artifacts
                   php .github/scripts/write-perf-bench-summary.php --current=artifacts/perf-bench.json | tee artifacts/perf-bench-summary.md
                   php .github/scripts/write-perf-bench-summary.php --current=artifacts/perf-bench-row-shapes.json | tee artifacts/perf-bench-row-shapes-summary.md
-                  if [ -s artifacts/perf-ui.json ]; then
-                    php .github/scripts/write-perf-ui-summary.php --current=artifacts/perf-ui.json | tee artifacts/perf-ui-summary.md
-                  fi
 
             - name: Save benchmark artifacts
               if: always()
@@ -151,6 +128,4 @@ jobs:
                   name: perf-bench
                   path: |
                       artifacts/perf-bench*.json
-                      artifacts/perf-ui*.json
-                      playwright-report/
                   retention-days: 7

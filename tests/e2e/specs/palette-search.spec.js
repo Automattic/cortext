@@ -308,7 +308,7 @@ test.describe( 'Command palette search', () => {
 
 			await expect
 				.poll( () => appPath( page ) )
-				.toContain( `${ fixture.entry.id }` );
+				.toMatch( new RegExp( `[/-]${ fixture.entry.id }$` ) );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,

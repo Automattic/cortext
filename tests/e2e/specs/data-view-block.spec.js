@@ -4560,13 +4560,32 @@ test.describe( 'Collection view block', () => {
 				}
 			};
 			await page.route( delayedSecondRowPattern, delaySecondRow );
+			// Record any spinner while the next row loads; the current row
+			// should stay on screen instead.
+			await detail.evaluate( ( element ) => {
+				window.cortextE2eSpinnerSeen = false;
+				window.cortextE2eSpinnerObserver = new window.MutationObserver(
+					() => {
+						if ( element.querySelector( '.components-spinner' ) ) {
+							window.cortextE2eSpinnerSeen = true;
+						}
+					}
+				);
+				window.cortextE2eSpinnerObserver.observe( element, {
+					childList: true,
+					subtree: true,
+				} );
+			} );
 			await detail.getByRole( 'button', { name: 'Next' } ).click();
-			await expect( detail.locator( '.components-spinner' ) ).toHaveCount(
-				0
-			);
 			// Side and modal panes are local React state, not URL state,
 			// so verify the navigation via the detail title rather than ?row.
 			await expect( detailTitle ).toHaveText( 'Kindred' );
+			expect(
+				await page.evaluate( () => {
+					window.cortextE2eSpinnerObserver.disconnect();
+					return window.cortextE2eSpinnerSeen;
+				} )
+			).toBe( false );
 			// Same collection, same fields, so Tags should still be present.
 			await expect(
 				detailCanvas
@@ -4721,9 +4740,8 @@ test.describe( 'Collection view block', () => {
 				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
-			expect( saved.content.raw ).not.toContain(
-				'"rowDetailMode":"full"'
-			);
+			// The last side or modal choice is kept; Full is a one-off jump.
+			expect( saved.content.raw ).toContain( '"rowDetailMode":"modal"' );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
@@ -5308,8 +5326,8 @@ test.describe( 'Collection view block', () => {
 			const readOnlyCells = canvas.locator(
 				'.cortext-data-view td .cortext-cell-readonly'
 			);
-			await expect( readOnlyCells.first() ).toBeVisible();
-			expect( await readOnlyCells.count() ).toBeGreaterThanOrEqual( 4 );
+			// One row, four system columns; the title cell stays editable.
+			await expect( readOnlyCells ).toHaveCount( 4 );
 
 			const createdByCell = readOnlyCells.nth( 1 );
 			await expect( createdByCell ).not.toHaveText( '' );
@@ -6358,7 +6376,40 @@ test.describe( 'Collection view block', () => {
 				const buttonRect = el.getBoundingClientRect();
 				const spanRect = span.getBoundingClientRect();
 				const styles = window.getComputedStyle( span );
+				const buttonStyles = window.getComputedStyle( el );
+				const ringWidth =
+					parseFloat( buttonStyles.outlineWidth ) +
+					parseFloat( buttonStyles.outlineOffset );
+				// Any ancestor that clips overflow must leave room for the
+				// whole focus outline around the button.
+				const clippedRingEdges = [];
+				for (
+					let ancestor = el.parentElement;
+					ancestor && ancestor !== document.body;
+					ancestor = ancestor.parentElement
+				) {
+					const ancestorStyles = window.getComputedStyle( ancestor );
+					const rect = ancestor.getBoundingClientRect();
+					if ( ancestorStyles.overflowX !== 'visible' ) {
+						if ( buttonRect.left - ringWidth < rect.left ) {
+							clippedRingEdges.push( 'left' );
+						}
+						if ( buttonRect.right + ringWidth > rect.right ) {
+							clippedRingEdges.push( 'right' );
+						}
+					}
+					if ( ancestorStyles.overflowY !== 'visible' ) {
+						if ( buttonRect.top - ringWidth < rect.top ) {
+							clippedRingEdges.push( 'top' );
+						}
+						if ( buttonRect.bottom + ringWidth > rect.bottom ) {
+							clippedRingEdges.push( 'bottom' );
+						}
+					}
+				}
 				return {
+					ringWidth,
+					clippedRingEdges,
 					buttonLeft: buttonRect.left,
 					buttonRight: buttonRect.right,
 					spanLeft: spanRect.left,
@@ -6370,6 +6421,8 @@ test.describe( 'Collection view block', () => {
 			} );
 
 			const epsilon = 0.5;
+			expect( headerState.ringWidth ).toBeGreaterThan( 0 );
+			expect( headerState.clippedRingEdges ).toEqual( [] );
 			expect( headerState.spanOverflow ).toBe( 'hidden' );
 			expect( headerState.spanTextOverflow ).toBe( 'ellipsis' );
 			expect( headerState.spanWhiteSpace ).toBe( 'nowrap' );
@@ -6949,7 +7002,7 @@ test.describe( 'Collection view block', () => {
 				canvas.getByRole( 'columnheader', { name: /Description/ } )
 			).toBeVisible();
 			await expect(
-				canvas.getByRole( 'columnheader', { name: /^Notes$/ } )
+				canvas.getByRole( 'columnheader', { name: /Notes/ } )
 			).toHaveCount( 0 );
 
 			await openColumnDropdown( canvas, 'Description' );
@@ -6972,6 +7025,26 @@ test.describe( 'Collection view block', () => {
 					name: /Copy of Description/,
 				} )
 			).toHaveCount( 0 );
+			// Hiding the column is not enough: the field must leave the
+			// collection on the server.
+			await expect
+				.poll( async () => {
+					const collection = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
+						params: { context: 'edit' },
+					} );
+					const fieldIds = collection.meta.cortext_fields ?? [];
+					const fields = await requestUtils.rest( {
+						path: '/wp/v2/crtxt_fields',
+						params: {
+							include: fieldIds.join( ',' ),
+							context: 'edit',
+							per_page: 100,
+						},
+					} );
+					return fields.map( ( field ) => field.title.raw );
+				} )
+				.not.toContain( 'Copy of Description' );
 
 			const ghostAdd = canvas
 				.locator( 'th' )

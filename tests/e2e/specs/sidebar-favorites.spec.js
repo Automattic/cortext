@@ -319,8 +319,11 @@ test.describe( 'Sidebar favorites', () => {
 			const otherTitle = otherRow.locator(
 				'.cortext-sidebar__favorite-title'
 			);
+			const otherIdleBackground = await rowBackground( otherRow );
 			await otherTitle.hover();
 			const otherHoveredBackground = await rowBackground( otherRow );
+			// Guards the comparisons below against reading a resting row.
+			expect( otherHoveredBackground ).not.toBe( otherIdleBackground );
 			const otherBox = await otherTitle.boundingBox();
 			expect( otherBox ).toBeTruthy();
 

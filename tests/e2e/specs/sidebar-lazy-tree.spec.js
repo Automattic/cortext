@@ -75,12 +75,16 @@ async function loadMoreUntilVisible( target, loadMoreButton, maxClicks = 10 ) {
 				if ( await target.isVisible().catch( () => false ) ) {
 					return true;
 				}
+				// The button goes away once the last page loads. Without a
+				// short timeout, evaluate waits for it to come back and the
+				// poll never rechecks the target.
 				return loadMoreButton
 					.evaluate(
 						( button, previousCount ) =>
 							( button.closest( 'ul' )?.children.length ?? 0 ) >
 							previousCount,
-						itemCount
+						itemCount,
+						{ timeout: 500 }
 					)
 					.catch( () => false );
 			} )
@@ -154,7 +158,12 @@ test.describe( 'Sidebar lazy tree', () => {
 		admin,
 		page,
 	} ) => {
-		await admin.visitAdminPage( SHELL_PATH, SHELL_QUERY );
+		// Open the parent so its children only show once the branch is
+		// expanded; an open child would reveal them on its own.
+		await admin.visitAdminPage(
+			SHELL_PATH,
+			`${ SHELL_QUERY }&p=/${ parent.id }`
+		);
 		await expect( page.locator( '#cortext-sidebar' ) ).toBeVisible();
 
 		await expect(
@@ -173,6 +182,9 @@ test.describe( 'Sidebar lazy tree', () => {
 				.getByRole( 'button', { name: 'Show more' } )
 		);
 
+		await expect(
+			page.getByRole( 'button', { name: FIRST_CHILD_TITLE, exact: true } )
+		).toHaveCount( 0 );
 		await expandSidebarNode( page, PARENT_TITLE );
 
 		await expect(

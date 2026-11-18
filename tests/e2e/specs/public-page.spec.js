@@ -433,13 +433,17 @@ test.describe( 'Public page rendering', () => {
 				page.getByText( 'Alpha Public Manual', { exact: true } )
 			).toBeVisible();
 
+			// DataViews scrolls the table inside its own container, so compare
+			// the table itself with the block instead of the block's overflow.
 			const widths = await dataView.evaluate( ( element ) => ( {
-				clientWidth: element.clientWidth,
-				scrollWidth: element.scrollWidth,
+				blockWidth: element.clientWidth,
+				tableWidth: element
+					.querySelector( '.dataviews-view-table' )
+					.getBoundingClientRect().width,
 			} ) );
-			expect( widths.clientWidth ).toBeGreaterThan( 0 );
-			expect( widths.scrollWidth ).toBeLessThanOrEqual(
-				widths.clientWidth + 1
+			expect( widths.blockWidth ).toBeGreaterThan( 0 );
+			expect( widths.tableWidth ).toBeLessThanOrEqual(
+				widths.blockWidth + 1
 			);
 		} finally {
 			for ( const row of fixture.rows ?? [] ) {

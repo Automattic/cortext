@@ -182,7 +182,7 @@ describe( 'RowEditor', () => {
 		expect( onPaneReady ).toHaveBeenCalledWith( 'crtxt_tasks:20' );
 	} );
 
-	it( 'is read-only while a lifecycle request holds the editors and editable after it fails', () => {
+	it( 'is read-only while a lifecycle request holds the editors and editable once it ends', () => {
 		let lockEditors;
 		function CaptureLock() {
 			lockEditors = useActiveEditor().lockEditors;
