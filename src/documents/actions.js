@@ -11,6 +11,7 @@ import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import { cascadeFavorites } from './favorites';
 import { afterDocumentTrash, applyInvalidationPack } from './invalidation';
+import { duplicateDocumentRecord } from './mutations';
 
 function collectCascadeIds( record, cascade ) {
 	const ids = new Set( [ Number( record.id ) ] );
@@ -105,7 +106,8 @@ export async function createDocument( input, ctx ) {
 	const created = await ctx.saveEntityRecord(
 		'postType',
 		DOCUMENT_POST_TYPE,
-		payload
+		payload,
+		{ throwOnError: true }
 	);
 	if ( created?.id ) {
 		applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
@@ -158,10 +160,10 @@ export async function renameDocument( record, title, ctx ) {
 }
 
 export async function duplicateDocument( record, ctx ) {
-	const created = await apiFetch( {
-		path: `/cortext/v1/documents/${ record.id }/duplicate`,
-		method: 'POST',
-	} );
+	const created = await duplicateDocumentRecord(
+		record,
+		ctx.receiveEntityRecords
+	);
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
 	notifySidebarTreeChanged( {
 		parentId: Number( created?.parent ?? record.parent ?? 0 ),

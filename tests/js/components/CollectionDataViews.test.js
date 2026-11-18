@@ -7,6 +7,11 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 	default: jest.fn(),
 } ) );
 
+const mockSaveRowDocumentField = jest.fn();
+jest.mock( '../../../src/components/rowDocumentMutations', () => ( {
+	saveRowDocumentField: ( ...args ) => mockSaveRowDocumentField( ...args ),
+} ) );
+
 const mockDataViewRowReorder = jest.fn( () => null );
 const mockSetFavorites = jest.fn();
 const mockOpenDocument = jest.fn();
@@ -539,6 +544,8 @@ describe( 'CollectionDataViews archive actions', () => {
 		useCollectionFieldsContext.mockReturnValue( collectionFieldState );
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( { archived: [] } );
+		mockSaveRowDocumentField.mockReset();
+		mockSaveRowDocumentField.mockResolvedValue( { id: 1 } );
 		filterFavoritesByDeletedIds.mockClear();
 		mockSetFavorites.mockReset();
 		mockSetFavorites.mockImplementation( async ( update ) =>
@@ -731,16 +738,16 @@ describe( 'CollectionDataViews archive actions', () => {
 	it( 'waits for a pending field save before archiving the row', async () => {
 		const row = { id: 1, title: { raw: 'One' } };
 		let resolveSave;
-		apiFetch.mockImplementation( ( { path } ) =>
-			path === '/wp/v2/crtxt_documents/1'
-				? new Promise( ( resolve ) => {
-						resolveSave = resolve;
-				  } )
-				: Promise.resolve( {
-						archived: [ 1 ],
-						post: { id: 1, status: 'crtxt_archived' },
-				  } )
+		mockSaveRowDocumentField.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					resolveSave = resolve;
+				} )
 		);
+		apiFetch.mockResolvedValue( {
+			archived: [ 1 ],
+			post: { id: 1, status: 'crtxt_archived' },
+		} );
 		const { archiveAction, captured } = renderWithMutationContext( row );
 
 		let savePromise;
@@ -771,7 +778,7 @@ describe( 'CollectionDataViews archive actions', () => {
 	it( 'aborts archive when a pending field save fails', async () => {
 		const row = { id: 1, title: { raw: 'One' } };
 		let rejectSave;
-		apiFetch.mockImplementation(
+		mockSaveRowDocumentField.mockImplementation(
 			() =>
 				new Promise( ( resolve, reject ) => {
 					rejectSave = reject;
@@ -794,7 +801,8 @@ describe( 'CollectionDataViews archive actions', () => {
 			await archivePromise;
 		} );
 
-		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( mockSaveRowDocumentField ).toHaveBeenCalledTimes( 1 );
+		expect( apiFetch ).not.toHaveBeenCalled();
 		expect(
 			await findAllByText(
 				'Could not save changes. Archive was canceled.'

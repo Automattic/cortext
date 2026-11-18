@@ -215,6 +215,7 @@ export default function Sidebar( {
 
 	const [ favoritesError, setFavoritesError ] = useState( null );
 	const [ duplicateNotice, setDuplicateNotice ] = useState( null );
+	const [ createError, setCreateError ] = useState( null );
 	const [ settingsReturnUri, setSettingsReturnUri ] = useState( null );
 	const {
 		isFavorite,
@@ -503,21 +504,39 @@ export default function Sidebar( {
 		},
 		[ navigate ]
 	);
-	const createAndOpen = useCallback(
-		async ( input ) => {
-			const created = await create( input );
-			refreshBranch( created?.parent ?? input?.parent ?? ROOT_PARENT_ID );
-			return openAfterCreate( created );
+	const createAndOpenWith = useCallback(
+		async ( createFn, input, fallbackMessage ) => {
+			setCreateError( null );
+			try {
+				const created = await createFn( input );
+				refreshBranch(
+					created?.parent ?? input?.parent ?? ROOT_PARENT_ID
+				);
+				return openAfterCreate( created );
+			} catch ( error ) {
+				setCreateError( error?.message ?? fallbackMessage );
+				return null;
+			}
 		},
-		[ create, openAfterCreate, refreshBranch ]
+		[ openAfterCreate, refreshBranch ]
+	);
+	const createAndOpen = useCallback(
+		( input ) =>
+			createAndOpenWith(
+				create,
+				input,
+				__( 'Could not create a document.', 'cortext' )
+			),
+		[ create, createAndOpenWith ]
 	);
 	const createCollectionAndOpen = useCallback(
-		async ( input ) => {
-			const created = await createCollection( input );
-			refreshBranch( created?.parent ?? input?.parent ?? ROOT_PARENT_ID );
-			return openAfterCreate( created );
-		},
-		[ createCollection, openAfterCreate, refreshBranch ]
+		( input ) =>
+			createAndOpenWith(
+				createCollection,
+				input,
+				__( 'Collection could not be created.', 'cortext' )
+			),
+		[ createCollection, createAndOpenWith ]
 	);
 	const createRootPage = useCallback(
 		() => createAndOpen( {} ),
@@ -657,6 +676,16 @@ export default function Sidebar( {
 										}
 									>
 										{ favoritesError }
+									</Notice>
+								) : null }
+								{ createError ? (
+									<Notice
+										status="error"
+										onRemove={ () =>
+											setCreateError( null )
+										}
+									>
+										{ createError }
 									</Notice>
 								) : null }
 								{ duplicateNotice ? (

@@ -91,6 +91,7 @@ import {
 	archiveSaveFailureMessage,
 	syncLifecycleEntityRecords,
 } from '../documents/actions';
+import { duplicateDocumentRecord } from '../documents/mutations';
 import {
 	afterDocumentTrash,
 	applyInvalidationPack,
@@ -132,7 +133,7 @@ export default function CollectionDataViews( {
 } ) {
 	const { fields, collection, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
-	const { invalidateResolution, receiveEntityRecords } =
+	const { invalidateResolution, receiveEntityRecords, saveEntityRecord } =
 		useDispatch( 'core' );
 	const { touchRecent } = useRecents();
 	// Field IDs from the last schema sync. We use this to auto-show fields
@@ -589,7 +590,12 @@ export default function CollectionDataViews( {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			const save = saveRowDocumentField( rowId, fieldId, value );
+			const save = saveRowDocumentField(
+				saveEntityRecord,
+				rowId,
+				fieldId,
+				value
+			);
 			const rowKey = normalizeRowId( rowId );
 			const rowSaves = pendingRowFieldSaves.current.get( rowKey ) ?? [];
 			pendingRowFieldSaves.current.set( rowKey, [ ...rowSaves, save ] );
@@ -614,7 +620,7 @@ export default function CollectionDataViews( {
 			notifyCollectionRowsChanged( collectionId );
 			return updated;
 		},
-		[ collectionId, refresh, touchRecent ]
+		[ collectionId, refresh, saveEntityRecord, touchRecent ]
 	);
 
 	let dataViewLayoutType = 'table';
@@ -1002,10 +1008,10 @@ export default function CollectionDataViews( {
 			}
 			setRowActionError( null );
 			try {
-				const created = await apiFetch( {
-					path: `/cortext/v1/documents/${ row.id }/duplicate`,
-					method: 'POST',
-				} );
+				const created = await duplicateDocumentRecord(
+					row,
+					receiveEntityRecords
+				);
 				if ( created?.id ) {
 					touchRecent( {
 						kind: 'row',
@@ -1021,7 +1027,7 @@ export default function CollectionDataViews( {
 				);
 			}
 		},
-		[ collectionId, refresh, touchRecent ]
+		[ collectionId, receiveEntityRecords, refresh, touchRecent ]
 	);
 
 	const forgetLifecycleRows = useCallback(
