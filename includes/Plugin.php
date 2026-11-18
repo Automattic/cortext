@@ -13,6 +13,7 @@ defined( 'ABSPATH' ) || exit;
 
 use Cortext\Admin\Screen;
 use Cortext\Block\DataView;
+use Cortext\Compat\IndexedDefaultMetadata;
 use Cortext\Editor\DocumentCoverBlock;
 use Cortext\Editor\DocumentIconBlock;
 use Cortext\Editor\DocumentPropertiesBlock;
@@ -58,6 +59,7 @@ final class Plugin {
 	}
 
 	public function boot(): void {
+		( new IndexedDefaultMetadata() )->register();
 		( new Screen() )->register();
 		( new Document() )->register();
 		( new DocumentIdentity() )->register();
