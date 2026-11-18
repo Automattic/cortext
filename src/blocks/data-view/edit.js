@@ -17,13 +17,10 @@ import {
 	Notice,
 	PanelBody,
 	Placeholder,
-	SearchControl,
 	SelectControl,
-	Spinner,
 	TextControl,
 	ToolbarButton,
 } from '@wordpress/components';
-import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useState } from '@wordpress/element';
@@ -36,11 +33,8 @@ import CanvasOwnerInspector, {
 import { useCanvasReadySignals } from '../../components/CanvasReadyContext';
 import CollectionDataViews from '../../components/CollectionDataViews';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
+import CollectionPicker from './CollectionPicker';
 import { useEditorSurface } from '../../components/EditorSurfaceContext';
-import {
-	DOCUMENT_POST_TYPE,
-	FULL_PAGE_COLLECTION_QUERY,
-} from '../../collections';
 import { useCreateCollectionDocument } from '../../documents';
 import { toDataViewId } from '../../hooks/fieldIds';
 import {
@@ -106,75 +100,6 @@ function createDefaultView() {
 		},
 		rowDetailMode: 'side',
 	};
-}
-
-function CollectionPicker( { selectedId = '', onSelect } ) {
-	// Every document that defines a schema (has `cortext_fields` meta).
-	const { records, isResolving, hasResolved } = useEntityRecords(
-		'postType',
-		DOCUMENT_POST_TYPE,
-		FULL_PAGE_COLLECTION_QUERY
-	);
-	const [ query, setQuery ] = useState( '' );
-
-	const hasCollections = Boolean( records?.length );
-
-	if ( isResolving && ! hasCollections ) {
-		return <Spinner />;
-	}
-
-	if ( hasResolved && ! hasCollections ) {
-		return (
-			<p className="cortext-data-view-picker__empty">
-				{ __( 'No collections yet.', 'cortext' ) }
-			</p>
-		);
-	}
-
-	const collectionTitle = ( collection ) =>
-		collection.title?.rendered ||
-		collection.title?.raw ||
-		`#${ collection.id }`;
-	const needle = query.trim().toLowerCase();
-	const matches = needle
-		? ( records ?? [] ).filter( ( collection ) =>
-				collectionTitle( collection ).toLowerCase().includes( needle )
-		  )
-		: records ?? [];
-
-	return (
-		<div className="cortext-collection-chooser">
-			<SearchControl
-				__nextHasNoMarginBottom
-				className="cortext-collection-chooser__search"
-				value={ query }
-				onChange={ setQuery }
-				placeholder={ __( 'Search collections', 'cortext' ) }
-			/>
-			{ matches.length === 0 ? (
-				<p className="cortext-data-view-picker__empty">
-					{ __( 'No collections match your search.', 'cortext' ) }
-				</p>
-			) : (
-				matches.map( ( collection ) => {
-					const isSelected =
-						selectedId && Number( selectedId ) === collection.id;
-
-					return (
-						<Button
-							key={ collection.id }
-							className="cortext-collection-chooser__item"
-							variant={ isSelected ? 'secondary' : 'tertiary' }
-							isPressed={ isSelected }
-							onClick={ () => onSelect( collection.id ) }
-						>
-							{ collectionTitle( collection ) }
-						</Button>
-					);
-				} )
-			) }
-		</div>
-	);
 }
 
 function CollectionCreator( { onCreate } ) {

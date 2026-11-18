@@ -252,3 +252,59 @@ describe( 'AddFieldPopover rollup config', () => {
 		expect( screen.queryByRole( 'option', { name: 'Sum' } ) ).toBeNull();
 	} );
 } );
+
+describe( 'AddFieldPopover relation config', () => {
+	const collectionRecords = ( search ) =>
+		search === 'Archive'
+			? [ { id: 140, title: { raw: 'Archive', rendered: 'Archive' } } ]
+			: [ { id: 12, title: { raw: 'Clients', rendered: 'Clients' } } ];
+
+	beforeEach( () => {
+		// The combobox scrolls the highlighted suggestion into view; jsdom
+		// does not implement it.
+		window.Element.prototype.scrollIntoView = jest.fn();
+		useEntityRecords.mockImplementation( ( kind, name, query ) => {
+			if ( name === 'crtxt_document' && query?.cortext_collections ) {
+				return {
+					records: collectionRecords( query.search ),
+					isResolving: false,
+					hasResolved: true,
+				};
+			}
+			return { records: [] };
+		} );
+		useEntityRecord.mockImplementation( ( kind, name, id ) => ( {
+			record:
+				name === 'crtxt_document' && id === 5
+					? { id: 5, title: { raw: 'Projects' } }
+					: null,
+		} ) );
+	} );
+
+	it( 'relates to a collection found by search and names the reverse field after the source', async () => {
+		render( <AddFieldPopover collectionId={ 5 } /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Relation' } ) );
+
+		const target = screen.getByRole( 'combobox', { name: 'Related to' } );
+		fireEvent.focus( target );
+		fireEvent.change( target, { target: { value: 'Archive' } } );
+
+		const option = await screen.findByRole( 'option', {
+			name: 'Archive',
+		} );
+		fireEvent.click( option );
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Add relation' } )
+		);
+
+		await waitFor( () =>
+			expect( run ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					type: 'relation',
+					related_collection_id: 140,
+					reverse_title: 'Related Projects',
+				} )
+			)
+		);
+	} );
+} );
