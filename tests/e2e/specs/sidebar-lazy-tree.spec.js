@@ -154,7 +154,12 @@ test.describe( 'Sidebar lazy tree', () => {
 		admin,
 		page,
 	} ) => {
-		await admin.visitAdminPage( SHELL_PATH, SHELL_QUERY );
+		// Open the parent so its children only show once the branch is
+		// expanded; an open child would reveal them on its own.
+		await admin.visitAdminPage(
+			SHELL_PATH,
+			`${ SHELL_QUERY }&p=/${ parent.id }`
+		);
 		await expect( page.locator( '#cortext-sidebar' ) ).toBeVisible();
 
 		await expect(
@@ -173,6 +178,9 @@ test.describe( 'Sidebar lazy tree', () => {
 				.getByRole( 'button', { name: 'Show more' } )
 		);
 
+		await expect(
+			page.getByRole( 'button', { name: FIRST_CHILD_TITLE, exact: true } )
+		).toHaveCount( 0 );
 		await expandSidebarNode( page, PARENT_TITLE );
 
 		await expect(
