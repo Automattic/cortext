@@ -78,6 +78,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertArrayHasKey( '/cortext/v1/documents/(?P<id>\d+)/unarchive', $routes );
 		$this->assertArrayHasKey( '/cortext/v1/documents/(?P<id>\d+)/restore', $routes );
 		$this->assertArrayHasKey( '/cortext/v1/documents/(?P<id>\d+)/permanent-delete', $routes );
+		$this->assertArrayHasKey( '/cortext/v1/documents/empty-trash', $routes );
 	}
 
 	public function test_archive_and_unarchive_return_affected_ids_and_updated_document(): void {
@@ -1090,6 +1091,154 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $row_id ), $response->get_data()['restored'] );
+	}
+
+	public function test_trash_listing_reports_when_and_by_whom_each_document_was_trashed(): void {
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		wp_update_user(
+			array(
+				'ID'           => $user_id,
+				'display_name' => 'Ada',
+			)
+		);
+
+		$parent_id = $this->create_page();
+		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
+		wp_trash_post( $parent_id );
+
+		$trashed_at = (int) get_post_meta( $parent_id, '_wp_trash_meta_time', true );
+		$by_id      = array_column( $this->trash_listing(), null, 'id' );
+
+		foreach ( array( $parent_id, $child_id ) as $id ) {
+			$this->assertSame(
+				array(
+					'id'   => $user_id,
+					'name' => 'Ada',
+				),
+				$by_id[ $id ]['trashed_by'],
+				'Cascaded children record the same user as their root.'
+			);
+		}
+		$this->assertSame( gmdate( 'c', $trashed_at ), $by_id[ $parent_id ]['trashed_at'] );
+		// Core's `wp_scheduled_delete` cutoff is `time() - EMPTY_TRASH_DAYS days`.
+		$this->assertSame(
+			gmdate( 'c', $trashed_at + EMPTY_TRASH_DAYS * DAY_IN_SECONDS ),
+			$by_id[ $parent_id ]['purge_at']
+		);
+	}
+
+	public function test_trash_listing_has_no_user_for_documents_trashed_without_one(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$page_id = $this->create_page();
+		wp_trash_post( $page_id );
+		delete_post_meta( $page_id, TrashCascade::TRASHED_BY_USER_META );
+
+		$by_id = array_column( $this->trash_listing(), null, 'id' );
+
+		$this->assertNull( $by_id[ $page_id ]['trashed_by'] );
+	}
+
+	public function test_restore_forgets_who_trashed_the_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id = $this->create_page();
+		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
+		wp_trash_post( $parent_id );
+
+		$this->restore( $parent_id );
+
+		$this->assertSame( '', get_post_meta( $parent_id, TrashCascade::TRASHED_BY_USER_META, true ) );
+		$this->assertSame( '', get_post_meta( $child_id, TrashCascade::TRASHED_BY_USER_META, true ) );
+	}
+
+	public function test_empty_trash_deletes_every_trashed_document_and_leaves_active_ones(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id     = $this->create_page();
+		$child_id      = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$sibling_id    = $this->create_page();
+		$collection_id = $this->create_full_page_collection( 'emptied' );
+		$row_id        = $this->create_row( $collection_id );
+		$lone_row_id   = $this->create_row( $collection_id );
+		$active_id     = $this->create_page();
+
+		// Trashed on its own before its collection, so it is a root with no
+		// marker and the collection's delete removes it first.
+		wp_trash_post( $lone_row_id );
+		wp_trash_post( $sibling_id );
+		wp_trash_post( $parent_id );
+		wp_trash_post( $collection_id );
+
+		$response = $this->empty_trash();
+
+		$this->assertSame( 200, $response->get_status() );
+		$deleted = $response->get_data()['deleted'];
+		foreach ( array( $parent_id, $child_id, $sibling_id, $collection_id, $row_id, $lone_row_id ) as $id ) {
+			$this->assertContains( $id, $deleted );
+			$this->assertNull( get_post( $id ) );
+		}
+		$this->assertCount( 6, $deleted, 'Each deleted document is reported once.' );
+		$this->assertSame( 'publish', get_post_status( $active_id ) );
+	}
+
+	public function test_empty_trash_skips_documents_the_user_cannot_delete(): void {
+		$admin_id  = $this->create_user( 'administrator' );
+		$author_id = $this->create_user( 'author' );
+
+		$others_id = $this->create_page( array( 'post_author' => $admin_id ) );
+		$own_id    = $this->create_page( array( 'post_author' => $author_id ) );
+		wp_trash_post( $others_id );
+		wp_trash_post( $own_id );
+
+		wp_set_current_user( $author_id );
+		$response = $this->empty_trash();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $own_id ), $response->get_data()['deleted'] );
+		$this->assertSame( 'trash', get_post_status( $others_id ) );
+	}
+
+	public function test_empty_trash_deletes_own_documents_cascaded_under_someone_elses_root(): void {
+		$editor_id = $this->create_user( 'editor' );
+		$author_id = $this->create_user( 'author' );
+
+		$editors_parent = $this->create_page( array( 'post_author' => $editor_id ) );
+		$authors_child  = $this->create_page(
+			array(
+				'post_author' => $author_id,
+				'post_parent' => $editors_parent,
+			)
+		);
+		wp_set_current_user( $editor_id );
+		wp_trash_post( $editors_parent );
+		$this->assertSame( 'trash', get_post_status( $authors_child ) );
+
+		// The author's trash listing shows the child as a root, because the
+		// editor's page is not theirs, so emptying the trash must delete it.
+		wp_set_current_user( $author_id );
+		$response = $this->empty_trash();
+
+		$this->assertSame( array( $authors_child ), $response->get_data()['deleted'] );
+		$this->assertSame( 'trash', get_post_status( $editors_parent ) );
+	}
+
+	public function test_empty_trash_requires_delete_posts_capability(): void {
+		wp_set_current_user( $this->create_user( 'subscriber' ) );
+
+		$this->assertSame( 403, $this->empty_trash()->get_status() );
+	}
+
+	private function trash_listing(): array {
+		$request = new WP_REST_Request( 'GET', '/cortext/v1/documents' );
+		$request->set_param( 'status', 'trash' );
+		return rest_do_request( $request )->get_data()['documents'];
+	}
+
+	private function empty_trash() {
+		$request = new WP_REST_Request( 'POST', '/cortext/v1/documents/empty-trash' );
+		return rest_do_request( $request );
 	}
 
 	private function restore( int $id ) {
