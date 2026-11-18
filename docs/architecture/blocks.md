@@ -63,7 +63,7 @@ These blocks stay out for specific reasons:
 
 Cortext's `EnsureHeaderBlocks` (in `src/components/EditorBody.js`) inserts the title as a locked header. `insertBlocks` checks `allowedBlockTypes`; if we drop `core/post-title`, the header never lands.
 
-To keep the block out of the picker, `initEditor.js` registers a `blocks.registerBlockType` filter that flips `supports.inserter` to `false`. The `cortext/document-*` header blocks do this in their own `block.json`.
+To keep the block out of the picker, `registerBlocks.js` registers a `blocks.registerBlockType` filter that flips `supports.inserter` to `false`. The `cortext/document-*` header blocks do this in their own `block.json`.
 
 ### Post-author and post-excerpt require `register_post_type` supports
 

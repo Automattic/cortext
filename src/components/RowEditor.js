@@ -12,11 +12,6 @@ import { SlotFillProvider } from '@wordpress/components';
 import useAutosave from '../hooks/useAutosave';
 import usePostLock from '../hooks/usePostLock';
 import { notifyBacklinksChanged } from '../hooks/backlinksInvalidation';
-// Registers core + Cortext blocks before any editor renders. Living here
-// (rather than at a static import in RowDetailView) keeps the Cortext
-// block sources and the registerCoreBlocks call site off the initial
-// bundle. The module is idempotent, so Canvas's copy of this import is
-// a no-op when RowEditor mounts second, or vice versa.
 import { getEditorSettings } from './initEditor';
 import { useEditorsLocked } from './ActiveEditorContext';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
