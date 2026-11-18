@@ -103,6 +103,28 @@ describe( 'isEditorPostReadyForHeaderRepair', () => {
 		expect( isEditorPostReadyForHeaderRepair( 41, 42 ) ).toBe( false );
 		expect( isEditorPostReadyForHeaderRepair( '42', 42 ) ).toBe( true );
 	} );
+
+	it( 'waits until the block list has been synced into the block editor', () => {
+		expect(
+			isEditorPostReadyForHeaderRepair( 42, 42, {
+				storeBlockCount: 0,
+				editorBlockCount: 2,
+			} )
+		).toBe( false );
+		expect(
+			isEditorPostReadyForHeaderRepair( 42, 42, {
+				storeBlockCount: 2,
+				editorBlockCount: 2,
+			} )
+		).toBe( true );
+		// A document that is really empty still gets its header.
+		expect(
+			isEditorPostReadyForHeaderRepair( 42, 42, {
+				storeBlockCount: 0,
+				editorBlockCount: 0,
+			} )
+		).toBe( true );
+	} );
 } );
 
 function ownerBlock( clientId, collectionId ) {
