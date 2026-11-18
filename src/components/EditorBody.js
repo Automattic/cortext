@@ -18,9 +18,14 @@ import {
 	store as blockEditorStore,
 	useSettings,
 } from '@wordpress/block-editor';
-import { createBlock } from '@wordpress/blocks';
+import { createBlock, parse } from '@wordpress/blocks';
 import { Button, Disabled, Notice } from '@wordpress/components';
-import { useEntityProp, useEntityRecord } from '@wordpress/core-data';
+import {
+	store as coreStore,
+	useEntityBlockEditor,
+	useEntityProp,
+	useEntityRecord,
+} from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { __ } from '@wordpress/i18n';
@@ -532,14 +537,19 @@ export function areCanvasReadyRequirementsMet( {
 	);
 }
 
+// The editor store can hold the post before the block list has been synced
+// into the block editor store. Repairing the header in that gap reads an empty
+// document and writes it over the real content.
 export function isEditorPostReadyForHeaderRepair(
 	currentEditorPostId,
-	targetPostId
+	targetPostId,
+	{ storeBlockCount = 0, editorBlockCount = 0 } = {}
 ) {
 	return (
 		currentEditorPostId !== null &&
 		currentEditorPostId !== undefined &&
-		Number( currentEditorPostId ) === Number( targetPostId )
+		Number( currentEditorPostId ) === Number( targetPostId ) &&
+		! ( storeBlockCount === 0 && editorBlockCount > 0 )
 	);
 }
 
@@ -1111,13 +1121,20 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		startTyping,
 		stopTyping,
 	} = useDispatch( blockEditorStore );
-	const currentEditorPostId = useSelect(
-		( select ) => select( editorStore ).getCurrentPostId(),
-		[]
-	);
+	const { currentEditorPostId, storeBlockCount, editorBlockCount } =
+		useSelect(
+			( select ) => ( {
+				currentEditorPostId: select( editorStore ).getCurrentPostId(),
+				storeBlockCount: select( blockEditorStore ).getBlockCount(),
+				editorBlockCount:
+					select( editorStore ).getEditorBlocks().length,
+			} ),
+			[]
+		);
 	const isEditorPostReady = isEditorPostReadyForHeaderRepair(
 		currentEditorPostId,
-		postId
+		postId,
+		{ storeBlockCount, editorBlockCount }
 	);
 
 	useLayoutEffect( () => {
@@ -2134,6 +2151,46 @@ function CanvasReadyEffect( {
 	return null;
 }
 
+// core-data parses a post's blocks when it resolves the record and caches
+// them by content. A record resolved before the editor chunk registered the
+// block types caches an empty list, and the block editor keeps using it while
+// the content is unchanged. Parse again once the block types exist; `blocks`
+// is a transient edit, so this does not mark the post as changed.
+function useRepairStaleParsedBlocks( postType, postId ) {
+	const [ blocks ] = useEntityBlockEditor( 'postType', postType, {
+		id: postId,
+	} );
+	const content = useSelect(
+		( select ) => {
+			const record = select( coreStore ).getEditedEntityRecord(
+				'postType',
+				postType,
+				postId
+			);
+			return typeof record?.content === 'string' ? record.content : '';
+		},
+		[ postType, postId ]
+	);
+	const { editEntityRecord } = useDispatch( coreStore );
+
+	useLayoutEffect( () => {
+		if ( ! postId || blocks?.length || ! content ) {
+			return;
+		}
+		const parsed = parse( content );
+		if ( parsed.length === 0 ) {
+			return;
+		}
+		editEntityRecord(
+			'postType',
+			postType,
+			postId,
+			{ blocks: parsed },
+			{ undoIgnore: true }
+		);
+	}, [ blocks, content, editEntityRecord, postId, postType ] );
+}
+
 export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
@@ -2149,6 +2206,7 @@ export default function EditorBody( {
 	onReady,
 	onRestored,
 } ) {
+	useRepairStaleParsedBlocks( postType, postId );
 	const baseStyles = useSelect(
 		( select ) => select( editorStore ).getEditorSettings().styles,
 		[]

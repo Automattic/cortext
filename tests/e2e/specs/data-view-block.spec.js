@@ -898,6 +898,70 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'keeps a collection page intact when the editor loads after the page record', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Late editor page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			// Hold the editor chunk so the shell resolves the page record
+			// before the block types are registered.
+			await page.route( '**/build/editor.js*', async ( route ) => {
+				await new Promise( ( resolve ) => setTimeout( resolve, 2500 ) );
+				await route.continue();
+			} );
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect(
+				dataViewTableRow( canvas, 'The Left Hand of Darkness' )
+			).toBeVisible( { timeout: 15_000 } );
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+			expect( saved.content.raw ).toContain( 'wp:cortext/data-view' );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'hides the parent toolbar only when it overlaps a DataViews menu in the iframe', async ( {
 		admin,
 		page,
