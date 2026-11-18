@@ -1,14 +1,21 @@
 import { __, sprintf } from '@wordpress/i18n';
-import { Button, Dropdown, Spinner } from '@wordpress/components';
+import {
+	Button,
+	Dropdown,
+	Spinner,
+	VisuallyHidden,
+} from '@wordpress/components';
 import {
 	useCallback,
 	useEffect,
+	useId,
 	useMemo,
 	useRef,
 	useState,
 } from '@wordpress/element';
 import {
 	Icon,
+	archive,
 	arrowUpRight,
 	chevronDown,
 	closeSmall,
@@ -20,7 +27,12 @@ import useCollectionRowsByIds from '../../hooks/useCollectionRowsByIds';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { useRecents } from '../../hooks/useRecents';
 import { useCreateRowDocument } from '../rowDocumentCreation';
-import { relationIds, relationTitle } from './relationUtils';
+import {
+	archivedRelationLabel,
+	isArchivedRelationRef,
+	relationIds,
+	relationTitle,
+} from './relationUtils';
 
 const RELATION_PICKER_PER_PAGE = 25;
 const SCROLL_LOAD_MORE_THRESHOLD_PX = 80;
@@ -28,6 +40,18 @@ const SEARCH_DEBOUNCE_MS = 150;
 
 function hasResolvedTitle( entry ) {
 	return Boolean( entry?.title?.raw || entry?.title?.rendered );
+}
+
+function refClassName( baseClassName, ref ) {
+	return isArchivedRelationRef( ref )
+		? `${ baseClassName } ${ baseClassName }--archived`
+		: baseClassName;
+}
+
+function archivedTooltip( ref ) {
+	return isArchivedRelationRef( ref )
+		? __( 'Archived', 'cortext' )
+		: undefined;
 }
 
 function mergeRowsById( previous, incoming ) {
@@ -52,6 +76,7 @@ export default function RelationEditor( {
 	const [ isCreating, setIsCreating ] = useState( false );
 	const [ createError, setCreateError ] = useState( '' );
 	const searchRef = useRef( null );
+	const archivedDescriptionId = useId();
 	const createRowDocument = useCreateRowDocument();
 	const { touchRecent } = useRecents();
 	const selectedIds = useMemo( () => relationIds( value ), [ value ] );
@@ -139,6 +164,8 @@ export default function RelationEditor( {
 			return fromValue || { id };
 		} );
 	}, [ selectedIds, currentRefs, byIdRows, accumulatedRows ] );
+
+	const archivedSelectedRefs = selectedRefs.filter( isArchivedRelationRef );
 
 	const unselectedRows = accumulatedRows.filter(
 		( row ) => ! selectedIds.includes( row.id )
@@ -263,17 +290,30 @@ export default function RelationEditor( {
 					onClick={ onToggle }
 					aria-expanded={ isOpen }
 					aria-label={ label }
+					aria-describedby={
+						archivedSelectedRefs.length
+							? archivedDescriptionId
+							: undefined
+					}
 				>
 					{ selectedRefs.length ? (
 						<span className="cortext-relation-edit__toggle-refs">
 							{ selectedRefs.map( ( ref ) => (
 								<span
 									key={ ref.id }
-									className="cortext-relation-edit__toggle-ref"
+									className={ refClassName(
+										'cortext-relation-edit__toggle-ref',
+										ref
+									) }
+									title={ archivedTooltip( ref ) }
 								>
 									<Icon
 										className="cortext-relation-ref__icon"
-										icon={ arrowUpRight }
+										icon={
+											isArchivedRelationRef( ref )
+												? archive
+												: arrowUpRight
+										}
 									/>
 									<span className="cortext-relation-ref__title">
 										{ relationTitle( ref ) }
@@ -291,6 +331,17 @@ export default function RelationEditor( {
 						size={ 16 }
 						className="cortext-relation-edit__toggle-chevron"
 					/>
+					{ archivedSelectedRefs.length ? (
+						<VisuallyHidden as="span" id={ archivedDescriptionId }>
+							{ archivedSelectedRefs
+								.map( ( ref ) =>
+									archivedRelationLabel(
+										relationTitle( ref )
+									)
+								)
+								.join( ', ' ) }
+						</VisuallyHidden>
+					) : null }
 				</Button>
 			) }
 			renderContent={ ( { onClose } ) => (
@@ -320,11 +371,31 @@ export default function RelationEditor( {
 								{ selectedRefs.map( ( ref ) => (
 									<span
 										key={ ref.id }
-										className="cortext-relation-edit__selected-pill"
+										className={ refClassName(
+											'cortext-relation-edit__selected-pill',
+											ref
+										) }
+										title={ archivedTooltip( ref ) }
 									>
-										<span className="cortext-relation-edit__selected-title">
-											{ relationTitle( ref ) }
-										</span>
+										{ isArchivedRelationRef( ref ) ? (
+											<>
+												<span
+													className="cortext-relation-edit__selected-title"
+													aria-hidden="true"
+												>
+													{ relationTitle( ref ) }
+												</span>
+												<VisuallyHidden as="span">
+													{ archivedRelationLabel(
+														relationTitle( ref )
+													) }
+												</VisuallyHidden>
+											</>
+										) : (
+											<span className="cortext-relation-edit__selected-title">
+												{ relationTitle( ref ) }
+											</span>
+										) }
 										<Button
 											className="cortext-relation-edit__remove"
 											icon={ closeSmall }

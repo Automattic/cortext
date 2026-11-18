@@ -186,6 +186,12 @@ jest.mock( '../../../src/components/relations/RelationEditor', () => ( {
 	},
 } ) );
 
+const mockRelationTargetStatuses = { current: {} };
+jest.mock( '../../../src/hooks/useRelationTargetStatuses', () => ( {
+	__esModule: true,
+	default: () => mockRelationTargetStatuses.current,
+} ) );
+
 import { useDispatch, useSelect } from '@wordpress/data';
 import { closestCenter, pointerWithin, useDroppable } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
@@ -979,6 +985,94 @@ describe( 'RowProperties', () => {
 			COLLECTION_ROWS_CHANGED_EVENT,
 			onRowsChanged
 		);
+	} );
+
+	it( 'marks archived targets without hiding relation edits saved later', async () => {
+		mockRelationTargetStatuses.current = { 123: 'crtxt_archived' };
+		mockSaveEntityRecord.mockResolvedValue( {
+			id: 99,
+			meta: { 'field-7': [ 456 ] },
+			cortext_hydrated_meta: {
+				'field-7': [
+					{
+						id: 456,
+						title: { raw: 'Grace Hopper' },
+						status: 'private',
+					},
+				],
+			},
+		} );
+		useSelect.mockReturnValue( {
+			title: 'Source row',
+			meta: { 'field-7': [ '123' ] },
+			hydratedMeta: {
+				'field-7': [
+					{
+						id: 123,
+						title: { raw: 'Ada Lovelace' },
+						status: 'private',
+					},
+				],
+			},
+		} );
+		const fields = [
+			{
+				id: 'field-7',
+				label: 'Assignee',
+				cortextFieldType: 'relation',
+				editable: true,
+				relatedCollectionId: 55,
+				relationMultiple: true,
+			},
+		];
+
+		const { rerender } = render(
+			<RowProperties
+				collectionId={ 44 }
+				row={ { id: 99 } }
+				fields={ fields }
+			/>
+		);
+
+		expect( mockRelationEditorProps.at( -1 ).value ).toEqual( [
+			expect.objectContaining( { id: 123, status: 'crtxt_archived' } ),
+		] );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Ada Lovelace' } )
+		);
+		await screen.findByRole( 'button', { name: 'Grace Hopper' } );
+
+		const caughtUpRow = {
+			id: 99,
+			meta: { 'field-7': [ 456 ] },
+			cortext_hydrated_meta: {
+				'field-7': [
+					{
+						id: 456,
+						title: { raw: 'Grace Hopper' },
+						status: 'private',
+					},
+				],
+			},
+		};
+		rerender(
+			<RowProperties
+				collectionId={ 44 }
+				row={ caughtUpRow }
+				fields={ fields }
+			/>
+		);
+
+		await waitFor( () =>
+			expect( mockRelationEditorProps.at( -1 ).value ).toEqual( [
+				expect.objectContaining( { id: 456, status: 'private' } ),
+			] )
+		);
+		expect(
+			screen.getByRole( 'button', { name: 'Grace Hopper' } )
+		).toBeInTheDocument();
+		mockRelationTargetStatuses.current = {};
 	} );
 
 	it( 'uses the explicit row id to enable editable relations', () => {

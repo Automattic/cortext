@@ -30,7 +30,61 @@ beforeEach( () => {
 	mockOpenDocument.mockReset();
 } );
 
+const ARCHIVED = { ...FIXTURE, status: 'crtxt_archived' };
+const ACTIVE = { ...FIXTURE, status: 'private' };
+
 describe( 'RelationReferences', () => {
+	it( 'mutes archived targets and labels them for assistive technology', () => {
+		render( <RelationReferences value={ [ ARCHIVED ] } /> );
+
+		const link = screen.getByRole( 'link', {
+			name: 'Ada Lovelace (archived)',
+		} );
+		expect( link ).toHaveClass( 'cortext-relation-ref--archived' );
+		expect( link ).toHaveAttribute( 'title', 'Archived' );
+	} );
+
+	it( 'renders active targets as normal chips', () => {
+		render( <RelationReferences value={ [ ACTIVE ] } /> );
+
+		const link = screen.getByRole( 'link', { name: 'Ada Lovelace' } );
+		expect( link ).not.toHaveClass( 'cortext-relation-ref--archived' );
+		expect( link ).not.toHaveAttribute( 'title' );
+	} );
+
+	it( 'returns to a normal chip once the target is restored', () => {
+		const { rerender } = render(
+			<RelationReferences value={ [ ARCHIVED ] } />
+		);
+		expect(
+			screen.getByRole( 'link', { name: 'Ada Lovelace (archived)' } )
+		).toBeInTheDocument();
+
+		rerender( <RelationReferences value={ [ ACTIVE ] } /> );
+
+		expect(
+			screen.getByRole( 'link', { name: 'Ada Lovelace' } )
+		).not.toHaveClass( 'cortext-relation-ref--archived' );
+	} );
+
+	it( 'still opens an archived target on plain click', () => {
+		render( <RelationReferences value={ [ ARCHIVED ] } /> );
+
+		screen
+			.getByRole( 'link', { name: 'Ada Lovelace (archived)' } )
+			.dispatchEvent(
+				new window.MouseEvent( 'click', {
+					bubbles: true,
+					cancelable: true,
+					button: 0,
+				} )
+			);
+
+		expect( mockOpenDocument ).toHaveBeenCalledWith(
+			expect.objectContaining( { id: 12, postType: 'crtxt_document' } )
+		);
+	} );
+
 	it( 'renders references with the row URL as href', () => {
 		renderReferences();
 

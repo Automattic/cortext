@@ -59,6 +59,7 @@ import MultiselectEdit from './MultiselectEdit';
 import { toRecordId } from '../hooks/fieldIds';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import useRelationTargetStatuses from '../hooks/useRelationTargetStatuses';
 import { saveRowDocumentField } from './rowDocumentMutations';
 import { useActiveEditor } from './ActiveEditorContext';
 import {
@@ -72,6 +73,7 @@ import {
 	valueForField,
 } from './rowDetailUtils';
 import RelationEditor from './relations/RelationEditor';
+import { withRelationTargetStatuses } from './relations/relationUtils';
 
 export const HIDDEN_PROPERTIES_DROP_TARGET =
 	'cortext-row-properties-hidden-drop-target';
@@ -1091,6 +1093,7 @@ export default function RowProperties( {
 	const [ fieldErrors, setFieldErrors ] = useState( {} );
 	const sourceRowId = providedRowId ?? row?.id;
 	const rowId = sourceRowId;
+	const relationTargetStatuses = useRelationTargetStatuses( rowId );
 	const sensors = useSensors(
 		useSensor( PointerSensor, { activationConstraint: { distance: 4 } } ),
 		useSensor( KeyboardSensor, {
@@ -1487,11 +1490,14 @@ export default function RowProperties( {
 				...committedMeta,
 				...localMeta,
 			},
-			hydratedMeta: {
-				...( storeHydratedMeta ?? {} ),
-				...fallbackHydratedMeta,
-				...committedHydratedMeta,
-			},
+			hydratedMeta: withRelationTargetStatuses(
+				{
+					...( storeHydratedMeta ?? {} ),
+					...fallbackHydratedMeta,
+					...committedHydratedMeta,
+				},
+				relationTargetStatuses
+			),
 			editContext: { collectionId, rowId },
 		};
 	}, [
@@ -1503,6 +1509,7 @@ export default function RowProperties( {
 		localMeta,
 		localTitle,
 		meta,
+		relationTargetStatuses,
 		row,
 		rowId,
 		title,

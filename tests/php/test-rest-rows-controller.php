@@ -781,6 +781,120 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
 	}
 
+	public function test_relation_refs_carry_target_status_and_skip_trashed_targets(): void {
+		( new ArchiveCascade() )->register_status();
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->create_relation_rollup_fixture( 'relstatus' );
+
+		( new ArchiveCascade() )->archive( $fixture['archived_target_id'] );
+		wp_trash_post( $fixture['trashed_target_id'] );
+
+		$refs = $this->relation_refs_for_source_row( $fixture );
+
+		$this->assertSame(
+			array(
+				$fixture['active_target_id']   => 'private',
+				$fixture['archived_target_id'] => Documents::STATUS_ARCHIVED,
+			),
+			array_column( $refs, 'status', 'id' )
+		);
+	}
+
+	public function test_archiving_a_relation_target_keeps_rollup_values(): void {
+		( new ArchiveCascade() )->register_status();
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->create_relation_rollup_fixture( 'relrollup' );
+
+		$before = $this->rollup_values_for_source_row( $fixture );
+		( new ArchiveCascade() )->archive( $fixture['archived_target_id'] );
+		$after = $this->rollup_values_for_source_row( $fixture );
+
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $fixture['archived_target_id'] ) );
+		$this->assertSame( array( 3, 60.0 ), $before );
+		$this->assertSame( $before, $after );
+	}
+
+	/**
+	 * Builds a source collection whose row relates to three target rows, plus
+	 * count and sum rollups over that relation.
+	 *
+	 * @param string $slug Collection slug prefix.
+	 * @return array<string,int>
+	 */
+	private function create_relation_rollup_fixture( string $slug ): array {
+		$target      = $this->create_collection_fixture( "{$slug}-target", 'number' );
+		$source      = $this->create_collection_fixture( "{$slug}-source", 'text' );
+		$relation_id = $this->add_field_to_collection(
+			$source['collection_id'],
+			'relation',
+			array(
+				'related_collection_id' => (string) $target['collection_id'],
+				'relation_multiple'     => '1',
+			)
+		);
+		$count_id    = $this->add_field_to_collection(
+			$source['collection_id'],
+			'rollup',
+			array(
+				'rollup_relation_field_id' => (string) $relation_id,
+				'rollup_aggregator'        => 'count',
+			)
+		);
+		$sum_id      = $this->add_field_to_collection(
+			$source['collection_id'],
+			'rollup',
+			array(
+				'rollup_relation_field_id' => (string) $relation_id,
+				'rollup_target_field_id'   => (string) $target['field_id'],
+				'rollup_aggregator'        => 'sum',
+			)
+		);
+
+		$score_key   = "field-{$target['field_id']}";
+		$active_id   = $this->create_row_fixture( $target['collection_id'], 'Active', 'private', array( $score_key => '10' ) );
+		$archived_id = $this->create_row_fixture( $target['collection_id'], 'Archived', 'private', array( $score_key => '20' ) );
+		$trashed_id  = $this->create_row_fixture( $target['collection_id'], 'Trashed', 'private', array( $score_key => '30' ) );
+		$source_row  = $this->create_row_fixture( $source['collection_id'], 'Source', 'private' );
+		foreach ( array( $active_id, $archived_id, $trashed_id ) as $target_id ) {
+			add_post_meta( $source_row, "field-{$relation_id}", (string) $target_id );
+		}
+
+		return array(
+			'source_collection_id' => $source['collection_id'],
+			'source_row_id'        => $source_row,
+			'relation_field_id'    => $relation_id,
+			'count_field_id'       => $count_id,
+			'sum_field_id'         => $sum_id,
+			'active_target_id'     => $active_id,
+			'archived_target_id'   => $archived_id,
+			'trashed_target_id'    => $trashed_id,
+		);
+	}
+
+	private function source_row_meta( array $fixture ): array {
+		$response = $this->query_rows(
+			array(
+				'trait'   => $fixture['source_collection_id'],
+				'context' => 'edit',
+			)
+		);
+		$this->assertSame( 200, $response->get_status() );
+		$rows = array_column( $response->get_data()['rows'], null, 'id' );
+		return $rows[ $fixture['source_row_id'] ]['meta'];
+	}
+
+	private function relation_refs_for_source_row( array $fixture ): array {
+		return $this->source_row_meta( $fixture )[ "field-{$fixture['relation_field_id']}" ];
+	}
+
+	private function rollup_values_for_source_row( array $fixture ): array {
+		$meta = $this->source_row_meta( $fixture );
+		return array(
+			$meta[ "field-{$fixture['count_field_id']}" ],
+			$meta[ "field-{$fixture['sum_field_id']}" ],
+		);
+	}
+
 	private function query_rows( array $params ): \WP_REST_Response {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
 		foreach ( $params as $key => $value ) {

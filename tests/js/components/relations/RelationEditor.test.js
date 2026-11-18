@@ -232,6 +232,45 @@ describe( 'RelationEditor', () => {
 		await flushPopoverEffects();
 	} );
 
+	it( 'mutes archived toggle chips and describes them on the toggle', async () => {
+		const { container } = render(
+			<RelationEditor
+				value={ [
+					{
+						id: 22,
+						title: { raw: 'Ada Lovelace' },
+						status: 'crtxt_archived',
+					},
+					{
+						id: 23,
+						title: { raw: 'Alan Turing' },
+						status: 'private',
+					},
+				] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+				defaultOpen={ false }
+			/>
+		);
+
+		const chips = container.querySelectorAll(
+			'.cortext-relation-edit__toggle-ref'
+		);
+		expect( chips[ 0 ] ).toHaveClass(
+			'cortext-relation-edit__toggle-ref--archived'
+		);
+		expect( chips[ 0 ] ).toHaveAttribute( 'title', 'Archived' );
+		expect( chips[ 1 ] ).not.toHaveClass(
+			'cortext-relation-edit__toggle-ref--archived'
+		);
+		expect(
+			screen.getByRole( 'button', { name: 'Assignee' } )
+		).toHaveAccessibleDescription( 'Ada Lovelace (archived)' );
+		await flushPopoverEffects();
+	} );
+
 	it( 'hides create while the debounced search has not caught up', async () => {
 		// Pin the debounced value so search ('New Row') stays unsettled.
 		useDebouncedValue.mockImplementation( () => '' );

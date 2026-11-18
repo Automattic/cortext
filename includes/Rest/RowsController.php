@@ -1220,12 +1220,13 @@ final class RowsController {
 	}
 
 	/**
-	 * Formats resolved references for a relation field.
+	 * Formats resolved references for a relation field. Each reference carries
+	 * the target's post status, so clients can mark archived targets.
 	 *
 	 * @param int                   $row_id   Row post ID.
 	 * @param int                   $field_id Relation field post ID.
 	 * @param RowFormatContext|null $ctx      Formatting context for rows responses.
-	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int}>
+	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int,status:string}>
 	 */
 	private function format_relation_value( int $row_id, int $field_id, ?RowFormatContext $ctx = null ): array {
 		$relation_meta        = $this->relation_field_meta_for( $field_id, $ctx );
@@ -1251,6 +1252,7 @@ final class RowsController {
 					'rendered' => $target->post_title,
 				),
 				'collectionId' => $target_collection_id,
+				'status'       => $target->post_status,
 			);
 		}
 
