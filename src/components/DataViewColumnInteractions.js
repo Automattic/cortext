@@ -109,8 +109,8 @@ function useHeaderCells( wrapperRef, view, fields ) {
 			( fields ?? [] ).map( ( field ) => [ field.id, field ] )
 		);
 
-		// Compare by element identity and field id so unchanged scans don't
-		// rerender the portal layer.
+		// Compare by element, field and label so unchanged scans don't
+		// rerender the portal layer, while renames still reach the handles.
 		const sync = () => {
 			const next = findHeaderCells( wrapper, view, fieldsById );
 			const prev = cellsRef.current;
@@ -120,7 +120,8 @@ function useHeaderCells( wrapperRef, view, fields ) {
 					( cell, i ) =>
 						cell.el === prev[ i ].el &&
 						cell.fieldId === prev[ i ].fieldId &&
-						cell.fieldType === prev[ i ].fieldType
+						cell.fieldType === prev[ i ].fieldType &&
+						cell.label === prev[ i ].label
 				);
 			if ( ! same ) {
 				setCells( next );
