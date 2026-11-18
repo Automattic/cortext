@@ -21,6 +21,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from '@wordpress/element';
@@ -551,21 +552,33 @@ export function PageActionsPanel( { postId } ) {
 		}
 	}, [ isHome, postId, setHome ] );
 
+	const lifecycleCtx = useMemo(
+		() => ( {
+			flushActiveEditor,
+			lockEditors,
+			waitForOpenDocuments,
+			invalidateResolution,
+			receiveEntityRecords,
+			setFavorites,
+			onFavoritesError: setError,
+		} ),
+		[
+			flushActiveEditor,
+			invalidateResolution,
+			lockEditors,
+			receiveEntityRecords,
+			setFavorites,
+			waitForOpenDocuments,
+		]
+	);
+
 	const trashPage = useCallback( async () => {
 		setError( null );
 		setIsTrashing( true );
 		try {
 			const response = await trashDocument(
 				{ id: postId },
-				{
-					flushActiveEditor,
-					lockEditors,
-					waitForOpenDocuments,
-					invalidateResolution,
-					receiveEntityRecords,
-					setFavorites,
-					onFavoritesError: setError,
-				}
+				lifecycleCtx
 			);
 			if ( response === null ) {
 				setError( trashSaveFailureMessage() );
@@ -578,15 +591,7 @@ export function PageActionsPanel( { postId } ) {
 		} finally {
 			setIsTrashing( false );
 		}
-	}, [
-		flushActiveEditor,
-		invalidateResolution,
-		lockEditors,
-		postId,
-		receiveEntityRecords,
-		setFavorites,
-		waitForOpenDocuments,
-	] );
+	}, [ lifecycleCtx, postId ] );
 
 	const archivePage = useCallback( async () => {
 		setError( null );
@@ -594,13 +599,7 @@ export function PageActionsPanel( { postId } ) {
 		try {
 			const response = await archiveDocument(
 				{ id: postId },
-				{
-					flushActiveEditor,
-					lockEditors,
-					waitForOpenDocuments,
-					invalidateResolution,
-					receiveEntityRecords,
-				}
+				lifecycleCtx
 			);
 			if ( response === null ) {
 				setError( archiveSaveFailureMessage() );
@@ -613,14 +612,7 @@ export function PageActionsPanel( { postId } ) {
 		} finally {
 			setIsArchiving( false );
 		}
-	}, [
-		flushActiveEditor,
-		invalidateResolution,
-		lockEditors,
-		postId,
-		receiveEntityRecords,
-		waitForOpenDocuments,
-	] );
+	}, [ lifecycleCtx, postId ] );
 
 	return (
 		<PanelBody title={ __( 'Actions', 'cortext' ) }>

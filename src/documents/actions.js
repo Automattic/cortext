@@ -229,55 +229,68 @@ export async function duplicateDocument( record, ctx ) {
 	return created;
 }
 
-// Soft-delete: server trashes descendants. Avoid `deleteEntityRecord` so
-// core-data does not drop the open record before the editor finishes its
-// block selection writes.
-export async function trashDocument( record, ctx ) {
+// Saves and locks the open editors, runs `request`, and syncs its response.
+// Resolves the response, or null after telling the user when the save fails.
+async function runDocumentLifecycle(
+	record,
+	ctx,
+	{ request, cascadeKey, saveFailureMessage, noticeId }
+) {
 	const lifecycleFocusIntent =
 		ctx.captureLifecycleFocusIntent?.( record ) ?? null;
 	try {
-		const deleted = await runWithEditorsLocked( ctx, async () => {
-			const response = await apiFetch( {
-				path: `/wp/v2/crtxt_documents/${ record.id }`,
-				method: 'DELETE',
-			} );
-			await syncLifecycleRecordsForEditors(
-				response,
-				ctx,
-				'cascade_deleted'
-			);
-			return response;
+		const response = await runWithEditorsLocked( ctx, async () => {
+			const result = await request();
+			await syncLifecycleRecordsForEditors( result, ctx, cascadeKey );
+			return result;
 		} );
-		if ( deleted === false ) {
+		if ( response === false ) {
 			ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
-			ctx.createErrorNotice?.( trashSaveFailureMessage(), {
-				id: 'cortext-document-trash-save-error',
+			ctx.createErrorNotice?.( saveFailureMessage, {
+				id: noticeId,
 				type: 'snackbar',
 			} );
 			return null;
 		}
-		applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
-		notifySidebarTreeChanged();
-		notifyDocumentTrashChanged();
-		notifyDocumentArchiveChanged( { action: 'trash' } );
-		const cascadeIds = collectCascadeIds(
-			record,
-			deleted?.cascade_deleted
-		);
-		await cascadeFavorites(
-			ctx,
-			cascadeIds,
-			__(
-				'Document moved to Trash, but Favorites could not be updated.',
-				'cortext'
-			)
-		);
-		ctx.onAfterTrash?.( { record, lifecycleFocusIntent } );
-		return deleted;
+		return { response, lifecycleFocusIntent };
 	} catch ( error ) {
 		ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
 		throw error;
 	}
+}
+
+// Soft-delete: server trashes descendants. Avoid `deleteEntityRecord` so
+// core-data does not drop the open record before the editor finishes its
+// block selection writes.
+export async function trashDocument( record, ctx ) {
+	const result = await runDocumentLifecycle( record, ctx, {
+		request: () =>
+			apiFetch( {
+				path: `/wp/v2/crtxt_documents/${ record.id }`,
+				method: 'DELETE',
+			} ),
+		cascadeKey: 'cascade_deleted',
+		saveFailureMessage: trashSaveFailureMessage(),
+		noticeId: 'cortext-document-trash-save-error',
+	} );
+	if ( ! result ) {
+		return null;
+	}
+	const { response: deleted, lifecycleFocusIntent } = result;
+	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+	notifySidebarTreeChanged();
+	notifyDocumentTrashChanged();
+	notifyDocumentArchiveChanged( { action: 'trash' } );
+	await cascadeFavorites(
+		ctx,
+		collectCascadeIds( record, deleted?.cascade_deleted ),
+		__(
+			'Document moved to Trash, but Favorites could not be updated.',
+			'cortext'
+		)
+	);
+	ctx.onAfterTrash?.( { record, lifecycleFocusIntent } );
+	return deleted;
 }
 
 export async function restoreDocument( record, ctx ) {
@@ -295,33 +308,24 @@ export async function restoreDocument( record, ctx ) {
 }
 
 export async function archiveDocument( record, ctx ) {
-	const lifecycleFocusIntent =
-		ctx.captureLifecycleFocusIntent?.( record ) ?? null;
-	try {
-		const response = await runWithEditorsLocked( ctx, async () => {
-			const archived = await apiFetch( {
+	const result = await runDocumentLifecycle( record, ctx, {
+		request: () =>
+			apiFetch( {
 				path: `/cortext/v1/documents/${ record.id }/archive`,
 				method: 'POST',
-			} );
-			await syncLifecycleRecordsForEditors( archived, ctx, 'archived' );
-			return archived;
-		} );
-		if ( response === false ) {
-			ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
-			ctx.createErrorNotice?.( archiveSaveFailureMessage(), {
-				id: 'cortext-document-archive-save-error',
-				type: 'snackbar',
-			} );
-			return null;
-		}
-		invalidateDocumentLifecycle( ctx );
-		notifyDocumentArchiveChanged( { action: 'archive' } );
-		ctx.onAfterArchive?.( { record, response, lifecycleFocusIntent } );
-		return response;
-	} catch ( error ) {
-		ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
-		throw error;
+			} ),
+		cascadeKey: 'archived',
+		saveFailureMessage: archiveSaveFailureMessage(),
+		noticeId: 'cortext-document-archive-save-error',
+	} );
+	if ( ! result ) {
+		return null;
 	}
+	const { response, lifecycleFocusIntent } = result;
+	invalidateDocumentLifecycle( ctx );
+	notifyDocumentArchiveChanged( { action: 'archive' } );
+	ctx.onAfterArchive?.( { record, response, lifecycleFocusIntent } );
+	return response;
 }
 
 export async function unarchiveDocument( record, ctx ) {
