@@ -49,6 +49,12 @@ final class TrashCascade {
 	 */
 	public const COLLECTION_MARKER_META = '_cortext_trashed_by_collection';
 
+	/**
+	 * User who moved the document to trash. Cascaded children record the
+	 * same user as their root.
+	 */
+	public const TRASHED_BY_USER_META = '_cortext_trashed_by_user';
+
 	private const ACTIVE_STATUSES = array( 'publish', 'private', 'draft', 'pending', 'future', 'auto-draft', Documents::STATUS_ARCHIVED );
 
 	private DocumentCascade $cascade;
@@ -145,6 +151,12 @@ final class TrashCascade {
 	 * @param int $post_id Document id that was just moved to trash.
 	 */
 	public function on_trash( int $post_id ): void {
+		if ( Document::POST_TYPE !== get_post_type( $post_id ) ) {
+			return;
+		}
+
+		update_post_meta( $post_id, self::TRASHED_BY_USER_META, get_current_user_id() );
+
 		$this->cascade->cascade(
 			$post_id,
 			static function ( int $child_id ): void {
@@ -161,6 +173,8 @@ final class TrashCascade {
 	 * @param int $post_id Document id that was just restored.
 	 */
 	public function on_restore( int $post_id ): void {
+		delete_post_meta( $post_id, self::TRASHED_BY_USER_META );
+
 		$this->cascade->restore(
 			$post_id,
 			static function ( int $child_id ): void {

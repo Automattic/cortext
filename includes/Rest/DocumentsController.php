@@ -147,6 +147,18 @@ final class DocumentsController {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/documents/empty-trash',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'empty_trash' ),
+					'permission_callback' => array( $this, 'can_empty_trash' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/documents/(?P<id>\d+)/duplicate',
 			array(
 				array(
@@ -405,29 +417,12 @@ final class DocumentsController {
 			);
 		}
 
-		// Hook deleted_post so the response includes every id that
-		// disappeared during this request: explicit page descendants, the
-		// document itself, and posts removed by other cascades (collection
-		// rows or owned collections deleted on before_delete_post).
-		$deleted = array();
-		$capture = static function ( $deleted_post_id ) use ( &$deleted ): void {
-			$deleted[] = (int) $deleted_post_id;
-		};
-		add_action( 'deleted_post', $capture );
-
-		try {
-			// Page descendants are deleted leaves-first so WordPress's
-			// hierarchical delete reparenting has no non-leaf pages left to
-			// move.
-			$descendants = $this->cascade->descendants_for_root( $id );
-			foreach ( array_reverse( $descendants ) as $descendant_id ) {
-				wp_delete_post( $descendant_id, true );
+		$root_deleted = false;
+		$deleted      = $this->capture_deleted_ids(
+			function () use ( $id, &$root_deleted ): void {
+				$root_deleted = $this->delete_trashed_tree( $id );
 			}
-
-			$root_deleted = wp_delete_post( $id, true );
-		} finally {
-			remove_action( 'deleted_post', $capture );
-		}
+		);
 
 		if ( ! $root_deleted ) {
 			return new WP_Error(
@@ -439,10 +434,112 @@ final class DocumentsController {
 
 		return new WP_REST_Response(
 			array(
-				'deleted' => array_values( array_unique( $deleted ) ),
+				'deleted' => $deleted,
 			),
 			200
 		);
+	}
+
+	public function can_empty_trash(): bool {
+		return current_user_can( 'delete_posts' );
+	}
+
+	/**
+	 * Permanently deletes every trashed document the current user may delete.
+	 * Works root by root, so each cascade is deleted the same way as a single
+	 * permanent delete. Like that endpoint, the capability check covers the
+	 * roots, not each descendant a root's cascade marked.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function empty_trash(): WP_REST_Response {
+		$deletable_ids = array_values(
+			array_filter(
+				array_map(
+					'intval',
+					get_posts(
+						array(
+							'post_type'      => Document::POST_TYPE,
+							'post_status'    => Documents::STATUS_TRASH,
+							'fields'         => 'ids',
+							'posts_per_page' => -1,
+							'no_found_rows'  => true,
+						)
+					)
+				),
+				static fn( int $post_id ): bool => current_user_can( 'delete_post', $post_id )
+			)
+		);
+		$deletable     = array_flip( $deletable_ids );
+
+		// A document is a root unless its marker points at another document
+		// this user can delete, which takes it along. When the marker points
+		// at someone else's document, the user's own document is a root.
+		$root_ids = array_filter(
+			$deletable_ids,
+			static function ( int $post_id ) use ( $deletable ): bool {
+				foreach ( array( TrashCascade::PARENT_MARKER_META, TrashCascade::COLLECTION_MARKER_META ) as $marker ) {
+					if ( isset( $deletable[ (int) get_post_meta( $post_id, $marker, true ) ] ) ) {
+						return false;
+					}
+				}
+				return true;
+			}
+		);
+
+		$deleted = $this->capture_deleted_ids(
+			function () use ( $root_ids ): void {
+				foreach ( $root_ids as $root_id ) {
+					// An earlier root may have taken this one with it, e.g.
+					// a collection deletes all of its rows.
+					if ( Documents::STATUS_TRASH === get_post_status( $root_id ) ) {
+						$this->delete_trashed_tree( $root_id );
+					}
+				}
+			}
+		);
+
+		return new WP_REST_Response( array( 'deleted' => $deleted ), 200 );
+	}
+
+	/**
+	 * Deletes a trashed document and the descendants its trash cascade marked.
+	 * Descendants go leaves-first so WordPress's hierarchical delete
+	 * reparenting has no non-leaf pages left to move.
+	 *
+	 * @param int $root_id Trashed document.
+	 * @return bool Whether the root itself was deleted.
+	 */
+	private function delete_trashed_tree( int $root_id ): bool {
+		foreach ( array_reverse( $this->cascade->descendants_for_root( $root_id ) ) as $descendant_id ) {
+			wp_delete_post( $descendant_id, true );
+		}
+
+		return (bool) wp_delete_post( $root_id, true );
+	}
+
+	/**
+	 * Runs a delete and returns every post id that disappeared while it ran:
+	 * explicit descendants, the roots, and posts removed by other cascades
+	 * (collection rows or owned collections deleted on `before_delete_post`).
+	 *
+	 * @param callable $delete Performs the deletes.
+	 * @return int[]
+	 */
+	private function capture_deleted_ids( callable $delete ): array {
+		$deleted = array();
+		$capture = static function ( $deleted_post_id ) use ( &$deleted ): void {
+			$deleted[] = (int) $deleted_post_id;
+		};
+		add_action( 'deleted_post', $capture );
+
+		try {
+			$delete();
+		} finally {
+			remove_action( 'deleted_post', $capture );
+		}
+
+		return array_values( array_unique( $deleted ) );
 	}
 
 	/**
