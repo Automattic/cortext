@@ -87,7 +87,7 @@ final class Document {
 			'cortext_defines_trait',
 			array(
 				'get_callback' => static function ( array $record ): bool {
-					return in_array( (int) $record['id'], TraitTaxonomy::all_trait_ids(), true );
+					return TraitTaxonomy::is_trait_id( (int) $record['id'] );
 				},
 				'schema'       => array(
 					'type'     => 'boolean',

@@ -173,9 +173,29 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$callback      = $fields['cortext_defines_trait']['get_callback'];
 		$collection_id = $this->create_collection();
 		$page_id       = $this->create_document();
+		$row_id        = $this->create_document();
+		wp_set_object_terms( $row_id, array( TraitTaxonomy::term_id_for_trait( $collection_id ) ), TraitTaxonomy::TAXONOMY );
 
 		$this->assertTrue( $callback( array( 'id' => $collection_id ) ) );
 		$this->assertFalse( $callback( array( 'id' => $page_id ) ) );
+		$this->assertFalse( $callback( array( 'id' => $row_id ) ) );
+	}
+
+	public function test_defines_trait_rest_field_follows_mirror_term_changes_in_the_same_request(): void {
+		( new Document() )->register_rest_fields();
+		$callback = $GLOBALS['wp_rest_additional_fields'][ Document::POST_TYPE ]['cortext_defines_trait']['get_callback'];
+
+		$collection_id = $this->create_collection();
+		$page_id       = $this->create_document();
+		$this->assertTrue( $callback( array( 'id' => $collection_id ) ) );
+		$this->assertFalse( $callback( array( 'id' => $page_id ) ) );
+
+		( new TraitTaxonomy() )->ensure_mirror_term( $page_id );
+		$this->assertTrue( $callback( array( 'id' => $page_id ) ), 'A term created mid-request is seen on the next read.' );
+
+		wp_delete_term( TraitTaxonomy::term_id_for_trait( $collection_id ), TraitTaxonomy::TAXONOMY );
+		$this->assertFalse( $callback( array( 'id' => $collection_id ) ), 'A term deleted mid-request is seen on the next read.' );
+		$this->assertTrue( $callback( array( 'id' => $page_id ) ) );
 	}
 
 	public function test_tree_children_rest_field_marks_parents_with_visible_children(): void {

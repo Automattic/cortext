@@ -57,6 +57,17 @@ final class TraitTaxonomy {
 	 */
 	private static array $wordbless_order = array();
 
+	/**
+	 * Collection ids as keys, memoized for one generation of the term cache.
+	 * `salt` is the `terms` last-changed value the set was built under.
+	 *
+	 * @var array{salt:string,ids:array<int,true>}
+	 */
+	private static array $trait_id_set = array(
+		'salt' => '',
+		'ids'  => array(),
+	);
+
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_taxonomy' ) );
 		// A document becomes a collection when its `cortext_fields` meta has
@@ -167,11 +178,36 @@ final class TraitTaxonomy {
 	/**
 	 * Document ids of every collection. Each `crtxt_trait` term is a
 	 * collection, so the term slugs (which are document ids) are the full list.
-	 * `get_terms` is cached by WP, so callers can treat this as a single query.
 	 *
 	 * @return int[]
 	 */
 	public static function all_trait_ids(): array {
+		return array_keys( self::trait_id_set() );
+	}
+
+	/**
+	 * Whether a document is a collection, by lookup in the memoized set, so a
+	 * list of records costs one term query instead of one per record.
+	 *
+	 * @param int $document_id Document post id.
+	 */
+	public static function is_trait_id( int $document_id ): bool {
+		return isset( self::trait_id_set()[ $document_id ] );
+	}
+
+	/**
+	 * Collection ids as keys. A cache hit on `get_terms` still builds a term
+	 * object per collection, so the set is kept until the `terms` last-changed
+	 * value moves. WP bumps it on every term insert, delete and relationship
+	 * write, the same signal that invalidates its own term query cache.
+	 *
+	 * @return array<int,true>
+	 */
+	private static function trait_id_set(): array {
+		$salt = wp_cache_get_last_changed( 'terms' );
+		if ( $salt === self::$trait_id_set['salt'] ) {
+			return self::$trait_id_set['ids'];
+		}
 		$slugs = get_terms(
 			array(
 				'taxonomy'   => self::TAXONOMY,
@@ -179,15 +215,23 @@ final class TraitTaxonomy {
 				'fields'     => 'slugs',
 			)
 		);
+		// Registering the taxonomy does not move the salt, so an early
+		// `invalid_taxonomy` error must not be kept.
 		if ( is_wp_error( $slugs ) ) {
 			return array();
 		}
-		return array_values(
-			array_filter(
-				array_map( array( self::class, 'trait_id_from_slug' ), $slugs ),
-				static fn( int $id ): bool => $id > 0
-			)
+		$ids = array();
+		foreach ( $slugs as $slug ) {
+			$id = self::trait_id_from_slug( (string) $slug );
+			if ( $id > 0 ) {
+				$ids[ $id ] = true;
+			}
+		}
+		self::$trait_id_set = array(
+			'salt' => $salt,
+			'ids'  => $ids,
 		);
+		return $ids;
 	}
 
 	/**
