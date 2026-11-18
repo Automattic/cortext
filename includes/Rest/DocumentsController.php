@@ -326,8 +326,9 @@ final class DocumentsController {
 		$post = get_post( $id );
 		return new WP_REST_Response(
 			array(
-				'restored' => $restored,
-				'post'     => $post instanceof WP_Post ? $this->prepared_post( $post ) : null,
+				'restored'  => $restored,
+				'published' => $this->published_ids( $restored ),
+				'post'      => $post instanceof WP_Post ? $this->prepared_post( $post ) : null,
 			),
 			200
 		);
@@ -381,10 +382,12 @@ final class DocumentsController {
 			}
 		}
 
+		$restored = array_values( array_unique( array_merge( array( $id ), $revived ) ) );
 		return new WP_REST_Response(
 			array(
-				'restored' => array_values( array_unique( array_merge( array( $id ), $revived ) ) ),
-				'post'     => $this->prepared_post( $post ),
+				'restored'  => $restored,
+				'published' => $this->published_ids( $restored ),
+				'post'      => $this->prepared_post( $post ),
 			),
 			200
 		);
@@ -713,6 +716,21 @@ final class DocumentsController {
 		};
 		$walk( parse_blocks( $content ) );
 		return $found;
+	}
+
+	/**
+	 * Returns the given document IDs whose status is `publish`.
+	 *
+	 * @param int[] $ids Document IDs.
+	 * @return int[]
+	 */
+	private function published_ids( array $ids ): array {
+		return array_values(
+			array_filter(
+				$ids,
+				static fn( int $post_id ): bool => 'publish' === get_post_status( $post_id )
+			)
+		);
 	}
 
 	/**

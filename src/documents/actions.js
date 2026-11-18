@@ -74,7 +74,32 @@ function invalidateDocumentLifecycle( ctx ) {
 	notifyCollectionRowsChanged();
 }
 
-export function restoredDocumentStatusMessage( status ) {
+export function restoredDocumentStatusMessage(
+	status,
+	publicDescendantCount = 0
+) {
+	const message = restoredRootStatusMessage( status );
+	if ( publicDescendantCount < 1 ) {
+		return message;
+	}
+
+	return `${ message } ${ sprintf(
+		/* translators: %d: number of nested documents that are public again */
+		_n(
+			'%d nested document is public again.',
+			'%d nested documents are public again.',
+			publicDescendantCount,
+			'cortext'
+		),
+		publicDescendantCount
+	) }`;
+}
+
+function restoredRootStatusMessage( status ) {
+	if ( status === 'crtxt_archived' ) {
+		return __( 'Document restored to Archived.', 'cortext' );
+	}
+
 	if ( status === 'publish' ) {
 		return __(
 			'Document restored as published and is public again.',
@@ -98,6 +123,22 @@ export function restoredDocumentStatusMessage( status ) {
 		/* translators: %s: restored document status, such as published or private */
 		__( 'Document restored as %s.', 'cortext' ),
 		label
+	);
+}
+
+function notifyRestored( response, ctx, noticeId ) {
+	const publicDescendantCount = ( response?.published ?? [] ).filter(
+		( id ) => id !== response?.post?.id
+	).length;
+	ctx.createSuccessNotice?.(
+		restoredDocumentStatusMessage(
+			response?.post?.status,
+			publicDescendantCount
+		),
+		{
+			id: noticeId,
+			type: 'snackbar',
+		}
 	);
 }
 
@@ -304,6 +345,7 @@ export async function restoreDocument( record, ctx ) {
 	notifyDocumentTrashChanged();
 	notifyDocumentArchiveChanged( { action: 'restore' } );
 	notifyCollectionRowsChanged();
+	notifyRestored( response, ctx, 'cortext-document-restore-success' );
 	return response;
 }
 
@@ -336,13 +378,7 @@ export async function unarchiveDocument( record, ctx ) {
 	syncLifecycleEntityRecords( response, ctx, 'restored' );
 	invalidateDocumentLifecycle( ctx );
 	notifyDocumentArchiveChanged( { action: 'unarchive' } );
-	ctx.createSuccessNotice?.(
-		restoredDocumentStatusMessage( response?.post?.status ),
-		{
-			id: 'cortext-document-unarchive-success',
-			type: 'snackbar',
-		}
-	);
+	notifyRestored( response, ctx, 'cortext-document-unarchive-success' );
 	return response;
 }
 

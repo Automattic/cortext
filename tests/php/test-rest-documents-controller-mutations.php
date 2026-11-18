@@ -106,9 +106,42 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data();
 		$this->assertEqualsCanonicalizing( array( $parent_id, $child_id ), $data['restored'] );
+		$this->assertSame( array( $child_id ), $data['published'] );
 		$this->assertSame( 'private', get_post_status( $parent_id ) );
 		$this->assertSame( 'publish', get_post_status( $child_id ) );
 		$this->assertSame( 'private', $data['post']['status'] );
+	}
+
+	public function test_unarchive_lists_a_published_root_with_its_published_descendants(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id = $this->create_page();
+		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$draft_id  = $this->create_page(
+			array(
+				'post_parent' => $parent_id,
+				'post_status' => 'draft',
+			)
+		);
+		$this->archive( $parent_id );
+
+		$data = $this->unarchive( $parent_id )->get_data();
+
+		$this->assertEqualsCanonicalizing( array( $parent_id, $child_id, $draft_id ), $data['restored'] );
+		$this->assertEqualsCanonicalizing( array( $parent_id, $child_id ), $data['published'] );
+	}
+
+	public function test_unarchive_lists_nothing_published_when_no_restored_document_is_public(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_id = $this->create_full_page_collection( 'private-rows' );
+		$row_id        = $this->create_row( $collection_id );
+		$this->archive( $collection_id );
+
+		$data = $this->unarchive( $collection_id )->get_data();
+
+		$this->assertEqualsCanonicalizing( array( $collection_id, $row_id ), $data['restored'] );
+		$this->assertSame( array(), $data['published'] );
 	}
 
 	public function test_updating_status_through_core_rest_archives_document_tree(): void {
@@ -767,6 +800,40 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertContains( $parent_id, $restored );
 		$this->assertContains( $child_id, $restored );
 		$this->assertContains( $grandchild_id, $restored );
+	}
+
+	public function test_restore_lists_the_restored_documents_that_are_published_again(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id = $this->create_page( array( 'post_status' => 'private' ) );
+		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$draft_id  = $this->create_page(
+			array(
+				'post_parent' => $parent_id,
+				'post_status' => 'draft',
+			)
+		);
+		wp_trash_post( $parent_id );
+
+		$data = $this->restore( $parent_id )->get_data();
+
+		$this->assertEqualsCanonicalizing( array( $parent_id, $child_id, $draft_id ), $data['restored'] );
+		$this->assertSame( array( $child_id ), $data['published'] );
+	}
+
+	public function test_restore_lists_nothing_published_when_documents_return_to_archived(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id = $this->create_page();
+		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$this->archive( $parent_id );
+		wp_trash_post( $parent_id );
+
+		$data = $this->restore( $parent_id )->get_data();
+
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $parent_id ) );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $child_id ) );
+		$this->assertSame( array(), $data['published'] );
 	}
 
 	public function test_restore_omits_descendants_that_were_independently_trashed(): void {

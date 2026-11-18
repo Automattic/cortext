@@ -375,7 +375,11 @@ describe( 'document archive lifecycle', () => {
 			DOCUMENT_ARCHIVE_CHANGED_EVENT,
 			onArchiveChanged
 		);
-		apiFetch.mockResolvedValue( { restored: [ 9 ], post } );
+		apiFetch.mockResolvedValue( {
+			restored: [ 9 ],
+			published: [ 9 ],
+			post,
+		} );
 
 		try {
 			await unarchiveDocument( { id: 9 }, ctx );
@@ -401,6 +405,58 @@ describe( 'document archive lifecycle', () => {
 		);
 		expect( ctx.setFavorites ).not.toHaveBeenCalled();
 	} );
+
+	it.each( [
+		[
+			'a private root with one published descendant',
+			{
+				restored: [ 9, 10, 11 ],
+				published: [ 10 ],
+				post: { id: 9, status: 'private' },
+			},
+			'Document restored as private. 1 nested document is public again.',
+		],
+		[
+			'a private root with several published descendants',
+			{
+				restored: [ 9, 10, 11 ],
+				published: [ 10, 11 ],
+				post: { id: 9, status: 'private' },
+			},
+			'Document restored as private. 2 nested documents are public again.',
+		],
+		[
+			'a published root with published descendants',
+			{
+				restored: [ 9, 10, 11 ],
+				published: [ 9, 10, 11 ],
+				post: { id: 9, status: 'publish' },
+			},
+			'Document restored as published and is public again. 2 nested documents are public again.',
+		],
+		[
+			'a root with no published descendants',
+			{
+				restored: [ 9, 10 ],
+				published: [],
+				post: { id: 9, status: 'private' },
+			},
+			'Document restored as private.',
+		],
+	] )(
+		'says which restored documents are public again for %s',
+		async ( _label, response, message ) => {
+			const ctx = makeCtx();
+			apiFetch.mockResolvedValue( response );
+
+			await unarchiveDocument( { id: 9 }, ctx );
+
+			expect( ctx.createSuccessNotice ).toHaveBeenCalledWith( message, {
+				id: 'cortext-document-unarchive-success',
+				type: 'snackbar',
+			} );
+		}
+	);
 
 	it( 'refreshes Archived when an archived document moves to Trash', async () => {
 		const ctx = makeCtx();
@@ -625,7 +681,57 @@ describe( 'document archive lifecycle', () => {
 			'crtxt_document',
 			[ { id: 9, status: 'crtxt_archived' } ]
 		);
+		expect( ctx.createSuccessNotice ).toHaveBeenCalledWith(
+			'Document restored to Archived.',
+			{
+				id: 'cortext-document-restore-success',
+				type: 'snackbar',
+			}
+		);
 	} );
+
+	it.each( [
+		[
+			'a private root with a published descendant',
+			{
+				restored: [ 9, 10 ],
+				published: [ 10 ],
+				post: { id: 9, status: 'private' },
+			},
+			'Document restored as private. 1 nested document is public again.',
+		],
+		[
+			'a published root with published descendants',
+			{
+				restored: [ 9, 10, 11 ],
+				published: [ 9, 10, 11 ],
+				post: { id: 9, status: 'publish' },
+			},
+			'Document restored as published and is public again. 2 nested documents are public again.',
+		],
+		[
+			'a root with no published descendants',
+			{
+				restored: [ 9, 10 ],
+				published: [],
+				post: { id: 9, status: 'draft' },
+			},
+			'Document restored as draft.',
+		],
+	] )(
+		'says which documents restored from Trash are public again for %s',
+		async ( _label, response, message ) => {
+			const ctx = makeCtx();
+			apiFetch.mockResolvedValue( response );
+
+			await restoreDocument( { id: 9 }, ctx );
+
+			expect( ctx.createSuccessNotice ).toHaveBeenCalledWith( message, {
+				id: 'cortext-document-restore-success',
+				type: 'snackbar',
+			} );
+		}
+	);
 
 	it( 'invalidates every cached descendant restored from Trash', async () => {
 		const ctx = makeCtx();
