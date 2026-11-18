@@ -1,6 +1,7 @@
 import { __, sprintf } from '@wordpress/i18n';
 import {
 	Button,
+	ComboboxControl,
 	Notice,
 	SelectControl,
 	TextControl,
@@ -11,7 +12,8 @@ import { useEffect, useMemo, useState } from '@wordpress/element';
 
 import './AddFieldPopover.scss';
 
-import { COLLECTION_QUERY } from '../../collections';
+import { DOCUMENT_POST_TYPE } from '../../collections';
+import useCollectionSearch from '../../hooks/useCollectionSearch';
 import { buildFieldListQuery } from '../../hooks/useCollectionFields';
 import { useCollectionFieldsContext } from '../CollectionFieldsContext';
 import { useCreateField } from '../../hooks/useFieldMutations';
@@ -77,7 +79,6 @@ function rollupAggregatorOptionsForTarget( type ) {
 
 function RelationConfig( {
 	collectionId,
-	collections,
 	title,
 	fallbackTitle,
 	isBusy,
@@ -86,25 +87,33 @@ function RelationConfig( {
 	onError,
 	run,
 } ) {
-	const [ targetCollectionId, setTargetCollectionId ] = useState( '' );
+	const [ target, setTarget ] = useState( null );
+	const [ targetSearch, setTargetSearch ] = useState( '' );
 	const [ relationMultiple, setRelationMultiple ] = useState( true );
 	const [ reverseTitle, setReverseTitle ] = useState( '' );
 	const [ reverseMultiple, setReverseMultiple ] = useState( true );
 	const [ showReverseOptions, setShowReverseOptions ] = useState( true );
+	const targetCollectionId = target?.value ?? '';
 
-	const options = useMemo(
-		() => [
-			{ value: '', label: __( 'Choose collection…', 'cortext' ) },
-			...( collections ?? [] ).map( ( collection ) => ( {
-				value: String( collection.id ),
-				label: titleOf( collection ),
-			} ) ),
-		],
-		[ collections ]
-	);
+	const { records: matches, isResolving: isSearching } =
+		useCollectionSearch( targetSearch );
+	const options = useMemo( () => {
+		const found = ( matches ?? [] ).map( ( collection ) => ( {
+			value: String( collection.id ),
+			label: titleOf( collection ),
+		} ) );
+		// Keep the chosen collection listed after a later search drops it, so
+		// the combobox can still show its label.
+		if ( target && ! found.some( ( o ) => o.value === target.value ) ) {
+			found.unshift( target );
+		}
+		return found;
+	}, [ matches, target ] );
 
-	const sourceCollection = collections?.find(
-		( collection ) => collection.id === collectionId
+	const { record: sourceCollection } = useEntityRecord(
+		'postType',
+		DOCUMENT_POST_TYPE,
+		collectionId
 	);
 	const defaultReverseTitle = sourceCollection
 		? sprintf(
@@ -138,12 +147,19 @@ function RelationConfig( {
 
 	return (
 		<div className="cortext-add-field-popover__config">
-			<SelectControl
+			<ComboboxControl
 				label={ __( 'Related to', 'cortext' ) }
+				placeholder={ __( 'Choose collection…', 'cortext' ) }
 				value={ targetCollectionId }
 				options={ options }
-				onChange={ setTargetCollectionId }
-				disabled={ isBusy }
+				onChange={ ( value ) =>
+					setTarget(
+						options.find( ( option ) => option.value === value ) ??
+							null
+					)
+				}
+				onFilterValueChange={ setTargetSearch }
+				isLoading={ isSearching }
 				__nextHasNoMarginBottom
 			/>
 			<SelectControl
@@ -434,11 +450,6 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 	const [ configType, setConfigType ] = useState( null );
 
 	const { run, isBusy, error } = useCreateField( collectionId );
-	const { records: collections } = useEntityRecords(
-		'postType',
-		'crtxt_document',
-		COLLECTION_QUERY
-	);
 
 	const submit = async ( chosenType ) => {
 		if ( isBusy ) {
@@ -503,7 +514,6 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 		configuration = (
 			<RelationConfig
 				collectionId={ collectionId }
-				collections={ collections ?? [] }
 				title={ title }
 				fallbackTitle={ fallbackTitle }
 				isBusy={ isBusy }

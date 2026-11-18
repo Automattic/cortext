@@ -1,5 +1,10 @@
 import { __ } from '@wordpress/i18n';
-import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
+import {
+	store as coreStore,
+	useEntityRecord,
+	useEntityRecords,
+} from '@wordpress/core-data';
+import { useSelect } from '@wordpress/data';
 import { useNavigate } from '@tanstack/react-router';
 import { useCallback, useMemo } from '@wordpress/element';
 
@@ -35,14 +40,15 @@ function traitTermIdOf( record ) {
 // Walks one step up the breadcrumb chain. A document's parent is the
 // collection that owns its trait term (if any), then its `post_parent` (if
 // any). Collections, pages, and rows all use the same rule; the difference is
-// which slots are filled.
-function parentOf( record, byId, collectionsByTerm ) {
+// which slots are filled. `lookup` answers from the cached lists first and
+// falls back to a single-record fetch for anything past their first page.
+function parentOf( record, lookup ) {
 	const traitTermId = traitTermIdOf( record );
 	if ( traitTermId > 0 ) {
-		return collectionsByTerm.get( traitTermId ) ?? null;
+		return lookup.collectionForTerm( traitTermId );
 	}
 	if ( record?.parent ) {
-		return byId.get( record.parent ) ?? null;
+		return lookup.document( record.parent );
 	}
 	return null;
 }
@@ -91,20 +97,13 @@ export default function useBreadcrumbSegments( paintedDocumentId ) {
 		return map;
 	}, [ activePages, allCollections ] );
 
-	const collectionsByTerm = useMemo( () => {
-		const map = new Map();
-		( traitTerms ?? [] ).forEach( ( term ) => {
-			const collectionId = Number( term.slug );
-			if ( ! Number.isFinite( collectionId ) || collectionId < 1 ) {
-				return;
-			}
-			const collection = documentsById.get( collectionId );
-			if ( collection ) {
-				map.set( Number( term.id ), collection );
-			}
-		} );
-		return map;
-	}, [ traitTerms, documentsById ] );
+	const termsById = useMemo(
+		() =>
+			new Map(
+				( traitTerms ?? [] ).map( ( term ) => [ term.id, term ] )
+			),
+		[ traitTerms ]
+	);
 
 	const goToDocument = useCallback(
 		( target ) => {
@@ -116,34 +115,59 @@ export default function useBreadcrumbSegments( paintedDocumentId ) {
 		[ navigate ]
 	);
 
-	return useMemo( () => {
-		if ( ! documentId || ! document ) {
-			return [];
-		}
-
-		const chain = [];
-		const seen = new Set();
-		let cursor = documentsById.get( documentId ) ?? document;
-		while ( cursor && ! seen.has( cursor.id ) ) {
-			seen.add( cursor.id );
-			chain.unshift( cursor );
-			cursor = parentOf( cursor, documentsById, collectionsByTerm );
-		}
-
-		return chain.map( ( node, index ) => {
-			const isCurrent = index === chain.length - 1;
-			return {
-				key: `document:${ node.id }`,
-				label: titleOf( node ),
-				onClick: isCurrent ? null : () => goToDocument( node ),
-				isCurrent,
+	// Walk the chain inside `useSelect` so a hop missing from the cached lists
+	// (more than 100 collections, terms, or documents) resolves by id. Those
+	// single-record fetches are not invalidated by document saves, unlike the
+	// lists, so they stay cached once loaded.
+	const chain = useSelect(
+		( select ) => {
+			if ( ! documentId || ! document ) {
+				return [];
+			}
+			const { getEntityRecord } = select( coreStore );
+			const lookupDocument = ( id ) =>
+				documentsById.get( id ) ??
+				getEntityRecord( 'postType', DOCUMENT_POST_TYPE, id ) ??
+				null;
+			const lookup = {
+				document: lookupDocument,
+				collectionForTerm: ( termId ) => {
+					const term =
+						termsById.get( termId ) ??
+						getEntityRecord( 'taxonomy', TRAIT_TAXONOMY, termId, {
+							context: TRAIT_TERMS_QUERY.context,
+						} );
+					const collectionId = Number( term?.slug );
+					return collectionId > 0
+						? lookupDocument( collectionId )
+						: null;
+				},
 			};
-		} );
-	}, [
-		documentId,
-		document,
-		documentsById,
-		collectionsByTerm,
-		goToDocument,
-	] );
+
+			const nodes = [];
+			const seen = new Set();
+			let cursor = documentsById.get( documentId ) ?? document;
+			while ( cursor && ! seen.has( cursor.id ) ) {
+				seen.add( cursor.id );
+				nodes.unshift( cursor );
+				cursor = parentOf( cursor, lookup );
+			}
+			return nodes;
+		},
+		[ documentId, document, documentsById, termsById ]
+	);
+
+	return useMemo(
+		() =>
+			chain.map( ( node, index ) => {
+				const isCurrent = index === chain.length - 1;
+				return {
+					key: `document:${ node.id }`,
+					label: titleOf( node ),
+					onClick: isCurrent ? null : () => goToDocument( node ),
+					isCurrent,
+				};
+			} ),
+		[ chain, goToDocument ]
+	);
 }

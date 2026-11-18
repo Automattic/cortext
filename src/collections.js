@@ -24,3 +24,22 @@ export const COLLECTION_QUERY = {
 };
 
 export const FULL_PAGE_COLLECTION_QUERY = COLLECTION_QUERY;
+
+/**
+ * Query for collection pickers. Searches on the server so collections past
+ * the first page stay reachable, and asks only for `id` and `title`: `meta`
+ * is what makes the shared collections list expensive to refetch. A search
+ * matches titles only, because every collection's content holds block markup
+ * that would match words like "view" or "data".
+ *
+ * @param {string} search Search term; empty lists the first page.
+ * @return {Object} REST query for `getEntityRecords`.
+ */
+export function collectionSearchQuery( search ) {
+	const query = { ...COLLECTION_QUERY, _fields: 'id,title' };
+	if ( search ) {
+		query.search = search;
+		query.search_columns = [ 'post_title' ];
+	}
+	return query;
+}
