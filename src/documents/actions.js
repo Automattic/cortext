@@ -58,6 +58,16 @@ export function syncLifecycleEntityRecords( response, ctx, cascadeKey ) {
 	} );
 }
 
+// Syncs the lifecycle response and waits for the open editors among the
+// cascaded documents to reload, so none of them unlocks on its old status.
+async function syncLifecycleRecordsForEditors( response, ctx, cascadeKey ) {
+	syncLifecycleEntityRecords( response, ctx, cascadeKey );
+	const cascadeIds = response?.[ cascadeKey ];
+	if ( Array.isArray( cascadeIds ) && cascadeIds.length > 0 ) {
+		await ctx.waitForOpenDocuments?.( cascadeIds );
+	}
+}
+
 function invalidateDocumentLifecycle( ctx ) {
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
 	notifySidebarTreeChanged();
@@ -93,6 +103,28 @@ export function restoredDocumentStatusMessage( status ) {
 
 export function archiveSaveFailureMessage() {
 	return __( 'Could not save changes. Archive was canceled.', 'cortext' );
+}
+
+export function trashSaveFailureMessage() {
+	return __(
+		'Could not save changes. Move to Trash was canceled.',
+		'cortext'
+	);
+}
+
+// Saves the open editors, then runs `request` while they stay read-only, so
+// nothing typed during an archive or trash is lost when the status changes.
+// Resolves false without running `request` when the save fails.
+export async function runWithEditorsLocked( ctx, request ) {
+	const unlock = ctx.lockEditors?.();
+	try {
+		if ( ( await ctx.flushActiveEditor?.() ) === false ) {
+			return false;
+		}
+		return await request();
+	} finally {
+		unlock?.();
+	}
 }
 
 // Pure create: saves the new document and refreshes the lists. Post-create
@@ -204,11 +236,26 @@ export async function trashDocument( record, ctx ) {
 	const lifecycleFocusIntent =
 		ctx.captureLifecycleFocusIntent?.( record ) ?? null;
 	try {
-		const deleted = await apiFetch( {
-			path: `/wp/v2/crtxt_documents/${ record.id }`,
-			method: 'DELETE',
+		const deleted = await runWithEditorsLocked( ctx, async () => {
+			const response = await apiFetch( {
+				path: `/wp/v2/crtxt_documents/${ record.id }`,
+				method: 'DELETE',
+			} );
+			await syncLifecycleRecordsForEditors(
+				response,
+				ctx,
+				'cascade_deleted'
+			);
+			return response;
 		} );
-		syncLifecycleEntityRecords( deleted, ctx, 'cascade_deleted' );
+		if ( deleted === false ) {
+			ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
+			ctx.createErrorNotice?.( trashSaveFailureMessage(), {
+				id: 'cortext-document-trash-save-error',
+				type: 'snackbar',
+			} );
+			return null;
+		}
 		applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
 		notifySidebarTreeChanged();
 		notifyDocumentTrashChanged();
@@ -226,6 +273,7 @@ export async function trashDocument( record, ctx ) {
 			)
 		);
 		ctx.onAfterTrash?.( { record, lifecycleFocusIntent } );
+		return deleted;
 	} catch ( error ) {
 		ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
 		throw error;
@@ -250,8 +298,15 @@ export async function archiveDocument( record, ctx ) {
 	const lifecycleFocusIntent =
 		ctx.captureLifecycleFocusIntent?.( record ) ?? null;
 	try {
-		const didFlush = await ctx.flushActiveEditor?.();
-		if ( didFlush === false ) {
+		const response = await runWithEditorsLocked( ctx, async () => {
+			const archived = await apiFetch( {
+				path: `/cortext/v1/documents/${ record.id }/archive`,
+				method: 'POST',
+			} );
+			await syncLifecycleRecordsForEditors( archived, ctx, 'archived' );
+			return archived;
+		} );
+		if ( response === false ) {
 			ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
 			ctx.createErrorNotice?.( archiveSaveFailureMessage(), {
 				id: 'cortext-document-archive-save-error',
@@ -259,11 +314,6 @@ export async function archiveDocument( record, ctx ) {
 			} );
 			return null;
 		}
-		const response = await apiFetch( {
-			path: `/cortext/v1/documents/${ record.id }/archive`,
-			method: 'POST',
-		} );
-		syncLifecycleEntityRecords( response, ctx, 'archived' );
 		invalidateDocumentLifecycle( ctx );
 		notifyDocumentArchiveChanged( { action: 'archive' } );
 		ctx.onAfterArchive?.( { record, response, lifecycleFocusIntent } );

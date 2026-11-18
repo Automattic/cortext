@@ -60,6 +60,7 @@ import {
 	archiveDocument,
 	archiveSaveFailureMessage,
 	trashDocument,
+	trashSaveFailureMessage,
 } from '../documents/actions';
 import { useActiveEditor } from './ActiveEditorContext';
 
@@ -504,7 +505,8 @@ export function PageActionsPanel( { postId } ) {
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( coreStore );
 	const { home, setHome, isUpdating: isHomeUpdating } = useWorkspaceHome();
-	const { flushActiveEditor } = useActiveEditor();
+	const { flushActiveEditor, lockEditors, waitForOpenDocuments } =
+		useActiveEditor();
 	const {
 		favorites,
 		setFavorites,
@@ -553,15 +555,21 @@ export function PageActionsPanel( { postId } ) {
 		setError( null );
 		setIsTrashing( true );
 		try {
-			await trashDocument(
+			const response = await trashDocument(
 				{ id: postId },
 				{
+					flushActiveEditor,
+					lockEditors,
+					waitForOpenDocuments,
 					invalidateResolution,
 					receiveEntityRecords,
 					setFavorites,
 					onFavoritesError: setError,
 				}
 			);
+			if ( response === null ) {
+				setError( trashSaveFailureMessage() );
+			}
 		} catch ( err ) {
 			setError(
 				err?.message ??
@@ -570,7 +578,15 @@ export function PageActionsPanel( { postId } ) {
 		} finally {
 			setIsTrashing( false );
 		}
-	}, [ invalidateResolution, postId, receiveEntityRecords, setFavorites ] );
+	}, [
+		flushActiveEditor,
+		invalidateResolution,
+		lockEditors,
+		postId,
+		receiveEntityRecords,
+		setFavorites,
+		waitForOpenDocuments,
+	] );
 
 	const archivePage = useCallback( async () => {
 		setError( null );
@@ -580,6 +596,8 @@ export function PageActionsPanel( { postId } ) {
 				{ id: postId },
 				{
 					flushActiveEditor,
+					lockEditors,
+					waitForOpenDocuments,
 					invalidateResolution,
 					receiveEntityRecords,
 				}
@@ -598,8 +616,10 @@ export function PageActionsPanel( { postId } ) {
 	}, [
 		flushActiveEditor,
 		invalidateResolution,
+		lockEditors,
 		postId,
 		receiveEntityRecords,
+		waitForOpenDocuments,
 	] );
 
 	return (
@@ -708,8 +728,17 @@ function RowInspectorContent( { postId } ) {
 	);
 }
 
-function InspectorFrame( { children, isLocked } ) {
-	return isLocked ? <Disabled>{ children }</Disabled> : children;
+// Always mounted, so locking for an archive or trash keeps the panels and
+// their state, such as the message when the request is canceled.
+// `display: contents` leaves the layout to the panels.
+const INSPECTOR_FRAME_STYLE = { display: 'contents' };
+
+export function InspectorFrame( { children, isLocked } ) {
+	return (
+		<Disabled isDisabled={ isLocked } style={ INSPECTOR_FRAME_STYLE }>
+			{ children }
+		</Disabled>
+	);
 }
 
 export default function DocumentInspectorSidebar( {

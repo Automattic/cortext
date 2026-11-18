@@ -138,6 +138,10 @@ import DocumentPublishToggle from '../../../src/components/DocumentPublishToggle
 import EditorBody from '../../../src/components/EditorBody';
 import DocumentInspectorSidebar from '../../../src/components/DocumentInspectorSidebar';
 import CortextInserterSidebar from '../../../src/components/CortextInserterSidebar';
+import {
+	ActiveEditorProvider,
+	useActiveEditor,
+} from '../../../src/components/ActiveEditorContext';
 
 function installMatchMedia() {
 	window.matchMedia = jest.fn( ( query ) => {
@@ -364,6 +368,40 @@ describe( 'Canvas archived lifecycle lock', () => {
 		expect( DocumentPublishToggle.mock.calls.at( -1 )[ 0 ].disabled ).toBe(
 			false
 		);
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( false );
+	} );
+
+	it( 'is read-only while a lifecycle request holds the editors and editable after it fails', () => {
+		let lockEditors;
+		function CaptureLock() {
+			lockEditors = useActiveEditor().lockEditors;
+			return null;
+		}
+		const post = { id: 7, status: 'private', type: 'crtxt_document' };
+		render(
+			<ActiveEditorProvider>
+				<CaptureLock />
+				<CanvasEditor { ...editorProps } post={ post } />
+			</ActiveEditorProvider>
+		);
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( false );
+
+		let unlock;
+		act( () => {
+			unlock = lockEditors();
+		} );
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( true );
+		expect(
+			DocumentInspectorSidebar.mock.calls.at( -1 )[ 0 ].isLocked
+		).toBe( true );
+		// The post lock stays held through the request.
+		expect( usePostLock ).toHaveBeenLastCalledWith( {
+			postId: 7,
+			postType: 'crtxt_document',
+			enabled: true,
+		} );
+
+		act( () => unlock() );
 		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( false );
 	} );
 

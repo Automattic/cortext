@@ -16,10 +16,32 @@ const mockDataViewRowReorder = jest.fn( () => null );
 const mockSetFavorites = jest.fn();
 const mockOpenDocument = jest.fn();
 const mockCloseDocument = jest.fn();
-const mockFlushActiveEditor = jest.fn( async () => true );
+// Mirrors the provider: flushing waits for every registered pending save.
+const mockPendingSaveFlushers = new Set();
+const flushRegisteredSaves = async () => {
+	for ( const flush of [ ...mockPendingSaveFlushers ] ) {
+		if ( ( await flush() ) === false ) {
+			return false;
+		}
+	}
+	return true;
+};
+const mockFlushActiveEditor = jest.fn( flushRegisteredSaves );
+const mockUnlockEditors = jest.fn();
+const mockLockEditors = jest.fn( () => mockUnlockEditors );
+const mockWaitForOpenDocuments = jest.fn( async () => {} );
+const mockRegisterPendingSaves = ( flush ) => {
+	mockPendingSaveFlushers.add( flush );
+	return () => mockPendingSaveFlushers.delete( flush );
+};
 
 jest.mock( '../../../src/components/ActiveEditorContext', () => ( {
-	useActiveEditor: () => ( { flushActiveEditor: mockFlushActiveEditor } ),
+	useActiveEditor: () => ( {
+		flushActiveEditor: mockFlushActiveEditor,
+		lockEditors: mockLockEditors,
+		registerPendingSaves: mockRegisterPendingSaves,
+		waitForOpenDocuments: mockWaitForOpenDocuments,
+	} ),
 } ) );
 
 jest.mock( '@wordpress/dataviews/wp', () => {
@@ -180,10 +202,12 @@ function collectionRowsState( overrides = {} ) {
 
 function deferred() {
 	let resolve;
-	const promise = new Promise( ( promiseResolve ) => {
+	let reject;
+	const promise = new Promise( ( promiseResolve, promiseReject ) => {
 		resolve = promiseResolve;
+		reject = promiseReject;
 	} );
-	return { promise, resolve };
+	return { promise, resolve, reject };
 }
 
 function makeScroller( {
@@ -560,6 +584,12 @@ describe( 'CollectionDataViews archive actions', () => {
 			closeDocument: mockCloseDocument,
 		} );
 		useDocumentPeekState.mockReturnValue( { peek: null } );
+		mockFlushActiveEditor.mockReset();
+		mockFlushActiveEditor.mockImplementation( flushRegisteredSaves );
+		mockLockEditors.mockClear();
+		mockUnlockEditors.mockClear();
+		mockWaitForOpenDocuments.mockReset();
+		mockWaitForOpenDocuments.mockResolvedValue( undefined );
 	} );
 
 	it( 'offers bulk Archive before Trash and archives every selected row', async () => {
@@ -843,6 +873,191 @@ describe( 'CollectionDataViews archive actions', () => {
 		expect(
 			await findAllByText(
 				'Could not save changes. Archive was canceled.'
+			)
+		).not.toHaveLength( 0 );
+	} );
+
+	it( 'registers in-flight cell saves so a sidebar archive of the collection waits for them', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		const save = deferred();
+		mockSaveRowDocumentField.mockReturnValue( save.promise );
+		const { captured } = renderWithMutationContext( row );
+
+		let savePromise;
+		act( () => {
+			savePromise = captured
+				.saveRowField( 1, 'field-9', true )
+				.catch( () => null );
+		} );
+		// The sidebar archives through the shared flush, not through this view.
+		let isFlushed = false;
+		const flushPromise = mockFlushActiveEditor().then( ( result ) => {
+			isFlushed = true;
+			return result;
+		} );
+		await act( async () => Promise.resolve() );
+		expect( isFlushed ).toBe( false );
+
+		await act( async () => {
+			save.reject( new Error( 'offline' ) );
+			await savePromise;
+		} );
+		await expect( flushPromise ).resolves.toBe( false );
+	} );
+
+	it( 'locks the editors from the flush until the archive request settles', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		const archive = deferred();
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		apiFetch.mockReturnValue( archive.promise );
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+		const archiveAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'archive-row' );
+		let archivePromise;
+		act( () => {
+			archivePromise = archiveAction.callback( [ row ] );
+		} );
+		await act( async () => Promise.resolve() );
+
+		expect( mockLockEditors.mock.invocationCallOrder[ 0 ] ).toBeLessThan(
+			mockFlushActiveEditor.mock.invocationCallOrder[ 0 ]
+		);
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( mockUnlockEditors ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			archive.reject( new Error( 'offline' ) );
+			await archivePromise;
+		} );
+		expect( mockUnlockEditors ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'keeps the editors locked until open documents under trashed rows reload', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		const reload = deferred();
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		mockWaitForOpenDocuments.mockReturnValue( reload.promise );
+		apiFetch.mockResolvedValue( {
+			id: 1,
+			status: 'trash',
+			cascade_deleted: [ 5 ],
+		} );
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+		const trashAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'delete-row' );
+		let trashPromise;
+		act( () => {
+			trashPromise = trashAction.callback( [ row ] );
+		} );
+		await act( async () => Promise.resolve() );
+
+		expect( mockWaitForOpenDocuments ).toHaveBeenCalledWith( [ 5 ] );
+		expect( mockUnlockEditors ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			reload.resolve();
+			await trashPromise;
+		} );
+		expect( mockUnlockEditors ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'saves the open editors before trashing rows', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		const flush = deferred();
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		mockFlushActiveEditor.mockReturnValueOnce( flush.promise );
+		apiFetch.mockResolvedValue( { id: 1, status: 'trash' } );
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+		const trashAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'delete-row' );
+		let trashPromise;
+		act( () => {
+			trashPromise = trashAction.callback( [ row ] );
+		} );
+		await act( async () => Promise.resolve() );
+
+		expect( mockLockEditors ).toHaveBeenCalledTimes( 1 );
+		expect( apiFetch ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			flush.resolve( true );
+			await trashPromise;
+		} );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/wp/v2/crtxt_documents/1',
+			method: 'DELETE',
+		} );
+		expect( mockUnlockEditors ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'cancels the trash when the open editors cannot be saved', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		mockFlushActiveEditor.mockResolvedValueOnce( false );
+
+		const { findAllByText } = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+		const trashAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'delete-row' );
+		await act( async () => {
+			await trashAction.callback( [ row ] );
+		} );
+
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( mockUnlockEditors ).toHaveBeenCalledTimes( 1 );
+		expect(
+			await findAllByText(
+				'Could not save changes. Move to Trash was canceled.'
 			)
 		).not.toHaveLength( 0 );
 	} );

@@ -1,9 +1,11 @@
+import { resolveSelect } from '@wordpress/data';
 import {
 	createContext,
 	useCallback,
 	useContext,
 	useMemo,
 	useRef,
+	useState,
 } from '@wordpress/element';
 
 const NO_ACTIVE_EDITOR = {
@@ -11,9 +13,14 @@ const NO_ACTIVE_EDITOR = {
 	registerPeekEditor: () => {},
 	registerPendingSaves: () => () => {},
 	flushActiveEditor: async () => true,
+	lockEditors: () => () => {},
+	waitForOpenDocuments: async () => {},
 };
 
 const ActiveEditorContext = createContext( NO_ACTIVE_EDITOR );
+
+// Kept apart from the API context so locking re-renders only the editors.
+const EditorsLockedContext = createContext( false );
 
 export function ActiveEditorProvider( { children } ) {
 	const activeEditorApiRef = useRef( null );
@@ -21,6 +28,9 @@ export function ActiveEditorProvider( { children } ) {
 	// Saves that live outside the block editor, such as row properties, so a
 	// lifecycle action can wait for them before changing the document.
 	const pendingSaveFlushersRef = useRef( new Set() );
+	// Lifecycle requests that hold the open editors read-only. A count, so
+	// overlapping requests keep the editors locked until the last one ends.
+	const [ lockCount, setLockCount ] = useState( 0 );
 
 	const registerActiveEditor = useCallback( ( api ) => {
 		activeEditorApiRef.current = api;
@@ -52,28 +62,70 @@ export function ActiveEditorProvider( { children } ) {
 		return true;
 	}, [] );
 
+	const lockEditors = useCallback( () => {
+		setLockCount( ( count ) => count + 1 );
+		let isReleased = false;
+		return () => {
+			if ( isReleased ) {
+				return;
+			}
+			isReleased = true;
+			setLockCount( ( count ) => count - 1 );
+		};
+	}, [] );
+
+	// Resolves once every open editor showing one of `ids` has reloaded its
+	// document, so it picks up a status changed on the server by a cascade.
+	const waitForOpenDocuments = useCallback( async ( ids ) => {
+		const documentIds = new Set( [ ...ids ].map( Number ) );
+		const reloads = [ activeEditorApiRef.current, peekEditorApiRef.current ]
+			.filter(
+				( api ) =>
+					api?.postType && documentIds.has( Number( api.postId ) )
+			)
+			.map( ( api ) =>
+				resolveSelect( 'core' ).getEntityRecord(
+					'postType',
+					api.postType,
+					api.postId
+				)
+			);
+		await Promise.allSettled( reloads );
+	}, [] );
+
 	const value = useMemo(
 		() => ( {
 			registerActiveEditor,
 			registerPeekEditor,
 			registerPendingSaves,
 			flushActiveEditor,
+			lockEditors,
+			waitForOpenDocuments,
 		} ),
 		[
 			registerActiveEditor,
 			registerPeekEditor,
 			registerPendingSaves,
 			flushActiveEditor,
+			lockEditors,
+			waitForOpenDocuments,
 		]
 	);
 
 	return (
 		<ActiveEditorContext.Provider value={ value }>
-			{ children }
+			<EditorsLockedContext.Provider value={ lockCount > 0 }>
+				{ children }
+			</EditorsLockedContext.Provider>
 		</ActiveEditorContext.Provider>
 	);
 }
 
 export function useActiveEditor() {
 	return useContext( ActiveEditorContext );
+}
+
+// True while an archive or trash request holds the open editors read-only.
+export function useEditorsLocked() {
+	return useContext( EditorsLockedContext );
 }

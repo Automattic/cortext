@@ -89,7 +89,9 @@ import { useRecents } from '../hooks/useRecents';
 import { filterFavoritesByDeletedIds, useFavoriteToggle } from '../documents';
 import {
 	archiveSaveFailureMessage,
+	runWithEditorsLocked,
 	syncLifecycleEntityRecords,
+	trashSaveFailureMessage,
 } from '../documents/actions';
 import { duplicateDocumentRecord } from '../documents/mutations';
 import {
@@ -581,10 +583,28 @@ export default function CollectionDataViews( {
 		[ dataFiltered, editableVisibleFields ]
 	);
 
-	// Inline field saves still in flight, keyed by row id, so archiving a row
-	// can wait for them instead of racing them to the server.
-	const pendingRowFieldSaves = useRef( new Map() );
-	const { flushActiveEditor } = useActiveEditor();
+	// Inline field saves still in flight, registered with the active editor so
+	// every archive or trash waits for them instead of racing them to the
+	// server, including one started from the sidebar on this collection.
+	const pendingRowFieldSaves = useRef( new Set() );
+	const {
+		flushActiveEditor,
+		lockEditors,
+		registerPendingSaves,
+		waitForOpenDocuments,
+	} = useActiveEditor();
+	useEffect(
+		() =>
+			registerPendingSaves( async () => {
+				const results = await Promise.allSettled( [
+					...pendingRowFieldSaves.current,
+				] );
+				return results.every(
+					( result ) => result.status === 'fulfilled'
+				);
+			} ),
+		[ registerPendingSaves ]
+	);
 	const saveRowField = useCallback(
 		async ( rowId, fieldId, value ) => {
 			if ( ! collectionId || ! rowId ) {
@@ -596,19 +616,9 @@ export default function CollectionDataViews( {
 				fieldId,
 				value
 			);
-			const rowKey = normalizeRowId( rowId );
-			const rowSaves = pendingRowFieldSaves.current.get( rowKey ) ?? [];
-			pendingRowFieldSaves.current.set( rowKey, [ ...rowSaves, save ] );
-			const forgetSave = () => {
-				const remaining = (
-					pendingRowFieldSaves.current.get( rowKey ) ?? []
-				).filter( ( pending ) => pending !== save );
-				if ( remaining.length > 0 ) {
-					pendingRowFieldSaves.current.set( rowKey, remaining );
-				} else {
-					pendingRowFieldSaves.current.delete( rowKey );
-				}
-			};
+			pendingRowFieldSaves.current.add( save );
+			const forgetSave = () =>
+				pendingRowFieldSaves.current.delete( save );
 			save.then( forgetSave, forgetSave );
 			const updated = await save;
 			touchRecent( {
@@ -1056,6 +1066,32 @@ export default function CollectionDataViews( {
 		[ clearSelection ]
 	);
 
+	// Stores the new status of each changed row and waits for any open editor
+	// on a cascaded document to reload, so none unlocks on its old status.
+	const syncSettledLifecycleRecords = useCallback(
+		async ( settledRequests, cascadeKey ) => {
+			const results = await settledRequests;
+			const cascadeIds = [];
+			results.forEach( ( result ) => {
+				if ( result.status === 'fulfilled' ) {
+					syncLifecycleEntityRecords(
+						result.value,
+						{ invalidateResolution, receiveEntityRecords },
+						cascadeKey
+					);
+					cascadeIds.push(
+						...( result.value?.[ cascadeKey ] ?? [] )
+					);
+				}
+			} );
+			if ( cascadeIds.length > 0 ) {
+				await waitForOpenDocuments( cascadeIds );
+			}
+			return results;
+		},
+		[ invalidateResolution, receiveEntityRecords, waitForOpenDocuments ]
+	);
+
 	const requestDeleteRows = useCallback(
 		async ( rows, options = {} ) => {
 			const nextRows = ( rows ?? [] ).filter( ( row ) => row?.id );
@@ -1064,15 +1100,29 @@ export default function CollectionDataViews( {
 			}
 
 			setRowActionError( null );
-			const results = await allSettledWithConcurrency(
-				nextRows,
-				BULK_LIFECYCLE_CONCURRENCY,
-				( row ) =>
-					apiFetch( {
-						path: `/wp/v2/crtxt_documents/${ row.id }`,
-						method: 'DELETE',
-					} )
-			);
+			let results = false;
+			try {
+				results = await runWithEditorsLocked(
+					{ flushActiveEditor, lockEditors },
+					() =>
+						syncSettledLifecycleRecords(
+							allSettledWithConcurrency(
+								nextRows,
+								BULK_LIFECYCLE_CONCURRENCY,
+								( row ) =>
+									apiFetch( {
+										path: `/wp/v2/crtxt_documents/${ row.id }`,
+										method: 'DELETE',
+									} )
+							),
+							'cascade_deleted'
+						)
+				);
+			} catch {}
+			if ( results === false ) {
+				setRowActionError( trashSaveFailureMessage() );
+				return;
+			}
 
 			const deletedIds = [];
 			const failedRows = [];
@@ -1088,11 +1138,6 @@ export default function CollectionDataViews( {
 					] );
 					cascadeIds.forEach( ( id ) =>
 						deletedIds.push( normalizeRowId( id ) )
-					);
-					syncLifecycleEntityRecords(
-						response,
-						{ invalidateResolution, receiveEntityRecords },
-						'cascade_deleted'
 					);
 				} else {
 					failedRows.push( row );
@@ -1162,13 +1207,15 @@ export default function CollectionDataViews( {
 		},
 		[
 			closeDocument,
+			flushActiveEditor,
 			forgetLifecycleRows,
 			invalidateResolution,
+			lockEditors,
 			openRowId,
 			postType,
-			receiveEntityRecords,
 			refresh,
 			setFavorites,
+			syncSettledLifecycleRecords,
 		]
 	);
 
@@ -1180,48 +1227,39 @@ export default function CollectionDataViews( {
 			}
 
 			setRowActionError( null );
-			const fieldSaves = await Promise.allSettled(
-				nextRows.flatMap(
-					( row ) =>
-						pendingRowFieldSaves.current.get(
-							normalizeRowId( row.id )
-						) ?? []
-				)
-			);
-			if ( fieldSaves.some( ( save ) => save.status === 'rejected' ) ) {
-				setRowActionError( archiveSaveFailureMessage() );
-				return;
-			}
 			const closesOpenRow =
 				openRowId &&
 				nextRows.some(
 					( row ) =>
 						normalizeRowId( row.id ) === normalizeRowId( openRowId )
 				);
-			if ( closesOpenRow ) {
-				let didClose = false;
-				try {
-					// Row properties save outside the peek's editor, so wait
-					// for them before the close flushes the rest.
-					didClose =
-						( await flushActiveEditor() ) &&
-						( await closeDocument() );
-				} catch {}
-				if ( ! didClose ) {
-					setRowActionError( archiveSaveFailureMessage() );
-					return;
-				}
+			let results = false;
+			try {
+				results = await runWithEditorsLocked(
+					{ flushActiveEditor, lockEditors },
+					async () => {
+						if ( closesOpenRow && ! ( await closeDocument() ) ) {
+							return false;
+						}
+						return syncSettledLifecycleRecords(
+							allSettledWithConcurrency(
+								nextRows,
+								BULK_LIFECYCLE_CONCURRENCY,
+								( row ) =>
+									apiFetch( {
+										path: `/cortext/v1/documents/${ row.id }/archive`,
+										method: 'POST',
+									} )
+							),
+							'archived'
+						);
+					}
+				);
+			} catch {}
+			if ( results === false ) {
+				setRowActionError( archiveSaveFailureMessage() );
+				return;
 			}
-
-			const results = await allSettledWithConcurrency(
-				nextRows,
-				BULK_LIFECYCLE_CONCURRENCY,
-				( row ) =>
-					apiFetch( {
-						path: `/cortext/v1/documents/${ row.id }/archive`,
-						method: 'POST',
-					} )
-			);
 
 			const archivedIds = [];
 			const failedRows = [];
@@ -1234,11 +1272,6 @@ export default function CollectionDataViews( {
 						: [ row.id ];
 					cascadeIds.forEach( ( id ) =>
 						archivedIds.push( normalizeRowId( id ) )
-					);
-					syncLifecycleEntityRecords(
-						response,
-						{ invalidateResolution, receiveEntityRecords },
-						'archived'
 					);
 				} else {
 					failedRows.push( row );
@@ -1294,10 +1327,11 @@ export default function CollectionDataViews( {
 			flushActiveEditor,
 			forgetLifecycleRows,
 			invalidateResolution,
+			lockEditors,
 			openRowId,
 			postType,
-			receiveEntityRecords,
 			refresh,
+			syncSettledLifecycleRecords,
 		]
 	);
 

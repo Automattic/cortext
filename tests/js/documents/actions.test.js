@@ -468,6 +468,129 @@ describe( 'document archive lifecycle', () => {
 		} );
 	} );
 
+	it( 'saves the open editors before moving a document to Trash', async () => {
+		const unlock = jest.fn();
+		const ctx = makeCtx( {
+			lockEditors: jest.fn().mockReturnValue( unlock ),
+			flushActiveEditor: jest.fn().mockResolvedValue( true ),
+		} );
+		const deleted = { id: 9, status: 'trash' };
+		apiFetch.mockResolvedValue( deleted );
+
+		await expect( trashDocument( { id: 9 }, ctx ) ).resolves.toBe(
+			deleted
+		);
+
+		const lockOrder = ctx.lockEditors.mock.invocationCallOrder[ 0 ];
+		const flushOrder = ctx.flushActiveEditor.mock.invocationCallOrder[ 0 ];
+		const requestOrder = apiFetch.mock.invocationCallOrder[ 0 ];
+		const syncOrder =
+			ctx.receiveEntityRecords.mock.invocationCallOrder[ 0 ];
+		expect( lockOrder ).toBeLessThan( flushOrder );
+		expect( flushOrder ).toBeLessThan( requestOrder );
+		// The trashed status reaches the store before the editors unlock.
+		expect( syncOrder ).toBeLessThan(
+			unlock.mock.invocationCallOrder[ 0 ]
+		);
+		expect( unlock ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it.each( [
+		[ 'archive', archiveDocument, { archived: [ 9, 10 ] } ],
+		[ 'trash', trashDocument, { id: 9, cascade_deleted: [ 10 ] } ],
+	] )(
+		'keeps the editors locked during the %s until open cascaded documents reload',
+		async ( _name, action, response ) => {
+			const unlock = jest.fn();
+			let finishReload;
+			const ctx = makeCtx( {
+				lockEditors: jest.fn().mockReturnValue( unlock ),
+				flushActiveEditor: jest.fn().mockResolvedValue( true ),
+				waitForOpenDocuments: jest.fn(
+					() =>
+						new Promise( ( resolve ) => {
+							finishReload = resolve;
+						} )
+				),
+			} );
+			apiFetch.mockResolvedValue( response );
+
+			const result = action( { id: 9 }, ctx );
+			await new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
+
+			expect( ctx.waitForOpenDocuments ).toHaveBeenCalledWith(
+				expect.arrayContaining( [ 10 ] )
+			);
+			expect( unlock ).not.toHaveBeenCalled();
+
+			finishReload();
+			await result;
+			expect( unlock ).toHaveBeenCalledTimes( 1 );
+		}
+	);
+
+	it( 'cancels Trash when the open editors cannot be saved', async () => {
+		const lifecycleFocusIntent = { token: 3 };
+		const unlock = jest.fn();
+		const ctx = makeCtx( {
+			captureLifecycleFocusIntent: jest
+				.fn()
+				.mockReturnValue( lifecycleFocusIntent ),
+			cancelLifecycleFocusIntent: jest.fn(),
+			lockEditors: jest.fn().mockReturnValue( unlock ),
+			flushActiveEditor: jest.fn().mockResolvedValue( false ),
+			onAfterTrash: jest.fn(),
+		} );
+
+		await expect( trashDocument( { id: 9 }, ctx ) ).resolves.toBeNull();
+
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( ctx.setFavorites ).not.toHaveBeenCalled();
+		expect( ctx.onAfterTrash ).not.toHaveBeenCalled();
+		expect( ctx.cancelLifecycleFocusIntent ).toHaveBeenCalledWith(
+			lifecycleFocusIntent
+		);
+		expect( ctx.createErrorNotice ).toHaveBeenCalledWith(
+			'Could not save changes. Move to Trash was canceled.',
+			{
+				id: 'cortext-document-trash-save-error',
+				type: 'snackbar',
+			}
+		);
+		expect( unlock ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it.each( [
+		[ 'archive', archiveDocument ],
+		[ 'trash', trashDocument ],
+	] )(
+		'keeps the editors locked during the %s request and unlocks them when it fails',
+		async ( _name, action ) => {
+			const unlock = jest.fn();
+			const ctx = makeCtx( {
+				lockEditors: jest.fn().mockReturnValue( unlock ),
+				flushActiveEditor: jest.fn().mockResolvedValue( true ),
+			} );
+			let rejectRequest;
+			apiFetch.mockReturnValue(
+				new Promise( ( resolve, reject ) => {
+					rejectRequest = reject;
+				} )
+			);
+
+			const result = action( { id: 9 }, ctx );
+			await Promise.resolve();
+			await Promise.resolve();
+			expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+			expect( unlock ).not.toHaveBeenCalled();
+
+			const error = new Error( 'offline' );
+			rejectRequest( error );
+			await expect( result ).rejects.toBe( error );
+			expect( unlock ).toHaveBeenCalledTimes( 1 );
+		}
+	);
+
 	it( 'refreshes Trash and Archived when restoring a trashed archived document', async () => {
 		const ctx = makeCtx();
 		const onArchiveChanged = jest.fn();

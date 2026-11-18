@@ -29,6 +29,7 @@ import './Canvas.scss';
 // RowEditor so opening a row peek first (without a document open) still
 // gets the blocks registered.
 import { getEditorSettings } from './initEditor';
+import { useEditorsLocked } from './ActiveEditorContext';
 import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import useMediaQuery from '../hooks/useMediaQuery';
@@ -389,15 +390,23 @@ export function CanvasEditor( {
 		// read-only state from there.
 		enabled: isActive && ! isLifecycleReadOnly,
 	} );
-	const isReadOnly = isLifecycleReadOnly || postLock.isReadOnly;
+	const isEditorsLocked = useEditorsLocked();
+	const isReadOnly =
+		isLifecycleReadOnly || postLock.isReadOnly || isEditorsLocked;
 	const { resetPost, setIsInserterOpened } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const lastNotifiedBacklinkSaveRef = useRef( null );
 
+	const editorPostType = post.type ?? postType;
 	useEffect( () => {
-		onApi?.( { flushNow, discard } );
+		onApi?.( {
+			flushNow,
+			discard,
+			postId: post.id,
+			postType: editorPostType,
+		} );
 		return () => onApi?.( null );
-	}, [ discard, flushNow, onApi ] );
+	}, [ discard, editorPostType, flushNow, onApi, post.id ] );
 
 	useEffect( () => {
 		if (
