@@ -19,7 +19,7 @@ cd cortext
 ./scripts/setup.sh
 ```
 
-`setup.sh` installs PHP and JS dependencies, assigns a deterministic port for the current worktree, writes a git-ignored `.wp-env.override.json`, and drops two helper plugins under `.wp-env-plugins/`: one labels the admin bar with the branch name, the other auto-logs you in as admin on localhost so agents and parallel worktrees don't have to juggle credentials.
+`setup.sh` installs PHP and JS dependencies, assigns a port for the current worktree (Conductor's `CONDUCTOR_PORT` when set, otherwise one derived from the worktree path), writes a git-ignored `.wp-env.override.json`, and drops two helper plugins under `.wp-env-plugins/`: one labels the admin bar with the branch name, the other auto-logs you in as admin on localhost so agents and parallel worktrees don't have to juggle credentials.
 
 ## Running Cortext
 
@@ -123,7 +123,7 @@ These run the same seed command as the dev environment, just pointed at `.wp-env
 
 ## Parallel worktrees
 
-Ports are derived from the worktree's absolute path, so multiple worktrees (one per branch, say) shouldn't collide. The site-title label re-derives from `git branch --show-current` on every `run.sh`, so it survives branch renames and checkouts within the same worktree.
+Under Conductor, wp-env runs on the workspace's `CONDUCTOR_PORT`, so its preview link opens the site. Elsewhere, a new worktree gets a port derived from its absolute path, and later runs keep whatever port is already in `.wp-env.override.json`. Either way, multiple worktrees (one per branch, say) shouldn't collide. The site-title label re-derives from `git branch --show-current` on every `run.sh`, so it survives branch renames and checkouts within the same worktree.
 
 If you use an agent orchestrator (Conductor, Cursor, Cline, or similar), wire:
 

@@ -8,14 +8,7 @@ cd "$(dirname "$0")/.."
 pnpm install
 composer install --no-interaction
 
-hash_cmd=$(command -v shasum || command -v sha1sum)
-hash=$(printf '%s' "$PWD" | "$hash_cmd" | awk '{print $1}')
-port=$(( 8000 + 16#${hash:0:6} % 1000 ))
-
-cat > .wp-env.override.json <<EOF
-{ "port": ${port}, "plugins": [ ".", "./.wp-env-plugins/worktree-label", "./.wp-env-plugins/dev-autologin" ] }
-EOF
-
+"$(dirname "$0")/write-wp-env-override.sh"
 "$(dirname "$0")/refresh-label.sh"
 
 mkdir -p .wp-env-plugins/dev-autologin
