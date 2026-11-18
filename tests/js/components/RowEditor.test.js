@@ -3,6 +3,10 @@ import { act, render } from '@testing-library/react';
 import RowEditor from '../../../src/components/RowEditor';
 import EditorBody from '../../../src/components/EditorBody';
 import usePostLock from '../../../src/hooks/usePostLock';
+import {
+	ActiveEditorProvider,
+	useActiveEditor,
+} from '../../../src/components/ActiveEditorContext';
 
 jest.mock( '@wordpress/components', () => ( {
 	SlotFillProvider: ( { children } ) => <>{ children }</>,
@@ -83,7 +87,7 @@ const unlockedPostLock = {
 	user: null,
 };
 
-function renderRowEditor( overrides = {} ) {
+function renderRowEditor( overrides = {}, options = {} ) {
 	return render(
 		<RowEditor
 			collectionId={ 10 }
@@ -103,7 +107,8 @@ function renderRowEditor( overrides = {} ) {
 			rowId={ 20 }
 			shouldAcquirePostLock
 			{ ...overrides }
-		/>
+		/>,
+		options
 	);
 }
 
@@ -175,6 +180,35 @@ describe( 'RowEditor', () => {
 		);
 
 		expect( onPaneReady ).toHaveBeenCalledWith( 'crtxt_tasks:20' );
+	} );
+
+	it( 'is read-only while a lifecycle request holds the editors and editable after it fails', () => {
+		let lockEditors;
+		function CaptureLock() {
+			lockEditors = useActiveEditor().lockEditors;
+			return null;
+		}
+		renderRowEditor(
+			{},
+			{
+				wrapper: ( { children } ) => (
+					<ActiveEditorProvider>
+						<CaptureLock />
+						{ children }
+					</ActiveEditorProvider>
+				),
+			}
+		);
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( false );
+
+		let unlock;
+		act( () => {
+			unlock = lockEditors();
+		} );
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( true );
+
+		act( () => unlock() );
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( false );
 	} );
 
 	it( 'skips locking archived rows and enables locking after restore', () => {

@@ -114,7 +114,8 @@ export function useDocumentActions() {
 	const navigate = useNavigate();
 	const { touchRecent } = useRecents();
 	const { setFavorites } = useFavorites();
-	const { flushActiveEditor } = useActiveEditor();
+	const { flushActiveEditor, lockEditors, waitForOpenDocuments } =
+		useActiveEditor();
 
 	const ctx = useMemo(
 		() => ( {
@@ -128,6 +129,8 @@ export function useDocumentActions() {
 			createErrorNotice,
 			createSuccessNotice,
 			flushActiveEditor,
+			lockEditors,
+			waitForOpenDocuments,
 		} ),
 		[
 			docCtx,
@@ -140,6 +143,8 @@ export function useDocumentActions() {
 			createErrorNotice,
 			createSuccessNotice,
 			flushActiveEditor,
+			lockEditors,
+			waitForOpenDocuments,
 		]
 	);
 

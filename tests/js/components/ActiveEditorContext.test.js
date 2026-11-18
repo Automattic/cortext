@@ -1,8 +1,14 @@
 import { act, renderHook } from '@testing-library/react';
 
+const mockGetEntityRecord = jest.fn( async () => ( {} ) );
+jest.mock( '@wordpress/data', () => ( {
+	resolveSelect: () => ( { getEntityRecord: mockGetEntityRecord } ),
+} ) );
+
 import {
 	ActiveEditorProvider,
 	useActiveEditor,
+	useEditorsLocked,
 } from '../../../src/components/ActiveEditorContext';
 
 function wrapper( { children } ) {
@@ -62,5 +68,57 @@ describe( 'ActiveEditorProvider', () => {
 			true
 		);
 		expect( flushSaves ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'locks the editors until every overlapping lock is released', () => {
+		const { result } = renderHook(
+			() => ( { api: useActiveEditor(), isLocked: useEditorsLocked() } ),
+			{ wrapper }
+		);
+		const { api } = result.current;
+		expect( result.current.isLocked ).toBe( false );
+
+		let unlockFirst;
+		let unlockSecond;
+		act( () => {
+			unlockFirst = api.lockEditors();
+			unlockSecond = api.lockEditors();
+		} );
+		expect( result.current.isLocked ).toBe( true );
+
+		act( () => {
+			unlockFirst();
+			unlockFirst();
+		} );
+		expect( result.current.isLocked ).toBe( true );
+		// Locking does not hand consumers of the editor API a new value.
+		expect( result.current.api ).toBe( api );
+
+		act( () => unlockSecond() );
+		expect( result.current.isLocked ).toBe( false );
+	} );
+
+	it( 'waits only for the open editors showing one of the given documents', async () => {
+		mockGetEntityRecord.mockClear();
+		const { result } = renderHook( () => useActiveEditor(), { wrapper } );
+		act( () => {
+			result.current.registerActiveEditor( {
+				postId: 10,
+				postType: 'crtxt_document',
+			} );
+			result.current.registerPeekEditor( {
+				postId: 20,
+				postType: 'crtxt_document',
+			} );
+		} );
+
+		await result.current.waitForOpenDocuments( [ '10', 30 ] );
+
+		expect( mockGetEntityRecord ).toHaveBeenCalledTimes( 1 );
+		expect( mockGetEntityRecord ).toHaveBeenCalledWith(
+			'postType',
+			'crtxt_document',
+			10
+		);
 	} );
 } );

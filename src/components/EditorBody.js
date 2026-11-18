@@ -54,6 +54,7 @@ const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
 const DOCUMENT_PROPERTIES_BLOCK = 'cortext/document-properties';
 const POST_TITLE_BLOCK = 'core/post-title';
 const ROOT_BLOCK_LIST = '';
+const CANVAS_LOCK_STYLE = { display: 'contents' };
 const DISABLE_HEADER_BOUNDARY_MOVE_UP_CLASS =
 	'cortext-disable-header-boundary-move-up';
 const DISABLED_BY_HEADER_BOUNDARY_ATTR =
@@ -2345,13 +2346,16 @@ export default function EditorBody( {
 					onRestored={ onRestored }
 				/>
 			) }
-			{ isReadOnly ? (
-				<Disabled className="cortext-canvas__locked">
-					{ blockCanvas }
-				</Disabled>
-			) : (
-				blockCanvas
-			) }
+			{ /* Always mounted, so locking and unlocking keep the canvas iframe
+			and its selection. `display: contents` leaves the canvas layout
+			to the surrounding flex containers. */ }
+			<Disabled
+				isDisabled={ isReadOnly }
+				className="cortext-canvas__locked"
+				style={ CANVAS_LOCK_STYLE }
+			>
+				{ blockCanvas }
+			</Disabled>
 		</div>
 	);
 }

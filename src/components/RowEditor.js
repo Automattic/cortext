@@ -18,6 +18,7 @@ import { notifyBacklinksChanged } from '../hooks/backlinksInvalidation';
 // bundle. The module is idempotent, so Canvas's copy of this import is
 // a no-op when RowEditor mounts second, or vice versa.
 import { getEditorSettings } from './initEditor';
+import { useEditorsLocked } from './ActiveEditorContext';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import { EditorSurfaceProvider } from './EditorSurfaceContext';
 import EditorBody from './EditorBody';
@@ -57,6 +58,8 @@ function RowAutosaveBridge( {
 	isActive = true,
 	onApi,
 	onSaved,
+	postId,
+	postType,
 	recentTarget,
 } ) {
 	const { status, lastSavedAt, flushNow, isDirty, isSaving } = useAutosave( {
@@ -80,9 +83,17 @@ function RowAutosaveBridge( {
 		if ( ! isActive ) {
 			return undefined;
 		}
-		onApi?.( { flushNow, discard, hasPendingEdits } );
+		onApi?.( { flushNow, discard, hasPendingEdits, postId, postType } );
 		return () => onApi?.( null );
-	}, [ discard, flushNow, hasPendingEdits, isActive, onApi ] );
+	}, [
+		discard,
+		flushNow,
+		hasPendingEdits,
+		isActive,
+		onApi,
+		postId,
+		postType,
+	] );
 
 	useEffect( () => {
 		if (
@@ -133,7 +144,9 @@ function DetailPaneContent( {
 		postType,
 		enabled: shouldAcquirePostLock && ! isLifecycleReadOnly,
 	} );
-	const isReadOnly = isLifecycleReadOnly || postLock.isReadOnly;
+	const isEditorsLocked = useEditorsLocked();
+	const isReadOnly =
+		isLifecycleReadOnly || postLock.isReadOnly || isEditorsLocked;
 	const [ isEditorReady, setIsEditorReady ] = useState( false );
 	const notifiedReadyKeyRef = useRef( null );
 	const handleReady = useCallback( () => setIsEditorReady( true ), [] );
@@ -205,6 +218,8 @@ function DetailPaneContent( {
 				isActive={ isActive }
 				onApi={ onApi }
 				onSaved={ onSaved }
+				postId={ row?.id ?? rowId }
+				postType={ postType }
 				recentTarget={
 					rowId && collectionId ? { id: rowId, collectionId } : null
 				}

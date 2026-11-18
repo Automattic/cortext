@@ -58,6 +58,16 @@ export function syncLifecycleEntityRecords( response, ctx, cascadeKey ) {
 	} );
 }
 
+// Syncs the lifecycle response and waits for the open editors among the
+// cascaded documents to reload, so none of them unlocks on its old status.
+async function syncLifecycleRecordsForEditors( response, ctx, cascadeKey ) {
+	syncLifecycleEntityRecords( response, ctx, cascadeKey );
+	const cascadeIds = response?.[ cascadeKey ];
+	if ( Array.isArray( cascadeIds ) && cascadeIds.length > 0 ) {
+		await ctx.waitForOpenDocuments?.( cascadeIds );
+	}
+}
+
 function invalidateDocumentLifecycle( ctx ) {
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
 	notifySidebarTreeChanged();
@@ -93,6 +103,28 @@ export function restoredDocumentStatusMessage( status ) {
 
 export function archiveSaveFailureMessage() {
 	return __( 'Could not save changes. Archive was canceled.', 'cortext' );
+}
+
+export function trashSaveFailureMessage() {
+	return __(
+		'Could not save changes. Move to Trash was canceled.',
+		'cortext'
+	);
+}
+
+// Saves the open editors, then runs `request` while they stay read-only, so
+// nothing typed during an archive or trash is lost when the status changes.
+// Resolves false without running `request` when the save fails.
+export async function runWithEditorsLocked( ctx, request ) {
+	const unlock = ctx.lockEditors?.();
+	try {
+		if ( ( await ctx.flushActiveEditor?.() ) === false ) {
+			return false;
+		}
+		return await request();
+	} finally {
+		unlock?.();
+	}
 }
 
 // Pure create: saves the new document and refreshes the lists. Post-create
@@ -197,39 +229,68 @@ export async function duplicateDocument( record, ctx ) {
 	return created;
 }
 
-// Soft-delete: server trashes descendants. Avoid `deleteEntityRecord` so
-// core-data does not drop the open record before the editor finishes its
-// block selection writes.
-export async function trashDocument( record, ctx ) {
+// Saves and locks the open editors, runs `request`, and syncs its response.
+// Resolves the response, or null after telling the user when the save fails.
+async function runDocumentLifecycle(
+	record,
+	ctx,
+	{ request, cascadeKey, saveFailureMessage, noticeId }
+) {
 	const lifecycleFocusIntent =
 		ctx.captureLifecycleFocusIntent?.( record ) ?? null;
 	try {
-		const deleted = await apiFetch( {
-			path: `/wp/v2/crtxt_documents/${ record.id }`,
-			method: 'DELETE',
+		const response = await runWithEditorsLocked( ctx, async () => {
+			const result = await request();
+			await syncLifecycleRecordsForEditors( result, ctx, cascadeKey );
+			return result;
 		} );
-		syncLifecycleEntityRecords( deleted, ctx, 'cascade_deleted' );
-		applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
-		notifySidebarTreeChanged();
-		notifyDocumentTrashChanged();
-		notifyDocumentArchiveChanged( { action: 'trash' } );
-		const cascadeIds = collectCascadeIds(
-			record,
-			deleted?.cascade_deleted
-		);
-		await cascadeFavorites(
-			ctx,
-			cascadeIds,
-			__(
-				'Document moved to Trash, but Favorites could not be updated.',
-				'cortext'
-			)
-		);
-		ctx.onAfterTrash?.( { record, lifecycleFocusIntent } );
+		if ( response === false ) {
+			ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
+			ctx.createErrorNotice?.( saveFailureMessage, {
+				id: noticeId,
+				type: 'snackbar',
+			} );
+			return null;
+		}
+		return { response, lifecycleFocusIntent };
 	} catch ( error ) {
 		ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
 		throw error;
 	}
+}
+
+// Soft-delete: server trashes descendants. Avoid `deleteEntityRecord` so
+// core-data does not drop the open record before the editor finishes its
+// block selection writes.
+export async function trashDocument( record, ctx ) {
+	const result = await runDocumentLifecycle( record, ctx, {
+		request: () =>
+			apiFetch( {
+				path: `/wp/v2/crtxt_documents/${ record.id }`,
+				method: 'DELETE',
+			} ),
+		cascadeKey: 'cascade_deleted',
+		saveFailureMessage: trashSaveFailureMessage(),
+		noticeId: 'cortext-document-trash-save-error',
+	} );
+	if ( ! result ) {
+		return null;
+	}
+	const { response: deleted, lifecycleFocusIntent } = result;
+	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+	notifySidebarTreeChanged();
+	notifyDocumentTrashChanged();
+	notifyDocumentArchiveChanged( { action: 'trash' } );
+	await cascadeFavorites(
+		ctx,
+		collectCascadeIds( record, deleted?.cascade_deleted ),
+		__(
+			'Document moved to Trash, but Favorites could not be updated.',
+			'cortext'
+		)
+	);
+	ctx.onAfterTrash?.( { record, lifecycleFocusIntent } );
+	return deleted;
 }
 
 export async function restoreDocument( record, ctx ) {
@@ -247,31 +308,24 @@ export async function restoreDocument( record, ctx ) {
 }
 
 export async function archiveDocument( record, ctx ) {
-	const lifecycleFocusIntent =
-		ctx.captureLifecycleFocusIntent?.( record ) ?? null;
-	try {
-		const didFlush = await ctx.flushActiveEditor?.();
-		if ( didFlush === false ) {
-			ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
-			ctx.createErrorNotice?.( archiveSaveFailureMessage(), {
-				id: 'cortext-document-archive-save-error',
-				type: 'snackbar',
-			} );
-			return null;
-		}
-		const response = await apiFetch( {
-			path: `/cortext/v1/documents/${ record.id }/archive`,
-			method: 'POST',
-		} );
-		syncLifecycleEntityRecords( response, ctx, 'archived' );
-		invalidateDocumentLifecycle( ctx );
-		notifyDocumentArchiveChanged( { action: 'archive' } );
-		ctx.onAfterArchive?.( { record, response, lifecycleFocusIntent } );
-		return response;
-	} catch ( error ) {
-		ctx.cancelLifecycleFocusIntent?.( lifecycleFocusIntent );
-		throw error;
+	const result = await runDocumentLifecycle( record, ctx, {
+		request: () =>
+			apiFetch( {
+				path: `/cortext/v1/documents/${ record.id }/archive`,
+				method: 'POST',
+			} ),
+		cascadeKey: 'archived',
+		saveFailureMessage: archiveSaveFailureMessage(),
+		noticeId: 'cortext-document-archive-save-error',
+	} );
+	if ( ! result ) {
+		return null;
 	}
+	const { response, lifecycleFocusIntent } = result;
+	invalidateDocumentLifecycle( ctx );
+	notifyDocumentArchiveChanged( { action: 'archive' } );
+	ctx.onAfterArchive?.( { record, response, lifecycleFocusIntent } );
+	return response;
 }
 
 export async function unarchiveDocument( record, ctx ) {
