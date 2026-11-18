@@ -13,7 +13,6 @@ import {
 import {
 	useEntityProp,
 	useEntityRecord,
-	useEntityRecords,
 	store as coreStore,
 } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
@@ -27,6 +26,7 @@ import {
 } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import {
+	archive,
 	home as homeIcon,
 	starEmpty,
 	starFilled,
@@ -51,20 +51,17 @@ import { SkeletonBlock } from './Skeleton';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
-import { filterFavoritesForTrashedPage } from './SidebarFavorites';
-import { ACTIVE_PAGES_QUERY, POST_TYPE } from './page-queries';
-import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
+import { POST_TYPE } from './page-queries';
 import { definesTrait } from '../documents/capabilities';
-import { trashDocumentRecord } from '../documents/mutations';
-import {
-	afterDocumentTrash,
-	applyInvalidationPack,
-} from '../documents/invalidation';
 import { unlock } from '../lock-unlock';
-import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
-import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
+import {
+	archiveDocument,
+	archiveSaveFailureMessage,
+	trashDocument,
+} from '../documents/actions';
+import { useActiveEditor } from './ActiveEditorContext';
 
 const { Tabs } = unlock( componentsPrivateApis );
 
@@ -503,20 +500,11 @@ function PageIdentityInspectorPanel( { postId, postType, title } ) {
 	);
 }
 
-function PageActionsPanel( { postId } ) {
+export function PageActionsPanel( { postId } ) {
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( coreStore );
-	const { records: pages = [] } = useEntityRecords(
-		'postType',
-		POST_TYPE,
-		ACTIVE_PAGES_QUERY
-	);
-	const { records: collections = [] } = useEntityRecords(
-		'postType',
-		DOCUMENT_POST_TYPE,
-		FULL_PAGE_COLLECTION_QUERY
-	);
 	const { home, setHome, isUpdating: isHomeUpdating } = useWorkspaceHome();
+	const { flushActiveEditor } = useActiveEditor();
 	const {
 		favorites,
 		setFavorites,
@@ -524,6 +512,7 @@ function PageActionsPanel( { postId } ) {
 		isUpdating: isFavoriteUpdating,
 	} = useFavorites();
 	const [ isTrashing, setIsTrashing ] = useState( false );
+	const [ isArchiving, setIsArchiving ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const isHome = home?.id === postId;
 	const isFavorite = favorites.some( ( favorite ) => favorite.id === postId );
@@ -564,28 +553,15 @@ function PageActionsPanel( { postId } ) {
 		setError( null );
 		setIsTrashing( true );
 		try {
-			await trashDocumentRecord( { id: postId }, receiveEntityRecords );
-			applyInvalidationPack( invalidateResolution, afterDocumentTrash );
-			notifySidebarTreeChanged();
-			notifyDocumentTrashChanged();
-			try {
-				await setFavorites( ( current ) =>
-					filterFavoritesForTrashedPage(
-						current,
-						postId,
-						pages,
-						collections
-					)
-				);
-			} catch ( err ) {
-				setError(
-					err?.message ??
-						__(
-							'Document moved to Trash, but Favorites could not be updated.',
-							'cortext'
-						)
-				);
-			}
+			await trashDocument(
+				{ id: postId },
+				{
+					invalidateResolution,
+					receiveEntityRecords,
+					setFavorites,
+					onFavoritesError: setError,
+				}
+			);
 		} catch ( err ) {
 			setError(
 				err?.message ??
@@ -594,13 +570,36 @@ function PageActionsPanel( { postId } ) {
 		} finally {
 			setIsTrashing( false );
 		}
+	}, [ invalidateResolution, postId, receiveEntityRecords, setFavorites ] );
+
+	const archivePage = useCallback( async () => {
+		setError( null );
+		setIsArchiving( true );
+		try {
+			const response = await archiveDocument(
+				{ id: postId },
+				{
+					flushActiveEditor,
+					invalidateResolution,
+					receiveEntityRecords,
+				}
+			);
+			if ( response === null ) {
+				setError( archiveSaveFailureMessage() );
+			}
+		} catch ( err ) {
+			setError(
+				err?.message ??
+					__( 'Could not archive this document.', 'cortext' )
+			);
+		} finally {
+			setIsArchiving( false );
+		}
 	}, [
+		flushActiveEditor,
 		invalidateResolution,
-		pages,
-		collections,
 		postId,
 		receiveEntityRecords,
-		setFavorites,
 	] );
 
 	return (
@@ -646,12 +645,22 @@ function PageActionsPanel( { postId } ) {
 				<Button
 					className="cortext-document-inspector__action-button"
 					variant="secondary"
+					icon={ archive }
+					label={ __( 'Archive', 'cortext' ) }
+					onClick={ archivePage }
+					isBusy={ isArchiving }
+					disabled={ isArchiving || isTrashing || ! postId }
+					size="compact"
+				/>
+				<Button
+					className="cortext-document-inspector__action-button"
+					variant="secondary"
 					icon={ trash }
 					label={ __( 'Move to Trash', 'cortext' ) }
 					isDestructive
 					onClick={ trashPage }
 					isBusy={ isTrashing }
-					disabled={ isTrashing || ! postId }
+					disabled={ isTrashing || isArchiving || ! postId }
 					size="compact"
 				/>
 			</div>
@@ -724,11 +733,17 @@ export default function DocumentInspectorSidebar( {
 			'trash',
 		[]
 	);
+	const isArchived = useSelect(
+		( select ) =>
+			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
+			'crtxt_archived',
+		[]
+	);
 	const isStoreLocked = useSelect(
 		( select ) => select( editorStore ).isPostLocked?.() ?? false,
 		[]
 	);
-	const isReadOnly = isTrashed || isLocked || isStoreLocked;
+	const isReadOnly = isTrashed || isArchived || isLocked || isStoreLocked;
 	const activeArea = useSelect(
 		( select ) => getActiveInspectorArea( select ),
 		[]

@@ -15,6 +15,7 @@ import {
 	normalizeRowDetailMode,
 } from './rowDetailUtils';
 import { rowRoute } from './relations/relationUtils';
+import { useActiveEditor } from './ActiveEditorContext';
 
 // Split the contexts so callers don't rerender on state they do not use:
 // chips need actions, tables need peek state, and the host needs save and
@@ -71,6 +72,7 @@ function prefersReducedMotion() {
 // stack separately, so action-only callers do not import it.
 export function DocumentPeekProvider( { children } ) {
 	const navigate = useNavigate();
+	const { registerPeekEditor } = useActiveEditor();
 
 	// peek: null | { docId, slug, postType, collectionId, mode, source }
 	// source is the caller's optional context: { collectionId, getRowList, refresh, onModeChange }
@@ -113,9 +115,13 @@ export function DocumentPeekProvider( { children } ) {
 		[]
 	);
 
-	const setDetailApi = useCallback( ( api ) => {
-		detailApiRef.current = api;
-	}, [] );
+	const setDetailApi = useCallback(
+		( api ) => {
+			detailApiRef.current = api;
+			registerPeekEditor( api );
+		},
+		[ registerPeekEditor ]
+	);
 
 	const applyTransition = useCallback(
 		( transition ) => {

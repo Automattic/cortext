@@ -193,6 +193,10 @@ import { RowMutationContext } from '../../../src/components/EditableCell';
 import RowProperties, {
 	HIDDEN_PROPERTIES_DROP_TARGET,
 } from '../../../src/components/RowProperties';
+import {
+	ActiveEditorProvider,
+	useActiveEditor,
+} from '../../../src/components/ActiveEditorContext';
 import { COLLECTION_ROWS_CHANGED_EVENT } from '../../../src/hooks/rowInvalidation';
 
 describe( 'RowProperties', () => {
@@ -416,6 +420,62 @@ describe( 'RowProperties', () => {
 		} finally {
 			jest.useRealTimers();
 		}
+	} );
+
+	function renderUrlProperty() {
+		const captured = {};
+		function CaptureFlush() {
+			captured.flush = useActiveEditor().flushActiveEditor;
+			return null;
+		}
+		render(
+			<ActiveEditorProvider>
+				<CaptureFlush />
+				<RowProperties
+					fields={ [
+						{
+							id: 'field-7',
+							label: 'Website',
+							cortextFieldType: 'url',
+							editable: true,
+						},
+					] }
+					row={ { id: 99 } }
+				/>
+			</ActiveEditorProvider>
+		);
+		fireEvent.change( screen.getByRole( 'textbox', { name: 'Website' } ), {
+			target: { value: 'https://example.com' },
+		} );
+		return () => captured.flush();
+	}
+
+	it( 'saves a debounced property edit when an action flushes pending saves', async () => {
+		mockSaveEntityRecord.mockResolvedValue( { id: 99, meta: {} } );
+		const flushPendingSaves = renderUrlProperty();
+
+		let didFlush;
+		await act( async () => {
+			didFlush = await flushPendingSaves();
+		} );
+		expect( didFlush ).toBe( true );
+		expect( mockSaveEntityRecord ).toHaveBeenCalledWith(
+			'postType',
+			'crtxt_document',
+			{ id: 99, meta: { 'field-7': 'https://example.com' } },
+			{ throwOnError: true }
+		);
+	} );
+
+	it( 'reports a failed property save when an action flushes pending saves', async () => {
+		mockSaveEntityRecord.mockRejectedValue( new Error( 'offline' ) );
+		const flushPendingSaves = renderUrlProperty();
+
+		let didFlush;
+		await act( async () => {
+			didFlush = await flushPendingSaves();
+		} );
+		expect( didFlush ).toBe( false );
 	} );
 
 	it( 'shows row meta updates from the table over stale editor meta', () => {

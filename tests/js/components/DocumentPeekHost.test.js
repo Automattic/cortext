@@ -1,33 +1,12 @@
 import { act, render, screen } from '@testing-library/react';
 
 const mockNavigate = jest.fn();
-const mockInvalidateResolution = jest.fn();
 jest.mock( '@wordpress/route', () => ( {
 	useNavigate: () => mockNavigate,
-} ) );
-jest.mock( '@wordpress/data', () => ( {
-	useDispatch: () => ( {
-		invalidateResolution: mockInvalidateResolution,
-	} ),
 } ) );
 
 jest.mock( '@tanstack/react-router', () => ( {
 	useParams: () => ( { _splat: '' } ),
-} ) );
-
-const mockNotifyDocumentTrashChanged = jest.fn();
-const mockNotifyCollectionRowsChanged = jest.fn();
-const mockNotifySidebarTreeChanged = jest.fn();
-jest.mock( '../../../src/hooks/documentTrashInvalidation', () => ( {
-	notifyDocumentTrashChanged: () => mockNotifyDocumentTrashChanged(),
-} ) );
-jest.mock( '../../../src/hooks/rowInvalidation', () => ( {
-	notifyCollectionRowsChanged: ( ...args ) =>
-		mockNotifyCollectionRowsChanged( ...args ),
-} ) );
-jest.mock( '../../../src/hooks/sidebarTreeInvalidation', () => ( {
-	notifySidebarTreeChanged: ( ...args ) =>
-		mockNotifySidebarTreeChanged( ...args ),
 } ) );
 
 jest.mock( '../../../src/hooks/useCollectionFields', () => () => ( {
@@ -61,7 +40,6 @@ jest.mock( '../../../src/components/RowDetailSidebarSlot', () => ( {
 const mockRowDetailView = jest.fn( ( props ) => (
 	<div data-testid="row-detail-view">
 		{ props.row?.meta?.[ 'field-7' ] ?? '' }
-		<button onClick={ props.onRestored }>Restore</button>
 	</div>
 ) );
 jest.mock( '../../../src/components/RowDetailView', () => ( {
@@ -70,13 +48,6 @@ jest.mock( '../../../src/components/RowDetailView', () => ( {
 } ) );
 
 import DocumentPeekHost from '../../../src/components/DocumentPeekHost';
-import {
-	ACTIVE_PAGES_QUERY,
-	POST_TYPE,
-	PUBLISHED_DOCUMENTS_QUERY,
-} from '../../../src/components/page-queries';
-import { DOCUMENT_POST_TYPE } from '../../../src/collections';
-import { afterDocumentTrash } from '../../../src/documents/invalidation';
 import {
 	DocumentPeekProvider,
 	useDocumentPeekActions,
@@ -101,10 +72,6 @@ describe( 'DocumentPeekHost', () => {
 	beforeEach( () => {
 		capturedActions = null;
 		mockNavigate.mockReset();
-		mockInvalidateResolution.mockReset();
-		mockNotifyDocumentTrashChanged.mockReset();
-		mockNotifyCollectionRowsChanged.mockReset();
-		mockNotifySidebarTreeChanged.mockReset();
 		mockRowDetailView.mockClear();
 	} );
 
@@ -152,70 +119,5 @@ describe( 'DocumentPeekHost', () => {
 				} ),
 			} )
 		);
-	} );
-
-	async function openRowPeek( refresh ) {
-		renderHost();
-
-		await act( async () => {
-			capturedActions.openDocument( {
-				id: 99,
-				postType: 'crtxt_document',
-				collectionId: 44,
-				preferredMode: 'side',
-				source: {
-					kind: 'collection',
-					collectionId: 44,
-					getRowList: () => [ { id: 99 } ],
-					refresh,
-				},
-			} );
-		} );
-	}
-
-	it( 'refreshes the row lists affected by a restore', async () => {
-		const refresh = jest.fn();
-		await openRowPeek( refresh );
-
-		act( () => {
-			screen.getByRole( 'button', { name: 'Restore' } ).click();
-		} );
-
-		expect( mockInvalidateResolution ).toHaveBeenCalledTimes( 1 );
-		expect( mockInvalidateResolution ).toHaveBeenCalledWith(
-			'getEntityRecords',
-			[ 'postType', DOCUMENT_POST_TYPE, PUBLISHED_DOCUMENTS_QUERY ]
-		);
-		expect( refresh ).toHaveBeenCalledTimes( 1 );
-		// The row leaves Trash, and other collections can relate to it.
-		expect( mockNotifyDocumentTrashChanged ).toHaveBeenCalledTimes( 1 );
-		expect( mockNotifyCollectionRowsChanged ).toHaveBeenCalledTimes( 1 );
-		expect( mockNotifyCollectionRowsChanged ).toHaveBeenCalledWith();
-		expect( mockNotifySidebarTreeChanged ).not.toHaveBeenCalled();
-	} );
-
-	it( 'refreshes the document lists when a restore brings back nested documents', async () => {
-		const refresh = jest.fn();
-		await openRowPeek( refresh );
-
-		act( () => {
-			mockRowDetailView.mock.lastCall[ 0 ].onRestored(
-				99,
-				'crtxt_document',
-				{ restored: [ 99, 120 ] }
-			);
-		} );
-
-		expect( mockInvalidateResolution ).toHaveBeenCalledTimes(
-			afterDocumentTrash.length
-		);
-		expect( mockInvalidateResolution ).toHaveBeenCalledWith(
-			'getEntityRecords',
-			[ 'postType', POST_TYPE, ACTIVE_PAGES_QUERY ]
-		);
-		expect( refresh ).toHaveBeenCalledTimes( 1 );
-		expect( mockNotifySidebarTreeChanged ).toHaveBeenCalledTimes( 1 );
-		expect( mockNotifyDocumentTrashChanged ).toHaveBeenCalledTimes( 1 );
-		expect( mockNotifyCollectionRowsChanged ).toHaveBeenCalledTimes( 1 );
 	} );
 } );

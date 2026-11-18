@@ -1,7 +1,7 @@
+import apiFetch from '@wordpress/api-fetch';
 import { Notice } from '@wordpress/components';
-import { store as coreStore } from '@wordpress/core-data';
-import { useDispatch } from '@wordpress/data';
 import { DataViews } from '@wordpress/dataviews/wp';
+import { useDispatch } from '@wordpress/data';
 import {
 	useCallback,
 	useEffect,
@@ -11,7 +11,7 @@ import {
 	useState,
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { copy, starEmpty, starFilled, trash } from '@wordpress/icons';
+import { archive, copy, starEmpty, starFilled, trash } from '@wordpress/icons';
 
 import './CollectionDataViews.scss';
 import './CollectionDataViews.grid.scss';
@@ -70,6 +70,7 @@ import {
 } from './dataViewItemLookup';
 import { scrollToEndQuickly } from './dataViewScroll';
 import { saveRowDocumentField } from './rowDocumentMutations';
+import { useActiveEditor } from './ActiveEditorContext';
 import { getRowDetailMode, withRowDetailMode } from './rowDetailUtils';
 import {
 	applyVisibleSelectionChange,
@@ -87,25 +88,27 @@ import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
 import { filterFavoritesByDeletedIds, useFavoriteToggle } from '../documents';
 import {
-	duplicateDocumentRecord,
-	trashDocumentRecord,
-} from '../documents/mutations';
+	archiveSaveFailureMessage,
+	syncLifecycleEntityRecords,
+} from '../documents/actions';
+import { duplicateDocumentRecord } from '../documents/mutations';
 import {
-	afterRowLifecycle,
+	afterDocumentTrash,
 	applyInvalidationPack,
-	rowLifecyclePack,
 } from '../documents/invalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
+import { notifyDocumentArchiveChanged } from '../hooks/documentArchiveInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import {
 	getCollectionSurfaceFocusTarget,
 	isCollectionTrulyEmpty,
 	isSurfaceFocusOriginCurrent,
 } from './collectionSurfaceFocus';
 
-const BULK_DELETE_CONCURRENCY = 4;
+const BULK_LIFECYCLE_CONCURRENCY = 4;
 // tech-debt.md#td-dataviews-list-row-hooks: DataViews ties list focus to its own selection. Cortext
 // uses blank-row clicks and keyboard activation to open the row instead.
 const EMPTY_DATA_VIEW_SELECTION = [];
@@ -131,7 +134,7 @@ export default function CollectionDataViews( {
 	const { fields, collection, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
 	const { invalidateResolution, receiveEntityRecords, saveEntityRecord } =
-		useDispatch( coreStore );
+		useDispatch( 'core' );
 	const { touchRecent } = useRecents();
 	// Field IDs from the last schema sync. We use this to auto-show fields
 	// the user just created. `null` on first run means the saved view should
@@ -578,17 +581,36 @@ export default function CollectionDataViews( {
 		[ dataFiltered, editableVisibleFields ]
 	);
 
+	// Inline field saves still in flight, keyed by row id, so archiving a row
+	// can wait for them instead of racing them to the server.
+	const pendingRowFieldSaves = useRef( new Map() );
+	const { flushActiveEditor } = useActiveEditor();
 	const saveRowField = useCallback(
 		async ( rowId, fieldId, value ) => {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			const updated = await saveRowDocumentField(
+			const save = saveRowDocumentField(
 				saveEntityRecord,
 				rowId,
 				fieldId,
 				value
 			);
+			const rowKey = normalizeRowId( rowId );
+			const rowSaves = pendingRowFieldSaves.current.get( rowKey ) ?? [];
+			pendingRowFieldSaves.current.set( rowKey, [ ...rowSaves, save ] );
+			const forgetSave = () => {
+				const remaining = (
+					pendingRowFieldSaves.current.get( rowKey ) ?? []
+				).filter( ( pending ) => pending !== save );
+				if ( remaining.length > 0 ) {
+					pendingRowFieldSaves.current.set( rowKey, remaining );
+				} else {
+					pendingRowFieldSaves.current.delete( rowKey );
+				}
+			};
+			save.then( forgetSave, forgetSave );
+			const updated = await save;
 			touchRecent( {
 				kind: 'row',
 				id: updated?.id ?? rowId,
@@ -997,10 +1019,6 @@ export default function CollectionDataViews( {
 						collectionId,
 					} );
 				}
-				applyInvalidationPack(
-					invalidateResolution,
-					afterRowLifecycle
-				);
 				refresh();
 			} catch ( apiError ) {
 				setRowActionError(
@@ -1009,16 +1027,10 @@ export default function CollectionDataViews( {
 				);
 			}
 		},
-		[
-			collectionId,
-			invalidateResolution,
-			receiveEntityRecords,
-			refresh,
-			touchRecent,
-		]
+		[ collectionId, receiveEntityRecords, refresh, touchRecent ]
 	);
 
-	const forgetDeletedRows = useCallback(
+	const forgetLifecycleRows = useCallback(
 		( deletedIds, options = {} ) => {
 			if ( options.clearSelection ) {
 				clearSelection();
@@ -1054,48 +1066,67 @@ export default function CollectionDataViews( {
 			setRowActionError( null );
 			const results = await allSettledWithConcurrency(
 				nextRows,
-				BULK_DELETE_CONCURRENCY,
-				( row ) => trashDocumentRecord( row, receiveEntityRecords )
+				BULK_LIFECYCLE_CONCURRENCY,
+				( row ) =>
+					apiFetch( {
+						path: `/wp/v2/crtxt_documents/${ row.id }`,
+						method: 'DELETE',
+					} )
 			);
 
 			const deletedIds = [];
 			const failedRows = [];
-			let didCascade = false;
 			results.forEach( ( result, index ) => {
 				const row = nextRows[ index ];
 				if ( result.status === 'fulfilled' ) {
-					deletedIds.push( normalizeRowId( row.id ) );
-					if ( result.value?.cascade_deleted?.length > 0 ) {
-						didCascade = true;
-					}
+					const response = result.value;
+					const cascadeIds = new Set( [
+						row.id,
+						...( Array.isArray( response?.cascade_deleted )
+							? response.cascade_deleted
+							: [] ),
+					] );
+					cascadeIds.forEach( ( id ) =>
+						deletedIds.push( normalizeRowId( id ) )
+					);
+					syncLifecycleEntityRecords(
+						response,
+						{ invalidateResolution, receiveEntityRecords },
+						'cascade_deleted'
+					);
 				} else {
 					failedRows.push( row );
 				}
 			} );
 
 			if ( deletedIds.length > 0 ) {
-				applyInvalidationPack(
-					invalidateResolution,
-					rowLifecyclePack( didCascade )
-				);
 				const deleted = new Set( deletedIds );
+				const deletedDocumentIds = new Set(
+					deletedIds.map( Number ).filter( ( id ) => id > 0 )
+				);
 				if ( openRowId && deleted.has( normalizeRowId( openRowId ) ) ) {
 					closeDocument();
 				}
-				forgetDeletedRows( deletedIds, {
+				forgetLifecycleRows( deletedIds, {
 					clearSelection:
 						failedRows.length === 0 &&
 						( options.clearSelectionOnSuccess ??
 							nextRows.length > 1 ),
 				} );
 				refresh();
+				applyInvalidationPack(
+					invalidateResolution,
+					afterDocumentTrash
+				);
+				notifySidebarTreeChanged();
 				notifyDocumentTrashChanged();
+				notifyDocumentArchiveChanged( { action: 'trash' } );
 				notifyCollectionRowsChanged();
 				// Prune favorites for the documents we just trashed. The server cleans
 				// stale entries on the next read, but doing it here keeps the next
 				// favorites PUT from sending these document ids back.
 				setFavorites( ( current ) =>
-					filterFavoritesByDeletedIds( current, { row: deleted } )
+					filterFavoritesByDeletedIds( current, deletedDocumentIds )
 				).catch( () => {
 					// Keep this quiet. The next favorites read asks the server to
 					// prune stale documents anyway.
@@ -1131,7 +1162,7 @@ export default function CollectionDataViews( {
 		},
 		[
 			closeDocument,
-			forgetDeletedRows,
+			forgetLifecycleRows,
 			invalidateResolution,
 			openRowId,
 			postType,
@@ -1140,6 +1171,139 @@ export default function CollectionDataViews( {
 			setFavorites,
 		]
 	);
+
+	const requestArchiveRows = useCallback(
+		async ( rows, options = {} ) => {
+			const nextRows = ( rows ?? [] ).filter( ( row ) => row?.id );
+			if ( nextRows.length === 0 || ! postType ) {
+				return;
+			}
+
+			setRowActionError( null );
+			const fieldSaves = await Promise.allSettled(
+				nextRows.flatMap(
+					( row ) =>
+						pendingRowFieldSaves.current.get(
+							normalizeRowId( row.id )
+						) ?? []
+				)
+			);
+			if ( fieldSaves.some( ( save ) => save.status === 'rejected' ) ) {
+				setRowActionError( archiveSaveFailureMessage() );
+				return;
+			}
+			const closesOpenRow =
+				openRowId &&
+				nextRows.some(
+					( row ) =>
+						normalizeRowId( row.id ) === normalizeRowId( openRowId )
+				);
+			if ( closesOpenRow ) {
+				let didClose = false;
+				try {
+					// Row properties save outside the peek's editor, so wait
+					// for them before the close flushes the rest.
+					didClose =
+						( await flushActiveEditor() ) &&
+						( await closeDocument() );
+				} catch {}
+				if ( ! didClose ) {
+					setRowActionError( archiveSaveFailureMessage() );
+					return;
+				}
+			}
+
+			const results = await allSettledWithConcurrency(
+				nextRows,
+				BULK_LIFECYCLE_CONCURRENCY,
+				( row ) =>
+					apiFetch( {
+						path: `/cortext/v1/documents/${ row.id }/archive`,
+						method: 'POST',
+					} )
+			);
+
+			const archivedIds = [];
+			const failedRows = [];
+			results.forEach( ( result, index ) => {
+				const row = nextRows[ index ];
+				if ( result.status === 'fulfilled' ) {
+					const response = result.value;
+					const cascadeIds = Array.isArray( response?.archived )
+						? response.archived
+						: [ row.id ];
+					cascadeIds.forEach( ( id ) =>
+						archivedIds.push( normalizeRowId( id ) )
+					);
+					syncLifecycleEntityRecords(
+						response,
+						{ invalidateResolution, receiveEntityRecords },
+						'archived'
+					);
+				} else {
+					failedRows.push( row );
+				}
+			} );
+
+			if ( archivedIds.length > 0 ) {
+				forgetLifecycleRows( archivedIds, {
+					clearSelection:
+						failedRows.length === 0 &&
+						( options.clearSelectionOnSuccess ??
+							nextRows.length > 1 ),
+				} );
+				refresh();
+				applyInvalidationPack(
+					invalidateResolution,
+					afterDocumentTrash
+				);
+				notifySidebarTreeChanged();
+				notifyDocumentArchiveChanged( { action: 'archive' } );
+				notifyCollectionRowsChanged();
+			}
+
+			if ( failedRows.length > 0 ) {
+				let archiveErrorMessage;
+				if ( nextRows.length === 1 ) {
+					archiveErrorMessage = __(
+						'Could not archive this document.',
+						'cortext'
+					);
+				} else if ( failedRows.length === nextRows.length ) {
+					archiveErrorMessage = __(
+						'Could not archive selected documents.',
+						'cortext'
+					);
+				} else {
+					archiveErrorMessage = sprintf(
+						/* translators: %d: number of documents that could not be archived */
+						_n(
+							'%d document could not be archived.',
+							'%d documents could not be archived.',
+							failedRows.length,
+							'cortext'
+						),
+						failedRows.length
+					);
+				}
+				setRowActionError( archiveErrorMessage );
+			}
+		},
+		[
+			closeDocument,
+			flushActiveEditor,
+			forgetLifecycleRows,
+			invalidateResolution,
+			openRowId,
+			postType,
+			receiveEntityRecords,
+			refresh,
+		]
+	);
+
+	const requestArchiveSelectedRows = useCallback( () => {
+		requestArchiveRows( selectedRows, { clearSelectionOnSuccess: true } );
+	}, [ requestArchiveRows, selectedRows ] );
 
 	const requestDeleteSelectedRows = useCallback( () => {
 		requestDeleteRows( selectedRows, { clearSelectionOnSuccess: true } );
@@ -1188,6 +1352,17 @@ export default function CollectionDataViews( {
 			callback: ( items ) => toggleRowFavorite( items?.[ 0 ] ),
 		} );
 		actions.push( {
+			id: 'archive-row',
+			label: __( 'Archive', 'cortext' ),
+			icon: archive,
+			supportsBulk: true,
+			context: 'single',
+			callback: ( items ) =>
+				requestArchiveRows( items, {
+					clearSelectionOnSuccess: ( items?.length ?? 0 ) > 1,
+				} ),
+		} );
+		actions.push( {
 			id: 'delete-row',
 			label: __( 'Trash', 'cortext' ),
 			icon: trash,
@@ -1205,6 +1380,7 @@ export default function CollectionDataViews( {
 		duplicateRow,
 		isRowFavorite,
 		openRowInMode,
+		requestArchiveRows,
 		requestDeleteRows,
 		toggleRowFavorite,
 	] );
@@ -1634,6 +1810,7 @@ export default function CollectionDataViews( {
 				className="dataviews-bulk-actions-footer__container cortext-table-calculations__bulk-actions"
 				selectedIds={ selectedRowIds }
 				visibleIds={ visibleRowIds }
+				onArchiveSelected={ requestArchiveSelectedRows }
 				onClearSelection={ clearSelection }
 				onDeleteSelected={ requestDeleteSelectedRows }
 				onToggleVisibleSelection={ toggleVisibleRows }
@@ -1646,6 +1823,7 @@ export default function CollectionDataViews( {
 			visibleIds={ visibleRowIds }
 			totalItems={ activePaginationInfo?.totalItems ?? 0 }
 			totalPages={ activePaginationInfo?.totalPages ?? 0 }
+			onArchiveSelected={ requestArchiveSelectedRows }
 			onClearSelection={ clearSelection }
 			onDeleteSelected={ requestDeleteSelectedRows }
 			onToggleVisibleSelection={ toggleVisibleRows }

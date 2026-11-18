@@ -60,6 +60,7 @@ import { toRecordId } from '../hooks/fieldIds';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import { saveRowDocumentField } from './rowDocumentMutations';
+import { useActiveEditor } from './ActiveEditorContext';
 import {
 	isRowDetailFieldEditable,
 	isValidNumberDraft,
@@ -1052,6 +1053,8 @@ export default function RowProperties( {
 	const propertiesRef = useRef( null );
 	const isMountedRef = useRef( true );
 	const pendingSavesRef = useRef( new Map() );
+	const inFlightSavesRef = useRef( new Set() );
+	const { registerPendingSaves } = useActiveEditor();
 	const saveTimersRef = useRef( new Map() );
 	const fieldSaveVersionsRef = useRef( new Map() );
 	const handleFieldOptionsSaved = useCallback(
@@ -1179,6 +1182,13 @@ export default function RowProperties( {
 		[]
 	);
 
+	const trackFieldSave = useCallback( ( save ) => {
+		inFlightSavesRef.current.add( save );
+		const forget = () => inFlightSavesRef.current.delete( save );
+		save.then( forget, forget );
+		return save;
+	}, [] );
+
 	const flushQueuedFieldSave = useCallback(
 		async ( fieldId, { rethrow = false } = {} ) => {
 			const entry = pendingSavesRef.current.get( fieldId );
@@ -1190,11 +1200,13 @@ export default function RowProperties( {
 			clearSaveTimer( fieldId );
 
 			try {
-				const updated = await saveRowDocumentField(
-					saveEntityRecord,
-					entry.rowId,
-					fieldId,
-					entry.value
+				const updated = await trackFieldSave(
+					saveRowDocumentField(
+						saveEntityRecord,
+						entry.rowId,
+						fieldId,
+						entry.value
+					)
 				);
 				if ( ! isMountedRef.current ) {
 					return updated;
@@ -1238,6 +1250,7 @@ export default function RowProperties( {
 			collectionId,
 			refreshRows,
 			saveEntityRecord,
+			trackFieldSave,
 		]
 	);
 
@@ -1287,13 +1300,16 @@ export default function RowProperties( {
 			saveTimersRef.current.forEach( ( timer ) => clearTimeout( timer ) );
 			saveTimersRef.current.clear();
 
+			let didSaveAll = true;
 			for ( const [ fieldId, entry ] of entries ) {
 				try {
-					const updated = await saveRowDocumentField(
-						saveEntityRecord,
-						entry.rowId,
-						fieldId,
-						entry.value
+					const updated = await trackFieldSave(
+						saveRowDocumentField(
+							saveEntityRecord,
+							entry.rowId,
+							fieldId,
+							entry.value
+						)
 					);
 					if ( preserveState && isMountedRef.current ) {
 						const isLatestSave =
@@ -1312,6 +1328,7 @@ export default function RowProperties( {
 						}
 					}
 				} catch ( error ) {
+					didSaveAll = false;
 					if (
 						preserveState &&
 						isMountedRef.current &&
@@ -1325,6 +1342,7 @@ export default function RowProperties( {
 					}
 				}
 			}
+			return didSaveAll;
 		},
 		[
 			applyCommittedFieldValue,
@@ -1332,7 +1350,25 @@ export default function RowProperties( {
 			collectionId,
 			refreshRows,
 			saveEntityRecord,
+			trackFieldSave,
 		]
+	);
+
+	// Saves queued or in flight when an action like Archive asks the editor
+	// to flush. Resolves false if any of them fails, so the action can stop.
+	useEffect(
+		() =>
+			registerPendingSaves( async () => {
+				const didFlushQueued = await flushAllPendingSaves();
+				const results = await Promise.allSettled( [
+					...inFlightSavesRef.current,
+				] );
+				return (
+					didFlushQueued &&
+					results.every( ( result ) => result.status === 'fulfilled' )
+				);
+			} ),
+		[ flushAllPendingSaves, registerPendingSaves ]
 	);
 
 	useEffect( () => {

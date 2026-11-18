@@ -85,6 +85,11 @@ jest.mock( '@wordpress/data', () => ( {
 	useDispatch: jest.fn(),
 } ) );
 
+jest.mock( '@wordpress/notices', () => ( {
+	__esModule: true,
+	store: { name: 'core/notices' },
+} ) );
+
 jest.mock( '@wordpress/api-fetch', () => ( {
 	__esModule: true,
 	default: jest.fn(),
@@ -158,13 +163,11 @@ import {
 	POST_TYPE,
 	TRASHED_PAGES_QUERY,
 } from '../../../src/components/page-queries';
-import { DOCUMENT_POST_TYPE } from '../../../src/collections';
 import { DOCUMENT_TRASH_CHANGED_EVENT } from '../../../src/hooks/documentTrashInvalidation';
 
 const dispatchMocks = {
 	deleteEntityRecord: jest.fn(),
 	invalidateResolution: jest.fn(),
-	receiveEntityRecords: jest.fn(),
 };
 
 const navigateMock = jest.fn();
@@ -177,7 +180,6 @@ beforeEach( () => {
 	useNavigate.mockReset();
 	dispatchMocks.deleteEntityRecord.mockReset();
 	dispatchMocks.invalidateResolution.mockReset();
-	dispatchMocks.receiveEntityRecords.mockReset();
 	navigateMock.mockReset();
 	useDispatch.mockReturnValue( dispatchMocks );
 	useNavigate.mockReturnValue( navigateMock );
@@ -508,13 +510,9 @@ describe( 'SidebarTrash', () => {
 
 	it( 'restores a row through the document endpoint', async () => {
 		const refresh = jest.fn();
-		const restoredPost = makeRow( { id: 17, status: 'private' } );
 		setTrashRecords( { records: [ makeRow( { id: 17 } ) ] } );
 		trashState.refresh = refresh;
-		apiFetch.mockResolvedValue( {
-			restored: [ 17 ],
-			post: restoredPost,
-		} );
+		apiFetch.mockResolvedValue( { restored: [ 17 ] } );
 
 		renderSidebarTrash();
 
@@ -526,13 +524,6 @@ describe( 'SidebarTrash', () => {
 				method: 'POST',
 			} );
 		} );
-		expect( dispatchMocks.receiveEntityRecords ).toHaveBeenCalledWith(
-			'postType',
-			DOCUMENT_POST_TYPE,
-			[ restoredPost ],
-			undefined,
-			false
-		);
 		expect( refresh ).toHaveBeenCalled();
 	} );
 

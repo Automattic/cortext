@@ -10,6 +10,7 @@ import {
 	FavoritesProvider,
 	useFavorites,
 } from '../../../src/hooks/useFavorites';
+import { DOCUMENT_ARCHIVE_CHANGED_EVENT } from '../../../src/hooks/documentArchiveInvalidation';
 
 function deferred() {
 	let resolve;
@@ -141,6 +142,91 @@ describe( 'useFavorites', () => {
 			await secondPromise;
 		} );
 
+		expect( result.current.favorites ).toEqual( [ { id: 2 } ] );
+	} );
+
+	it( 'refetches after Trash and unarchive but not archive', async () => {
+		const restored = { id: 7, path: 'page/notes-7' };
+		apiFetch
+			.mockResolvedValueOnce( { favorites: [] } )
+			.mockResolvedValueOnce( { favorites: [] } )
+			.mockResolvedValueOnce( { favorites: [ restored ] } );
+
+		const { result } = renderHook( () => useFavorites(), { wrapper } );
+		await waitFor( () => {
+			expect( result.current.isResolving ).toBe( false );
+		} );
+
+		await act( async () => {
+			window.dispatchEvent(
+				new CustomEvent( DOCUMENT_ARCHIVE_CHANGED_EVENT, {
+					detail: { action: 'archive' },
+				} )
+			);
+			await Promise.resolve();
+		} );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		act( () => {
+			window.dispatchEvent(
+				new CustomEvent( DOCUMENT_ARCHIVE_CHANGED_EVENT, {
+					detail: { action: 'trash' },
+				} )
+			);
+		} );
+
+		await waitFor( () => {
+			expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		} );
+		expect( result.current.favorites ).toEqual( [] );
+
+		act( () => {
+			window.dispatchEvent(
+				new CustomEvent( DOCUMENT_ARCHIVE_CHANGED_EVENT, {
+					detail: { action: 'unarchive' },
+				} )
+			);
+		} );
+
+		await waitFor( () => {
+			expect( result.current.favorites ).toEqual( [ restored ] );
+		} );
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/cortext/v1/favorites',
+		} );
+	} );
+
+	it( 'keeps loaded favorites resolved while a lifecycle refetch is pending', async () => {
+		const refetch = deferred();
+		apiFetch
+			.mockResolvedValueOnce( { favorites: [ { id: 1 }, { id: 2 } ] } )
+			.mockReturnValueOnce( refetch.promise );
+
+		const { result } = renderHook( () => useFavorites(), { wrapper } );
+		await waitFor( () => {
+			expect( result.current.isResolving ).toBe( false );
+		} );
+
+		act( () => {
+			window.dispatchEvent(
+				new CustomEvent( DOCUMENT_ARCHIVE_CHANGED_EVENT, {
+					detail: { action: 'trash' },
+				} )
+			);
+		} );
+		await waitFor( () => {
+			expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		} );
+
+		expect( result.current.isResolving ).toBe( false );
+		expect( result.current.favorites ).toEqual( [ { id: 1 }, { id: 2 } ] );
+
+		await act( async () => {
+			refetch.resolve( { favorites: [ { id: 2 } ] } );
+			await refetch.promise;
+		} );
+
+		expect( result.current.isResolving ).toBe( false );
 		expect( result.current.favorites ).toEqual( [ { id: 2 } ] );
 	} );
 } );

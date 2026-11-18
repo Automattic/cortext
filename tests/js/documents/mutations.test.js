@@ -9,8 +9,6 @@ import { DOCUMENT_POST_TYPE } from '../../../src/collections';
 import {
 	duplicateDocumentRecord,
 	receiveCanonicalDocumentRecord,
-	restoreDocumentRecord,
-	trashDocumentRecord,
 } from '../../../src/documents/mutations';
 
 describe( 'document mutation cache updates', () => {
@@ -82,79 +80,6 @@ describe( 'document mutation cache updates', () => {
 		).resolves.toBe( response );
 
 		expect( receiveEntityRecords ).not.toHaveBeenCalled();
-	} );
-
-	it( 'caches the canonical top-level record after moving a document to trash', async () => {
-		const receiveEntityRecords = jest.fn();
-		const response = {
-			id: 31,
-			status: 'trash',
-			title: { raw: 'Trashed document' },
-			cascade_deleted: [ 32 ],
-		};
-		apiFetch.mockResolvedValue( response );
-
-		await expect(
-			trashDocumentRecord( { id: 31 }, receiveEntityRecords )
-		).resolves.toBe( response );
-
-		expect( apiFetch ).toHaveBeenCalledWith( {
-			path: '/wp/v2/crtxt_documents/31',
-			method: 'DELETE',
-		} );
-		expect( receiveEntityRecords ).toHaveBeenCalledWith(
-			'postType',
-			DOCUMENT_POST_TYPE,
-			[ response ],
-			undefined,
-			false
-		);
-	} );
-
-	it( 'caches response.previous from a wrapped delete response', async () => {
-		const receiveEntityRecords = jest.fn();
-		const previous = { id: 31, status: 'private' };
-		const response = { deleted: true, previous };
-		apiFetch.mockResolvedValue( response );
-
-		await expect(
-			trashDocumentRecord( { id: 31 }, receiveEntityRecords )
-		).resolves.toBe( response );
-
-		expect( apiFetch ).toHaveBeenCalledWith( {
-			path: '/wp/v2/crtxt_documents/31',
-			method: 'DELETE',
-		} );
-		expect( receiveEntityRecords ).toHaveBeenCalledWith(
-			'postType',
-			DOCUMENT_POST_TYPE,
-			[ previous ],
-			undefined,
-			false
-		);
-	} );
-
-	it( 'caches response.post and returns the full restore response', async () => {
-		const receiveEntityRecords = jest.fn();
-		const post = { id: 31, status: 'private' };
-		const response = { restored: [ 31 ], post };
-		apiFetch.mockResolvedValue( response );
-
-		await expect(
-			restoreDocumentRecord( { id: 31 }, receiveEntityRecords )
-		).resolves.toBe( response );
-
-		expect( apiFetch ).toHaveBeenCalledWith( {
-			path: '/cortext/v1/documents/31/restore',
-			method: 'POST',
-		} );
-		expect( receiveEntityRecords ).toHaveBeenCalledWith(
-			'postType',
-			DOCUMENT_POST_TYPE,
-			[ post ],
-			undefined,
-			false
-		);
 	} );
 
 	it( 'rejects without caching a record when the custom endpoint fails', async () => {

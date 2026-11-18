@@ -414,7 +414,7 @@ final class Documents {
 	 * @return array<string,mixed>|null
 	 */
 	public function format_document( WP_Post $post, array $opts = array() ): ?array {
-		$kind = $this->kind_for_document( $post );
+		$kind = self::kind_for_document( $post );
 		if ( null === $kind ) {
 			return null;
 		}
@@ -500,14 +500,14 @@ final class Documents {
 	 *
 	 * @param WP_Post $post Document post.
 	 */
-	private function kind_for_document( WP_Post $post ): ?string {
+	public static function kind_for_document( WP_Post $post ): ?string {
 		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
 			return null;
 		}
 		if ( Document::is_collection_post( $post ) ) {
 			return self::KIND_COLLECTION;
 		}
-		if ( $this->has_trait_term( $post ) ) {
+		if ( self::has_trait_term( $post ) ) {
 			return self::KIND_ROW;
 		}
 		return self::KIND_PAGE;
@@ -529,7 +529,7 @@ final class Documents {
 	 *
 	 * @param WP_Post $post Document post.
 	 */
-	private function has_trait_term( WP_Post $post ): bool {
+	private static function has_trait_term( WP_Post $post ): bool {
 		if ( Document::POST_TYPE !== $post->post_type ) {
 			return false;
 		}
@@ -606,7 +606,7 @@ final class Documents {
 			return $this->target_not_found_error();
 		}
 
-		$kind = $this->kind_for_document( $post );
+		$kind = self::kind_for_document( $post );
 		if ( null === $kind ) {
 			return $this->target_not_found_error();
 		}

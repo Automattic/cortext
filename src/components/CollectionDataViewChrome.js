@@ -7,7 +7,7 @@ import {
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useMemo } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { closeSmall, trash } from '@wordpress/icons';
+import { archive, closeSmall, trash } from '@wordpress/icons';
 
 export function DataViewsChrome( { footer } ) {
 	return (
@@ -48,6 +48,7 @@ export function DataViewsBulkSelectionControls( {
 	className = 'dataviews-bulk-actions-footer__container',
 	selectedIds,
 	visibleIds,
+	onArchiveSelected,
 	onClearSelection,
 	onDeleteSelected,
 	onToggleVisibleSelection,
@@ -112,6 +113,16 @@ export function DataViewsBulkSelectionControls( {
 			>
 				{ selectedCount > 0 && (
 					<Button
+						icon={ archive }
+						label={ __( 'Archive selected', 'cortext' ) }
+						onClick={ onArchiveSelected }
+						size="compact"
+						showTooltip
+						tooltipPosition="top"
+					/>
+				) }
+				{ selectedCount > 0 && (
+					<Button
 						icon={ trash }
 						isDestructive
 						label={ __( 'Move selected to Trash', 'cortext' ) }
@@ -142,6 +153,7 @@ export function DataViewsSelectionFooter( {
 	visibleIds,
 	totalItems,
 	totalPages,
+	onArchiveSelected,
 	onClearSelection,
 	onDeleteSelected,
 	onToggleVisibleSelection,
@@ -164,6 +176,7 @@ export function DataViewsSelectionFooter( {
 					<DataViewsBulkSelectionControls
 						selectedIds={ selectedIds }
 						visibleIds={ visibleIds }
+						onArchiveSelected={ onArchiveSelected }
 						onClearSelection={ onClearSelection }
 						onDeleteSelected={ onDeleteSelected }
 						onToggleVisibleSelection={ onToggleVisibleSelection }

@@ -6,8 +6,10 @@ import {
 	MenuItem,
 	TextControl,
 } from '@wordpress/components';
+import { useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import {
+	archive as archiveIcon,
 	chevronRight,
 	home as homeIcon,
 	moreVertical,
@@ -15,6 +17,7 @@ import {
 	starEmpty,
 	starFilled,
 } from '@wordpress/icons';
+import { store as noticesStore } from '@wordpress/notices';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 import { collectionIcon } from '../cortextIcons';
@@ -83,7 +86,8 @@ export default function DocumentRow( {
 } ) {
 	const { requestFromActivation } = useSurfaceFocusIntent();
 	const { title, icon, features } = useDocumentRecord( record );
-	const { rename, duplicate, trash } = useDocumentActions();
+	const { rename, duplicate, archive, trash } = useDocumentActions();
+	const { createErrorNotice } = useDispatch( noticesStore );
 
 	const recordId = record.id;
 	const hasLoadedChildren = features.hierarchy && childNodes.length > 0;
@@ -204,7 +208,10 @@ export default function DocumentRow( {
 	}
 
 	return (
-		<li className="cortext-sidebar__node">
+		<li
+			className="cortext-sidebar__node"
+			data-cortext-document-id={ recordId }
+		>
 			<div
 				className="cortext-sidebar__row-wrapper"
 				style={ { '--cortext-depth': depth } }
@@ -399,6 +406,28 @@ export default function DocumentRow( {
 										} }
 									>
 										{ __( 'Duplicate', 'cortext' ) }
+									</MenuItem>
+									<MenuItem
+										icon={ archiveIcon }
+										onClick={ () => {
+											archive( record ).catch(
+												( error ) =>
+													createErrorNotice(
+														error?.message ??
+															__(
+																'Could not archive this document.',
+																'cortext'
+															),
+														{
+															id: 'cortext-document-archive-error',
+															type: 'snackbar',
+														}
+													)
+											);
+											onClose();
+										} }
+									>
+										{ __( 'Archive', 'cortext' ) }
 									</MenuItem>
 									<MenuItem
 										icon="trash"

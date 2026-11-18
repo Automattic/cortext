@@ -1,5 +1,4 @@
 import { __ } from '@wordpress/i18n';
-import { useDispatch } from '@wordpress/data';
 import {
 	useCallback,
 	useEffect,
@@ -21,13 +20,6 @@ import { elementsFromOptions } from '../hooks/optionElements';
 import useCollectionFields from '../hooks/useCollectionFields';
 import { adjacentRowId } from './rowDetailUtils';
 import { parseIdFromUri } from '../router/useResolveEntity';
-import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
-import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
-import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
-import {
-	applyInvalidationPack,
-	rowLifecyclePack,
-} from '../documents/invalidation';
 
 // EntityRoute adds this title field for full-page rows. Do the same here so
 // RowProperties and RowDetailView get the same field shape.
@@ -51,7 +43,6 @@ function withTitleField( fields ) {
 export default function DocumentPeekHost() {
 	const { peek, isPinned } = useDocumentPeekState();
 	const { closeDocument, requestMode } = useDocumentPeekActions();
-	const { invalidateResolution } = useDispatch( 'core' );
 	const {
 		modeSurfaceTransition,
 		saveError,
@@ -195,22 +186,7 @@ export default function DocumentPeekHost() {
 		( candidate ) => String( candidate?.id ) === String( peek.docId )
 	);
 	const handleSaved = () => peek.source?.refresh?.();
-	// Match the full-page restore: the row leaves Trash, and relations and
-	// rollups in other collections can point at it. Nested documents restored
-	// with it can appear in the sidebar tree.
-	const handleRestored = ( _postId, _postType, response ) => {
-		const didCascade = response?.restored?.length > 1;
-		applyInvalidationPack(
-			invalidateResolution,
-			rowLifecyclePack( didCascade )
-		);
-		if ( didCascade ) {
-			notifySidebarTreeChanged();
-		}
-		notifyDocumentTrashChanged();
-		notifyCollectionRowsChanged();
-		peek.source?.refresh?.();
-	};
+	const handleRestored = () => peek.source?.refresh?.();
 
 	const detailView = (
 		<CurrentViewModeProvider value={ peek.mode }>

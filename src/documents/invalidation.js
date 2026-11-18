@@ -22,22 +22,23 @@ const FULL_PAGE_COLLECTIONS = [
 	[ 'postType', DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY ],
 ];
 
-const PUBLISHED_DOCUMENTS = [
-	'getEntityRecords',
-	[ 'postType', DOCUMENT_POST_TYPE, PUBLISHED_DOCUMENTS_QUERY ],
-];
-
 const HOME_FALLBACK = [
 	'getEntityRecords',
 	[ 'postType', PAGE_POST_TYPE, HOME_FALLBACK_QUERY ],
 ];
 
+const PUBLISHED_DOCUMENTS = [
+	'getEntityRecords',
+	[ 'postType', PAGE_POST_TYPE, PUBLISHED_DOCUMENTS_QUERY ],
+];
+
 /**
  * A lifecycle change on any document can affect the sidebar document tree (the
- * non-row query that holds pages and collections), the trashed-pages list, and
- * the collections lookup that Favorites resolves titles from, the published
- * view, and the command palette's fallback home. Refresh them after trash,
- * restore, permanent delete, and duplicate.
+ * non-row query that holds pages and collections), the trashed-pages list, the
+ * collections lookup that Favorites resolves titles from, the Published pane's
+ * status-filtered membership, and the first root document used as the home
+ * fallback. Refresh all five after archive, trash, restore, permanent delete,
+ * and duplicate.
  */
 export const afterDocumentTrash = [
 	ACTIVE_PAGES,
@@ -46,24 +47,6 @@ export const afterDocumentTrash = [
 	PUBLISHED_DOCUMENTS,
 	HOME_FALLBACK,
 ];
-
-// Rows cannot enter the workspace tree or collection picker. Of the core-data
-// lists, only the Published view includes them; the Trash and collection views
-// use their own refresh events.
-export const afterRowLifecycle = [ PUBLISHED_DOCUMENTS ];
-
-/**
- * Picks the pack for a row lifecycle change. A row can own nested documents,
- * such as a collection created from a data view block in its content, and the
- * server trashes and restores them with the row. Those descendants do appear
- * in the tree and collection lists, so a cascade needs the full pack.
- *
- * @param {boolean} didCascade Whether the server moved other documents with the row.
- * @return {Array<Array>} Invalidation pack.
- */
-export function rowLifecyclePack( didCascade ) {
-	return didCascade ? afterDocumentTrash : afterRowLifecycle;
-}
 
 /**
  * Apply an invalidation pack with `invalidateResolution`.
