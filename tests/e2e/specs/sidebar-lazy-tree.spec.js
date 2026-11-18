@@ -14,6 +14,10 @@ const LAST_ROOT_TITLE = `${ ROOT_PREFIX } 100`;
 const FIRST_CHILD_TITLE = `${ CHILD_PREFIX } 001`;
 const LAST_CHILD_TITLE = `${ CHILD_PREFIX } 101`;
 
+function numberedTitle( prefix, number ) {
+	return `${ prefix } ${ String( number ).padStart( 3, '0' ) }`;
+}
+
 async function createDocument( requestUtils, title, args = {} ) {
 	return requestUtils.rest( {
 		method: 'POST',
@@ -98,26 +102,25 @@ test.describe( 'Sidebar lazy tree', () => {
 		} );
 		createdIds.push( parent.id );
 
-		for ( let i = 1; i <= 100; i++ ) {
-			const root = await createDocument(
-				requestUtils,
-				`${ ROOT_PREFIX } ${ String( i ).padStart( 3, '0' ) }`,
-				{ menu_order: -1000 + i }
-			);
-			createdIds.push( root.id );
-		}
-
-		for ( let i = 1; i <= 101; i++ ) {
-			const child = await createDocument(
-				requestUtils,
-				`${ CHILD_PREFIX } ${ String( i ).padStart( 3, '0' ) }`,
-				{
-					parent: parent.id,
-					menu_order: -1000 + i,
-				}
-			);
-			createdIds.push( child.id );
-		}
+		const documents = [
+			...Array.from( { length: 100 }, ( _, index ) => ( {
+				title: numberedTitle( ROOT_PREFIX, index + 1 ),
+				menu_order: -1000 + index + 1,
+			} ) ),
+			...Array.from( { length: 101 }, ( _, index ) => ( {
+				title: numberedTitle( CHILD_PREFIX, index + 1 ),
+				parent: parent.id,
+				menu_order: -1000 + index + 1,
+			} ) ),
+		];
+		const responses = await requestUtils.batchRest(
+			documents.map( ( body ) => ( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				body: { status: 'private', ...body },
+			} ) )
+		);
+		createdIds.push( ...responses.map( ( { body } ) => body.id ) );
 
 		await requestUtils.rest( {
 			method: 'PUT',
@@ -132,9 +135,19 @@ test.describe( 'Sidebar lazy tree', () => {
 			path: '/cortext/v1/sidebar-tree-preferences',
 			data: { expanded: [] },
 		} );
-		for ( const id of [ ...createdIds ].reverse() ) {
-			await deleteIfCreated( requestUtils, id );
+		// The parent goes last, after its children are gone.
+		const [ parentId, ...documentIds ] = createdIds;
+		try {
+			await requestUtils.batchRest(
+				documentIds.map( ( id ) => ( {
+					method: 'DELETE',
+					path: `/wp/v2/crtxt_documents/${ id }?force=true`,
+				} ) )
+			);
+		} catch {
+			// Best-effort cleanup; some records may already be gone.
 		}
+		await deleteIfCreated( requestUtils, parentId );
 	} );
 
 	test( 'paginates root and child branches, then restores the open branch', async ( {
