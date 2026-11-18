@@ -1,10 +1,10 @@
 import { registerBlockType } from '@wordpress/blocks';
 
 import metadata from './block.json';
-import edit from './edit';
+import { deferredEdit } from '../deferredEdit';
 
 registerBlockType( metadata.name, {
 	...metadata,
-	edit,
+	edit: deferredEdit( metadata.name ),
 	save: () => null,
 } );

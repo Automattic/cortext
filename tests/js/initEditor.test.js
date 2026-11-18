@@ -17,9 +17,10 @@ jest.mock( '@wordpress/i18n', () => ( {
 	setLocaleData: jest.fn(),
 } ) );
 
-// Mock the block barrel; importing the real one pulls in every block edit/save
-// component.
+// Mock the block barrel and the edit map; importing the real ones pulls in
+// every block edit component.
 jest.mock( '../../src/blocks', () => ( {} ) );
+jest.mock( '../../src/blocks/edits', () => ( {} ) );
 
 // `initInserterMediaCategories` dispatches to the block-editor store on
 // import; stub it so the test doesn't pull the full data + editor chain.

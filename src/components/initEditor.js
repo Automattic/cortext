@@ -1,21 +1,19 @@
-// Registers the core and Cortext blocks for every editor surface in the
-// shell. The shell entry (`src/index.js`) imports this module first, so the
-// block types exist before core-data parses any document it fetches. The
-// guard keeps the side effect idempotent across bundles.
+// Editor setup shared by every editor surface: Canvas, RowEditor, and the
+// command palette preview import this module before they render blocks. The
+// block types themselves register earlier, from the shell entry (see
+// `./registerBlocks`); this module adds their edit components and the
+// editor-only extensions.
 //
 // `ALLOWED_BLOCK_TYPES` is the editor's block list. `getEditorSettings()`
 // passes it to Gutenberg as `allowedBlockTypes`, which the editor checks for
 // the inserter, slash search, paste, and programmatic inserts. Blocks outside
 // the list stay registered, so stored content and `createBlock` keep working;
 // they just do not appear in the UI.
-import { registerCoreBlocks } from '@wordpress/block-library';
-import { addFilter } from '@wordpress/hooks';
 import { __, setLocaleData } from '@wordpress/i18n';
 
-// Register the Collections category before the `../blocks` barrel registers
-// Cortext blocks from block.json.
+import './registerBlocks';
 import { COLLECTIONS_BLOCK_CATEGORY } from './collectionsBlockCategory';
-import '../blocks';
+import '../blocks/edits';
 
 // Side-effect import: register media categories for the full inserter.
 import './initInserterMediaCategories';
@@ -25,32 +23,6 @@ import './prioritizeCortextInserterBlocks';
 
 // Register Cortext's inline mention format and @ completer.
 import './mention';
-
-// Core exposes `core/post-title` in the inserter and block actions by default.
-// Cortext owns title placement through EnsureHeaderBlocks, so users shouldn't
-// insert another title, duplicate it, or unlock its fixed position. Adjust the
-// supports before `registerCoreBlocks` reads them.
-// Keep it in `ALLOWED_BLOCK_TYPES`: `insertBlocks` checks that list before it
-// inserts the locked header. The `cortext/document-*` blocks use the same
-// hidden-from-inserter pattern in block.json.
-addFilter(
-	'blocks.registerBlockType',
-	'cortext/hide-post-title-from-inserter',
-	( settings, name ) => {
-		if ( name !== 'core/post-title' ) {
-			return settings;
-		}
-		return {
-			...settings,
-			supports: {
-				...settings.supports,
-				inserter: false,
-				lock: false,
-				multiple: false,
-			},
-		};
-	}
-);
 
 // Our link picker's "Create" action makes a Cortext document, not a WordPress
 // page, so relabel Gutenberg's create button. "Create: %s" (text and image
@@ -149,9 +121,4 @@ export function getEditorSettings() {
 		...( window.cortextEditorSettings ?? {} ),
 		allowedBlockTypes: ALLOWED_BLOCK_TYPES,
 	};
-}
-
-if ( ! window.__cortextBlocksRegistered ) {
-	registerCoreBlocks();
-	window.__cortextBlocksRegistered = true;
 }
