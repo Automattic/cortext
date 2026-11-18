@@ -71,6 +71,9 @@ trait InMemoryTermStore {
 		self::$term_store   = array();
 		self::$object_terms = array();
 		self::$next_term_id = 1;
+		// The store was wiped outside WP, so move the term cache salt the way
+		// a real term write would.
+		wp_cache_set_terms_last_changed();
 	}
 
 	/**
@@ -93,6 +96,7 @@ trait InMemoryTermStore {
 			'term_taxonomy_id' => $term_id,
 		);
 		wp_cache_set( $term_id, (object) self::$term_store[ $term_id ], 'terms' );
+		wp_cache_set_terms_last_changed();
 		return $term_id;
 	}
 

@@ -200,6 +200,18 @@ final class Test_Taxonomy_Trait_Taxonomy extends BaseTestCase {
 		$this->assertSame( 0, TraitTaxonomy::term_id_for_trait( $collection_id ) );
 	}
 
+	public function test_all_trait_ids_follows_terms_created_and_deleted_in_the_same_request(): void {
+		$this->assertSame( array(), TraitTaxonomy::all_trait_ids() );
+
+		$collection_id = $this->create_collection();
+		$this->assertSame( array( $collection_id ), TraitTaxonomy::all_trait_ids() );
+		$this->assertTrue( TraitTaxonomy::is_trait_id( $collection_id ) );
+
+		wp_delete_term( TraitTaxonomy::term_id_for_trait( $collection_id ), TraitTaxonomy::TAXONOMY );
+		$this->assertSame( array(), TraitTaxonomy::all_trait_ids() );
+		$this->assertFalse( TraitTaxonomy::is_trait_id( $collection_id ) );
+	}
+
 	public function test_trash_keeps_the_mirror_term_intact(): void {
 		$collection_id = $this->create_collection();
 		$term_id       = TraitTaxonomy::term_id_for_trait( $collection_id );
