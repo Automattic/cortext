@@ -1,7 +1,13 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { Icon, arrowUpRight } from '@wordpress/icons';
+import { Icon, archive, arrowUpRight } from '@wordpress/icons';
 
-import { relationTitle, rowHref, shouldUseNativeLink } from './relationUtils';
+import {
+	archivedRelationLabel,
+	isArchivedRelationRef,
+	relationTitle,
+	rowHref,
+	shouldUseNativeLink,
+} from './relationUtils';
 import { useDocumentPeekActions } from '../DocumentPeekProvider';
 import { useCurrentViewMode } from '../CurrentViewModeContext';
 
@@ -18,10 +24,23 @@ export default function RelationReferences( { value } ) {
 		<span className="cortext-relation-refs">
 			{ populated.map( ( ref ) => {
 				const title = relationTitle( ref );
+				const isArchived = isArchivedRelationRef( ref );
 				return (
 					<a
 						key={ ref.id }
-						className="cortext-relation-ref"
+						className={
+							isArchived
+								? 'cortext-relation-ref cortext-relation-ref--archived'
+								: 'cortext-relation-ref'
+						}
+						title={
+							isArchived ? __( 'Archived', 'cortext' ) : undefined
+						}
+						aria-label={
+							isArchived
+								? archivedRelationLabel( title )
+								: undefined
+						}
 						href={ rowHref( ref ) }
 						target="_top"
 						onClick={ ( event ) => {
@@ -41,7 +60,7 @@ export default function RelationReferences( { value } ) {
 					>
 						<Icon
 							className="cortext-relation-ref__icon"
-							icon={ arrowUpRight }
+							icon={ isArchived ? archive : arrowUpRight }
 						/>
 						<span className="cortext-relation-ref__title">
 							{ title }
