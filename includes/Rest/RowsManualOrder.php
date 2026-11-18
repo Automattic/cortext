@@ -122,14 +122,14 @@ final class RowsManualOrder {
 		$before_order = $before instanceof WP_Post ? TraitTaxonomy::member_order( $before->ID, $tt_id ) : null;
 		$after_order  = $after instanceof WP_Post ? TraitTaxonomy::member_order( $after->ID, $tt_id ) : null;
 
-		if ( null !== $before_order && null !== $after_order && $before_order <= $after_order ) {
-			return new WP_Error(
-				'cortext_reorder_invalid_neighbors',
-				__( 'Those row positions are no longer valid.', 'cortext' ),
-				array( 'status' => 400 )
-			);
+		if ( null !== $before_order && null !== $after_order && $before_order < $after_order ) {
+			return $this->invalid_neighbors_error();
 		}
 
+		// Neighbors that share a position (a row restored onto a slot another
+		// row took meanwhile) or sit too close get renumbered first. Lists
+		// break position ties by ID, and so does densify, so the renumbered
+		// order matches what the user saw.
 		if ( null !== $before_order && null !== $after_order && ( $before_order - $after_order ) < 2 ) {
 			$densified = $this->densify( $collection_id );
 			if ( is_wp_error( $densified ) ) {
@@ -139,6 +139,9 @@ final class RowsManualOrder {
 
 			$before_order = null === $before_id ? null : TraitTaxonomy::member_order( $before_id, $tt_id );
 			$after_order  = null === $after_id ? null : TraitTaxonomy::member_order( $after_id, $tt_id );
+			if ( $before_order <= $after_order ) {
+				return $this->invalid_neighbors_error();
+			}
 		}
 
 		$menu_order = $this->menu_order_between( $before_order, $after_order );
@@ -316,6 +319,14 @@ final class RowsManualOrder {
 		}
 
 		return $row;
+	}
+
+	private function invalid_neighbors_error(): WP_Error {
+		return new WP_Error(
+			'cortext_reorder_invalid_neighbors',
+			__( 'Those row positions are no longer valid.', 'cortext' ),
+			array( 'status' => 400 )
+		);
 	}
 
 	private function is_hidden( ?WP_Post $post ): bool {

@@ -427,6 +427,66 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		$this->assertLessThan( 300, $menu_order );
 	}
 
+	public function test_reorder_densifies_when_a_restored_row_ties_with_its_neighbor(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$fixture = $this->create_collection_fixture( 'restored-tie' );
+		$rows    = $this->create_ordered_rows( $fixture['collection_id'], 4 );
+		$this->set_manual_orders( $fixture['collection_id'], $rows, array( 100, 200, 300, 400 ) );
+
+		// Moving the last row between the two active rows around an archived
+		// one lands it on the archived row's position.
+		$this->assertIsArray( $this->archive_cascade->archive( $rows[1] ) );
+		$this->reorder_row(
+			$rows[3],
+			array(
+				'before_id'    => $rows[2],
+				'after_id'     => $rows[0],
+				'current_sort' => null,
+			)
+		);
+		$this->assertIsArray( $this->archive_cascade->unarchive( $rows[1] ) );
+		$this->assertSame( $this->order_of( $fixture['collection_id'], $rows[1] ), $this->order_of( $fixture['collection_id'], $rows[3] ) );
+
+		$response = $this->reorder_row(
+			$rows[2],
+			array(
+				'before_id'    => $rows[3],
+				'after_id'     => $rows[1],
+				'current_sort' => null,
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['reseeded'] );
+		$orders = array_map(
+			fn( int $row_id ): int => $this->order_of( $fixture['collection_id'], $row_id ),
+			$rows
+		);
+		$this->assertLessThan( $orders[1], $orders[0] );
+		$this->assertLessThan( $orders[2], $orders[1] );
+		$this->assertLessThan( $orders[3], $orders[2] );
+	}
+
+	public function test_reorder_rejects_tied_neighbors_sent_in_reverse_order(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$fixture = $this->create_collection_fixture( 'reverse-tie' );
+		$rows    = $this->create_ordered_rows( $fixture['collection_id'], 3 );
+		$this->set_manual_orders( $fixture['collection_id'], $rows, array( 100, 100, 200 ) );
+
+		// Lists show tied rows by ID, so rows[0] sits above rows[1].
+		$response = $this->reorder_row(
+			$rows[2],
+			array(
+				'before_id'    => $rows[0],
+				'after_id'     => $rows[1],
+				'current_sort' => null,
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_reorder_invalid_neighbors', $response->get_data()['code'] );
+	}
+
 	/**
 	 * @dataProvider hidden_statuses
 	 *
