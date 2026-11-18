@@ -5,9 +5,8 @@ jest.mock( '@wordpress/core-data', () => ( {
 } ) );
 
 import { useEntityRecords } from '@wordpress/core-data';
-import useCollectionSearch, {
-	collectionSearchQuery,
-} from '../../../src/hooks/useCollectionSearch';
+import { collectionSearchQuery } from '../../../src/collections';
+import useCollectionSearch from '../../../src/hooks/useCollectionSearch';
 
 beforeEach( () => {
 	jest.useFakeTimers();
@@ -24,6 +23,14 @@ describe( 'collectionSearchQuery', () => {
 		expect(
 			collectionSearchQuery( '' )._fields.split( ',' )
 		).not.toContain( 'meta' );
+	} );
+
+	// Every collection's content holds block markup, so a content match would
+	// return them all for words like "view".
+	it( 'matches a search against titles only', () => {
+		expect( collectionSearchQuery( 'view' ).search_columns ).toEqual( [
+			'post_title',
+		] );
 	} );
 } );
 

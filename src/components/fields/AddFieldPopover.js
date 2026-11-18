@@ -95,7 +95,8 @@ function RelationConfig( {
 	const [ showReverseOptions, setShowReverseOptions ] = useState( true );
 	const targetCollectionId = target?.value ?? '';
 
-	const { records: matches } = useCollectionSearch( targetSearch );
+	const { records: matches, isResolving: isSearching } =
+		useCollectionSearch( targetSearch );
 	const options = useMemo( () => {
 		const found = ( matches ?? [] ).map( ( collection ) => ( {
 			value: String( collection.id ),
@@ -158,6 +159,7 @@ function RelationConfig( {
 					)
 				}
 				onFilterValueChange={ setTargetSearch }
+				isLoading={ isSearching }
 				__nextHasNoMarginBottom
 			/>
 			<SelectControl

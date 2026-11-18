@@ -1,26 +1,10 @@
 import { useEntityRecords } from '@wordpress/core-data';
 import { useRef } from '@wordpress/element';
 
-import { COLLECTION_QUERY, DOCUMENT_POST_TYPE } from '../collections';
+import { DOCUMENT_POST_TYPE, collectionSearchQuery } from '../collections';
 import useDebouncedValue from './useDebouncedValue';
 
 const SEARCH_DEBOUNCE_MS = 150;
-
-/**
- * Query for collection pickers. Searches on the server so collections past
- * the first page stay reachable, and asks only for `id` and `title`: `meta`
- * is what makes the shared collections list expensive to refetch.
- *
- * @param {string} search Search term; empty lists the first page.
- * @return {Object} REST query for `getEntityRecords`.
- */
-export function collectionSearchQuery( search ) {
-	const query = { ...COLLECTION_QUERY, _fields: 'id,title' };
-	if ( search ) {
-		query.search = search;
-	}
-	return query;
-}
 
 /**
  * Collections matching `search`, for pickers. Keeps the previous results

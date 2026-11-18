@@ -126,6 +126,7 @@ jest.mock( '../../../src/components/page-queries', () => ( {
 jest.mock( '../../../src/collections', () => ( {
 	DOCUMENT_POST_TYPE: 'page',
 	FULL_PAGE_COLLECTION_QUERY: {},
+	collectionSearchQuery: () => ( {} ),
 } ) );
 jest.mock( '../../../src/documents/capabilities', () => ( {
 	definesTrait: () => false,

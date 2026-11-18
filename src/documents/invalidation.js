@@ -5,7 +5,11 @@ import {
 	PUBLISHED_DOCUMENTS_QUERY,
 	TRASHED_PAGES_QUERY,
 } from '../components/page-queries';
-import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
+import {
+	DOCUMENT_POST_TYPE,
+	FULL_PAGE_COLLECTION_QUERY,
+	collectionSearchQuery,
+} from '../collections';
 
 const ACTIVE_PAGES = [
 	'getEntityRecords',
@@ -22,6 +26,11 @@ const FULL_PAGE_COLLECTIONS = [
 	[ 'postType', DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY ],
 ];
 
+const COLLECTION_PICKER = [
+	'getEntityRecords',
+	[ 'postType', DOCUMENT_POST_TYPE, collectionSearchQuery( '' ) ],
+];
+
 const HOME_FALLBACK = [
 	'getEntityRecords',
 	[ 'postType', PAGE_POST_TYPE, HOME_FALLBACK_QUERY ],
@@ -35,15 +44,16 @@ const PUBLISHED_DOCUMENTS = [
 /**
  * A lifecycle change on any document can affect the sidebar document tree (the
  * non-row query that holds pages and collections), the trashed-pages list, the
- * collections lookup that Favorites resolves titles from, the Published pane's
- * status-filtered membership, and the first root document used as the home
- * fallback. Refresh all five after archive, trash, restore, permanent delete,
- * and duplicate.
+ * collections lookup that Favorites resolves titles from, the collection
+ * pickers' unfiltered list, the Published pane's status-filtered membership,
+ * and the first root document used as the home fallback. Refresh all six after
+ * archive, trash, restore, permanent delete, and duplicate.
  */
 export const afterDocumentTrash = [
 	ACTIVE_PAGES,
 	TRASHED_PAGES,
 	FULL_PAGE_COLLECTIONS,
+	COLLECTION_PICKER,
 	PUBLISHED_DOCUMENTS,
 	HOME_FALLBACK,
 ];
