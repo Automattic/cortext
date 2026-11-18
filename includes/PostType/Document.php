@@ -25,6 +25,7 @@ use Cortext\Fields\FieldTypeRegistry;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\Relations;
+use Cortext\Rest\DocumentsPostsController;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
@@ -69,10 +70,6 @@ final class Document {
 		// transient autosave that fires before the cleanup never persists.
 		add_filter( 'wp_insert_post_data', array( $this, 'strip_foreign_root_data_views' ), 10, 2 );
 		add_action( 'rest_api_init', array( $this, 'register_rest_fields' ) );
-		// `field-<id>` meta is registered on every `crtxt_document`, so a REST
-		// response would carry every collection's fields on every document.
-		// Trim it to the document's own collection before it goes out.
-		add_filter( 'rest_prepare_' . self::POST_TYPE, array( $this, 'limit_field_meta_to_collection' ), 10, 2 );
 	}
 
 	/**
@@ -159,44 +156,31 @@ final class Document {
 	}
 
 	/**
-	 * Trims `field-<id>` meta in the REST response to the document's own
-	 * collection. `field-<id>` is registered on every `crtxt_document`, so
-	 * without this trim the response carries every collection's fields on every
-	 * document. A row keeps its collection's writable fields. Rollups and
-	 * formulas stay out of `meta` because they are computed and read-only,
-	 * exposed in `cortext_hydrated_meta`. Pages and collections keep no field values.
-	 * Schema and identity meta stay.
+	 * Returns the `field-<id>` meta keys a document carries in REST `meta`.
+	 * `field-<id>` is registered on every `crtxt_document`, so without this the
+	 * response would carry every collection's fields on every document. A row
+	 * keeps its collection's writable fields. Rollups and formulas stay out of
+	 * `meta` because they are computed and read-only, exposed in
+	 * `cortext_hydrated_meta`. Pages and collections carry no field values.
 	 *
-	 * @param \WP_REST_Response $response Prepared response.
-	 * @param \WP_Post          $post     Document being prepared.
-	 * @return \WP_REST_Response
+	 * @param WP_Post $post Document.
+	 * @return string[]
 	 */
-	public function limit_field_meta_to_collection( $response, $post ) {
-		$data = $response->get_data();
-		if ( ! is_array( $data ) || ! isset( $data['meta'] ) || ! is_array( $data['meta'] ) ) {
-			return $response;
-		}
-
-		$allowed    = array();
+	public static function rest_field_meta_keys( WP_Post $post ): array {
 		$trait_post = ( new Documents() )->find_trait_for_document( $post );
-		if ( $trait_post instanceof WP_Post ) {
-			foreach ( self::collection_field_ids( (int) $trait_post->ID ) as $field_id ) {
-				$field_type = (string) get_post_meta( $field_id, 'type', true );
-				if ( in_array( $field_type, array( 'rollup', 'formula' ), true ) ) {
-					continue;
-				}
-				$allowed[ 'field-' . $field_id ] = true;
-			}
+		if ( ! $trait_post instanceof WP_Post ) {
+			return array();
 		}
 
-		foreach ( array_keys( $data['meta'] ) as $key ) {
-			if ( is_string( $key ) && str_starts_with( $key, 'field-' ) && ! isset( $allowed[ $key ] ) ) {
-				unset( $data['meta'][ $key ] );
+		$keys = array();
+		foreach ( self::collection_field_ids( (int) $trait_post->ID ) as $field_id ) {
+			$field_type = (string) get_post_meta( $field_id, 'type', true );
+			if ( in_array( $field_type, array( 'rollup', 'formula' ), true ) ) {
+				continue;
 			}
+			$keys[] = 'field-' . $field_id;
 		}
-
-		$response->set_data( $data );
-		return $response;
+		return $keys;
 	}
 
 	/**
@@ -929,7 +913,7 @@ final class Document {
 				'show_in_menu'          => false,
 				'show_in_rest'          => true,
 				'rest_base'             => 'crtxt_documents',
-				'rest_controller_class' => 'WP_REST_Posts_Controller',
+				'rest_controller_class' => DocumentsPostsController::class,
 				'has_archive'           => false,
 				// `post_parent` carries the workspace-tree hierarchy. Any
 				// document can hang under any other; the tree is content,
