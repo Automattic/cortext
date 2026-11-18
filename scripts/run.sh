@@ -3,6 +3,7 @@
 # wp-env, seed the local demo workspace, and start the JS watcher.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+"$(dirname "$0")/write-wp-env-override.sh"
 "$(dirname "$0")/refresh-label.sh"
 
 port=$(node -p 'require("./.wp-env.override.json").port')
