@@ -34,6 +34,10 @@ module.exports = defineConfig( {
 	globalSetup: require.resolve( './tests/e2e/global-setup.js' ),
 	// wp-env is started explicitly by the developer / CI.
 	webServer: undefined,
+	// Shard by test rather than by file so one large spec doesn't pin a
+	// shard. Still one worker: tests share a single WordPress database.
+	fullyParallel: true,
+	retries: process.env.CI ? 1 : 0,
 	use: {
 		...baseConfig.use,
 		video: 'off',

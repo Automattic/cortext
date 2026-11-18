@@ -12,8 +12,6 @@ const CANVAS_SELECTOR = 'iframe[name="editor-canvas"]';
 const TITLE_BLOCK_SELECTOR = '[data-type="core/post-title"]';
 const PARAGRAPH_BLOCK_SELECTOR = '[data-type="core/paragraph"]';
 
-test.describe.configure( { mode: 'serial' } );
-
 async function deleteIfCreated( requestUtils, path ) {
 	if ( ! path ) {
 		return;

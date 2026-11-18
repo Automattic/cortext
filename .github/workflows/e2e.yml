@@ -48,11 +48,15 @@ jobs:
                   fi
 
     playwright:
-        name: Playwright
+        name: Playwright (shard ${{ matrix.shard }}/4)
         runs-on: ubuntu-latest
         needs: changes
         if: needs.changes.outputs.e2e_changed == 'true'
         timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                shard: [1, 2, 3, 4]
         steps:
             - uses: actions/checkout@v7.0.1
 
@@ -87,15 +91,35 @@ jobs:
 
             - run: pnpm run env:start
 
-            - run: pnpm run test:e2e
+            - run: pnpm run test:e2e --shard=${{ matrix.shard }}/4
               env:
                   WP_BASE_URL: http://localhost:8888
+                  # Chromium is installed above; skip wp-scripts' download of every browser.
+                  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
             - if: failure()
               uses: actions/upload-artifact@v7
               with:
-                  name: playwright-artifacts
+                  name: playwright-artifacts-${{ matrix.shard }}
                   path: |
                       artifacts/
                       playwright-report/
                   retention-days: 7
+
+    # Required status check on main. Shard jobs get matrix names, so this job
+    # reports one result under the stable name.
+    playwright-result:
+        name: Playwright
+        runs-on: ubuntu-latest
+        needs: [changes, playwright]
+        if: always()
+        steps:
+            - run: |
+                  if [ "${{ needs.changes.result }}" != "success" ]; then
+                    echo "Path detection: ${{ needs.changes.result }}"
+                    exit 1
+                  fi
+                  case "${{ needs.playwright.result }}" in
+                    success|skipped) exit 0 ;;
+                    *) echo "Playwright shards: ${{ needs.playwright.result }}"; exit 1 ;;
+                  esac
