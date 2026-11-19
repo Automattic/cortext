@@ -795,7 +795,7 @@ final class Documents {
 			if (
 				! $collection instanceof WP_Post
 				|| (
-					self::STATUS_TRASH === $collection->post_status
+					! self::is_live_status( $collection->post_status )
 					&& ! in_array( $collection_id, $current_ids, true )
 				)
 				|| $term_id < 1

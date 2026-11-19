@@ -57,6 +57,7 @@ export default function TraitControl( {
 	documentId,
 	collections,
 	beforeRemoveCollection,
+	isReadOnly = false,
 	onChange,
 } ) {
 	const [ isAdding, setIsAdding ] = useState( false );
@@ -183,11 +184,14 @@ export default function TraitControl( {
 	};
 
 	// Archived and trashed traits stay in every write so restore can bring the
-	// row back to them, but they are not places the row lives, so no chip.
+	// row back to them, but they are not places the row lives, so no chip. A
+	// row retired together with all of its collections still lists them.
 	const liveCollections = collections.filter(
 		( collection ) => collection.active !== false
 	);
-	const canRemoveLiveCollection = liveCollections.length > 1;
+	const shownCollections =
+		liveCollections.length > 0 ? liveCollections : collections;
+	const canRemoveLiveCollection = ! isReadOnly && liveCollections.length > 1;
 
 	const removeCollection = ( collection ) => {
 		if ( ! canRemoveLiveCollection ) {
@@ -218,7 +222,7 @@ export default function TraitControl( {
 					</span>
 				</div>
 				<div className="cortext-row-detail__property-value cortext-traits__chips">
-					{ liveCollections.map( ( collection ) => (
+					{ shownCollections.map( ( collection ) => (
 						<span
 							key={ collection.id }
 							className="cortext-traits__chip"
@@ -246,20 +250,22 @@ export default function TraitControl( {
 							) : null }
 						</span>
 					) ) }
-					<Button
-						ref={ addButtonRef }
-						className="cortext-traits__add"
-						icon={ plus }
-						size="small"
-						variant="tertiary"
-						label={ __( 'Add trait', 'cortext' ) }
-						disabled={ isSaving }
-						onClick={ () =>
-							setIsAdding( ( current ) => ! current )
-						}
-					/>
+					{ isReadOnly ? null : (
+						<Button
+							ref={ addButtonRef }
+							className="cortext-traits__add"
+							icon={ plus }
+							size="small"
+							variant="tertiary"
+							label={ __( 'Add trait', 'cortext' ) }
+							disabled={ isSaving }
+							onClick={ () =>
+								setIsAdding( ( current ) => ! current )
+							}
+						/>
+					) }
 					{ isSaving ? <Spinner /> : null }
-					{ isAdding ? (
+					{ isAdding && ! isReadOnly ? (
 						<Popover
 							className="cortext-traits__popover"
 							anchor={ addButtonRef.current }

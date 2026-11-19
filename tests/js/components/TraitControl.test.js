@@ -146,6 +146,25 @@ describe( 'TraitControl', () => {
 		);
 	} );
 
+	it( 'lists traits without add or remove controls when read-only', () => {
+		render(
+			<TraitControl
+				documentId={ 5 }
+				collections={ [
+					{ ...membership( 1, 'Projects' ), active: false },
+					{ ...membership( 2, 'People' ), active: false },
+				] }
+				isReadOnly
+				onChange={ () => {} }
+			/>
+		);
+
+		expect( screen.getByText( 'Projects' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'People' ) ).toBeInTheDocument();
+		expect( screen.queryByLabelText( 'Remove trait' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Add trait' ) ).toBeNull();
+	} );
+
 	it( 'never offers to remove the last live trait', () => {
 		render(
 			<TraitControl

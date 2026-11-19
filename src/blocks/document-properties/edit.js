@@ -20,6 +20,7 @@ import {
 } from '@wordpress/element';
 import { store as coreStore } from '@wordpress/core-data';
 import { useSelect } from '@wordpress/data';
+import { store as editorStore } from '@wordpress/editor';
 import { pencil, seen, unseen } from '@wordpress/icons';
 
 import DocumentPropertiesActions from '../../components/DocumentPropertiesActions';
@@ -81,6 +82,14 @@ export default function Edit() {
 	// for restore. A row that lives in another collection does not show or
 	// write their fields, so only live memberships render property groups. A
 	// row retired together with all of its collections still shows them.
+	// Archived and trashed rows are read-only, their traits included.
+	const isRowRetired = useSelect(
+		( select ) =>
+			[ 'trash', 'crtxt_archived' ].includes(
+				select( editorStore ).getCurrentPostAttribute( 'status' )
+			),
+		[]
+	);
 	const visibleMemberships = useMemo( () => {
 		const live = memberships.filter(
 			( collection ) => collection.active !== false
@@ -649,6 +658,7 @@ export default function Edit() {
 							beforeRemoveCollection={ prepareCollectionRemoval }
 							documentId={ rowId }
 							collections={ memberships }
+							isReadOnly={ isRowRetired }
 							onChange={ refreshTraits }
 						/>
 					) : null }

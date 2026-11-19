@@ -539,6 +539,16 @@ final class DocumentsController {
 		$id  = (int) $request->get_param( 'id' );
 		$raw = $request->get_param( 'collection_ids' );
 
+		// Archived and trashed documents are read-only, their traits included.
+		$status = (string) get_post_status( $id );
+		if ( ! Documents::is_live_status( $status ) ) {
+			return new WP_Error(
+				Documents::STATUS_ARCHIVED === $status ? 'cortext_document_archived' : 'cortext_document_trashed',
+				__( 'Restore this document before editing it.', 'cortext' ),
+				array( 'status' => 409 )
+			);
+		}
+
 		$collection_ids = is_array( $raw )
 			? array_values(
 				array_unique(
@@ -625,15 +635,27 @@ final class DocumentsController {
 	 * @return true|WP_Error
 	 */
 	private function authorize_membership_changes( array $before, array $collection_ids ): bool|WP_Error {
-		$has_active_membership = false;
+		$has_live_membership = false;
 		foreach ( $collection_ids as $collection_id ) {
 			$collection = get_post( $collection_id );
+			$is_new     = ! in_array( $collection_id, $before, true );
+			if (
+				$collection instanceof WP_Post
+				&& $is_new
+				&& Documents::STATUS_ARCHIVED === $collection->post_status
+			) {
+				return new WP_Error(
+					'cortext_membership_collection_archived',
+					__( 'Restore this collection from Archive before adding items to it.', 'cortext' ),
+					array(
+						'status'        => 409,
+						'collection_id' => $collection_id,
+					)
+				);
+			}
 			if (
 				! $collection instanceof WP_Post
-				|| (
-					Documents::STATUS_TRASH === $collection->post_status
-					&& ! in_array( $collection_id, $before, true )
-				)
+				|| ( Documents::STATUS_TRASH === $collection->post_status && $is_new )
 				|| ! Document::is_collection_post( $collection )
 				|| TraitTaxonomy::term_id_for_trait( $collection_id ) < 1
 			) {
@@ -647,15 +669,15 @@ final class DocumentsController {
 				);
 			}
 
-			if ( Documents::STATUS_TRASH !== $collection->post_status ) {
-				$has_active_membership = true;
+			if ( Documents::is_live_status( $collection->post_status ) ) {
+				$has_live_membership = true;
 			}
 		}
 
-		// A lifecycle-preserved membership in a trashed collection is not enough
-		// to keep a live row addressable. Require at least one collection that can
+		// A membership kept in an archived or trashed collection is not enough to
+		// keep a live row addressable. Require at least one collection that can
 		// actually surface the row before changing any taxonomy relationships.
-		if ( ! $has_active_membership ) {
+		if ( ! $has_live_membership ) {
 			return new WP_Error(
 				'cortext_membership_empty',
 				__( 'A row must belong to at least one active collection.', 'cortext' ),

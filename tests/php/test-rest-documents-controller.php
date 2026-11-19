@@ -462,6 +462,68 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		$this->assertSame( $expected, $actual );
 	}
 
+	public function test_put_traits_rejects_adding_an_archived_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$live_collection     = $this->create_collection( 'live', 'Live' );
+		$archived_collection = $this->create_collection( 'archived', 'Archived' );
+		$row_id              = $this->create_row( $live_collection, 'Ada' );
+		$this->archive( $archived_collection );
+
+		$response = $this->request_traits( $row_id, array( $live_collection, $archived_collection ) );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'cortext_membership_collection_archived', $response->get_data()['code'] );
+		$this->assertSame( array( $live_collection ), ( new \Cortext\Documents() )->membership_ids( $row_id ) );
+	}
+
+	public function test_put_traits_rejects_leaving_only_archived_memberships(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$live_collection     = $this->create_collection( 'live', 'Live' );
+		$archived_collection = $this->create_collection( 'archived', 'Archived' );
+		$row_id              = $this->create_row( $live_collection, 'Ada' );
+		$this->add_membership( $row_id, $archived_collection );
+		$this->archive( $archived_collection );
+
+		$response = $this->request_traits( $row_id, array( $archived_collection ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_membership_empty', $response->get_data()['code'] );
+	}
+
+	/**
+	 * Archived and trashed rows are read-only, their traits included.
+	 *
+	 * @dataProvider retired_row_statuses
+	 *
+	 * @param string $status        Status the row is retired to.
+	 * @param string $expected_code Error code the endpoint returns.
+	 */
+	public function test_put_traits_rejects_changes_on_a_retired_row( string $status, string $expected_code ): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_a = $this->create_collection( 'a', 'A' );
+		$collection_b = $this->create_collection( 'b', 'B' );
+		$row_id       = $this->create_row( $collection_a, 'Ada' );
+		wp_update_post(
+			array(
+				'ID'          => $row_id,
+				'post_status' => $status,
+			)
+		);
+
+		$response = $this->request_traits( $row_id, array( $collection_a, $collection_b ) );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( $expected_code, $response->get_data()['code'] );
+		$this->assertSame( array( $collection_a ), ( new \Cortext\Documents() )->membership_ids( $row_id ) );
+	}
+
+	public static function retired_row_statuses(): array {
+		return array(
+			'archived' => array( Documents::STATUS_ARCHIVED, 'cortext_document_archived' ),
+			'trashed'  => array( 'trash', 'cortext_document_trashed' ),
+		);
+	}
+
 	public function test_get_traits_marks_trashed_memberships_inactive(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$active_collection  = $this->create_collection( 'projects-flag', 'Projects' );
@@ -776,6 +838,15 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 			array(
 				'related_collection_id' => (string) $target_id,
 				'relation_multiple'     => '1',
+			)
+		);
+	}
+
+	private function archive( int $post_id ): void {
+		wp_update_post(
+			array(
+				'ID'          => $post_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
 			)
 		);
 	}

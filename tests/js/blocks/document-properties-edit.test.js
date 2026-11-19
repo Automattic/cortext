@@ -10,6 +10,7 @@ let mockContext;
 let mockCanEdit;
 let mockCanEditById;
 let mockIsSaving;
+let mockPostStatus;
 let mockSaveEntityRecord;
 let mockRowPropertiesProps;
 let mockTraitControlProps;
@@ -100,7 +101,14 @@ jest.mock( '@wordpress/data', () => ( {
 			canUser: ( action, resource ) =>
 				mockCanEditById?.[ resource?.id ] ?? mockCanEdit,
 			isSavingEntityRecord: () => mockIsSaving,
+			getCurrentPostAttribute: ( key ) =>
+				key === 'status' ? mockPostStatus : undefined,
 		} ) ),
+} ) );
+
+jest.mock( '@wordpress/editor', () => ( {
+	__esModule: true,
+	store: 'core/editor',
 } ) );
 
 jest.mock( '../../../src/components/DocumentPropertiesActions', () => ( {
@@ -278,6 +286,7 @@ beforeEach( () => {
 	mockCanEdit = true;
 	mockCanEditById = null;
 	mockIsSaving = false;
+	mockPostStatus = 'private';
 	mockSaveEntityRecord = jest.fn().mockResolvedValue( {} );
 	mockRowPropertiesProps = null;
 	mockTraitControlProps = null;
@@ -322,6 +331,15 @@ describe( 'document-properties Customize properties mode', () => {
 
 		expect( mockTraitsDocumentId ).toBe( 123 );
 		expect( screen.getByTestId( 'trait-control' ) ).toBeInTheDocument();
+		expect( mockTraitControlProps.isReadOnly ).toBe( false );
+	} );
+
+	it( 'makes the trait control read-only on an archived row', () => {
+		mockPostStatus = 'crtxt_archived';
+
+		render( <Edit /> );
+
+		expect( mockTraitControlProps.isReadOnly ).toBe( true );
 	} );
 
 	it( 'coordinates a collection property flush with the membership control', async () => {
