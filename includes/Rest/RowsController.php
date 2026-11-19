@@ -1143,6 +1143,11 @@ final class RowsController {
 		if ( Documents::STATUS_TRASH === get_post_status( $collection_id ) ) {
 			$statuses[] = Documents::STATUS_TRASH;
 		}
+		// An archived collection took its rows with it. Opening the collection
+		// from Archived still shows them, read-only like the rest of it.
+		if ( Documents::STATUS_ARCHIVED === get_post_status( $collection_id ) ) {
+			$statuses[] = Documents::STATUS_ARCHIVED;
+		}
 		return $statuses;
 	}
 

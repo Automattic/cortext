@@ -482,6 +482,14 @@ final class Documents {
 			if ( $include_archive_meta ) {
 				$meta[ ArchiveCascade::PARENT_MARKER_META ]     = (int) get_post_meta( $post->ID, ArchiveCascade::PARENT_MARKER_META, true );
 				$meta[ ArchiveCascade::COLLECTION_MARKER_META ] = (int) get_post_meta( $post->ID, ArchiveCascade::COLLECTION_MARKER_META, true );
+				$document                                       = array_merge(
+					$document,
+					$this->lifecycle_details(
+						'archived',
+						(int) get_post_meta( $post->ID, ArchiveCascade::TIME_META, true ),
+						(int) get_post_meta( $post->ID, ArchiveCascade::ARCHIVED_BY_USER_META, true )
+					)
+				);
 			}
 			$document['meta'] = $meta;
 		}
@@ -501,14 +509,36 @@ final class Documents {
 	 */
 	private function trash_details( WP_Post $post ): array {
 		$trashed_at = (int) get_post_meta( $post->ID, '_wp_trash_meta_time', true );
-		$user       = get_userdata( (int) get_post_meta( $post->ID, TrashCascade::TRASHED_BY_USER_META, true ) );
+
+		$details             = $this->lifecycle_details(
+			'trashed',
+			$trashed_at,
+			(int) get_post_meta( $post->ID, TrashCascade::TRASHED_BY_USER_META, true )
+		);
+		$details['purge_at'] = $trashed_at > 0
+			? gmdate( 'c', $trashed_at + EMPTY_TRASH_DAYS * DAY_IN_SECONDS )
+			: '';
+
+		return $details;
+	}
+
+	/**
+	 * When a document entered a lifecycle state and who put it there, as
+	 * `{$state}_at` and `{$state}_by` (`trashed_at`, `archived_by`, ...).
+	 * The date is empty when none was recorded. The user is null when none
+	 * was recorded or the user is gone.
+	 *
+	 * @param string $state   Key prefix, such as `trashed` or `archived`.
+	 * @param int    $time    Unix timestamp the state was entered, 0 if unknown.
+	 * @param int    $user_id User who moved the document there, 0 if unknown.
+	 * @return array<string, mixed>
+	 */
+	private function lifecycle_details( string $state, int $time, int $user_id ): array {
+		$user = get_userdata( $user_id );
 
 		return array(
-			'trashed_at' => $trashed_at > 0 ? gmdate( 'c', $trashed_at ) : '',
-			'purge_at'   => $trashed_at > 0
-				? gmdate( 'c', $trashed_at + EMPTY_TRASH_DAYS * DAY_IN_SECONDS )
-				: '',
-			'trashed_by' => $user instanceof WP_User
+			"{$state}_at" => $time > 0 ? gmdate( 'c', $time ) : '',
+			"{$state}_by" => $user instanceof WP_User
 				? array(
 					'id'   => (int) $user->ID,
 					'name' => $user->display_name,

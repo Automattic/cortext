@@ -1108,7 +1108,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		wp_trash_post( $parent_id );
 
 		$trashed_at = (int) get_post_meta( $parent_id, '_wp_trash_meta_time', true );
-		$by_id      = array_column( $this->trash_listing(), null, 'id' );
+		$by_id      = array_column( $this->listing( 'trash' ), null, 'id' );
 
 		foreach ( array( $parent_id, $child_id ) as $id ) {
 			$this->assertSame(
@@ -1135,7 +1135,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		wp_trash_post( $page_id );
 		delete_post_meta( $page_id, TrashCascade::TRASHED_BY_USER_META );
 
-		$by_id = array_column( $this->trash_listing(), null, 'id' );
+		$by_id = array_column( $this->listing( 'trash' ), null, 'id' );
 
 		$this->assertNull( $by_id[ $page_id ]['trashed_by'] );
 	}
@@ -1151,6 +1151,63 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 		$this->assertSame( '', get_post_meta( $parent_id, TrashCascade::TRASHED_BY_USER_META, true ) );
 		$this->assertSame( '', get_post_meta( $child_id, TrashCascade::TRASHED_BY_USER_META, true ) );
+	}
+
+	public function test_archived_listing_reports_when_and_by_whom_each_document_was_archived(): void {
+		$user_id = $this->create_user( 'administrator' );
+		wp_set_current_user( $user_id );
+		wp_update_user(
+			array(
+				'ID'           => $user_id,
+				'display_name' => 'Ada',
+			)
+		);
+
+		$parent_id = $this->create_page();
+		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$this->archive( $parent_id );
+
+		$archived_at = (int) get_post_meta( $parent_id, ArchiveCascade::TIME_META, true );
+		$by_id       = array_column( $this->listing( Documents::STATUS_ARCHIVED ), null, 'id' );
+
+		foreach ( array( $parent_id, $child_id ) as $id ) {
+			$this->assertSame(
+				array(
+					'id'   => $user_id,
+					'name' => 'Ada',
+				),
+				$by_id[ $id ]['archived_by'],
+				'Cascaded children record the same user as their root.'
+			);
+		}
+		$this->assertSame( gmdate( 'c', $archived_at ), $by_id[ $parent_id ]['archived_at'] );
+		$this->assertArrayNotHasKey( 'purge_at', $by_id[ $parent_id ] );
+	}
+
+	public function test_archived_listing_has_no_user_for_documents_archived_without_one(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$page_id = $this->create_page();
+		$this->archive( $page_id );
+		delete_post_meta( $page_id, ArchiveCascade::ARCHIVED_BY_USER_META );
+
+		$by_id = array_column( $this->listing( Documents::STATUS_ARCHIVED ), null, 'id' );
+
+		$this->assertArrayHasKey( 'archived_by', $by_id[ $page_id ] );
+		$this->assertNull( $by_id[ $page_id ]['archived_by'] );
+	}
+
+	public function test_unarchive_forgets_who_archived_the_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$parent_id = $this->create_page();
+		$child_id  = $this->create_page( array( 'post_parent' => $parent_id ) );
+		$this->archive( $parent_id );
+
+		$this->unarchive( $parent_id );
+
+		$this->assertSame( '', get_post_meta( $parent_id, ArchiveCascade::ARCHIVED_BY_USER_META, true ) );
+		$this->assertSame( '', get_post_meta( $child_id, ArchiveCascade::ARCHIVED_BY_USER_META, true ) );
 	}
 
 	public function test_empty_trash_deletes_every_trashed_document_and_leaves_active_ones(): void {
@@ -1230,9 +1287,9 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertSame( 403, $this->empty_trash()->get_status() );
 	}
 
-	private function trash_listing(): array {
+	private function listing( string $status ): array {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/documents' );
-		$request->set_param( 'status', 'trash' );
+		$request->set_param( 'status', $status );
 		return rest_do_request( $request )->get_data()['documents'];
 	}
 

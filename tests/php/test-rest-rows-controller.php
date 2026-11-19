@@ -209,6 +209,52 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 'Kept row', $response->get_data()['rows'][0]['title']['raw'] );
 	}
 
+	public function test_archived_collection_still_lists_its_archived_rows(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		( new ArchiveCascade() )->register_status();
+
+		$fixture = $this->create_collection_fixture( 'archived-rows' );
+		$row_id  = $this->create_row_fixture( $fixture['collection_id'], 'Archived row', 'private' );
+		wp_update_post(
+			array(
+				'ID'          => $row_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'          => $fixture['collection_id'],
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $response->get_data()['total'] );
+		$this->assertSame( 'Archived row', $response->get_data()['rows'][0]['title']['raw'] );
+	}
+
+	public function test_active_collection_leaves_archived_rows_out(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		( new ArchiveCascade() )->register_status();
+
+		$fixture = $this->create_collection_fixture( 'active-with-archived-row' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Kept row', 'private' );
+		$archived = $this->create_row_fixture( $fixture['collection_id'], 'Archived row', 'private' );
+		wp_update_post(
+			array(
+				'ID'          => $archived,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
+
+		$this->assertSame( 1, $response->get_data()['total'] );
+		$this->assertSame( 'Kept row', $response->get_data()['rows'][0]['title']['raw'] );
+	}
+
 	public function test_view_context_rejects_unpublished_collection(): void {
 		wp_set_current_user( 0 );
 
