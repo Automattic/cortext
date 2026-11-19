@@ -1,4 +1,4 @@
-.cortext-trashed-notice {
+.cortext-lifecycle-notice {
 
 	&__title,
 	&__facts {
@@ -11,17 +11,27 @@
 		opacity: 0.75;
 	}
 
-	.components-button.cortext-trashed-notice__delete {
+	.components-button.cortext-lifecycle-notice__secondary {
 		color: var(--cortext-danger);
 	}
 }
 
-// A document in Trash reads as deleted: its content and its inspector fade,
+// A document in Trash reads as deleted and an archived one as out of
+// circulation: their content and inspector fade, Trash more than Archived,
 // while the banner above stays at full strength.
 .cortext-canvas.is-trashed {
+	--cortext-lifecycle-fade: 0.55;
+}
+
+.cortext-canvas.is-archived {
+	--cortext-lifecycle-fade: 0.75;
+}
+
+.cortext-canvas.is-trashed,
+.cortext-canvas.is-archived {
 
 	.cortext-canvas__block-canvas,
 	.interface-interface-skeleton__sidebar .components-panel__body {
-		opacity: 0.55;
+		opacity: var(--cortext-lifecycle-fade);
 	}
 }

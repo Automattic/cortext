@@ -78,13 +78,25 @@ jest.mock( '../../../src/components/WorkspaceTopBar', () => () => null );
 jest.mock( '../../../src/components/CortextSnackbars', () => () => null );
 jest.mock( '../../../src/components/ExperimentsPane', () => () => null );
 jest.mock( '../../../src/components/ImportPane', () => () => null );
-const mockTrashView = jest.fn( () => null );
+const mockLifecycleView = jest.fn( () => null );
 jest.mock(
 	'../../../src/components/lifecycle/LifecycleView',
 	() =>
 		( ...args ) =>
-			mockTrashView( ...args )
+			mockLifecycleView( ...args )
 );
+jest.mock( '../../../src/components/lifecycle/lifecycleStates', () => ( {
+	TRASH: { name: 'trash' },
+	ARCHIVED: { name: 'archived' },
+} ) );
+
+// Whether the last render of a lifecycle pane asked it to load.
+function lastLifecycleViewActive( name ) {
+	const calls = mockLifecycleView.mock.calls.filter(
+		( [ props ] ) => props.state.name === name
+	);
+	return calls[ calls.length - 1 ][ 0 ].isActive;
+}
 jest.mock( '../../../src/router/EmptyState', () => () => null );
 
 const resolved = ( id ) => ( {
@@ -157,20 +169,34 @@ describe( 'EntityRoute', () => {
 	it( 'stops the Trash pane as soon as the URL leaves Trash', () => {
 		mockSplat = 'trash';
 		const { rerender } = render( <EntityRoute /> );
-		expect( mockTrashView ).toHaveBeenLastCalledWith(
-			{ isActive: true },
-			expect.anything()
-		);
+		expect( lastLifecycleViewActive( 'trash' ) ).toBe( true );
+		expect( lastLifecycleViewActive( 'archived' ) ).toBe( false );
 
 		// Opening a document changes the URL before the Trash pane fades out.
 		mockSplat = 'old-draft-722';
 		mockResolution = { ...resolved( 722 ), isResolving: true };
 		rerender( <EntityRoute /> );
 
-		expect( mockTrashView ).toHaveBeenLastCalledWith(
-			{ isActive: false },
-			expect.anything()
+		expect( lastLifecycleViewActive( 'trash' ) ).toBe( false );
+	} );
+
+	it( 'shows the Archived pane at `archived`', () => {
+		mockSplat = 'archived';
+		render( <EntityRoute /> );
+		expect( lastLifecycleViewActive( 'archived' ) ).toBe( true );
+		expect( lastLifecycleViewActive( 'trash' ) ).toBe( false );
+	} );
+
+	it( 'keeps documents opened from Archived out of Recents', async () => {
+		mockRecents.touchRecent.mockClear();
+		mockSplat = 'archived/722';
+		mockResolution = resolved( 722 );
+		holdTransitions = false;
+		render( <EntityRoute /> );
+		expect( await screen.findByTestId( 'canvas' ) ).toHaveTextContent(
+			'722'
 		);
+		expect( mockRecents.touchRecent ).not.toHaveBeenCalled();
 	} );
 
 	it( 'opens the item Trash selects while the switch to Trash still waits on its transition', async () => {

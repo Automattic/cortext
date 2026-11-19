@@ -35,6 +35,7 @@ import { withViewTransition } from '../hooks/viewTransition';
 import { notifyBacklinksChanged } from '../hooks/backlinksInvalidation';
 import { definesTrait } from '../documents/capabilities';
 import {
+	READ_ONLY_ARCHIVED,
 	READ_ONLY_FROZEN,
 	READ_ONLY_TRASHED,
 	getReadOnlyState,
@@ -94,7 +95,7 @@ function InserterToggle( { disabled = false } ) {
 
 function DocumentActions( {
 	disabled = false,
-	isTrashed = false,
+	isRetired = false,
 	isReadOnlyDocument = false,
 	canInsertBlocks = true,
 	isActive,
@@ -128,20 +129,20 @@ function DocumentActions( {
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
 				{ /* Adding blocks, publishing, and the properties layout don't
-				apply to a document in Trash, so only Settings stays. A locked
-				or archived document keeps Publish to show whether it's public,
-				but can't take new blocks or a new properties layout. */ }
+				apply to a trashed or archived document, so only Settings stays.
+				A locked document keeps Publish to show whether it's public, but
+				can't take new blocks or a new properties layout. */ }
 				{ canInsertBlocks && ! isReadOnlyDocument ? (
 					<InserterToggle disabled={ disabled } />
 				) : null }
-				{ ! isTrashed && topBarActions }
-				{ ! isTrashed && (
+				{ ! isRetired && topBarActions }
+				{ ! isRetired && (
 					<DocumentPublishToggle
 						postId={ postId }
 						disabled={ disabled }
 					/>
 				) }
-				{ hasProperties && ! isTrashed ? (
+				{ hasProperties && ! isRetired ? (
 					<>
 						<Button
 							className="cortext-document-actions__fields"
@@ -389,6 +390,7 @@ export function CanvasEditor( {
 	const isCollection = definesTrait( post );
 	const readOnlyState = getReadOnlyState( post );
 	const isTrashed = readOnlyState === READ_ONLY_TRASHED;
+	const isArchived = readOnlyState === READ_ONLY_ARCHIVED;
 	const isLifecycleReadOnly = readOnlyState !== null;
 	const hasTrait =
 		Array.isArray( post?.crtxt_trait ) && post.crtxt_trait.length > 0;
@@ -547,7 +549,7 @@ export function CanvasEditor( {
 			<CortextMentions />
 			<DocumentActions
 				disabled={ isReadOnly }
-				isTrashed={ isTrashed }
+				isRetired={ isTrashed || isArchived }
 				isReadOnlyDocument={ isLifecycleReadOnly }
 				canInsertBlocks={ ! isCollection }
 				isActive={ isActive }
@@ -560,9 +562,13 @@ export function CanvasEditor( {
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
 			<CanvasInterfaceSkeleton
-				className={
-					isTrashed ? 'cortext-canvas is-trashed' : 'cortext-canvas'
-				}
+				className={ [
+					'cortext-canvas',
+					isTrashed && 'is-trashed',
+					isArchived && 'is-archived',
+				]
+					.filter( Boolean )
+					.join( ' ' ) }
 				content={
 					<>
 						{ notice }

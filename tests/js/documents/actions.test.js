@@ -29,6 +29,7 @@ import {
 	restoreDocuments,
 	trashDocument,
 	unarchiveDocument,
+	unarchiveDocuments,
 	useCreateCollectionDocument,
 	useCreateDocument,
 } from '../../../src/documents/actions';
@@ -400,10 +401,10 @@ describe( 'document archive lifecycle', () => {
 		expect( onArchiveChanged ).toHaveBeenCalledTimes( 1 );
 		expect( ctx.createSuccessNotice ).toHaveBeenCalledWith(
 			'Document restored as published and is public again.',
-			{
+			expect.objectContaining( {
 				id: 'cortext-document-unarchive-success',
 				type: 'snackbar',
-			}
+			} )
 		);
 		expect( ctx.setFavorites ).not.toHaveBeenCalled();
 	} );
@@ -453,10 +454,13 @@ describe( 'document archive lifecycle', () => {
 
 			await unarchiveDocument( { id: 9 }, ctx );
 
-			expect( ctx.createSuccessNotice ).toHaveBeenCalledWith( message, {
-				id: 'cortext-document-unarchive-success',
-				type: 'snackbar',
-			} );
+			expect( ctx.createSuccessNotice ).toHaveBeenCalledWith(
+				message,
+				expect.objectContaining( {
+					id: 'cortext-document-unarchive-success',
+					type: 'snackbar',
+				} )
+			);
 		}
 	);
 
@@ -921,5 +925,123 @@ describe( 'Trash snackbars', () => {
 		expect( response ).toEqual( { deleted: [ 1, 2 ] } );
 		expect( onTrashChanged ).toHaveBeenCalledTimes( 1 );
 		expectLifecycleInvalidations( ctx );
+	} );
+} );
+
+describe( 'Archive snackbars', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	function undoFrom( notice ) {
+		const [ , options ] = notice.mock.calls.at( -1 );
+		return options.actions.find( ( action ) => action.label === 'Undo' );
+	}
+
+	it( 'says what was archived and unarchives it on Undo', async () => {
+		const ctx = makeCtx();
+		apiFetch.mockResolvedValueOnce( {
+			archived: [ 9, 10, 11 ],
+			post: { id: 9, status: 'crtxt_archived' },
+		} );
+
+		await archiveDocument( { id: 9 }, ctx );
+
+		expect( ctx.createSuccessNotice ).toHaveBeenCalledWith(
+			'Document and 2 nested documents archived.',
+			expect.objectContaining( {
+				id: 'cortext-document-archive-success',
+				type: 'snackbar',
+			} )
+		);
+
+		apiFetch.mockResolvedValueOnce( {
+			restored: [ 9, 10, 11 ],
+			post: { id: 9, status: 'draft' },
+		} );
+		await act( () => undoFrom( ctx.createSuccessNotice ).onClick() );
+
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/cortext/v1/documents/9/unarchive',
+			method: 'POST',
+		} );
+	} );
+
+	it( 'archives an unarchived document again on Undo', async () => {
+		const ctx = makeCtx();
+		apiFetch.mockResolvedValueOnce( {
+			restored: [ 9 ],
+			post: { id: 9, status: 'draft' },
+		} );
+
+		await unarchiveDocument( { id: 9 }, ctx );
+
+		apiFetch.mockResolvedValueOnce( {
+			archived: [ 9 ],
+			post: { id: 9, status: 'crtxt_archived' },
+		} );
+		await act( () => undoFrom( ctx.createSuccessNotice ).onClick() );
+
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/cortext/v1/documents/9/archive',
+			method: 'POST',
+		} );
+		expect( ctx.createSuccessNotice ).toHaveBeenLastCalledWith(
+			'Document archived.',
+			expect.objectContaining( {
+				id: 'cortext-document-archive-success',
+			} )
+		);
+	} );
+
+	it( 'unarchives documents archived together and refreshes Archived once', async () => {
+		const ctx = makeCtx();
+		const onArchiveChanged = jest.fn();
+		window.addEventListener(
+			DOCUMENT_ARCHIVE_CHANGED_EVENT,
+			onArchiveChanged
+		);
+		apiFetch.mockImplementation( ( { path } ) =>
+			Promise.resolve( {
+				restored: [],
+				post: { id: Number( path.match( /\d+/ )[ 0 ] ) },
+			} )
+		);
+
+		try {
+			await unarchiveDocuments( [ { id: 1 }, { id: 2 } ], ctx );
+		} finally {
+			window.removeEventListener(
+				DOCUMENT_ARCHIVE_CHANGED_EVENT,
+				onArchiveChanged
+			);
+		}
+
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/1/unarchive',
+			method: 'POST',
+		} );
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( onArchiveChanged ).toHaveBeenCalledTimes( 1 );
+		expectLifecycleInvalidations( ctx );
+		expect( ctx.createSuccessNotice ).toHaveBeenCalledWith(
+			'2 documents unarchived.',
+			{ id: 'cortext-document-restore-success', type: 'snackbar' }
+		);
+	} );
+
+	it( 'says how many documents could not be unarchived', async () => {
+		const ctx = makeCtx();
+		apiFetch
+			.mockResolvedValueOnce( { restored: [ 1 ], post: { id: 1 } } )
+			.mockRejectedValueOnce( new Error( 'Nope' ) );
+
+		await unarchiveDocuments( [ { id: 1 }, { id: 2 } ], ctx );
+
+		expect( ctx.createSuccessNotice ).not.toHaveBeenCalled();
+		expect( ctx.createErrorNotice ).toHaveBeenCalledWith(
+			'1 of 2 documents could not be unarchived.',
+			{ id: 'cortext-document-restore-success', type: 'snackbar' }
+		);
 	} );
 } );

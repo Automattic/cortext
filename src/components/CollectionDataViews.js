@@ -12,7 +12,7 @@ import {
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import {
-	archive,
+	box as archiveIcon,
 	copy,
 	lock,
 	starEmpty,
@@ -101,12 +101,14 @@ import { useRecents } from '../hooks/useRecents';
 import { filterFavoritesByDeletedIds, useFavoriteToggle } from '../documents';
 import {
 	archiveSaveFailureMessage,
+	archivedMessage,
 	freezeDocument,
 	movedToTrashMessage,
 	restoreDocuments,
 	runWithEditorsLocked,
 	syncLifecycleEntityRecords,
 	trashSaveFailureMessage,
+	unarchiveDocuments,
 	undoAction,
 	unfreezeDocument,
 } from '../documents/actions';
@@ -1422,6 +1424,39 @@ export default function CollectionDataViews( {
 				notifySidebarTreeChanged();
 				notifyDocumentArchiveChanged( { action: 'archive' } );
 				notifyCollectionRowsChanged();
+
+				const archivedRows = nextRows.filter(
+					( row ) => ! failedRows.includes( row )
+				);
+				const noticeCtx = {
+					createErrorNotice,
+					createSuccessNotice,
+					invalidateResolution,
+					receiveEntityRecords,
+				};
+				createSuccessNotice(
+					archivedRows.length === 1
+						? archivedMessage( archivedIds.length - 1 )
+						: sprintf(
+								/* translators: %d: number of documents archived */
+								_n(
+									'%d document archived.',
+									'%d documents archived.',
+									archivedRows.length,
+									'cortext'
+								),
+								archivedRows.length
+						  ),
+					{
+						id: 'cortext-document-archive-success',
+						type: 'snackbar',
+						actions: undoAction(
+							noticeCtx,
+							() => unarchiveDocuments( archivedRows, noticeCtx ),
+							'cortext-document-archive-success'
+						),
+					}
+				);
 			}
 
 			if ( failedRows.length > 0 ) {
@@ -1453,12 +1488,15 @@ export default function CollectionDataViews( {
 		},
 		[
 			closeDocument,
+			createErrorNotice,
+			createSuccessNotice,
 			flushActiveEditor,
 			forgetLifecycleRows,
 			invalidateResolution,
 			lockEditors,
 			openRowId,
 			postType,
+			receiveEntityRecords,
 			refresh,
 			syncSettledLifecycleRecords,
 		]
@@ -1533,7 +1571,7 @@ export default function CollectionDataViews( {
 		actions.push( {
 			id: 'archive-row',
 			label: __( 'Archive', 'cortext' ),
-			icon: archive,
+			icon: archiveIcon,
 			supportsBulk: true,
 			context: 'single',
 			callback: ( items ) =>

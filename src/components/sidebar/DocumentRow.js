@@ -9,7 +9,7 @@ import {
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import {
-	archive as archiveIcon,
+	box as archiveIcon,
 	chevronRight,
 	home as homeIcon,
 	lock,

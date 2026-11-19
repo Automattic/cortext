@@ -113,7 +113,7 @@ test.describe( 'Page trash flow', () => {
 			// Canvas keeps the parent open with a trashed banner.
 			await expect(
 				page
-					.locator( '.cortext-trashed-notice' )
+					.locator( '.cortext-lifecycle-notice' )
 					.filter( { hasText: 'This document is in the Trash.' } )
 			).toBeVisible();
 			// Publishing and adding blocks don't apply to a deleted document.
@@ -133,7 +133,7 @@ test.describe( 'Page trash flow', () => {
 			await sidebar.locator( '.cortext-sidebar__trash-footer' ).click();
 			// Trash takes over the sidebar with its list, and the selected item
 			// opens in the canvas.
-			const trashList = page.locator( '.cortext-sidebar__trash' );
+			const trashList = page.locator( '.cortext-sidebar__lifecycle' );
 			const parentItem = trashList
 				.getByRole( 'option' )
 				.filter( { hasText: PARENT_TITLE } );
@@ -145,7 +145,7 @@ test.describe( 'Page trash flow', () => {
 			).toHaveCount( 0 );
 
 			await parentItem.click();
-			const banner = page.locator( '.cortext-trashed-notice' );
+			const banner = page.locator( '.cortext-lifecycle-notice' );
 			await expect( banner ).toContainText(
 				'1 nested document comes back with it'
 			);

@@ -15,6 +15,7 @@ const publishedTarget = { kind: 'published', tail: '' };
 const importTarget = { kind: 'import', tail: '' };
 const experimentsTarget = { kind: 'experiments', tail: '' };
 const trashTarget = { kind: 'trash', tail: '' };
+const archivedTarget = { kind: 'archived', tail: '' };
 
 function activate( state, target ) {
 	let next = reducer( state, { type: 'TARGET_CHANGED', target } );
@@ -78,7 +79,23 @@ describe( 'EntityRoute reducer', () => {
 				kind: 'document',
 				id: 42,
 				tail: '42',
-				inTrash: true,
+				fromLifecycle: 'trash',
+			} );
+		} );
+
+		it( 'opens Archived from `archived`', () => {
+			expect( parseTarget( 'archived' ) ).toEqual( {
+				kind: 'archived',
+				tail: '',
+			} );
+		} );
+
+		it( 'opens an archived document from `archived/<id>`, marked as coming from Archived', () => {
+			expect( parseTarget( 'archived/42' ) ).toEqual( {
+				kind: 'document',
+				id: 42,
+				tail: '42',
+				fromLifecycle: 'archived',
 			} );
 		} );
 
@@ -180,6 +197,12 @@ describe( 'EntityRoute reducer', () => {
 			} );
 		} );
 
+		it( 'starts an archived target on the archived pane', () => {
+			expect( init( archivedTarget ).active ).toEqual( {
+				kind: 'archived',
+			} );
+		} );
+
 		it( 'starts a deep-linked redirect on the loading pane', () => {
 			expect(
 				init( redirectTarget( 'settings/import' ) ).active
@@ -247,6 +270,16 @@ describe( 'EntityRoute reducer', () => {
 			);
 			expect( activate( state, trashTarget ).active ).toEqual( {
 				kind: 'trash',
+			} );
+		} );
+
+		it( 'switches to archived immediately', () => {
+			const state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
+			expect( activate( state, archivedTarget ).active ).toEqual( {
+				kind: 'archived',
 			} );
 		} );
 

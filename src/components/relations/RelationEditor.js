@@ -15,8 +15,8 @@ import {
 } from '@wordpress/element';
 import {
 	Icon,
-	archive,
 	arrowUpRight,
+	box as archiveIcon,
 	chevronDown,
 	closeSmall,
 	plus,
@@ -311,7 +311,7 @@ export default function RelationEditor( {
 										className="cortext-relation-ref__icon"
 										icon={
 											isArchivedRelationRef( ref )
-												? archive
+												? archiveIcon
 												: arrowUpRight
 										}
 									/>

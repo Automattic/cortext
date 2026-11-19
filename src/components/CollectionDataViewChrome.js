@@ -7,7 +7,7 @@ import {
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useMemo } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { archive, closeSmall, trash } from '@wordpress/icons';
+import { box as archiveIcon, closeSmall, trash } from '@wordpress/icons';
 
 export function DataViewsChrome( { footer } ) {
 	return (
@@ -113,7 +113,7 @@ export function DataViewsBulkSelectionControls( {
 			>
 				{ selectedCount > 0 && (
 					<Button
-						icon={ archive }
+						icon={ archiveIcon }
 						label={ __( 'Archive selected', 'cortext' ) }
 						onClick={ onArchiveSelected }
 						size="compact"

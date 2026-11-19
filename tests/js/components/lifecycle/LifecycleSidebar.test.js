@@ -1,8 +1,9 @@
 /**
- * Tests for `src/components/lifecycle/LifecycleSidebar.js`.
+ * Tests for `src/components/lifecycle/LifecycleSidebar.js`, as Trash and as
+ * Archived.
  *
  * The WordPress data and REST layers are mocked so each case can drive the
- * trashed documents, the route selection, and check the requests the view
+ * listed documents, the route selection, and check the requests the view
  * makes.
  */
 
@@ -72,6 +73,7 @@ jest.mock( '@wordpress/components', () => {
 
 jest.mock( '@wordpress/icons', () => ( {
 	__esModule: true,
+	box: 'box-icon',
 	chevronLeft: 'chevron-left-icon',
 	Icon: () => null,
 	customPostType: 'custom-post-type-icon',
@@ -119,6 +121,11 @@ jest.mock( '../../../../src/hooks/useTrashedDocuments', () => ( {
 	default: () => mockTrashState,
 } ) );
 
+jest.mock( '../../../../src/hooks/useArchivedDocuments', () => ( {
+	__esModule: true,
+	default: () => mockTrashState,
+} ) );
+
 jest.mock( '../../../../src/hooks/useFavorites', () => ( {
 	__esModule: true,
 	useFavorites: () => ( { setFavorites: jest.fn() } ),
@@ -155,7 +162,11 @@ import { useEntityRecords } from '@wordpress/core-data';
 import apiFetch from '@wordpress/api-fetch';
 import { useNavigate } from '@tanstack/react-router';
 
-import TrashSidebar from '../../../../src/components/lifecycle/LifecycleSidebar';
+import LifecycleSidebar from '../../../../src/components/lifecycle/LifecycleSidebar';
+import {
+	ARCHIVED,
+	TRASH,
+} from '../../../../src/components/lifecycle/lifecycleStates';
 
 let mockTrashState;
 const navigate = jest.fn();
@@ -211,15 +222,37 @@ function setTrash( documents ) {
 
 const onBack = jest.fn();
 
-function renderTrash( selectedId = null ) {
+function renderView( state, selectedId = null ) {
 	return render(
-		<TrashSidebar
+		<LifecycleSidebar
+			state={ state }
 			collapsed={ false }
 			onBack={ onBack }
-			trashedDocumentsState={ mockTrashState }
+			documentsState={ mockTrashState }
 			selectedId={ selectedId }
 		/>
 	);
+}
+
+function renderTrash( selectedId = null ) {
+	return renderView( TRASH, selectedId );
+}
+
+function archivedPage( id, title, overrides = {} ) {
+	const { meta, ...rest } = overrides;
+	return page( id, title, {
+		trashed_at: undefined,
+		purge_at: undefined,
+		trashed_by: undefined,
+		archived_at: '2026-11-18T10:00:00+00:00',
+		archived_by: { id: CURRENT_USER_ID, name: 'admin' },
+		meta: {
+			_cortext_archived_by_parent: 0,
+			_cortext_archived_by_collection: 0,
+			...meta,
+		},
+		...rest,
+	} );
 }
 
 function option( title ) {
@@ -243,7 +276,7 @@ beforeEach( () => {
 	setTrash( [] );
 } );
 
-describe( 'TrashSidebar', () => {
+describe( 'LifecycleSidebar as Trash', () => {
 	it( 'goes back when asked', () => {
 		renderTrash();
 		fireEvent.click( screen.getByRole( 'button', { name: 'Back' } ) );
@@ -428,5 +461,108 @@ describe( 'TrashSidebar', () => {
 		renderTrash( 7 );
 
 		expect( navigate ).not.toHaveBeenCalled();
+	} );
+} );
+
+describe( 'LifecycleSidebar as Archived', () => {
+	it( 'says when nothing is archived', () => {
+		renderView( ARCHIVED );
+		expect(
+			screen.getByText( 'No archived documents.' )
+		).toBeInTheDocument();
+	} );
+
+	it( 'shows how many items there are, with no way to empty the view', () => {
+		setTrash( [ archivedPage( 1, 'Notes' ), archivedPage( 2, 'Ideas' ) ] );
+		renderView( ARCHIVED, 1 );
+
+		expect(
+			screen.getByRole( 'heading', { name: 'Archived 2' } )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Empty Trash…' } )
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByLabelText( 'Search Archived' )
+		).toBeInTheDocument();
+	} );
+
+	it( 'lists cascade roots only, with where each one hung from', () => {
+		setTrash( [
+			archivedPage( 1, 'Reading notes', { parent: 50 } ),
+			archivedPage( 2, 'Q1 highlights', {
+				parent: 1,
+				meta: { _cortext_archived_by_parent: 1 },
+			} ),
+			archivedPage( 3, 'Old draft' ),
+		] );
+		renderView( ARCHIVED, 1 );
+
+		expect( screen.getAllByRole( 'option' ) ).toHaveLength( 2 );
+		expect( option( 'Reading notes' ) ).toHaveTextContent( '+1' );
+		expect( option( 'Reading notes' ) ).toHaveTextContent( 'Library' );
+	} );
+
+	it( 'selects the first item at its archived URL', () => {
+		setTrash( [ archivedPage( 1, 'Notes' ) ] );
+		renderView( ARCHIVED );
+
+		expect( navigate ).toHaveBeenCalledWith( {
+			to: '/$',
+			params: { _splat: 'archived/1' },
+			replace: true,
+		} );
+	} );
+
+	it( 'names who archived an item only when it was someone else', () => {
+		setTrash( [
+			archivedPage( 1, 'Mine' ),
+			archivedPage( 2, 'Theirs', {
+				archived_by: { id: 7, name: 'maria' },
+			} ),
+		] );
+		renderView( ARCHIVED, 1 );
+
+		expect( option( 'Theirs' ) ).toHaveTextContent( 'maria · 2 hours ago' );
+		expect( option( 'Mine' ) ).not.toHaveTextContent( 'admin' );
+	} );
+
+	it( 'unarchives with Enter and moves to Trash with Backspace after confirming', async () => {
+		setTrash( [ archivedPage( 1, 'Notes' ), archivedPage( 2, 'Ideas' ) ] );
+		apiFetch.mockResolvedValue( {
+			restored: [ 1 ],
+			post: { id: 1, status: 'draft' },
+		} );
+		renderView( ARCHIVED, 1 );
+		const listbox = screen.getByRole( 'listbox' );
+
+		await act( async () => {
+			fireEvent.keyDown( listbox, { key: 'Enter' } );
+		} );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/1/unarchive',
+			method: 'POST',
+		} );
+
+		fireEvent.keyDown( listbox, { key: 'Backspace' } );
+		expect( screen.getByRole( 'dialog' ) ).toHaveTextContent( '30 days' );
+		apiFetch.mockResolvedValue( { cascade_deleted: [] } );
+		await act( async () => {
+			fireEvent.click( screen.getByTestId( 'confirm-dialog-confirm' ) );
+		} );
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/wp/v2/crtxt_documents/1',
+			method: 'DELETE',
+		} );
+	} );
+
+	it( 'drops the selection from the URL once nothing is archived', () => {
+		renderView( ARCHIVED, 7 );
+
+		expect( navigate ).toHaveBeenCalledWith( {
+			to: '/$',
+			params: { _splat: 'archived' },
+			replace: true,
+		} );
 	} );
 } );

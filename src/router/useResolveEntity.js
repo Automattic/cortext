@@ -143,6 +143,7 @@ export const SETTINGS_PUBLISHED_URI = 'settings/published';
 export const PUBLISHED_DOCUMENTS_URI = 'published';
 export const IMPORT_URI = 'import';
 export const TRASH_URI = 'trash';
+export const ARCHIVED_URI = 'archived';
 
 // Strips the prefix from a splat URI and returns { prefix, tail }.
 export function parseSplatUri( uri ) {
@@ -163,6 +164,15 @@ export function trashUri( id = null ) {
 
 export function isTrashUri( uri ) {
 	return uri === TRASH_URI || parseSplatUri( uri ).prefix === TRASH_URI;
+}
+
+// `archived` opens the Archived view, `archived/<id>` with that item selected.
+export function archivedUri( id = null ) {
+	return id ? `${ ARCHIVED_URI }/${ id }` : ARCHIVED_URI;
+}
+
+export function isArchivedUri( uri ) {
+	return uri === ARCHIVED_URI || parseSplatUri( uri ).prefix === ARCHIVED_URI;
 }
 
 export function isSettingsUri( uri ) {

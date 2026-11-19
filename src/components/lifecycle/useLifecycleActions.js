@@ -1,61 +1,58 @@
-import { __ } from '@wordpress/i18n';
 import { useCallback, useState } from '@wordpress/element';
 
 import { EMPTY_COUNTS } from './useLifecycleList';
-import TrashConfirmDialog from './TrashConfirmDialog';
 import { useDocumentActions } from '../../documents';
 
 /**
- * Restore and permanent delete for a Trash list, with the delete confirmation
- * the caller renders.
+ * Restore and the secondary action (permanent delete, or move to Trash) for a
+ * lifecycle list, with the confirmation the caller renders.
  *
- * @param {Object} list State from `useSidebarLifecycleList`.
- * @return {{ restore: Function, requestDelete: Function, confirmDialog: ?Object }}
- *         Handlers, and the dialog element to render while a delete waits for
- *         confirmation.
+ * @param {Object} state Lifecycle state from `lifecycleStates`.
+ * @param {Object} list  State from `useLifecycleList`.
+ * @return {{ restore: Function, requestSecondary: Function, confirmDialog: ?Object }}
+ *         Handlers, and the dialog element to render while the secondary
+ *         action waits for confirmation.
  */
-export default function useTrashActions( list ) {
-	const { restore, permanentDelete } = useDocumentActions();
+export default function useLifecycleActions( state, list ) {
+	const actions = useDocumentActions();
+	const restoreAction = state.restore( actions );
+	const secondaryAction = state.secondary( actions );
 	const { descendantCountById, runRowAction } = list;
-	const [ pendingDelete, setPendingDelete ] = useState( null );
+	const [ pending, setPending ] = useState( null );
+	const { restoreError, secondaryError } = state.copy();
 
-	const handleRestore = useCallback(
+	const restore = useCallback(
 		( record ) =>
-			runRowAction(
-				record,
-				() => restore( record ),
-				__( 'Could not restore this document.', 'cortext' )
-			),
-		[ restore, runRowAction ]
+			runRowAction( record, () => restoreAction( record ), restoreError ),
+		[ restoreAction, restoreError, runRowAction ]
 	);
 
-	const handleDelete = useCallback(
+	const handleSecondary = useCallback(
 		( record ) => {
-			setPendingDelete( null );
+			setPending( null );
 			return runRowAction(
 				record,
-				() => permanentDelete( record ),
-				__( 'Could not delete this document.', 'cortext' )
+				() => secondaryAction( record ),
+				secondaryError
 			);
 		},
-		[ permanentDelete, runRowAction ]
+		[ runRowAction, secondaryAction, secondaryError ]
 	);
 
+	const { SecondaryConfirmDialog } = state;
 	const confirmDialog =
-		pendingDelete !== null ? (
-			<TrashConfirmDialog
-				record={ pendingDelete }
-				counts={
-					descendantCountById.get( pendingDelete.id ) ?? EMPTY_COUNTS
-				}
-				onConfirm={ handleDelete }
-				onCancel={ () => setPendingDelete( null ) }
+		pending !== null ? (
+			<SecondaryConfirmDialog
+				record={ pending }
+				counts={ descendantCountById.get( pending.id ) ?? EMPTY_COUNTS }
+				onConfirm={ handleSecondary }
+				onCancel={ () => setPending( null ) }
 			/>
 		) : null;
 
 	return {
-		restore: handleRestore,
-		requestDelete: setPendingDelete,
+		restore,
+		requestSecondary: setPending,
 		confirmDialog,
 	};
 }

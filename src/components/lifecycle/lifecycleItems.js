@@ -37,13 +37,18 @@ function matchesSearch( record, query ) {
  * bring back a matching nested document. Actions always apply to the root,
  * since nested documents come back with it.
  *
- * @param {Array}  roots           Cascade roots in Trash.
+ * @param {Array}  roots           Cascade roots in the view.
  * @param {Map}    descendantsById Nested documents of each root.
  * @param {string} search          Search text.
  * @param {string} typeFilter      One of the `typeFilters()` values.
  * @return {Array<{record: Object, match: ?Object}>} Items to list.
  */
-export function filterTrashItems( roots, descendantsById, search, typeFilter ) {
+export function filterLifecycleItems(
+	roots,
+	descendantsById,
+	search,
+	typeFilter
+) {
 	const query = search.trim().toLowerCase();
 	return roots
 		.filter(
@@ -62,7 +67,7 @@ export function filterTrashItems( roots, descendantsById, search, typeFilter ) {
 		.filter( Boolean );
 }
 
-// Titles of the documents a trashed one hung from, outermost first: its
+// Titles of the documents a trashed or archived one hung from, outermost first: its
 // collection for rows, its parent pages otherwise. Empty at the top level.
 export function originalPath( record, ancestorById ) {
 	if ( record.collection?.id ) {
@@ -142,21 +147,50 @@ export function deletionLabel( record, byName ) {
 }
 
 /**
- * Name of whoever trashed each document, unless it was the current user: in a
- * workspace of one, "Deleted by you" on every item is noise.
+ * When an archived document was archived and by whom, e.g. "Archived 2 hours
+ * ago by maria". Archived documents stay until someone restores or trashes
+ * them, so there is no purge date.
  *
+ * @param {Object} record Archived document from the Archived list.
+ * @param {string} byName Who archived it, or empty to leave it out.
+ * @return {string} The label, or empty when the archive time is unknown.
+ */
+export function archivedLabel( record, byName ) {
+	if ( ! record.archived_at ) {
+		return '';
+	}
+	const ago = humanTimeDiff( record.archived_at );
+	return byName
+		? sprintf(
+				/* translators: 1: how long ago the document was archived, e.g. "2 hours ago", 2: name of who archived it */
+				__( 'Archived %1$s by %2$s', 'cortext' ),
+				ago,
+				byName
+		  )
+		: sprintf(
+				/* translators: %s: how long ago the document was archived, e.g. "2 hours ago" */
+				__( 'Archived %s', 'cortext' ),
+				ago
+		  );
+}
+
+/**
+ * Name of whoever moved each document into a lifecycle state, unless it was
+ * the current user: in a workspace of one, "by you" on every item is noise.
+ *
+ * @param {string} byKey Record key holding the user, e.g. `trashed_by`.
  * @return {Function} `( record ) => string`, empty when there is nobody to name.
  */
-export function useTrashedByName() {
+export function useLifecycleByName( byKey ) {
 	const currentUserId = useSelect(
 		( select ) => select( coreStore ).getCurrentUser()?.id ?? null,
 		[]
 	);
 	return ( record ) => {
-		const trashedBy = record.trashed_by;
-		if ( ! trashedBy?.name || trashedBy.id === currentUserId ) {
+		const user = record[ byKey ];
+		if ( ! user?.name || user.id === currentUserId ) {
 			return '';
 		}
-		return trashedBy.name;
+		return user.name;
 	};
 }
