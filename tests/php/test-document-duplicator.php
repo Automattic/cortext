@@ -11,10 +11,12 @@ namespace Cortext\Tests;
 
 use Cortext\Documents;
 use Cortext\Documents\DocumentDuplicator;
+use Cortext\Formula\Compiler as FormulaCompiler;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
+use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_Error;
@@ -394,6 +396,131 @@ final class Test_Document_Duplicator extends BaseTestCase {
 		$this->assertSame( array( 'blue', 'red' ), $values );
 	}
 
+	public function test_duplicate_row_preserves_all_memberships_and_each_collections_values(): void {
+		$collection_a = $this->create_collection_with_fields( array( array( 'Status', 'text' ) ) );
+		$collection_b = $this->create_collection_with_fields( array( array( 'Score', 'number' ) ) );
+		$field_a      = Document::collection_field_ids( $collection_a )[0];
+		$field_b      = Document::collection_field_ids( $collection_b )[0];
+		$row_id       = $this->create_row( $collection_a, 'Shared row' );
+		$this->add_membership( $row_id, $collection_b );
+		update_post_meta( $row_id, Relations::meta_key( $field_a ), 'active' );
+		update_post_meta( $row_id, Relations::meta_key( $field_b ), '42' );
+
+		$result = $this->duplicator->duplicate( get_post( $row_id ) );
+
+		$this->assertIsArray( $result );
+		$new_row_id  = (int) $result['document']->ID;
+		$memberships = wp_get_object_terms( $new_row_id, TraitTaxonomy::TAXONOMY, array( 'fields' => 'slugs' ) );
+		$memberships = is_array( $memberships ) ? array_map( 'intval', $memberships ) : array();
+		sort( $memberships );
+		$expected = array( $collection_a, $collection_b );
+		sort( $expected );
+		$this->assertSame( $expected, $memberships );
+		$this->assertSame( 'active', (string) get_post_meta( $new_row_id, Relations::meta_key( $field_a ), true ) );
+		$this->assertSame( '42', (string) get_post_meta( $new_row_id, Relations::meta_key( $field_b ), true ) );
+	}
+
+	public function test_duplicate_row_returns_active_source_while_preserving_trashed_membership(): void {
+		$trashed_collection = $this->create_collection_with_fields( array() );
+		$active_collection  = $this->create_collection_with_fields( array() );
+		$row_id             = $this->create_row( $trashed_collection, 'Shared row' );
+		$this->add_membership( $row_id, $active_collection );
+		wp_trash_post( $trashed_collection );
+
+		$result = $this->duplicator->duplicate( get_post( $row_id ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( $active_collection, $result['collection_id'] );
+		$memberships = wp_get_object_terms(
+			(int) $result['document']->ID,
+			TraitTaxonomy::TAXONOMY,
+			array( 'fields' => 'slugs' )
+		);
+		$memberships = is_array( $memberships ) ? array_map( 'intval', $memberships ) : array();
+		sort( $memberships );
+		$expected = array( $trashed_collection, $active_collection );
+		sort( $expected );
+		$this->assertSame( $expected, $memberships );
+	}
+
+	public function test_duplicate_row_copies_a_field_shared_by_two_schemas_only_once(): void {
+		$collection_a = $this->create_collection_with_fields( array( array( 'Tags', 'multiselect' ) ) );
+		$collection_b = $this->create_collection_with_fields( array() );
+		$field_id     = Document::collection_field_ids( $collection_a )[0];
+		add_post_meta( $collection_b, 'cortext_fields', (string) $field_id );
+
+		$row_id = $this->create_row( $collection_a, 'Shared schema row' );
+		$this->add_membership( $row_id, $collection_b );
+		add_post_meta( $row_id, Relations::meta_key( $field_id ), 'red' );
+		add_post_meta( $row_id, Relations::meta_key( $field_id ), 'blue' );
+
+		$result = $this->duplicator->duplicate( get_post( $row_id ) );
+
+		$this->assertIsArray( $result );
+		$values = array_map(
+			'strval',
+			get_post_meta( (int) $result['document']->ID, Relations::meta_key( $field_id ), false )
+		);
+		sort( $values );
+		$this->assertSame( array( 'blue', 'red' ), $values );
+	}
+
+	public function test_duplicate_row_copies_relation_values_from_a_secondary_membership(): void {
+		$collection_a      = $this->create_collection_with_fields( array() );
+		$collection_b      = $this->create_collection_with_fields( array() );
+		$target_collection = $this->create_collection_with_fields( array() );
+		$forward_field     = $this->attach_field( $collection_b, 'Related', 'relation' );
+		$reverse_field     = $this->attach_field( $target_collection, 'Backlinks', 'relation' );
+		update_post_meta( $forward_field, 'relation_multiple', '1' );
+		update_post_meta( $forward_field, 'related_collection_id', (string) $target_collection );
+		update_post_meta( $forward_field, 'relation_reverse_field_id', (string) $reverse_field );
+		update_post_meta( $reverse_field, 'relation_multiple', '1' );
+		update_post_meta( $reverse_field, 'related_collection_id', (string) $collection_b );
+		update_post_meta( $reverse_field, 'relation_reverse_field_id', (string) $forward_field );
+
+		$row_id    = $this->create_row( $collection_a, 'Shared relation row' );
+		$target_id = $this->create_row( $target_collection, 'Target' );
+		$this->add_membership( $row_id, $collection_b );
+		add_post_meta( $row_id, Relations::meta_key( $forward_field ), (string) $target_id );
+		add_post_meta( $target_id, Relations::meta_key( $reverse_field ), (string) $row_id );
+
+		// The production query uses `post_status => any`; the WorDBless query shim
+		// treats that literal as a status, so normalize it to the fixture's status.
+		$normalize_status = static function ( \WP_Query $query ): void {
+			if ( 'any' === $query->get( 'post_status' ) ) {
+				$query->set( 'post_status', array( 'private' ) );
+			}
+		};
+		add_action( 'pre_get_posts', $normalize_status );
+		try {
+			$result = $this->duplicator->duplicate( get_post( $row_id ) );
+		} finally {
+			remove_action( 'pre_get_posts', $normalize_status );
+		}
+
+		$this->assertIsArray( $result );
+		$new_row_id = (int) $result['document']->ID;
+		$this->assertSame( array( $target_id ), Relations::relation_values( $new_row_id, $forward_field ) );
+	}
+
+	public function test_duplicate_row_recomputes_formula_values_in_a_secondary_membership(): void {
+		$collection_a  = $this->create_collection_with_fields( array() );
+		$collection_b  = $this->create_collection_with_fields( array( array( 'Score', 'number' ) ) );
+		$score_field   = Document::collection_field_ids( $collection_b )[0];
+		$formula_field = $this->attach_formula_field( $collection_b, 'Double score', 'field("Score") * 2' );
+		$row_id        = $this->create_row( $collection_a, 'Formula row' );
+		$this->add_membership( $row_id, $collection_b );
+		update_post_meta( $row_id, Relations::meta_key( $score_field ), '4' );
+		update_post_meta( $row_id, Relations::meta_key( $formula_field ), '999' );
+
+		$result = $this->duplicator->duplicate( get_post( $row_id ) );
+
+		$this->assertIsArray( $result );
+		$new_row_id = (int) $result['document']->ID;
+		$this->assertSame( '4', (string) get_post_meta( $new_row_id, Relations::meta_key( $score_field ), true ) );
+		$this->assertSame( 8.0, (float) get_post_meta( $new_row_id, Relations::meta_key( $formula_field ), true ) );
+	}
+
 	public function test_duplicate_row_skips_relation_when_reverse_is_not_multiple(): void {
 		$collection_id = $this->create_collection_with_fields( array() );
 		$other_id      = $this->create_collection_with_fields( array() );
@@ -578,6 +705,23 @@ final class Test_Document_Duplicator extends BaseTestCase {
 		return $field_id;
 	}
 
+	/**
+	 * Attaches a compiled formula field to a collection.
+	 *
+	 * @param int    $collection_id Collection document id.
+	 * @param string $title         Formula title.
+	 * @param string $expression    Formula expression.
+	 */
+	private function attach_formula_field( int $collection_id, string $title, string $expression ): int {
+		$field_id = $this->attach_field( $collection_id, $title, 'formula' );
+		$compiled = ( new FormulaCompiler() )->compile( $expression, $collection_id, $field_id );
+		update_post_meta( $field_id, 'expression', $expression );
+		update_post_meta( $field_id, 'formula_result_type', $compiled['result_type'] );
+		update_post_meta( $field_id, 'formula_ast', wp_json_encode( $compiled['ast'] ) );
+		update_post_meta( $field_id, 'formula_dep_field_ids', wp_json_encode( $compiled['deps'] ) );
+		return $field_id;
+	}
+
 	private function create_row( int $collection_id, string $title ): int {
 		$id      = (int) wp_insert_post(
 			array(
@@ -590,6 +734,25 @@ final class Test_Document_Duplicator extends BaseTestCase {
 		$this->assertGreaterThan( 0, $term_id );
 		wp_set_object_terms( $id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
 		return $id;
+	}
+
+	/**
+	 * Adds a collection membership without dropping the row's existing ones.
+	 *
+	 * @param int $row_id        Row document id.
+	 * @param int $collection_id Collection document id.
+	 */
+	private function add_membership( int $row_id, int $collection_id ): void {
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+		$existing = wp_get_object_terms( $row_id, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) );
+		$existing = is_array( $existing ) ? array_map( 'intval', $existing ) : array();
+		wp_set_object_terms(
+			$row_id,
+			array_values( array_unique( array_merge( $existing, array( $term_id ) ) ) ),
+			TraitTaxonomy::TAXONOMY,
+			false
+		);
 	}
 
 	/**

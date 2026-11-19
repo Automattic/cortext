@@ -1766,6 +1766,7 @@ describe( 'DataViewRowReorder', () => {
 			path: '/cortext/v1/documents/1/reorder',
 			method: 'POST',
 			data: {
+				collection_id: 7,
 				before_id: null,
 				after_id: 3,
 				current_sort: null,
@@ -1815,6 +1816,7 @@ describe( 'DataViewRowReorder', () => {
 			[ 3, 1, 2 ]
 		);
 		expect( mockApiFetch.mock.calls[ 0 ][ 0 ].data ).toEqual( {
+			collection_id: 7,
 			before_id: 1,
 			after_id: null,
 			current_sort: { field: 'title', direction: 'asc' },
@@ -1848,6 +1850,7 @@ describe( 'DataViewRowReorder', () => {
 		);
 		expect( onChangeView ).not.toHaveBeenCalled();
 		expect( mockApiFetch.mock.calls[ 0 ][ 0 ].data ).toEqual( {
+			collection_id: 7,
 			before_id: 1,
 			after_id: null,
 			current_sort: null,

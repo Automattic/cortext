@@ -148,7 +148,7 @@ final class Relations {
 	 * @param int   $field_id Relation field post ID.
 	 * @param mixed $value    Incoming relation value.
 	 *
-	 * @return array{reverse_id:int,multiple:bool,reverse_multiple:bool,desired:int[],current:int[],target_collection_id:int}|WP_Error
+	 * @return array{reverse_id:int,multiple:bool,reverse_multiple:bool,desired:int[],current:int[]}|WP_Error
 	 */
 	public static function prepare_relation_update( int $row_id, int $field_id, mixed $value ): array|WP_Error {
 		$field = get_post( $field_id );
@@ -222,12 +222,11 @@ final class Relations {
 		}
 
 		return array(
-			'reverse_id'           => $reverse_id,
-			'multiple'             => $multiple,
-			'reverse_multiple'     => $reverse_multiple,
-			'desired'              => $desired,
-			'current'              => self::relation_values( $row_id, $field_id ),
-			'target_collection_id' => $target_collection_id,
+			'reverse_id'       => $reverse_id,
+			'multiple'         => $multiple,
+			'reverse_multiple' => $reverse_multiple,
+			'desired'          => $desired,
+			'current'          => self::relation_values( $row_id, $field_id ),
 		);
 	}
 
@@ -320,12 +319,11 @@ final class Relations {
 	 * @param array $prepared Output of `prepare_relation_update`.
 	 */
 	public static function apply_relation_pointers( int $row_id, int $field_id, array $prepared ): void {
-		$reverse_id           = (int) $prepared['reverse_id'];
-		$multiple             = (bool) $prepared['multiple'];
-		$reverse_multiple     = (bool) $prepared['reverse_multiple'];
-		$desired              = array_map( 'intval', $prepared['desired'] );
-		$current              = array_map( 'intval', $prepared['current'] );
-		$target_collection_id = (int) ( $prepared['target_collection_id'] ?? 0 );
+		$reverse_id       = (int) $prepared['reverse_id'];
+		$multiple         = (bool) $prepared['multiple'];
+		$reverse_multiple = (bool) $prepared['reverse_multiple'];
+		$desired          = array_map( 'intval', $prepared['desired'] );
+		$current          = array_map( 'intval', $prepared['current'] );
 
 		// (A) Only the deltas reach the wire.
 		$added   = array_values( array_diff( $desired, $current ) );
@@ -363,8 +361,10 @@ final class Relations {
 
 		// Bypassing the meta hooks above means the sidecar is unaware of the
 		// reverse-pointer changes. Re-index the touched targets explicitly so
-		// the field-value index stays in sync.
-		self::reindex_targets( array_merge( $added, $removed ), $reverse_id, $target_collection_id );
+		// the field-value index stays in sync. Owners resolve per target: a
+		// target can belong to several collections whose schemas
+		// share the reverse field, and each membership carries its own rows.
+		self::reindex_targets( array_merge( $added, $removed ), $reverse_id );
 
 		// Conflict resolution rewrote the forward field on rows that used to
 		// point at a reassigned target. Their forward index entries went stale

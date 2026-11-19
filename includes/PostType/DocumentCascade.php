@@ -41,10 +41,12 @@ final class DocumentCascade {
 	/**
 	 * Moves a document's active children and rows to the target status.
 	 *
-	 * @param int      $post_id    Document whose children and rows should move.
-	 * @param callable $transition Moves each child or row.
+	 * @param int           $post_id    Document whose children and rows should move.
+	 * @param callable      $transition Moves each child or row.
+	 * @param callable|null $keep_row   Returns true for a row that should stay
+	 *                                  put, given the row and collection IDs.
 	 */
-	public function cascade( int $post_id, callable $transition ): void {
+	public function cascade( int $post_id, callable $transition, ?callable $keep_row = null ): void {
 		if ( Document::POST_TYPE !== get_post_type( $post_id ) ) {
 			return;
 		}
@@ -56,6 +58,9 @@ final class DocumentCascade {
 
 		if ( Document::is_collection( $post_id ) ) {
 			foreach ( $this->active_row_ids( $post_id ) as $row_id ) {
+				if ( null !== $keep_row && $keep_row( $row_id, $post_id ) ) {
+					continue;
+				}
 				update_post_meta( $row_id, $this->collection_marker_meta, $post_id );
 				$transition( $row_id );
 			}
@@ -103,10 +108,14 @@ final class DocumentCascade {
 	/**
 	 * Restores the children and rows marked by this document.
 	 *
-	 * @param int      $post_id    Document whose children and rows should be restored.
-	 * @param callable $transition Restores each marked child or row.
+	 * @param int      $post_id               Document whose children and rows should be restored.
+	 * @param callable $transition            Restores each marked child or row.
+	 * @param bool     $any_collection_marker Also restore rows a different
+	 *                                        collection's cascade moved. Rows that
+	 *                                        belong to several collections come
+	 *                                        back when any of them is restored.
 	 */
-	public function restore( int $post_id, callable $transition ): void {
+	public function restore( int $post_id, callable $transition, bool $any_collection_marker = false ): void {
 		if ( Document::POST_TYPE !== get_post_type( $post_id ) ) {
 			return;
 		}
@@ -122,7 +131,10 @@ final class DocumentCascade {
 		}
 
 		if ( Document::is_collection( $post_id ) ) {
-			foreach ( $this->rows_marked_by( $post_id ) as $row_id ) {
+			$row_ids = $any_collection_marker
+				? $this->rows_moved_by_any_collection( $post_id )
+				: $this->rows_marked_by( $post_id );
+			foreach ( $row_ids as $row_id ) {
 				$transition( $row_id );
 				delete_post_meta( $row_id, $this->collection_marker_meta );
 			}
@@ -132,10 +144,14 @@ final class DocumentCascade {
 	/**
 	 * Finds all marked descendants below a document.
 	 *
-	 * @param int $root_id Root document ID.
+	 * @param int           $root_id               Root document ID.
+	 * @param callable|null $skip_row              Returns true for a row to leave
+	 *                                             out, given the row and collection IDs.
+	 * @param bool          $any_collection_marker Walk rows any collection's
+	 *                                             cascade moved, as `restore()` does.
 	 * @return int[] Descendant IDs, excluding the root.
 	 */
-	public function descendants_for_root( int $root_id ): array {
+	public function descendants_for_root( int $root_id, ?callable $skip_row = null, bool $any_collection_marker = false ): array {
 		if ( Document::POST_TYPE !== get_post_type( $root_id ) ) {
 			return array();
 		}
@@ -156,8 +172,14 @@ final class DocumentCascade {
 					$next[]            = $child_id;
 				}
 				if ( Document::is_collection( $current ) ) {
-					foreach ( $this->rows_marked_by( $current ) as $row_id ) {
+					$row_ids = $any_collection_marker
+						? $this->rows_moved_by_any_collection( $current )
+						: $this->rows_marked_by( $current );
+					foreach ( $row_ids as $row_id ) {
 						if ( isset( $seen[ $row_id ] ) ) {
+							continue;
+						}
+						if ( null !== $skip_row && $skip_row( $row_id, $current ) ) {
 							continue;
 						}
 						$seen[ $row_id ] = true;
@@ -258,6 +280,23 @@ final class DocumentCascade {
 	 */
 	private function active_row_ids( int $collection_id ): array {
 		return $this->row_ids_for_collection( $collection_id, $this->active_statuses );
+	}
+
+	/**
+	 * Finds rows of this collection in the target status that any collection's
+	 * cascade moved there. The marker can name another collection when a row
+	 * belongs to several and they moved one after another.
+	 *
+	 * @param int $collection_id Collection document ID.
+	 * @return int[]
+	 */
+	private function rows_moved_by_any_collection( int $collection_id ): array {
+		return array_values(
+			array_filter(
+				$this->row_ids_for_collection( $collection_id, array( $this->target_status ) ),
+				fn( int $row_id ): bool => (int) get_post_meta( $row_id, $this->collection_marker_meta, true ) > 0
+			)
+		);
 	}
 
 	/**

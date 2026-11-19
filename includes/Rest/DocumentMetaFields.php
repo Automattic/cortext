@@ -19,7 +19,7 @@ use WP_REST_Post_Meta_Fields;
  * Every field registers a `field-<id>` key on `crtxt_document`, so core would
  * read every field in the workspace for every document. Reads here cover only
  * the document's own keys: every non-field key plus the writable fields of the
- * row's collection. The schema and writes keep the full registry: core-data
+ * row's collections. The schema and writes keep the full registry: core-data
  * reads `schema.properties.meta.properties` to learn the registered keys, and a
  * new row has no collection yet when core writes its meta.
  */
@@ -71,7 +71,8 @@ final class DocumentMetaFields extends WP_REST_Post_Meta_Fields {
 	 * @return array<string, mixed>
 	 */
 	public function get_value( $object_id, $request ) {
-		$this->scope = $this->fields_for( get_post( (int) $object_id ) );
+		$context     = $request instanceof \WP_REST_Request ? (string) $request->get_param( 'context' ) : 'edit';
+		$this->scope = $this->fields_for( get_post( (int) $object_id ), '' !== $context ? $context : 'edit' );
 		try {
 			return parent::get_value( $object_id, $request );
 		} finally {
@@ -95,14 +96,15 @@ final class DocumentMetaFields extends WP_REST_Post_Meta_Fields {
 	/**
 	 * Non-field keys plus the document's own `field-<id>` keys, in registry order.
 	 *
-	 * @param WP_Post $post Document.
+	 * @param WP_Post $post    Document.
+	 * @param string  $context REST context (`edit` or `view`).
 	 * @return array<string, array<string, mixed>>
 	 */
-	private function fields_for( WP_Post $post ): array {
+	private function fields_for( WP_Post $post, string $context ): array {
 		$this->refresh();
 
 		$own = array();
-		foreach ( Document::rest_field_meta_keys( $post ) as $key ) {
+		foreach ( Document::rest_field_meta_keys( $post, $context ) as $key ) {
 			if ( isset( $this->fields[ $key ] ) ) {
 				$own[ $key ] = $this->fields[ $key ];
 			}

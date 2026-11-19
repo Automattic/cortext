@@ -17,6 +17,7 @@ const mockSurfaceFocus = { request: null, consume: jest.fn() };
 jest.mock( '@tanstack/react-router', () => ( {
 	useParams: () => ( { _splat: mockSplat } ),
 	useNavigate: () => mockNavigate,
+	useSearch: () => ( {} ),
 } ) );
 
 jest.mock( '@wordpress/core-data', () => ( {

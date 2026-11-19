@@ -10,8 +10,6 @@ import {
 	ToolbarButton,
 	ToolbarGroup,
 } from '@wordpress/components';
-import { store as coreStore } from '@wordpress/core-data';
-import { useDispatch, useSelect } from '@wordpress/data';
 import {
 	useCallback,
 	useEffect,
@@ -20,95 +18,26 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
+import { store as coreStore } from '@wordpress/core-data';
+import { useSelect } from '@wordpress/data';
 import { pencil, seen, unseen } from '@wordpress/icons';
 
 import DocumentPropertiesActions from '../../components/DocumentPropertiesActions';
-import RowProperties, {
-	HIDDEN_PROPERTIES_DROP_TARGET,
-} from '../../components/RowProperties';
+import RowProperties from '../../components/RowProperties';
+import AdditionalCollectionProperties, {
+	CollectionGroupHeader,
+} from '../../components/AdditionalCollectionProperties';
+import TraitControl from '../../components/TraitControl';
 import { CollectionFieldsSnapshotProvider } from '../../components/CollectionFieldsContext';
-import { TITLE_FIELD_ID } from '../../components/dataViewColumns';
 import { useDocumentPropertiesContext } from '../../components/DocumentPropertiesContext';
-import {
-	detailFieldsFromEntries,
-	detailLayoutMetaFromEntries,
-	reorderVisibleDetailEntries,
-} from '../../hooks/detailLayout';
-
-function entriesWithHiddenLast( entries ) {
-	const safeEntries = Array.isArray( entries ) ? entries : [];
-	return [
-		...safeEntries.filter( ( entry ) => entry?.visible !== false ),
-		...safeEntries.filter( ( entry ) => entry?.visible === false ),
-	];
-}
-
-function reconcileOptimisticEntries( optimisticEntries, currentEntries ) {
-	if ( ! Array.isArray( optimisticEntries ) ) {
-		return currentEntries;
-	}
-	const currentByField = new Map(
-		( Array.isArray( currentEntries ) ? currentEntries : [] ).map(
-			( entry ) => [ entry.field, entry ]
-		)
-	);
-	const optimisticFields = new Set();
-	const reconciledEntries = optimisticEntries.filter( ( entry ) => {
-		if (
-			! currentByField.has( entry.field ) ||
-			optimisticFields.has( entry.field )
-		) {
-			return false;
-		}
-		optimisticFields.add( entry.field );
-		return true;
-	} );
-	for ( const entry of currentByField.values() ) {
-		if ( ! optimisticFields.has( entry.field ) ) {
-			reconciledEntries.push( entry );
-		}
-	}
-	return reconciledEntries;
-}
-
-function reorderDetailLayoutEntries( entries, activeField, overField ) {
-	const safeEntries = Array.isArray( entries ) ? entries : [];
-	const from = safeEntries.findIndex(
-		( entry ) => entry.field === activeField
-	);
-	const isHiddenGroupDrop = overField === HIDDEN_PROPERTIES_DROP_TARGET;
-	const firstHiddenIndex = safeEntries.findIndex(
-		( entry ) => entry.visible === false
-	);
-	let to = safeEntries.findIndex( ( entry ) => entry.field === overField );
-	if ( isHiddenGroupDrop ) {
-		to = firstHiddenIndex === -1 ? safeEntries.length : firstHiddenIndex;
-	}
-	if ( from < 0 || to < 0 || ( from === to && ! isHiddenGroupDrop ) ) {
-		return safeEntries;
-	}
-	const activeIsHidden = safeEntries[ from ]?.visible === false;
-	const overIsHidden = safeEntries[ to ]?.visible === false;
-	const shouldHideActive =
-		! activeIsHidden && ( isHiddenGroupDrop || overIsHidden );
-	const shouldShowActive =
-		activeIsHidden && ( isHiddenGroupDrop || ! overIsHidden );
-	const nextEntries = [ ...safeEntries ];
-	const [ moved ] = nextEntries.splice( from, 1 );
-	let nextMoved = moved;
-	if ( shouldHideActive ) {
-		nextMoved = { ...moved, visible: false };
-	} else if ( shouldShowActive ) {
-		nextMoved = { ...moved, visible: true };
-	}
-	const insertAt = isHiddenGroupDrop && from < to ? to - 1 : to;
-	nextEntries.splice( insertAt, 0, nextMoved );
-	return nextEntries;
-}
+import useDocumentTraits from '../../hooks/useDocumentTraits';
+import useDetailLayoutEditing from '../../hooks/useDetailLayoutEditing';
+import { isExperimentEnabled, TRAITS_EXPERIMENT_ID } from '../../settings';
 
 // Row documents show collection properties between the title and body. Canvas
-// and RowEditor provide the fields and fallback row record; pages and rows
-// without fields return null.
+// and RowEditor provide the source collection's fields and the fallback row
+// record; a row's other collections resolve their own fields. Pages
+// and rows without fields return null.
 export default function Edit() {
 	const ctx = useDocumentPropertiesContext();
 	const {
@@ -125,76 +54,307 @@ export default function Edit() {
 		onToggleVisible,
 	} = ctx ?? {};
 	const isVisible = contextIsVisible !== false;
+	const traitsEnabled = isExperimentEnabled( TRAITS_EXPERIMENT_ID );
+
+	// All the collections this row belongs to. `collectionId` from
+	// context is the source collection (the one the row was opened from); the
+	// rest render as additional groups below it.
+	const {
+		collections: traitMemberships,
+		isResolving: membershipsResolving,
+		isUnknown: membershipsUnknown = false,
+		error: membershipsError = null,
+		refresh: refreshTraits,
+	} = useDocumentTraits( traitsEnabled ? rowId : null );
+	// With the experiment off, retain the legacy single-collection surface and
+	// skip the traits request. The backend remains multi-membership aware so
+	// existing data is preserved if an administrator disables the experiment.
+	const memberships = useMemo( () => {
+		if ( traitsEnabled ) {
+			return traitMemberships;
+		}
+		return collectionId ? [ { id: collectionId } ] : [];
+	}, [ collectionId, traitsEnabled, traitMemberships ] );
+	const membershipsAreActionable =
+		! traitsEnabled || ( ! membershipsResolving && ! membershipsUnknown );
+	// Trashed memberships stay in `memberships` so the chips can show them and
+	// a PUT preserves them for restore, but the server strips their field
+	// values from row responses and rejects writes to them, so only active
+	// memberships render property groups or count toward layout editing.
+	const activeMemberships = useMemo(
+		() =>
+			memberships.filter( ( collection ) => collection.active !== false ),
+		[ memberships ]
+	);
+	const currentMembershipIds = useMemo(
+		() =>
+			activeMemberships
+				.map( ( collection ) => Number( collection.id ) )
+				.filter( ( id ) => id > 0 ),
+		[ activeMemberships ]
+	);
+	const canEditAnyCurrentLayout = useSelect(
+		( select ) =>
+			membershipsAreActionable &&
+			currentMembershipIds.some(
+				( id ) =>
+					select( coreStore ).canUser( 'update', {
+						kind: 'postType',
+						name: 'crtxt_document',
+						id,
+					} ) === true
+			),
+		[ currentMembershipIds, membershipsAreActionable ]
+	);
+	const additionalCollections = useMemo(
+		() =>
+			activeMemberships.filter(
+				( collection ) => collection.id !== collectionId
+			),
+		[ activeMemberships, collectionId ]
+	);
+	const sourceCollection = useMemo(
+		() =>
+			activeMemberships.find(
+				( collection ) => collection.id === collectionId
+			) ?? null,
+		[ activeMemberships, collectionId ]
+	);
+	const isMultiMembership = activeMemberships.length > 1;
+	// Once memberships have loaded, if the source collection is no longer one of
+	// the active ones (the user just removed the collection they opened the row
+	// from, or that collection is in the trash), drop the now-stale source
+	// group. Also hide it while refreshing: those fields and layout handlers
+	// target a membership whose continued existence is not yet known.
+	const sourceInactive =
+		traitsEnabled &&
+		membershipsAreActionable &&
+		! activeMemberships.some(
+			( collection ) => collection.id === collectionId
+		);
+	const showSourceGroup = membershipsAreActionable && ! sourceInactive;
+	// System properties describe the row rather than a collection. The source
+	// group normally owns them; when it does not render, exactly one surviving
+	// group takes ownership so they neither disappear nor repeat.
+	const systemFieldsOwnerId = sourceInactive
+		? additionalCollections[ 0 ]?.id ?? null
+		: null;
+
 	const [ isEditingLayout, setIsEditingLayout ] = useState( false );
-	const [ optimisticEntries, setOptimisticEntries ] = useState( null );
 	const [ layoutEditorMinHeight, setLayoutEditorMinHeight ] =
 		useState( null );
-	const [ saveError, setSaveError ] = useState( null );
+	// Visible-field counts reported by each additional collection group, so the
+	// collapse summary totals every collection rather than just the source. They
+	// persist while collapsed (the groups unmount), keyed by collection id.
+	const [ additionalCounts, setAdditionalCounts ] = useState( {} );
+	const [ lockedCollectionIds, setLockedCollectionIds ] = useState(
+		() => new Set()
+	);
 	const propertiesContentRef = useRef( null );
 	const lastLayoutEditRequestRef = useRef( 0 );
-	const { saveEntityRecord } = useDispatch( coreStore );
-	// RowProperties still expects the row-detail ancestor used by its nested
-	// SCSS rules. The collapsed stub does not render RowProperties, so it can
-	// use its smaller wrapper.
+	const pendingSaveFlushersRef = useRef( new Map() );
+	const orphanedPendingSavesRef = useRef( new Map() );
+	const pendingSaveRegistryRevisionRef = useRef( 0 );
+	const collectionSaveLockTokensRef = useRef( new Map() );
+	const rememberOrphanedPendingSave = useCallback(
+		( targetCollectionId, pendingSave ) => {
+			if ( ! pendingSave ) {
+				return;
+			}
+			const normalizedId = Number( targetCollectionId );
+			if ( normalizedId < 1 ) {
+				return;
+			}
+			// Convert rejection into data immediately. The component that started
+			// this save is gone, so nobody else can catch it before a later
+			// membership barrier observes it.
+			const tracked = Promise.resolve( pendingSave ).then(
+				() => ( { status: 'fulfilled' } ),
+				( reason ) => ( { status: 'rejected', reason } )
+			);
+			let saves = orphanedPendingSavesRef.current.get( normalizedId );
+			if ( ! saves ) {
+				saves = new Set();
+				orphanedPendingSavesRef.current.set( normalizedId, saves );
+			}
+			saves.add( tracked );
+			pendingSaveRegistryRevisionRef.current += 1;
+			tracked.then( ( result ) => {
+				// Successful saves need no later barrier once settled. Rejections
+				// remain until beforeRemoveCollection reports them to the user.
+				if ( result.status !== 'fulfilled' ) {
+					return;
+				}
+				saves.delete( tracked );
+				if (
+					saves.size === 0 &&
+					orphanedPendingSavesRef.current.get( normalizedId ) ===
+						saves
+				) {
+					orphanedPendingSavesRef.current.delete( normalizedId );
+				}
+			} );
+		},
+		[]
+	);
+	const registerPendingSaveFlusher = useCallback(
+		( targetCollectionId, flush ) => {
+			const normalizedId = Number( targetCollectionId );
+			if ( normalizedId < 1 || typeof flush !== 'function' ) {
+				return () => {};
+			}
+			pendingSaveFlushersRef.current.set( normalizedId, flush );
+			pendingSaveRegistryRevisionRef.current += 1;
+			return ( orphanedPendingSave = null ) => {
+				if (
+					pendingSaveFlushersRef.current.get( normalizedId ) === flush
+				) {
+					pendingSaveFlushersRef.current.delete( normalizedId );
+					pendingSaveRegistryRevisionRef.current += 1;
+				}
+				rememberOrphanedPendingSave(
+					normalizedId,
+					orphanedPendingSave
+				);
+			};
+		},
+		[ rememberOrphanedPendingSave ]
+	);
+	const flushPendingCollectionSaves = useCallback(
+		async ( targetCollectionId ) => {
+			const normalizedId = Number( targetCollectionId );
+
+			// Orphaned groups are always drained first, then the current group is
+			// recaptured and flushed. This ordering matters: the current group can
+			// receive edits while an old collapsed group's request is in flight.
+			while ( true ) {
+				while ( true ) {
+					const saves =
+						orphanedPendingSavesRef.current.get( normalizedId );
+					const orphaned = saves ? Array.from( saves ) : [];
+					if ( orphaned.length === 0 ) {
+						break;
+					}
+					orphaned.forEach( ( pendingSave ) =>
+						saves.delete( pendingSave )
+					);
+					const orphanedResults = await Promise.all( orphaned );
+					const failedOrphan = orphanedResults.find(
+						( result ) => result.status === 'rejected'
+					);
+					if ( failedOrphan ) {
+						throw failedOrphan.reason;
+					}
+				}
+
+				const revisionBeforeFlush =
+					pendingSaveRegistryRevisionRef.current;
+				const currentFlusher =
+					pendingSaveFlushersRef.current.get( normalizedId );
+				if ( currentFlusher ) {
+					await currentFlusher();
+				}
+
+				const currentAfterFlush =
+					pendingSaveFlushersRef.current.get( normalizedId );
+				const newOrphans =
+					orphanedPendingSavesRef.current.get( normalizedId );
+				if (
+					( newOrphans?.size ?? 0 ) === 0 &&
+					pendingSaveRegistryRevisionRef.current ===
+						revisionBeforeFlush &&
+					currentAfterFlush === currentFlusher
+				) {
+					if ( newOrphans ) {
+						orphanedPendingSavesRef.current.delete( normalizedId );
+					}
+					return true;
+				}
+			}
+		},
+		[]
+	);
+	const isCollectionSaveLocked = useCallback(
+		( targetCollectionId ) =>
+			collectionSaveLockTokensRef.current.has(
+				Number( targetCollectionId )
+			),
+		[]
+	);
+	const prepareCollectionRemoval = useCallback(
+		( targetCollectionId ) => {
+			const normalizedId = Number( targetCollectionId );
+			if ( normalizedId < 1 ) {
+				return Promise.resolve( () => {} );
+			}
+			const token = Symbol( `collection-save-lock:${ normalizedId }` );
+			collectionSaveLockTokensRef.current.set( normalizedId, token );
+			setLockedCollectionIds( ( current ) => {
+				if ( current.has( normalizedId ) ) {
+					return current;
+				}
+				const next = new Set( current );
+				next.add( normalizedId );
+				return next;
+			} );
+
+			let released = false;
+			const release = () => {
+				if (
+					released ||
+					collectionSaveLockTokensRef.current.get( normalizedId ) !==
+						token
+				) {
+					return;
+				}
+				released = true;
+				collectionSaveLockTokensRef.current.delete( normalizedId );
+				setLockedCollectionIds( ( current ) => {
+					if ( ! current.has( normalizedId ) ) {
+						return current;
+					}
+					const next = new Set( current );
+					next.delete( normalizedId );
+					return next;
+				} );
+			};
+
+			return flushPendingCollectionSaves( normalizedId ).then(
+				() => release,
+				( error ) => {
+					release();
+					throw error;
+				}
+			);
+		},
+		[ flushPendingCollectionSaves ]
+	);
+
 	const blockProps = useBlockProps( {
 		className: isVisible
 			? 'cortext-document-properties cortext-row-detail'
 			: 'cortext-document-properties cortext-document-properties--collapsed',
 	} );
-	const canEditLayout = useSelect(
-		( select ) =>
-			collectionId
-				? select( coreStore ).canUser( 'update', {
-						kind: 'postType',
-						name: 'crtxt_document',
-						id: collectionId,
-				  } ) === true
-				: false,
-		[ collectionId ]
-	);
-	const isSavingLayout = useSelect(
-		( select ) =>
-			collectionId
-				? select( coreStore ).isSavingEntityRecord(
-						'postType',
-						'crtxt_document',
-						collectionId
-				  )
-				: false,
-		[ collectionId ]
-	);
-	const visibleFields = useMemo(
-		() => ( Array.isArray( fields ) ? fields : [] ),
-		[ fields ]
-	);
-	const layoutFields = useMemo(
-		() => ( Array.isArray( allFields ) ? allFields : visibleFields ),
-		[ allFields, visibleFields ]
-	);
-	const visiblePropertyFields = useMemo(
-		() => visibleFields.filter( ( field ) => field.id !== TITLE_FIELD_ID ),
-		[ visibleFields ]
-	);
-	const layoutPropertyFields = useMemo(
-		() => layoutFields.filter( ( field ) => field.id !== TITLE_FIELD_ID ),
-		[ layoutFields ]
-	);
-	const currentEntries = useMemo(
-		() =>
-			Array.isArray( detailLayoutEntries )
-				? detailLayoutEntries
-				: layoutPropertyFields.map( ( field ) => ( {
-						field: field.id,
-						visible: true,
-				  } ) ),
-		[ detailLayoutEntries, layoutPropertyFields ]
-	);
-	useEffect( () => {
-		setOptimisticEntries( null );
-	}, [ collectionId, rowId ] );
+
+	// The source collection's detail-layout editing. Additional collections own
+	// theirs inside `AdditionalCollectionProperties`; all share `isEditingLayout`.
+	const source = useDetailLayoutEditing( {
+		collectionId,
+		fields,
+		allFields,
+		detailLayoutEntries,
+		rowId,
+		isLayoutEditing: isEditingLayout,
+	} );
+	const sourceBaseFields = Array.isArray( fields ) ? fields : [];
+	const sourceSnapshotFields = Array.isArray( allFields )
+		? allFields
+		: sourceBaseFields;
+
 	useEffect( () => {
 		onLayoutEditingChange?.( isEditingLayout );
 	}, [ isEditingLayout, onLayoutEditingChange ] );
+
 	const rememberPropertiesHeight = useCallback( () => {
 		const height =
 			propertiesContentRef.current?.getBoundingClientRect?.().height;
@@ -208,7 +368,6 @@ export default function Edit() {
 	}, [] );
 	const startEditingLayout = useCallback( () => {
 		rememberPropertiesHeight();
-		setSaveError( null );
 		setIsEditingLayout( true );
 	}, [ rememberPropertiesHeight ] );
 	const stopEditingLayout = useCallback( () => {
@@ -223,10 +382,24 @@ export default function Edit() {
 	}, [ isEditingLayout, startEditingLayout, stopEditingLayout ] );
 	useEffect( () => {
 		if (
+			( ! membershipsAreActionable || ! canEditAnyCurrentLayout ) &&
+			isEditingLayout
+		) {
+			stopEditingLayout();
+		}
+	}, [
+		canEditAnyCurrentLayout,
+		isEditingLayout,
+		membershipsAreActionable,
+		stopEditingLayout,
+	] );
+	useEffect( () => {
+		if (
 			! layoutEditRequest ||
 			lastLayoutEditRequestRef.current === layoutEditRequest ||
 			isResolving ||
-			! canEditLayout
+			! membershipsAreActionable ||
+			! canEditAnyCurrentLayout
 		) {
 			return;
 		}
@@ -240,8 +413,9 @@ export default function Edit() {
 		}
 		startEditingLayout();
 	}, [
-		canEditLayout,
+		canEditAnyCurrentLayout,
 		isResolving,
+		membershipsAreActionable,
 		isEditingLayout,
 		isVisible,
 		layoutEditRequest,
@@ -249,137 +423,36 @@ export default function Edit() {
 		startEditingLayout,
 		stopEditingLayout,
 	] );
-	const saveLayoutEntries = useCallback(
-		async ( nextEntries ) => {
-			if ( ! collectionId ) {
-				return;
-			}
-			const previousOptimisticEntries = optimisticEntries;
-			setOptimisticEntries( nextEntries );
-			setSaveError( null );
-			try {
-				await saveEntityRecord(
-					'postType',
-					'crtxt_document',
-					{
-						id: collectionId,
-						meta: {
-							cortext_detail_layout:
-								detailLayoutMetaFromEntries( nextEntries ),
-						},
-					},
-					{ throwOnError: true }
-				);
-			} catch ( error ) {
-				setOptimisticEntries( previousOptimisticEntries );
-				setSaveError(
-					error?.message ??
-						__( "Couldn't save the property layout.", 'cortext' )
-				);
-			}
-		},
-		[ collectionId, optimisticEntries, saveEntityRecord ]
-	);
-	const handleInlineLayoutReorder = useCallback(
-		( activeField, overField ) => {
-			if ( isSavingLayout ) {
-				return;
-			}
-			const baseEntries = reconcileOptimisticEntries(
-				optimisticEntries,
-				currentEntries
+	const reportAdditionalCount = useCallback(
+		( collectionRecordId, count ) => {
+			setAdditionalCounts( ( current ) =>
+				current[ collectionRecordId ] === count
+					? current
+					: { ...current, [ collectionRecordId ]: count }
 			);
-			const nextEntries = reorderVisibleDetailEntries(
-				baseEntries,
-				activeField,
-				overField
-			);
-			if ( nextEntries === baseEntries ) {
-				return;
-			}
-			saveLayoutEntries( nextEntries );
 		},
-		[ currentEntries, isSavingLayout, optimisticEntries, saveLayoutEntries ]
-	);
-	const layoutEntries = useMemo(
-		() => reconcileOptimisticEntries( optimisticEntries, currentEntries ),
-		[ currentEntries, optimisticEntries ]
-	);
-	const inlineLayoutFields = useMemo(
-		() =>
-			optimisticEntries
-				? detailFieldsFromEntries( layoutFields, layoutEntries )
-				: visibleFields,
-		[ layoutEntries, layoutFields, optimisticEntries, visibleFields ]
-	);
-	const layoutEditingFields = useMemo( () => {
-		const fieldsById = new Map(
-			layoutFields.map( ( field ) => [ field.id, field ] )
-		);
-		return entriesWithHiddenLast( layoutEntries )
-			.map( ( entry ) => {
-				const field = fieldsById.get( entry.field );
-				return field
-					? {
-							...field,
-							cortextDetailVisible: entry.visible !== false,
-					  }
-					: null;
-			} )
-			.filter( Boolean );
-	}, [ layoutEntries, layoutFields ] );
-	const handleLayoutEditReorder = useCallback(
-		( activeField, overField ) => {
-			const visibleOrderEntries = entriesWithHiddenLast( layoutEntries );
-			const nextEntries = reorderDetailLayoutEntries(
-				visibleOrderEntries,
-				activeField,
-				overField
-			);
-			if ( nextEntries === visibleOrderEntries ) {
-				return;
-			}
-			saveLayoutEntries( nextEntries );
-		},
-		[ layoutEntries, saveLayoutEntries ]
-	);
-	const handleLayoutVisibilityToggle = useCallback(
-		( fieldId ) => {
-			const nextEntries = layoutEntries.map( ( entry ) =>
-				entry.field === fieldId
-					? { ...entry, visible: entry.visible === false }
-					: entry
-			);
-			saveLayoutEntries( nextEntries );
-		},
-		[ layoutEntries, saveLayoutEntries ]
+		[]
 	);
 	useLayoutEffect( () => {
 		if ( ! isEditingLayout ) {
 			rememberPropertiesHeight();
 		}
 	}, [
-		inlineLayoutFields,
 		isEditingLayout,
 		rememberPropertiesHeight,
-		visiblePropertyFields.length,
+		source.propertyFieldsForDisplay,
 	] );
-	const propertyFieldsForDisplay = isEditingLayout
-		? layoutEditingFields
-		: inlineLayoutFields;
-	let layoutReorderHandler;
-	if ( isEditingLayout ) {
-		layoutReorderHandler = handleLayoutEditReorder;
-	} else if ( canEditLayout ) {
-		layoutReorderHandler = handleInlineLayoutReorder;
-	}
-	const layoutVisibilityHandler = isEditingLayout
-		? handleLayoutVisibilityToggle
-		: undefined;
-	const showEmptyProperties =
-		! isEditingLayout && visiblePropertyFields.length === 0;
 
-	if ( ! ctx || isResolving || layoutPropertyFields.length === 0 ) {
+	const canRenderTraitShell =
+		traitsEnabled &&
+		rowId &&
+		( ( membershipsAreActionable && memberships.length > 0 ) ||
+			membershipsError );
+	if (
+		! ctx ||
+		isResolving ||
+		( ! source.hasLayoutProperties && ! canRenderTraitShell )
+	) {
 		return null;
 	}
 
@@ -398,7 +471,9 @@ export default function Edit() {
 					/>
 				</ToolbarGroup>
 			) : null }
-			{ canEditLayout && isVisible ? (
+			{ canEditAnyCurrentLayout &&
+			isVisible &&
+			membershipsAreActionable ? (
 				<ToolbarGroup>
 					<ToolbarButton
 						icon={ pencil }
@@ -420,20 +495,45 @@ export default function Edit() {
 		</InspectorControls>
 	);
 
+	const additionalVisibleTotal = additionalCollections.reduce(
+		( sum, collection ) => sum + ( additionalCounts[ collection.id ] ?? 0 ),
+		0
+	);
+	const totalVisibleCount =
+		( showSourceGroup ? source.visiblePropertyCount : 0 ) +
+		additionalVisibleTotal;
+	const additionalPropertyGroups = additionalCollections.map(
+		( collection ) => (
+			<AdditionalCollectionProperties
+				key={ collection.id }
+				collection={ collection }
+				rowId={ rowId }
+				row={ fallbackRecord }
+				isLayoutEditing={ isEditingLayout }
+				onVisibleCount={ reportAdditionalCount }
+				renderProperties={ isVisible && membershipsAreActionable }
+				includeSystemFields={ collection.id === systemFieldsOwnerId }
+				isCollectionSaveLocked={ isCollectionSaveLocked }
+				isSaveLocked={ lockedCollectionIds.has(
+					Number( collection.id )
+				) }
+				registerPendingSaveFlusher={ registerPendingSaveFlusher }
+			/>
+		)
+	);
+
 	if ( ! isVisible ) {
 		// Keep the hidden block selectable and give users a quick way to show
-		// properties again. Match RowProperties by excluding the synthetic
-		// title property from the count.
-		const visibleFieldCount = visiblePropertyFields.length;
+		// properties again. The count totals every collection the row belongs to.
 		const label = sprintf(
 			/* translators: %d: number of collapsed fields. */
 			_n(
 				'%d property collapsed',
 				'%d properties collapsed',
-				visibleFieldCount,
+				totalVisibleCount,
 				'cortext'
 			),
-			visibleFieldCount
+			totalVisibleCount
 		);
 		return (
 			<>
@@ -448,8 +548,54 @@ export default function Edit() {
 					>
 						{ label }
 					</Button>
+					{ additionalPropertyGroups }
 				</div>
 			</>
+		);
+	}
+
+	const sourceProperties = collectionId ? (
+		<CollectionFieldsSnapshotProvider fields={ sourceSnapshotFields }>
+			<RowProperties
+				collectionId={ collectionId }
+				fields={ source.propertyFieldsForDisplay }
+				isLayoutEditing={ source.isLayoutEditingEnabled }
+				isCollectionSaveLocked={ isCollectionSaveLocked }
+				isSaveLocked={ lockedCollectionIds.has(
+					Number( collectionId )
+				) }
+				onLayoutReorder={ source.layoutReorderHandler }
+				onLayoutVisibilityToggle={ source.layoutVisibilityHandler }
+				rowId={ rowId }
+				row={ fallbackRecord }
+				registerPendingSaveFlusher={ registerPendingSaveFlusher }
+			/>
+		</CollectionFieldsSnapshotProvider>
+	) : (
+		<RowProperties
+			fields={ source.propertyFieldsForDisplay }
+			isLayoutEditing={ source.isLayoutEditingEnabled }
+			isCollectionSaveLocked={ isCollectionSaveLocked }
+			onLayoutReorder={ source.layoutReorderHandler }
+			onLayoutVisibilityToggle={ source.layoutVisibilityHandler }
+			rowId={ rowId }
+			row={ fallbackRecord }
+			registerPendingSaveFlusher={ registerPendingSaveFlusher }
+		/>
+	);
+
+	// When the row belongs to several collections, label the source group with a
+	// header too (including while editing), so every editable group reads as its
+	// own collection.
+	let sourceGroup = null;
+	if ( showSourceGroup ) {
+		sourceGroup = isMultiMembership ? (
+			<div className="cortext-property-group cortext-property-group--source">
+				<CollectionGroupHeader collection={ sourceCollection } />
+				{ sourceProperties }
+			</div>
+		) : (
+			sourceProperties
 		);
 	}
 
@@ -458,9 +604,26 @@ export default function Edit() {
 			{ blockControls }
 			{ inspectorControls }
 			<div { ...blockProps }>
-				{ saveError ? (
+				{ membershipsError ? (
+					<Notice
+						status="error"
+						isDismissible={ false }
+						actions={ [
+							{
+								label: __( 'Retry', 'cortext' ),
+								onClick: refreshTraits,
+							},
+						] }
+					>
+						{ __(
+							'Could not load the collections for this item.',
+							'cortext'
+						) }
+					</Notice>
+				) : null }
+				{ showSourceGroup && source.saveError ? (
 					<Notice status="error" isDismissible={ false }>
-						{ saveError }
+						{ source.saveError }
 					</Notice>
 				) : null }
 				<div
@@ -476,37 +639,25 @@ export default function Edit() {
 							: undefined
 					}
 				>
-					{ collectionId ? (
-						<CollectionFieldsSnapshotProvider
-							fields={ layoutFields }
-						>
-							<RowProperties
-								collectionId={ collectionId }
-								fields={ propertyFieldsForDisplay }
-								isLayoutEditing={ isEditingLayout }
-								onLayoutReorder={ layoutReorderHandler }
-								onLayoutVisibilityToggle={
-									layoutVisibilityHandler
-								}
-								rowId={ rowId }
-								row={ fallbackRecord }
-							/>
-						</CollectionFieldsSnapshotProvider>
-					) : (
-						<RowProperties
-							fields={ propertyFieldsForDisplay }
-							isLayoutEditing={ isEditingLayout }
-							onLayoutReorder={ layoutReorderHandler }
-							onLayoutVisibilityToggle={ layoutVisibilityHandler }
-							rowId={ rowId }
-							row={ fallbackRecord }
+					{ traitsEnabled &&
+					rowId &&
+					! isEditingLayout &&
+					membershipsAreActionable &&
+					memberships.length > 0 ? (
+						<TraitControl
+							beforeRemoveCollection={ prepareCollectionRemoval }
+							documentId={ rowId }
+							collections={ memberships }
+							onChange={ refreshTraits }
 						/>
-					) }
-					{ showEmptyProperties ? (
+					) : null }
+					{ sourceGroup }
+					{ showSourceGroup && source.showEmptyProperties ? (
 						<p className="cortext-document-properties__empty">
 							{ __( 'No properties are visible.', 'cortext' ) }
 						</p>
 					) : null }
+					{ additionalPropertyGroups }
 				</div>
 			</div>
 		</>

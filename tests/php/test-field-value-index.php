@@ -13,11 +13,20 @@ use Cortext\Documents;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\FieldValues\FieldValueStore;
 use Cortext\PostType\Document;
+use Cortext\PostType\Field;
 use Cortext\Relations;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_Post;
 
 final class Test_Field_Value_Index extends BaseTestCase {
+
+	use InMemoryTermStore;
+
+	public function set_up(): void {
+		parent::set_up();
+		$this->install_in_memory_term_store();
+	}
 
 	public function tear_down(): void {
 		FieldValueIndex::resume_sync();
@@ -30,6 +39,9 @@ final class Test_Field_Value_Index extends BaseTestCase {
 		delete_option( 'cortext_field_values_install_attempted_version' );
 		delete_option( 'cortext_field_values_auto_rebuild_lock' );
 		remove_all_filters( 'cortext_field_values_index_enabled' );
+		remove_all_filters( 'wordbless_wpdb_delete' );
+		remove_all_filters( 'wordbless_wpdb_replace' );
+		$this->uninstall_in_memory_term_store();
 		parent::tear_down();
 	}
 
@@ -114,7 +126,7 @@ final class Test_Field_Value_Index extends BaseTestCase {
 		$reflection = new \ReflectionClass( FieldValueIndex::class );
 
 		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
-		update_option( 'cortext_field_values_schema_version', 2, false );
+		update_option( 'cortext_field_values_schema_version', 3, false );
 
 		$table_cache = $reflection->getProperty( 'table_exists_cache' );
 		$table_cache->setAccessible( true );
@@ -153,7 +165,7 @@ final class Test_Field_Value_Index extends BaseTestCase {
 		$reflection = new \ReflectionClass( FieldValueIndex::class );
 
 		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
-		update_option( 'cortext_field_values_schema_version', 2, false );
+		update_option( 'cortext_field_values_schema_version', 3, false );
 
 		$table_cache = $reflection->getProperty( 'table_exists_cache' );
 		$table_cache->setAccessible( true );
@@ -217,6 +229,32 @@ final class Test_Field_Value_Index extends BaseTestCase {
 		$this->assertFalse( $index->can_read() );
 	}
 
+	public function test_schema_upgrade_marks_previously_ready_index_stale(): void {
+		$index  = new FieldValueIndex();
+		$method = new \ReflectionMethod( $index, 'set_post_install_status' );
+		$method->setAccessible( true );
+
+		$method->invoke( $index, 2, FieldValueIndex::STATUS_READY );
+
+		$this->assertSame(
+			FieldValueIndex::STATUS_STALE,
+			get_option( 'cortext_field_values_index_status' )
+		);
+	}
+
+	public function test_same_schema_install_preserves_ready_index(): void {
+		$index  = new FieldValueIndex();
+		$method = new \ReflectionMethod( $index, 'set_post_install_status' );
+		$method->setAccessible( true );
+
+		$method->invoke( $index, 3, FieldValueIndex::STATUS_READY );
+
+		$this->assertSame(
+			FieldValueIndex::STATUS_READY,
+			get_option( 'cortext_field_values_index_status' )
+		);
+	}
+
 	public function test_index_can_be_disabled_with_option_and_filter(): void {
 		$index = new FieldValueIndex();
 
@@ -239,5 +277,120 @@ final class Test_Field_Value_Index extends BaseTestCase {
 
 		$this->assertGreaterThan( 0, (int) get_option( 'cortext_field_values_disabled_since', 0 ) );
 		$this->assertSame( FieldValueIndex::STATUS_DISABLED, $index->status()['status'] );
+	}
+
+	public function test_shared_field_is_indexed_for_every_collection_membership(): void {
+		[ $index, $row_id, $field_id, $collection_ids ] = $this->shared_field_fixture( 'text' );
+
+		$written = array();
+		add_filter(
+			'wordbless_wpdb_replace',
+			static function ( $result, string $table, array $data ) use ( &$written, $index ) {
+				if ( $index->table_name() === $table ) {
+					$written[] = $data;
+					return 1;
+				}
+				return $result;
+			},
+			10,
+			3
+		);
+
+		$count = $index->index_known_value( $row_id, $field_id, 'text', 'shared' );
+
+		$this->assertSame( 2, $count );
+		$written_collection_ids = array_map( static fn( array $row ): int => (int) $row['collection_id'], $written );
+		sort( $written_collection_ids );
+		sort( $collection_ids );
+		$this->assertSame( $collection_ids, $written_collection_ids );
+	}
+
+	public function test_shared_field_deletes_are_scoped_to_each_collection(): void {
+		[ $index, $row_id, $field_id, $collection_ids ] = $this->shared_field_fixture( 'multiselect' );
+
+		$deleted = array();
+		add_filter(
+			'wordbless_wpdb_delete',
+			static function ( $result, string $table, array $where ) use ( &$deleted, $index ) {
+				if ( $index->table_name() === $table ) {
+					$deleted[] = $where;
+					return 1;
+				}
+				return $result;
+			},
+			10,
+			3
+		);
+
+		$index->index_known_value( $row_id, $field_id, 'multiselect', array() );
+
+		$this->assertCount( 2, $deleted );
+		$deleted_collection_ids = array_map( static fn( array $where ): int => (int) $where['collection_id'], $deleted );
+		sort( $deleted_collection_ids );
+		sort( $collection_ids );
+		$this->assertSame( $collection_ids, $deleted_collection_ids );
+		foreach ( $deleted as $where ) {
+			$this->assertSame( $row_id, (int) $where['row_id'] );
+			$this->assertSame( $field_id, (int) $where['field_id'] );
+		}
+	}
+
+	/**
+	 * Builds a row whose same field definition is present in two schemas and
+	 * makes the sidecar writable in WorDBless.
+	 *
+	 * @param string $field_type Field type for the shared definition.
+	 * @return array{0:FieldValueIndex,1:int,2:int,3:int[]}
+	 */
+	private function shared_field_fixture( string $field_type ): array {
+		( new Document() )->register_post_type();
+		( new Field() )->register_post_type();
+		$taxonomy = new TraitTaxonomy();
+		$taxonomy->register_taxonomy();
+
+		$field_id       = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Shared field',
+				'meta_input'  => array( 'type' => $field_type ),
+			)
+		);
+		$collection_ids = array();
+		foreach ( array( 'A', 'B' ) as $suffix ) {
+			$collection_id = (int) wp_insert_post(
+				array(
+					'post_type'   => Document::POST_TYPE,
+					'post_status' => 'private',
+					'post_title'  => "Collection {$suffix}",
+				)
+			);
+			add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
+			$taxonomy->ensure_mirror_term( $collection_id );
+			$collection_ids[] = $collection_id;
+		}
+
+		$row_id   = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Shared row',
+			)
+		);
+		$term_ids = array_map(
+			static fn( int $collection_id ): int => TraitTaxonomy::term_id_for_trait( $collection_id ),
+			$collection_ids
+		);
+		wp_set_object_terms( $row_id, $term_ids, TraitTaxonomy::TAXONOMY, false );
+
+		$index      = new FieldValueIndex();
+		$reflection = new \ReflectionClass( FieldValueIndex::class );
+		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
+		update_option( 'cortext_field_values_schema_version', 3, false );
+		$table_cache = $reflection->getProperty( 'table_exists_cache' );
+		$table_cache->setAccessible( true );
+		$table_cache->setValue( null, array( $index->table_name() => true ) );
+
+		return array( $index, $row_id, $field_id, $collection_ids );
 	}
 }

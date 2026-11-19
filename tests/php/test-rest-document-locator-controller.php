@@ -93,6 +93,56 @@ final class Test_Rest_Document_Locator_Controller extends BaseTestCase {
 		$this->assertSame( 'cortext_document_not_found', $response->get_data()['code'] );
 	}
 
+	public function test_trait_ids_exclude_trashed_collection_memberships(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$active_collection  = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Active collection',
+			)
+		);
+		$trashed_collection = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Archived collection',
+			)
+		);
+
+		$taxonomy = new TraitTaxonomy();
+		$taxonomy->ensure_mirror_term( $active_collection );
+		$taxonomy->ensure_mirror_term( $trashed_collection );
+
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Shared row',
+			)
+		);
+		wp_set_object_terms(
+			$row_id,
+			array(
+				TraitTaxonomy::term_id_for_trait( $active_collection ),
+				TraitTaxonomy::term_id_for_trait( $trashed_collection ),
+			),
+			TraitTaxonomy::TAXONOMY,
+			false
+		);
+		wp_update_post(
+			array(
+				'ID'          => $trashed_collection,
+				'post_status' => 'trash',
+			)
+		);
+
+		$response = $this->locate( $row_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $active_collection ), $response->get_data()['trait_ids'] );
+	}
+
 	private function locate( int $id ) {
 		$request = new WP_REST_Request( 'GET', '/cortext/v1/documents/' . $id );
 		return rest_do_request( $request );

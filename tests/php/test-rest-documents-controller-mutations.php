@@ -1086,6 +1086,32 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertSame( array( $collection_id ), $response->get_data()['restored'] );
 	}
 
+	public function test_restore_response_includes_shared_row_revived_by_another_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_a = $this->create_full_page_collection( 'shared-a' );
+		$collection_b = $this->create_full_page_collection( 'shared-b' );
+		$row_id       = $this->create_row( $collection_a );
+		$term_id      = TraitTaxonomy::term_id_for_trait( $collection_b );
+		$this->assertGreaterThan( 0, $term_id );
+		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, true );
+
+		wp_trash_post( $collection_a );
+		wp_trash_post( $collection_b );
+		$this->assertSame( 'trash', get_post_status( $row_id ) );
+
+		$response = $this->restore( $collection_a );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotSame( 'trash', get_post_status( $row_id ) );
+		$this->assertContains( $collection_a, $response->get_data()['restored'] );
+		$this->assertContains(
+			$row_id,
+			$response->get_data()['restored'],
+			'The response must report a shared row revived through this collection even when another collection owned its trash marker.'
+		);
+	}
+
 	public function test_permanent_delete_removes_a_trashed_collection_and_its_rows(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 

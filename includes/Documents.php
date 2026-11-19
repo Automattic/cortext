@@ -420,11 +420,19 @@ final class Documents {
 			return null;
 		}
 
-		// A row needs its parent collection to be openable.
-		$collection_post = null;
+		// A row needs at least one active parent collection to be openable.
+		$source_collection = null;
 		if ( self::KIND_ROW === $kind ) {
-			$collection_post = $this->find_trait_for_document( $post );
-			if ( ! $collection_post instanceof WP_Post ) {
+			$active_collections = $this->find_active_traits_for_document( $post );
+			$source_collection  = $active_collections[0] ?? null;
+
+			// Trash responses still need their collection shape even when the
+			// collection was trashed with the row. Normal live targets must have an
+			// active source or Favorites/Recents would retain an orphaned row.
+			if ( ! $source_collection instanceof WP_Post && ! empty( $opts['include_trash_meta'] ) ) {
+				$source_collection = $this->find_traits_for_document( $post )[0] ?? null;
+			}
+			if ( ! $source_collection instanceof WP_Post ) {
 				return null;
 			}
 		}
@@ -445,12 +453,8 @@ final class Documents {
 			$document['icon'] = $icon;
 		}
 
-		if ( $collection_post instanceof WP_Post ) {
-			$document['collection'] = array(
-				'id'    => (int) $collection_post->ID,
-				'title' => $this->post_title( $collection_post ),
-				'path'  => $this->path_for( $collection_post ),
-			);
+		if ( $source_collection instanceof WP_Post ) {
+			$document['collection'] = $this->format_collection_summary( $source_collection );
 		}
 
 		$include_trash_meta     = ! empty( $opts['include_trash_meta'] );
@@ -602,42 +606,217 @@ final class Documents {
 	}
 
 	/**
-	 * Returns the first trait (collection) document that a row document is a
+	 * Returns the first active trait (collection) document that a row document is a
 	 * member of. Reads the document's `crtxt_trait` term, extracts the trait
 	 * document id from the deterministic term slug, and loads the document.
 	 *
 	 * In the universal model, traits are just `crtxt_document` posts with a
 	 * `cortext_fields` meta. A row can belong to multiple traits (multi-trait
 	 * membership), but most legacy callers expect a singular "owning trait" —
-	 * this helper returns the first one found. Callers that need all traits
-	 * should query `wp_get_object_terms` directly.
+	 * this helper returns the first non-trashed one found. Callers that need all
+	 * traits, including lifecycle-preserved trash memberships, should use
+	 * `find_traits_for_document`.
 	 *
 	 * @param WP_Post $document Row document post.
 	 */
 	public function find_trait_for_document( WP_Post $document ): ?WP_Post {
 		$document_id = (int) $document->ID;
 		if ( array_key_exists( $document_id, $this->trait_cache ) ) {
-			return $this->trait_cache[ $document_id ];
-		}
-
-		$trait = null;
-		$terms = get_the_terms( $document_id, TraitTaxonomy::TAXONOMY );
-		if ( is_array( $terms ) && count( $terms ) > 0 ) {
-			$trait_id = TraitTaxonomy::trait_id_from_slug( (string) $terms[0]->slug );
-			if ( $trait_id > 0 ) {
-				$candidate = get_post( $trait_id );
-				if (
-					$candidate instanceof WP_Post
-					&& Document::POST_TYPE === $candidate->post_type
-					&& Document::is_collection( $trait_id )
-				) {
-					$trait = $candidate;
+			$cached = $this->trait_cache[ $document_id ];
+			if ( $cached instanceof WP_Post ) {
+				$fresh = get_post( $cached->ID );
+				if ( $fresh instanceof WP_Post && self::STATUS_TRASH !== $fresh->post_status ) {
+					return $fresh;
 				}
 			}
+			unset( $this->trait_cache[ $document_id ] );
 		}
+
+		$active_traits = $this->find_active_traits_for_document( $document );
+		$trait         = $active_traits[0] ?? null;
 
 		$this->trait_cache[ $document_id ] = $trait;
 		return $trait;
+	}
+
+	/**
+	 * Returns every collection (trait) document a row is a member of. A row can
+	 * carry several `crtxt_trait` terms; `find_trait_for_document`
+	 * returns the first of these as the source collection. Terms whose mirror
+	 * document no longer exists or is no longer a collection are skipped.
+	 *
+	 * @param WP_Post $document Row document post.
+	 * @return WP_Post[]
+	 */
+	public function find_traits_for_document( WP_Post $document ): array {
+		$terms = get_the_terms( (int) $document->ID, TraitTaxonomy::TAXONOMY );
+		if ( ! is_array( $terms ) || count( $terms ) === 0 ) {
+			return array();
+		}
+
+		$collections = array();
+		foreach ( $terms as $term ) {
+			$trait_id = TraitTaxonomy::trait_id_from_slug( (string) $term->slug );
+			if ( $trait_id < 1 ) {
+				continue;
+			}
+			$candidate = get_post( $trait_id );
+			if (
+				$candidate instanceof WP_Post
+				&& Document::POST_TYPE === $candidate->post_type
+				&& Document::is_collection( $trait_id )
+			) {
+				$collections[] = $candidate;
+			}
+		}
+		return $collections;
+	}
+
+	/**
+	 * Returns the row's active collection memberships. Full membership lookup
+	 * intentionally retains trashed collection terms so trash/restore can
+	 * reconstruct shared rows; normal row hydration and legacy source selection
+	 * must ignore those inactive owners.
+	 *
+	 * @param WP_Post $document Row document post.
+	 * @return WP_Post[]
+	 */
+	public function find_active_traits_for_document( WP_Post $document ): array {
+		return array_values(
+			array_filter(
+				$this->find_traits_for_document( $document ),
+				static fn( WP_Post $collection ): bool => self::STATUS_TRASH !== $collection->post_status
+			)
+		);
+	}
+
+	/**
+	 * Collection ids a document currently belongs to. Thin wrapper over
+	 * `find_traits_for_document` for callers that only need the ids (membership
+	 * diffs, sidecar cleanup).
+	 *
+	 * @param int $document_id Document id.
+	 * @return int[]
+	 */
+	public function membership_ids( int $document_id ): array {
+		$post = get_post( $document_id );
+		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+			return array();
+		}
+		return array_map(
+			static fn( WP_Post $collection ): int => (int) $collection->ID,
+			$this->find_traits_for_document( $post )
+		);
+	}
+
+	/**
+	 * Formatted `{id,title,path,icon,active}` summaries for every collection a
+	 * document belongs to. The traits REST endpoint and the membership chips
+	 * render this. `active` is false for memberships whose collection is in the
+	 * trash: those stay in the set so trash/restore keeps working, but their
+	 * fields are stripped from row responses and rejected on write, so clients
+	 * must not render them as editable.
+	 *
+	 * @param int $document_id Document id.
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function get_memberships( int $document_id ): array {
+		$post = get_post( $document_id );
+		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+			return array();
+		}
+		return array_map(
+			function ( WP_Post $collection ): array {
+				$summary           = $this->format_collection_summary( $collection );
+				$summary['active'] = self::STATUS_TRASH !== $collection->post_status;
+				return $summary;
+			},
+			$this->find_traits_for_document( $post )
+		);
+	}
+
+	/**
+	 * Replaces a document's collection memberships with the given set, letting a
+	 * row belong to several collections at once. Each id must be a
+	 * collection (resolve a mirror term); unknown or non-collection ids abort the
+	 * whole write. Deduplicates and writes the full term set in one call, so the
+	 * manual-order append hook only fires for genuinely new memberships. An empty
+	 * set removes every membership (the document becomes a page); callers that
+	 * must keep at least one membership guard before calling this.
+	 *
+	 * @param int   $document_id    Row document id.
+	 * @param int[] $collection_ids Collections the document should belong to.
+	 * @return int[]|WP_Error Resolved (deduplicated) collection ids on success.
+	 */
+	public function set_memberships( int $document_id, array $collection_ids ): array|WP_Error {
+		$post = get_post( $document_id );
+		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$current_ids = $this->membership_ids( $document_id );
+		$resolved    = array();
+		$term_ids    = array();
+		foreach ( $collection_ids as $collection_id ) {
+			$collection_id = (int) $collection_id;
+			if ( $collection_id < 1 || isset( $resolved[ $collection_id ] ) ) {
+				continue;
+			}
+			$collection = get_post( $collection_id );
+			$term_id    = TraitTaxonomy::term_id_for_trait( $collection_id );
+			if (
+				! $collection instanceof WP_Post
+				|| (
+					self::STATUS_TRASH === $collection->post_status
+					&& ! in_array( $collection_id, $current_ids, true )
+				)
+				|| $term_id < 1
+				|| ! Document::is_collection_post( $collection )
+			) {
+				return new WP_Error(
+					'cortext_trait_not_found',
+					__( 'Collection not found.', 'cortext' ),
+					array(
+						'status'        => 404,
+						'collection_id' => $collection_id,
+					)
+				);
+			}
+			$resolved[ $collection_id ] = true;
+			$term_ids[]                 = $term_id;
+		}
+
+		$set = wp_set_object_terms( $document_id, $term_ids, TraitTaxonomy::TAXONOMY, false );
+		if ( $set instanceof WP_Error ) {
+			return $set;
+		}
+
+		unset( $this->trait_cache[ $document_id ] );
+		return array_keys( $resolved );
+	}
+
+	/**
+	 * Formats a collection document into the `{id,title,path,icon}` summary the
+	 * shell renders as breadcrumb segments and collection chips.
+	 *
+	 * @param WP_Post $collection Collection document post.
+	 * @return array<string,mixed>
+	 */
+	private function format_collection_summary( WP_Post $collection ): array {
+		$summary = array(
+			'id'    => (int) $collection->ID,
+			'title' => $this->post_title( $collection ),
+			'path'  => $this->path_for( $collection ),
+		);
+		$icon    = (string) get_post_meta( $collection->ID, DocumentIdentity::META_KEY, true );
+		if ( '' !== $icon ) {
+			$summary['icon'] = $icon;
+		}
+		return $summary;
 	}
 
 	/**
@@ -710,8 +889,17 @@ final class Documents {
 	 * @param bool    $require_edit Enforce `edit_post` on both row and trait.
 	 */
 	private function validate_row_target( WP_Post $row, bool $require_edit ): ?WP_Error {
-		$trait = $this->find_trait_for_document( $row );
-		if ( ! $trait instanceof WP_Post || self::STATUS_TRASH === $trait->post_status ) {
+		// A shared row stays reachable through any collection that is neither
+		// trashed nor archived; it is hidden only when every live one is archived.
+		$active_traits = $this->find_active_traits_for_document( $row );
+		$trait         = $active_traits[0] ?? null;
+		foreach ( $active_traits as $candidate ) {
+			if ( self::STATUS_ARCHIVED !== $candidate->post_status ) {
+				$trait = $candidate;
+				break;
+			}
+		}
+		if ( ! $trait instanceof WP_Post ) {
 			return $this->target_not_found_error();
 		}
 		if ( self::STATUS_ARCHIVED === $trait->post_status ) {

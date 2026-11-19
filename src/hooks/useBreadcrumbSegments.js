@@ -14,6 +14,7 @@ import {
 } from '../components/page-queries';
 import { COLLECTION_QUERY, DOCUMENT_POST_TYPE } from '../collections';
 import { computeDocumentUri } from '../router/useResolveEntity';
+import { isExperimentEnabled, TRAITS_EXPERIMENT_ID } from '../settings';
 
 const TRAIT_TAXONOMY = 'crtxt_trait';
 const TRAIT_TERMS_QUERY = { per_page: 100, context: 'view' };
@@ -30,27 +31,67 @@ function titleOf( entity ) {
 	);
 }
 
-function traitTermIdOf( record ) {
-	const terms = record?.crtxt_trait;
-	return Array.isArray( terms ) && terms.length > 0
-		? Number( terms[ 0 ] )
-		: 0;
+function termIdsOf( record ) {
+	return Array.isArray( record?.crtxt_trait ) ? record.crtxt_trait : [];
 }
 
-// Walks one step up the breadcrumb chain. A document's parent is the
-// collection that owns its trait term (if any), then its `post_parent` (if
+// A trashed collection keeps its rows' membership for restore, but it is not a
+// place the row lives in, so it never shows as a parent or a chip.
+function liveCollectionForTerm( termId, lookup ) {
+	const collection = lookup.collectionForTerm( Number( termId ) );
+	return collection && collection.status !== 'trash' ? collection : null;
+}
+
+// Every live collection a row belongs to, deduplicated and in term order.
+function collectionsOfRecord( record, lookup ) {
+	const collections = [];
+	const seen = new Set();
+	termIdsOf( record ).forEach( ( termId ) => {
+		const collection = liveCollectionForTerm( termId, lookup );
+		if ( collection && ! seen.has( collection.id ) ) {
+			seen.add( collection.id );
+			collections.push( collection );
+		}
+	} );
+	return collections;
+}
+
+// Walks one step up the breadcrumb chain. A document's parent is the first
+// live collection among its trait terms (if any), then its `post_parent` (if
 // any). Collections, pages, and rows all use the same rule; the difference is
 // which slots are filled. `lookup` answers from the cached lists first and
 // falls back to a single-record fetch for anything past their first page.
 function parentOf( record, lookup ) {
-	const traitTermId = traitTermIdOf( record );
-	if ( traitTermId > 0 ) {
-		return lookup.collectionForTerm( traitTermId );
+	for ( const termId of termIdsOf( record ) ) {
+		const collection = liveCollectionForTerm( termId, lookup );
+		if ( collection ) {
+			return collection;
+		}
 	}
 	if ( record?.parent ) {
 		return lookup.document( record.parent );
 	}
 	return null;
+}
+
+function createLookup( select, documentsById, termsById ) {
+	const { getEntityRecord } = select( coreStore );
+	const lookupDocument = ( id ) =>
+		documentsById.get( id ) ??
+		getEntityRecord( 'postType', DOCUMENT_POST_TYPE, id ) ??
+		null;
+	return {
+		document: lookupDocument,
+		collectionForTerm: ( termId ) => {
+			const term =
+				termsById.get( termId ) ??
+				getEntityRecord( 'taxonomy', TRAIT_TAXONOMY, termId, {
+					context: TRAIT_TERMS_QUERY.context,
+				} );
+			const collectionId = Number( term?.slug );
+			return collectionId > 0 ? lookupDocument( collectionId ) : null;
+		},
+	};
 }
 
 // Returns the breadcrumb segments for the currently mounted document.
@@ -59,6 +100,7 @@ function parentOf( record, lookup ) {
 export default function useBreadcrumbSegments( paintedDocumentId ) {
 	const navigate = useNavigate();
 	const documentId = paintedDocumentId ?? null;
+	const traitsEnabled = isExperimentEnabled( TRAITS_EXPERIMENT_ID );
 
 	const { record: document } = useEntityRecord(
 		'postType',
@@ -119,55 +161,71 @@ export default function useBreadcrumbSegments( paintedDocumentId ) {
 	// (more than 100 collections, terms, or documents) resolves by id. Those
 	// single-record fetches are not invalidated by document saves, unlike the
 	// lists, so they stay cached once loaded.
+	// Every live collection the current item belongs to. With traits on and
+	// more than one, the item has no single owning collection: they render as
+	// chips beside it instead of one of them heading the chain.
+	const itemCollections = useSelect(
+		( select ) => {
+			if ( ! traitsEnabled || ! documentId || ! document ) {
+				return [];
+			}
+			const collections = collectionsOfRecord(
+				documentsById.get( documentId ) ?? document,
+				createLookup( select, documentsById, termsById )
+			);
+			return collections.length > 1 ? collections : [];
+		},
+		[ traitsEnabled, documentId, document, documentsById, termsById ]
+	);
+	const isMultiCollection = itemCollections.length > 1;
+
 	const chain = useSelect(
 		( select ) => {
 			if ( ! documentId || ! document ) {
 				return [];
 			}
-			const { getEntityRecord } = select( coreStore );
-			const lookupDocument = ( id ) =>
-				documentsById.get( id ) ??
-				getEntityRecord( 'postType', DOCUMENT_POST_TYPE, id ) ??
-				null;
-			const lookup = {
-				document: lookupDocument,
-				collectionForTerm: ( termId ) => {
-					const term =
-						termsById.get( termId ) ??
-						getEntityRecord( 'taxonomy', TRAIT_TAXONOMY, termId, {
-							context: TRAIT_TERMS_QUERY.context,
-						} );
-					const collectionId = Number( term?.slug );
-					return collectionId > 0
-						? lookupDocument( collectionId )
-						: null;
-				},
-			};
+			const lookup = createLookup( select, documentsById, termsById );
 
 			const nodes = [];
 			const seen = new Set();
 			let cursor = documentsById.get( documentId ) ?? document;
+			let isStart = true;
 			while ( cursor && ! seen.has( cursor.id ) ) {
 				seen.add( cursor.id );
 				nodes.unshift( cursor );
-				cursor = parentOf( cursor, lookup );
+				// A multi-collection item does not climb into an arbitrary
+				// collection. Any page hierarchy above it (via `post_parent`)
+				// still shows.
+				if ( isStart && isMultiCollection ) {
+					cursor = cursor?.parent
+						? lookup.document( cursor.parent )
+						: null;
+				} else {
+					cursor = parentOf( cursor, lookup );
+				}
+				isStart = false;
 			}
 			return nodes;
 		},
-		[ documentId, document, documentsById, termsById ]
+		[ documentId, document, documentsById, termsById, isMultiCollection ]
 	);
 
-	return useMemo(
-		() =>
-			chain.map( ( node, index ) => {
-				const isCurrent = index === chain.length - 1;
-				return {
-					key: `document:${ node.id }`,
-					label: titleOf( node ),
-					onClick: isCurrent ? null : () => goToDocument( node ),
-					isCurrent,
-				};
-			} ),
-		[ chain, goToDocument ]
-	);
+	return useMemo( () => {
+		const segments = chain.map( ( node, index ) => {
+			const isCurrent = index === chain.length - 1;
+			return {
+				key: `document:${ node.id }`,
+				label: titleOf( node ),
+				onClick: isCurrent ? null : () => goToDocument( node ),
+				isCurrent,
+			};
+		} );
+		const chips = itemCollections.map( ( collection ) => ( {
+			key: `collection:${ collection.id }`,
+			id: collection.id,
+			label: titleOf( collection ),
+			onClick: () => goToDocument( collection ),
+		} ) );
+		return { segments, chips };
+	}, [ chain, goToDocument, itemCollections ] );
 }

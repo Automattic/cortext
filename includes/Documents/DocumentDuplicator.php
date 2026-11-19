@@ -3,9 +3,9 @@
  * Duplicates a document. The duplicate always inherits title, content,
  * excerpt, status, parent, icon, and thumbnail. If the source has
  * `cortext_fields` meta, its field posts are cloned and rollup references
- * remapped. If the source belongs to a collection (carries a trait term),
- * the term and field values are copied so the duplicate lands in the same
- * collection.
+ * remapped. If the source belongs to collections (carries trait terms), all
+ * memberships and their field values are copied so the duplicate lands in
+ * every collection the source belongs to.
  *
  * @package Cortext
  */
@@ -17,6 +17,7 @@ namespace Cortext\Documents;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Documents;
+use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use Cortext\Relations;
@@ -60,7 +61,7 @@ final class DocumentDuplicator {
 	 *
 	 * @param WP_Post $source Source document post.
 	 *
-	 * @return array{document: WP_Post, collection_id: int, skipped_fields: array<int, array{id: int, title: string, reason: string}>}|WP_Error
+	 * @return array{document: WP_Post, collection_id: int, skipped_fields: array<int, array{id: int, title: string, reason: string}>}|WP_Error The active source remains the legacy collection id.
 	 */
 	public function duplicate( WP_Post $source ): array|WP_Error {
 		if ( Document::POST_TYPE !== $source->post_type ) {
@@ -71,11 +72,19 @@ final class DocumentDuplicator {
 			);
 		}
 
-		$parent          = (int) $source->post_parent > 0 ? get_post( (int) $source->post_parent ) : null;
-		$collection_post = $this->documents->find_trait_for_document( $source );
+		// The copy joins every collection the source belongs to, so any archived
+		// one blocks it just like an archived parent.
+		$parent                  = (int) $source->post_parent > 0 ? get_post( (int) $source->post_parent ) : null;
+		$collections             = $this->documents->find_traits_for_document( $source );
+		$has_archived_collection = count(
+			array_filter(
+				$collections,
+				static fn( WP_Post $collection ): bool => Documents::STATUS_ARCHIVED === $collection->post_status
+			)
+		) > 0;
 		if (
 			( $parent instanceof WP_Post && Documents::STATUS_ARCHIVED === $parent->post_status )
-			|| ( $collection_post instanceof WP_Post && Documents::STATUS_ARCHIVED === $collection_post->post_status )
+			|| $has_archived_collection
 		) {
 			return new WP_Error(
 				'cortext_duplicate_archived_container',
@@ -112,10 +121,14 @@ final class DocumentDuplicator {
 			( new TraitTaxonomy() )->ensure_mirror_term( $new_id );
 		}
 
-		$collection_id = 0;
-		if ( $collection_post instanceof WP_Post ) {
-			$collection_id = (int) $collection_post->ID;
-			$result        = $this->copy_membership_and_values( $source, $new_id, $collection_id );
+		$collection_ids    = array_map(
+			static fn( WP_Post $collection ): int => (int) $collection->ID,
+			$collections
+		);
+		$source_collection = $this->documents->find_trait_for_document( $source );
+		$collection_id     = $source_collection instanceof WP_Post ? (int) $source_collection->ID : 0;
+		if ( count( $collection_ids ) > 0 ) {
+			$result = $this->copy_memberships_and_values( $source, $new_id, $collection_ids );
 			if ( $result instanceof WP_Error ) {
 				$this->delete_partial_duplicate( $new_id );
 				return $result;
@@ -237,24 +250,43 @@ final class DocumentDuplicator {
 	}
 
 	/**
-	 * Reuses the source's trait term so the duplicate joins the same
-	 * collection, then copies each field value defined by that collection.
+	 * Reuses all of the source's trait terms so the duplicate joins the same
+	 * collections, then copies every distinct writable field once. Formula
+	 * values are recomputed after their inputs have been copied rather than
+	 * carrying over stale materialized output from the source.
 	 *
-	 * @param WP_Post $source        Source document.
-	 * @param int     $target_id     Newly created document id.
-	 * @param int     $collection_id Collection the source belongs to.
+	 * @param WP_Post $source         Source document.
+	 * @param int     $target_id      Newly created document id.
+	 * @param int[]   $collection_ids Collections the source belongs to.
 	 */
-	private function copy_membership_and_values( WP_Post $source, int $target_id, int $collection_id ): bool|WP_Error {
-		$trait_term_id = Relations::trait_term_id_for_collection( $collection_id );
-		if ( $trait_term_id > 0 ) {
-			wp_set_object_terms( $target_id, array( $trait_term_id ), TraitTaxonomy::TAXONOMY );
+	private function copy_memberships_and_values( WP_Post $source, int $target_id, array $collection_ids ): bool|WP_Error {
+		$trait_term_ids = array();
+		$field_ids      = array();
+
+		foreach ( array_unique( array_map( 'intval', $collection_ids ) ) as $collection_id ) {
+			$trait_term_id = Relations::trait_term_id_for_collection( $collection_id );
+			if ( $trait_term_id < 1 ) {
+				return new WP_Error(
+					'cortext_duplicate_membership_missing',
+					__( 'A collection membership could not be copied.', 'cortext' ),
+					array( 'status' => 500 )
+				);
+			}
+			$trait_term_ids[] = $trait_term_id;
+			foreach ( Document::collection_field_ids( $collection_id ) as $field_id ) {
+				$field_ids[ (int) $field_id ] = true;
+			}
 		}
 
-		$field_ids = Document::collection_field_ids( $collection_id );
-		foreach ( $field_ids as $field_id ) {
+		$set = wp_set_object_terms( $target_id, $trait_term_ids, TraitTaxonomy::TAXONOMY, false );
+		if ( $set instanceof WP_Error ) {
+			return $set;
+		}
+
+		foreach ( array_keys( $field_ids ) as $field_id ) {
 			$field_type = (string) get_post_meta( $field_id, 'type', true );
 
-			if ( 'rollup' === $field_type ) {
+			if ( in_array( $field_type, array( 'formula', 'rollup' ), true ) ) {
 				continue;
 			}
 
@@ -288,6 +320,10 @@ final class DocumentDuplicator {
 			if ( '' !== $value && null !== $value ) {
 				update_post_meta( $target_id, $key, $value );
 			}
+		}
+
+		foreach ( array_unique( array_map( 'intval', $collection_ids ) ) as $collection_id ) {
+			FormulaMaterializer::recompute_row( $collection_id, $target_id );
 		}
 
 		return true;

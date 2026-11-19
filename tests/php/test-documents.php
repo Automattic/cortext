@@ -127,6 +127,119 @@ final class Test_Documents extends BaseTestCase {
 		$this->assertSame( $icon, $document['icon'] );
 	}
 
+	public function test_find_reports_a_membership_as_shared_row_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_a = $this->create_collection( 'projects', 'Projects' );
+		$collection_b = $this->create_collection( 'people', 'People' );
+		$row_id       = $this->create_row( $collection_a, 'Ada Lovelace' );
+		$this->documents->set_memberships( $row_id, array( $collection_a, $collection_b ) );
+
+		$document = $this->documents->find( $row_id );
+
+		$this->assertNotNull( $document );
+		$this->assertContains(
+			$document['collection']['id'],
+			array( $collection_a, $collection_b ),
+			'A shared row reports one of its memberships as its collection.'
+		);
+	}
+
+	public function test_shared_row_uses_active_collection_as_legacy_source(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$trashed_collection = $this->create_collection( 'archived-projects', 'Archived projects' );
+		$active_collection  = $this->create_collection( 'people', 'People' );
+		$row_id             = $this->create_row( $trashed_collection, 'Ada Lovelace' );
+		$this->documents->set_memberships( $row_id, array( $trashed_collection, $active_collection ) );
+		$this->assertSame(
+			$trashed_collection,
+			$this->documents->find_trait_for_document( get_post( $row_id ) )->ID,
+			'The fixture primes the legacy source cache with the collection that will be trashed.'
+		);
+		wp_update_post(
+			array(
+				'ID'          => $trashed_collection,
+				'post_status' => Documents::STATUS_TRASH,
+			)
+		);
+
+		$row          = get_post( $row_id );
+		$all_ids      = array_map(
+			static fn( \WP_Post $collection ): int => (int) $collection->ID,
+			$this->documents->find_traits_for_document( $row )
+		);
+		$active_ids   = array_map(
+			static fn( \WP_Post $collection ): int => (int) $collection->ID,
+			$this->documents->find_active_traits_for_document( $row )
+		);
+		$legacy_trait = $this->documents->find_trait_for_document( $row );
+		$target       = $this->documents->format_target( $row_id );
+
+		$this->assertContains( $trashed_collection, $all_ids );
+		$this->assertContains( $active_collection, $all_ids );
+		$this->assertSame( array( $active_collection ), $active_ids );
+		$this->assertSame( $active_collection, $legacy_trait->ID );
+		$this->assertIsArray( $target );
+		$this->assertSame( $active_collection, $target['collection']['id'] );
+	}
+
+	public function test_set_memberships_replaces_the_full_set(): void {
+		$collection_a = $this->create_collection( 'projects', 'Projects' );
+		$collection_b = $this->create_collection( 'people', 'People' );
+		$row_id       = $this->create_row( $collection_a, 'Ada' );
+
+		$result = $this->documents->set_memberships(
+			$row_id,
+			array( $collection_a, $collection_b, $collection_a )
+		);
+
+		$this->assertIsArray( $result );
+		sort( $result );
+		$expected = array( $collection_a, $collection_b );
+		sort( $expected );
+		$this->assertSame( $expected, $result, 'Duplicate ids collapse to a unique set.' );
+		$this->assertCount( 2, $this->documents->membership_ids( $row_id ) );
+
+		// Narrowing back to a single membership drops the other term.
+		$this->documents->set_memberships( $row_id, array( $collection_b ) );
+		$this->assertSame( array( $collection_b ), $this->documents->membership_ids( $row_id ) );
+	}
+
+	public function test_set_memberships_rejects_unknown_collection_and_keeps_current(): void {
+		$collection_a = $this->create_collection( 'projects', 'Projects' );
+		$row_id       = $this->create_row( $collection_a, 'Ada' );
+
+		$result = $this->documents->set_memberships( $row_id, array( $collection_a, 999999 ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_trait_not_found', $result->get_error_code() );
+		$this->assertSame(
+			array( $collection_a ),
+			$this->documents->membership_ids( $row_id ),
+			'A rejected membership write leaves the existing memberships untouched.'
+		);
+	}
+
+	public function test_set_memberships_rejects_trashed_collection_and_keeps_current(): void {
+		$active_collection  = $this->create_collection( 'projects', 'Projects' );
+		$trashed_collection = $this->create_collection( 'archived', 'Archived' );
+		$row_id             = $this->create_row( $active_collection, 'Ada' );
+		wp_update_post(
+			array(
+				'ID'          => $trashed_collection,
+				'post_status' => Documents::STATUS_TRASH,
+			)
+		);
+
+		$result = $this->documents->set_memberships(
+			$row_id,
+			array( $active_collection, $trashed_collection )
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_trait_not_found', $result->get_error_code() );
+		$this->assertSame( array( $active_collection ), $this->documents->membership_ids( $row_id ) );
+	}
+
 	public function test_find_returns_full_page_collection_document(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'tasks', 'Tasks' );

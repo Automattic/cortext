@@ -137,6 +137,39 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( array(), Document::collection_field_ids( $page_id ) );
 	}
 
+	public function test_prepare_meta_updates_accepts_fields_from_any_membership(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		[ $collection_a ]           = $this->create_collection_with_field();
+		[ $collection_b, $field_b ] = $this->create_collection_with_field();
+		$row_id                     = $this->create_row_in( $collection_a );
+		$this->add_membership( $row_id, $collection_b );
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $row_id );
+		$request->set_param( 'meta', array( 'field-' . $field_b => 'value from B' ) );
+
+		$result = ( new Document() )->prepare_meta_updates( (object) array( 'ID' => $row_id ), $request );
+
+		$this->assertNotInstanceOf(
+			\WP_Error::class,
+			$result,
+			'A field belonging to a second membership is accepted; the union validation must not 400.'
+		);
+	}
+
+	public function test_prepare_meta_updates_rejects_field_from_unrelated_collection(): void {
+		[ $collection_a ] = $this->create_collection_with_field();
+		$row_id           = $this->create_row_in( $collection_a );
+		[ , $field_c ]    = $this->create_collection_with_field();
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $row_id );
+		$request->set_param( 'meta', array( 'field-' . $field_c => 'nope' ) );
+
+		$result = ( new Document() )->prepare_meta_updates( (object) array( 'ID' => $row_id ), $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_field_not_in_collection', $result->get_error_code() );
+	}
+
 	public function test_register_collection_meta_registers_cortext_fields(): void {
 		( new Document() )->register_collection_meta();
 
@@ -723,6 +756,115 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( array(), $terms );
 	}
 
+	public function test_membership_guard_allows_legacy_trait_on_create(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection();
+		$prepared      = new \stdClass();
+		$request       = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'cortext_trait', $collection_id );
+
+		$result = ( new Document() )->validate_membership_update( $prepared, $request );
+
+		$this->assertSame( $prepared, $result );
+	}
+
+	public function test_membership_guard_rejects_missing_or_trashed_trait_on_create(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$trashed_collection = $this->create_collection();
+		wp_update_post(
+			array(
+				'ID'          => $trashed_collection,
+				'post_status' => 'trash',
+			)
+		);
+
+		foreach ( array( 99999, $trashed_collection ) as $collection_id ) {
+			$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+			$request->set_param( 'cortext_trait', $collection_id );
+
+			$result = ( new Document() )->validate_membership_update( new \stdClass(), $request );
+
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'cortext_trait_not_found', $result->get_error_code() );
+			$this->assertSame( 404, $result->get_error_data()['status'] );
+		}
+	}
+
+	public function test_membership_guard_requires_collection_permission_on_create(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$protected_collection = $this->create_collection();
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'cortext_trait', $protected_collection );
+
+		$result = ( new Document() )->validate_membership_update( new \stdClass(), $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_membership_collection_forbidden', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] );
+	}
+
+	public function test_membership_guard_rejects_creating_collection_and_row_together(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection();
+		$request       = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$request->set_param( 'cortext_trait', $collection_id );
+		$request->set_param( 'cortext_collection', true );
+
+		$result = ( new Document() )->validate_membership_update( new \stdClass(), $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_membership_unsupported', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	public function test_membership_guard_rejects_legacy_trait_on_update(): void {
+		$prepared = (object) array( 'ID' => 123 );
+		$request  = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/123' );
+		$request->set_param( 'id', 123 );
+		$request->set_param( 'cortext_trait', 456 );
+
+		$result = ( new Document() )->validate_membership_update( $prepared, $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_membership_endpoint_required', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	public function test_membership_guard_rejects_direct_taxonomy_writes(): void {
+		foreach (
+			array(
+				array( new \stdClass(), new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' ) ),
+				array( (object) array( 'ID' => 123 ), new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/123' ) ),
+			) as [ $prepared, $request ]
+		) {
+			$request->set_param( TraitTaxonomy::TAXONOMY, array( 7, 8 ) );
+
+			$result = ( new Document() )->validate_membership_update( $prepared, $request );
+
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'cortext_membership_endpoint_required', $result->get_error_code() );
+		}
+	}
+
+	public function test_assign_trait_from_request_does_not_change_membership_on_update(): void {
+		$first_collection  = $this->create_collection();
+		$second_collection = $this->create_collection();
+		$row_id            = $this->create_row_in( $first_collection );
+		$request           = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $row_id );
+		$request->set_param( 'cortext_trait', $second_collection );
+
+		( new Document() )->assign_trait_from_request( get_post( $row_id ), $request, false );
+
+		$this->assertSame(
+			array( $first_collection ),
+			array_map(
+				static fn( \WP_Post $collection ): int => (int) $collection->ID,
+				( new \Cortext\Documents() )->find_traits_for_document( get_post( $row_id ) )
+			)
+		);
+	}
+
 	public function test_prepare_meta_updates_rejects_field_from_another_collection(): void {
 		// `field-<id>` is registered globally on `crtxt_document`, so without
 		// an extra check WP REST would accept writes for any field on any
@@ -754,6 +896,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 	}
 
 	public function test_prepare_meta_updates_accepts_field_from_the_rows_own_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection();
 		$field_id      = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
 
@@ -777,7 +920,26 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( $prepared, $result );
 	}
 
+	public function test_prepare_meta_updates_rejects_field_from_uneditable_membership(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		[ $protected_collection, $protected_field ] = $this->create_collection_with_field();
+		wp_set_current_user( $this->create_user( 'author' ) );
+		[ $own_collection ] = $this->create_collection_with_field();
+		$row_id             = $this->create_row_in( $own_collection );
+		$this->add_membership( $row_id, $protected_collection );
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $row_id );
+		$request->set_param( 'id', $row_id );
+		$request->set_param( 'meta', array( 'field-' . $protected_field => 'forbidden' ) );
+
+		$result = ( new Document() )->prepare_meta_updates( (object) array( 'ID' => $row_id ), $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_field_collection_forbidden', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] );
+	}
+
 	public function test_prepare_meta_updates_ignores_rollup_meta(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection();
 		$field_id      = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
 		$rollup_field  = $this->create_field( 'rollup' );
@@ -818,6 +980,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 	}
 
 	public function test_rest_field_meta_keys_lists_only_the_rows_collection_fields(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection();
 		$own_field_id  = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
 		$this->create_field( 'text' );
@@ -830,6 +993,7 @@ final class Test_Post_Type_Document extends BaseTestCase {
 	}
 
 	public function test_rest_field_meta_keys_skips_rollup_and_formula_fields(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection();
 		$own_field_id  = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
 		add_post_meta( $collection_id, 'cortext_fields', (string) $this->create_field( 'rollup' ) );
@@ -840,6 +1004,21 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY );
 
 		$this->assertSame( array( 'field-' . $own_field_id ), Document::rest_field_meta_keys( get_post( $row_id ) ) );
+	}
+
+	public function test_rest_field_meta_keys_hides_fields_from_uneditable_membership_in_edit_context(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		[ $protected_collection, $protected_field ] = $this->create_collection_with_field();
+		wp_set_current_user( $this->create_user( 'author' ) );
+		[ $own_collection, $own_field ] = $this->create_collection_with_field();
+
+		$row_id = $this->create_row_in( $own_collection );
+		$this->add_membership( $row_id, $protected_collection );
+
+		$keys = Document::rest_field_meta_keys( get_post( $row_id ), 'edit' );
+
+		$this->assertContains( 'field-' . $own_field, $keys );
+		$this->assertNotContains( 'field-' . $protected_field, $keys );
 	}
 
 	public function test_rest_field_meta_keys_is_empty_for_pages_and_collections(): void {
@@ -1024,6 +1203,45 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		add_post_meta( $id, 'cortext_fields', (string) $field_id );
 
 		return $id;
+	}
+
+	/**
+	 * Creates a collection and returns `[collection_id, field_id]` so the test
+	 * can target that field's meta key.
+	 *
+	 * @param string $type Field type for the collection's single field.
+	 * @return array{0:int,1:int}
+	 */
+	private function create_collection_with_field( string $type = 'text' ): array {
+		$collection_id = $this->create_document( array( 'post_title' => 'Collection ' . wp_generate_uuid4() ) );
+		$field_id      = $this->create_field( $type );
+		add_post_meta( $collection_id, 'cortext_fields', (string) $field_id );
+
+		return array( $collection_id, $field_id );
+	}
+
+	private function create_row_in( int $collection_id ): int {
+		$row_id  = $this->create_document();
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+
+		return $row_id;
+	}
+
+	private function add_membership( int $row_id, int $collection_id ): void {
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+
+		$existing = wp_get_object_terms( $row_id, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) );
+		$existing = is_array( $existing ) ? array_map( 'intval', $existing ) : array();
+
+		wp_set_object_terms(
+			$row_id,
+			array_values( array_unique( array_merge( $existing, array( $term_id ) ) ) ),
+			TraitTaxonomy::TAXONOMY,
+			false
+		);
 	}
 
 	private function create_user( string $role ): int {

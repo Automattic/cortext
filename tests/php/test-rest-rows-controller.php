@@ -89,6 +89,21 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
+	public function test_edit_context_requires_permission_for_the_collection(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'protected-edit' );
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$response = $this->query_rows(
+			array(
+				'trait'   => $fixture['collection_id'],
+				'context' => 'edit',
+			)
+		);
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
 	public function test_view_context_allows_anonymous_for_published_collection(): void {
 		wp_set_current_user( 0 );
 
@@ -272,6 +287,37 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
 	}
 
+	public function test_view_context_rejects_private_collection_owned_by_another_author(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'protected-view', 'text', 'private' );
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$response = $this->query_rows(
+			array(
+				'trait'   => $fixture['collection_id'],
+				'context' => 'view',
+			)
+		);
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	public function test_rejects_trashed_collection(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'trashed-rows' );
+		wp_update_post(
+			array(
+				'ID'          => $fixture['collection_id'],
+				'post_status' => 'trash',
+			)
+		);
+
+		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
+
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'cortext_collection_not_found', $response->get_data()['code'] );
+	}
+
 	public function test_rejects_nonexistent_collection(): void {
 		wp_set_current_user( $this->create_user( 'author' ) );
 
@@ -294,6 +340,67 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$response = $this->query_rows( array( 'trait' => $post_id ) );
 
 		$this->assertSame( 404, $response->get_status() );
+	}
+
+	public function test_core_rest_legacy_create_validates_collection_before_insert(): void {
+		$owner_id = $this->create_user( 'author' );
+		wp_set_current_user( $owner_id );
+		$fixture  = $this->create_collection_fixture( 'legacy-create' );
+		$document = new Document();
+		add_filter(
+			'rest_pre_insert_' . Document::POST_TYPE,
+			array( $document, 'validate_membership_update' ),
+			9,
+			2
+		);
+		add_action(
+			'rest_after_insert_' . Document::POST_TYPE,
+			array( $document, 'assign_trait_from_request' ),
+			10,
+			3
+		);
+		$valid_request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$valid_request->set_param( 'title', 'Valid legacy row' );
+		$valid_request->set_param( 'status', 'private' );
+		$valid_request->set_param( 'cortext_trait', $fixture['collection_id'] );
+
+		$valid_response = rest_do_request( $valid_request );
+
+		$this->assertSame( 201, $valid_response->get_status() );
+		$row_id  = (int) $valid_response->get_data()['id'];
+		$term_id = TraitTaxonomy::term_id_for_trait( $fixture['collection_id'] );
+		$this->assertTrue( has_term( $term_id, TraitTaxonomy::TAXONOMY, $row_id ) );
+
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$before            = get_posts(
+			array(
+				'post_type'      => Document::POST_TYPE,
+				'post_status'    => array( 'draft', 'private', 'publish' ),
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+			)
+		);
+		$forbidden_request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$forbidden_request->set_param( 'title', 'Forbidden legacy row' );
+		$forbidden_request->set_param( 'status', 'private' );
+		$forbidden_request->set_param( 'cortext_trait', $fixture['collection_id'] );
+
+		$forbidden_response = rest_do_request( $forbidden_request );
+		$after              = get_posts(
+			array(
+				'post_type'      => Document::POST_TYPE,
+				'post_status'    => array( 'draft', 'private', 'publish' ),
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+			)
+		);
+
+		$this->assertSame( 403, $forbidden_response->get_status() );
+		$this->assertSame(
+			'cortext_membership_collection_forbidden',
+			$forbidden_response->get_data()['code']
+		);
+		$this->assertCount( count( $before ), $after, 'Validation must run before core inserts a document.' );
 	}
 
 	public function test_response_shape(): void {
@@ -832,6 +939,82 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 15.0, $data['cortext_hydrated_meta'][ "field-{$formula_id}" ] );
 	}
 
+	public function test_core_rest_row_updates_recompute_formulas_for_secondary_membership(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$primary   = $this->create_collection_fixture( 'primary-formula', 'number' );
+		$secondary = $this->create_collection_fixture( 'secondary-formula', 'number' );
+		$row_id    = $this->create_row_for_collection( $primary['collection_id'], 'Shared invoice' );
+		$this->add_membership( $row_id, $secondary['collection_id'] );
+		$formula_id = $this->create_formula_field(
+			$secondary['collection_id'],
+			'Secondary total',
+			'field("Score") * 2'
+		);
+
+		$document = new Document();
+		$document->register_field_meta();
+		add_filter( 'rest_pre_insert_' . Document::POST_TYPE, array( $document, 'prepare_meta_updates' ), 10, 2 );
+		add_action( 'rest_after_insert_' . Document::POST_TYPE, array( $document, 'apply_meta_updates' ), 20, 3 );
+
+		$request = new WP_REST_Request( 'PUT', "/wp/v2/crtxt_documents/{$row_id}" );
+		$request->set_param( 'id', $row_id );
+		$request->set_param(
+			'meta',
+			array( "field-{$secondary['field_id']}" => '15' )
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 30.0, (float) get_post_meta( $row_id, "field-{$formula_id}", true ) );
+	}
+
+	public function test_rest_prepare_row_hydrates_formulas_for_secondary_membership(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$primary   = $this->create_collection_fixture( 'primary-hydrate', 'number' );
+		$secondary = $this->create_collection_fixture( 'secondary-hydrate', 'number' );
+		$row_id    = $this->create_row_for_collection( $primary['collection_id'], 'Shared invoice' );
+		$this->add_membership( $row_id, $secondary['collection_id'] );
+		$formula_id = $this->create_formula_field(
+			$secondary['collection_id'],
+			'Secondary total',
+			'field("Score") + 5'
+		);
+		update_post_meta( $row_id, "field-{$secondary['field_id']}", '10' );
+
+		$request = new WP_REST_Request( 'GET', "/wp/v2/crtxt_documents/{$row_id}" );
+		$request->set_param( 'id', $row_id );
+		$request->set_param( 'context', 'edit' );
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 15.0, $data['cortext_hydrated_meta'][ "field-{$formula_id}" ] );
+	}
+
+	public function test_rest_prepare_row_hides_hydrated_fields_from_uneditable_membership(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$protected  = $this->create_collection_fixture( 'protected-hydrate', 'number' );
+		$formula_id = $this->create_formula_field(
+			$protected['collection_id'],
+			'Protected total',
+			'field("Score") + 5'
+		);
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$own    = $this->create_collection_fixture( 'own-hydrate', 'number' );
+		$row_id = $this->create_row_for_collection( $own['collection_id'], 'Shared invoice' );
+		$this->add_membership( $row_id, $protected['collection_id'] );
+		update_post_meta( $row_id, "field-{$protected['field_id']}", '10' );
+
+		$request = new WP_REST_Request( 'GET', "/wp/v2/crtxt_documents/{$row_id}" );
+		$request->set_param( 'id', $row_id );
+		$request->set_param( 'context', 'edit' );
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayNotHasKey( "field-{$formula_id}", $data['cortext_hydrated_meta'] ?? array() );
+	}
+
 	public function test_formula_result_type_controls_sort_and_filter_schema(): void {
 		$fixture    = $this->create_collection_fixture( 'formulaquery', 'number' );
 		$formula_id = $this->create_formula_field( $fixture['collection_id'], 'Total', 'field("Score") + 5' );
@@ -841,7 +1024,16 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$schema = $query->field_schema_for( $fixture['collection_id'] );
 
 		$this->assertSame( 'number', $schema[ $key ]['type'] );
-		$this->assertTrue( $query->validate_sort( array( 'field' => $key, 'direction' => 'asc' ), $schema, $fixture['collection_id'] ) );
+		$this->assertTrue(
+			$query->validate_sort(
+				array(
+					'field'     => $key,
+					'direction' => 'asc',
+				),
+				$schema,
+				$fixture['collection_id']
+			)
+		);
 		$this->assertIsArray(
 			$query->compile_filters(
 				array(
@@ -868,7 +1060,13 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertFalse( $method->invoke( $controller, $fixture['collection_id'], $plain_request ) );
 
 		$sort_request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
-		$sort_request->set_param( 'sort', array( 'field' => "field-{$formula_id}", 'direction' => 'asc' ) );
+		$sort_request->set_param(
+			'sort',
+			array(
+				'field'     => "field-{$formula_id}",
+				'direction' => 'asc',
+			)
+		);
 		$this->assertTrue( $method->invoke( $controller, $fixture['collection_id'], $sort_request ) );
 	}
 
@@ -1075,7 +1273,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$table_cache->setAccessible( true );
 
 		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
-		update_option( 'cortext_field_values_schema_version', 2, false );
+		update_option( 'cortext_field_values_schema_version', 3, false );
 		$table_cache->setValue( null, array( ( new FieldValueIndex() )->table_name() => true ) );
 
 		try {
@@ -1200,6 +1398,20 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 
 	private function create_row_for_collection( int $collection_id, string $title ): int {
 		return $this->create_row_fixture( $collection_id, $title, 'publish' );
+	}
+
+	private function add_membership( int $row_id, int $collection_id ): void {
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+
+		$existing = wp_get_object_terms( $row_id, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) );
+		$existing = is_array( $existing ) ? array_map( 'intval', $existing ) : array();
+		wp_set_object_terms(
+			$row_id,
+			array_values( array_unique( array_merge( $existing, array( $term_id ) ) ) ),
+			TraitTaxonomy::TAXONOMY,
+			false
+		);
 	}
 
 	private function create_formula_field( int $collection_id, string $title, string $expression ): int {

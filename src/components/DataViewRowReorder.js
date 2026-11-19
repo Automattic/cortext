@@ -1750,12 +1750,10 @@ export default function DataViewRowReorder( {
 			setIsPosting( true );
 			try {
 				await apiFetch( {
-					// The reorder endpoint derives the parent collection from
-					// the row's trait term, so the row id is the only path
-					// param needed.
 					path: `/cortext/v1/documents/${ request.rowId }/reorder`,
 					method: 'POST',
 					data: {
+						collection_id: collectionId,
 						before_id: request.before_id,
 						after_id: request.after_id,
 						current_sort: request.currentSort ?? null,

@@ -81,8 +81,9 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		$response = $this->reorder_row(
 			$row_id,
 			array(
-				'after_id'     => $row_id + 1,
-				'current_sort' => null,
+				'collection_id' => $fixture['collection_id'],
+				'after_id'      => $row_id + 1,
+				'current_sort'  => null,
 			)
 		);
 
@@ -96,7 +97,10 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 
 		$response = $this->reorder_row(
 			$row_id,
-			array( 'current_sort' => null )
+			array(
+				'collection_id' => $fixture['collection_id'],
+				'current_sort'  => null,
+			)
 		);
 
 		$this->assertSame( 400, $response->get_status() );
@@ -109,7 +113,10 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 
 		$response = $this->reorder_row(
 			$rows[1],
-			array( 'after_id' => $rows[0] )
+			array(
+				'collection_id' => $fixture['collection_id'],
+				'after_id'      => $rows[0],
+			)
 		);
 
 		$this->assertSame( 400, $response->get_status() );
@@ -124,8 +131,9 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		$response = $this->reorder_row(
 			$rows[4],
 			array(
-				'after_id'     => $rows[3],
-				'current_sort' => array(
+				'collection_id' => $fixture['collection_id'],
+				'after_id'      => $rows[3],
+				'current_sort'  => array(
 					'field'     => 'created_at',
 					'direction' => 'asc',
 				),
@@ -155,9 +163,10 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		$response = $this->reorder_row(
 			$rows[2],
 			array(
-				'before_id'    => $rows[1],
-				'after_id'     => $rows[0],
-				'current_sort' => array(
+				'collection_id' => $fixture['collection_id'],
+				'before_id'     => $rows[1],
+				'after_id'      => $rows[0],
+				'current_sort'  => array(
 					'field'     => 'manual',
 					'direction' => 'asc',
 				),
@@ -185,8 +194,9 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		$response = $this->reorder_row(
 			$rows[2],
 			array(
-				'before_id'    => $rows[0],
-				'current_sort' => array(
+				'collection_id' => $fixture['collection_id'],
+				'before_id'     => $rows[0],
+				'current_sort'  => array(
 					'field'     => 'created_at',
 					'direction' => 'asc',
 				),
@@ -213,9 +223,10 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		$response = $this->reorder_row(
 			$rows[2],
 			array(
-				'before_id'    => $rows[1],
-				'after_id'     => $rows[0],
-				'current_sort' => array(
+				'collection_id' => $fixture['collection_id'],
+				'before_id'     => $rows[1],
+				'after_id'      => $rows[0],
+				'current_sort'  => array(
 					'field'     => 'manual',
 					'direction' => 'asc',
 				),
@@ -227,6 +238,52 @@ final class Test_Rest_Rows_Reorder extends BaseTestCase {
 		$this->assertSame( 150, $this->order_of( $fixture['collection_id'], $rows[2] ) );
 		$this->assertSame( 100, $this->order_of( $fixture['collection_id'], $rows[0] ) );
 		$this->assertSame( 200, $this->order_of( $fixture['collection_id'], $rows[1] ) );
+	}
+
+	public function test_reorder_without_collection_id_uses_legacy_active_trait(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'legacy-scope' );
+		$rows    = $this->create_ordered_rows( $fixture['collection_id'], 2 );
+		$request = new WP_REST_Request(
+			'POST',
+			"/cortext/v1/documents/{$rows[1]}/reorder"
+		);
+		$request->set_param( 'after_id', $rows[0] );
+		$request->set_param( 'current_sort', null );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '1', get_post_meta( $fixture['collection_id'], '_cortext_manual_seeded', true ) );
+	}
+
+	public function test_shared_row_reorders_in_explicit_secondary_collection(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$primary           = $this->create_collection_fixture( 'primary-order' );
+		$secondary         = $this->create_collection_fixture( 'secondary-order' );
+		$previous          = $this->create_row_for( $secondary['collection_id'], 'Previous', '2026-01-01 00:00:00' );
+		$moved             = $this->create_row_for( $primary['collection_id'], 'Moved', '2026-01-02 00:00:00' );
+		$next              = $this->create_row_for( $secondary['collection_id'], 'Next', '2026-01-03 00:00:00' );
+		$secondary_term_id = TraitTaxonomy::term_id_for_trait( $secondary['collection_id'] );
+		wp_set_object_terms( $moved, array( $secondary_term_id ), TraitTaxonomy::TAXONOMY, true );
+
+		$response = $this->reorder_row(
+			$moved,
+			array(
+				'collection_id' => $secondary['collection_id'],
+				'before_id'     => $next,
+				'after_id'      => $previous,
+				'current_sort'  => array(
+					'field'     => 'created_at',
+					'direction' => 'asc',
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '1', get_post_meta( $secondary['collection_id'], '_cortext_manual_seeded', true ) );
+		$this->assertSame( '', get_post_meta( $primary['collection_id'], '_cortext_manual_seeded', true ) );
+		$this->assertSame( 200, $this->order_of( $secondary['collection_id'], $moved ) );
 	}
 
 	public function test_new_member_lands_after_existing_rows(): void {

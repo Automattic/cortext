@@ -4,7 +4,7 @@
  * mocked so each case controls the REST responses (locator + record fetch).
  */
 
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 jest.mock( '@wordpress/api-fetch', () => ( {
 	__esModule: true,
@@ -12,6 +12,7 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 } ) );
 
 import apiFetch from '@wordpress/api-fetch';
+import { notifyDocumentLocatorChanged } from '../../src/hooks/documentLocatorInvalidation';
 import {
 	computeDocumentUri,
 	isSettingsUri,
@@ -170,6 +171,184 @@ describe( 'useResolveDocument', () => {
 			/\/wp\/v2\/crtxt_documents\/96(?:\?|$)/
 		);
 		expect( result.current.traitIds ).toEqual( [ 7 ] );
+	} );
+
+	it( 'revalidates changed memberships without clearing the mounted document', async () => {
+		let resolveRefreshedLocator;
+		const refreshedLocator = new Promise( ( resolve ) => {
+			resolveRefreshedLocator = resolve;
+		} );
+		const entity = {
+			id: 96,
+			slug: 'demo-workspace',
+			parent: 0,
+			type: 'crtxt_document',
+		};
+		apiFetch
+			.mockResolvedValueOnce( {
+				id: 96,
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
+				trait_ids: [ 7, 8 ],
+			} )
+			.mockResolvedValueOnce( entity )
+			.mockReturnValueOnce( refreshedLocator )
+			.mockResolvedValueOnce( entity );
+
+		const { result } = renderHook( () =>
+			useResolveDocument( 'demo-workspace-96' )
+		);
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+
+		act( () => notifyDocumentLocatorChanged( 96, [ 8 ] ) );
+
+		// The successful mutation response updates source context immediately,
+		// while the same entity remains mounted during background validation.
+		expect( result.current.entity ).toEqual( entity );
+		expect( result.current.traitIds ).toEqual( [ 8 ] );
+		expect( result.current.isResolving ).toBe( true );
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
+
+		act( () =>
+			resolveRefreshedLocator( {
+				id: 96,
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
+				trait_ids: [ 8 ],
+			} )
+		);
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+
+		expect( result.current.entity ).toEqual( entity );
+		expect( result.current.traitIds ).toEqual( [ 8 ] );
+		expect( apiFetch ).toHaveBeenCalledTimes( 4 );
+	} );
+
+	it( 'keeps the mounted document when background locator validation fails', async () => {
+		const entity = {
+			id: 96,
+			slug: 'demo-workspace',
+			parent: 0,
+			type: 'crtxt_document',
+		};
+		apiFetch
+			.mockResolvedValueOnce( {
+				id: 96,
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
+				trait_ids: [ 7, 8 ],
+			} )
+			.mockResolvedValueOnce( entity )
+			.mockRejectedValueOnce( new Error( 'locator unavailable' ) );
+
+		const { result } = renderHook( () =>
+			useResolveDocument( 'demo-workspace-96' )
+		);
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+
+		act( () => notifyDocumentLocatorChanged( 96, [ 8 ] ) );
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+
+		expect( result.current.entity ).toEqual( entity );
+		expect( result.current.traitIds ).toEqual( [ 8 ] );
+		expect( result.current.notFound ).toBe( false );
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
+	} );
+
+	it( 'keeps the mounted document when its background entity fetch fails', async () => {
+		const entity = {
+			id: 96,
+			slug: 'demo-workspace',
+			parent: 0,
+			type: 'crtxt_document',
+		};
+		apiFetch
+			.mockResolvedValueOnce( {
+				id: 96,
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
+				trait_ids: [ 7, 8 ],
+			} )
+			.mockResolvedValueOnce( entity )
+			.mockResolvedValueOnce( {
+				id: 96,
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
+				trait_ids: [ 8 ],
+			} )
+			.mockRejectedValueOnce( new Error( 'entity unavailable' ) );
+
+		const { result } = renderHook( () =>
+			useResolveDocument( 'demo-workspace-96' )
+		);
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+
+		act( () => notifyDocumentLocatorChanged( 96, [ 8 ] ) );
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+
+		expect( result.current.entity ).toEqual( entity );
+		expect( result.current.traitIds ).toEqual( [ 8 ] );
+		expect( result.current.notFound ).toBe( false );
+		expect( apiFetch ).toHaveBeenCalledTimes( 4 );
+	} );
+
+	it( 'ignores a locator response that predates the membership change', async () => {
+		let resolveStaleLocator;
+		const staleLocator = new Promise( ( resolve ) => {
+			resolveStaleLocator = resolve;
+		} );
+		const entity = {
+			id: 96,
+			slug: 'demo-workspace',
+			parent: 0,
+			type: 'crtxt_document',
+		};
+		apiFetch
+			.mockReturnValueOnce( staleLocator )
+			.mockResolvedValueOnce( {
+				id: 96,
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
+				trait_ids: [ 8 ],
+			} )
+			.mockResolvedValueOnce( entity );
+
+		const { result } = renderHook( () =>
+			useResolveDocument( 'demo-workspace-96' )
+		);
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+
+		act( () => notifyDocumentLocatorChanged( 96, [ 8 ] ) );
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+		expect( result.current.traitIds ).toEqual( [ 8 ] );
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
+
+		await act( async () => {
+			resolveStaleLocator( {
+				id: 96,
+				type: 'crtxt_document',
+				rest_base: 'crtxt_documents',
+				trait_ids: [ 7 ],
+			} );
+		} );
+
+		expect( result.current.traitIds ).toEqual( [ 8 ] );
+		// The stale locator must not launch its own record request.
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
 	} );
 
 	it( 'sets notFound when the locator rejects (id unknown or not a document)', async () => {
