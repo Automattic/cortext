@@ -85,15 +85,20 @@ jobs:
 
             - run: pnpm install --frozen-lockfile
 
+            # Installing apt packages restarts systemd, DNS and networking on the
+            # runner, which breaks Docker and git clones that are mid-flight. Get
+            # it done before wp-env starts.
+            - run: pnpm exec playwright install-deps chromium
+
             # wp-env spends most of its time building Docker images, so start it
-            # in the background and let the browser install and build run
+            # in the background and let the browser download and build run
             # meanwhile. The process outlives this step; "Wait for wp-env" joins it.
             - name: Start wp-env in the background
               run: |
-                  ( pnpm run env:start; echo $? > /tmp/env.status ) > /tmp/env.log 2>&1 < /dev/null &
+                  ( set +e; pnpm run env:start; echo $? > /tmp/env.status ) > /tmp/env.log 2>&1 < /dev/null &
                   echo $! > /tmp/env.pid
 
-            - run: pnpm exec playwright install --with-deps chromium
+            - run: pnpm exec playwright install chromium
 
             - run: pnpm run build
 
