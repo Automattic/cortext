@@ -1,5 +1,5 @@
 /**
- * Tests for `src/components/trash/TrashSidebar.js`.
+ * Tests for `src/components/lifecycle/LifecycleSidebar.js`.
  *
  * The WordPress data and REST layers are mocked so each case can drive the
  * trashed documents, the route selection, and check the requests the view
@@ -155,7 +155,7 @@ import { useEntityRecords } from '@wordpress/core-data';
 import apiFetch from '@wordpress/api-fetch';
 import { useNavigate } from '@tanstack/react-router';
 
-import TrashSidebar from '../../../../src/components/trash/TrashSidebar';
+import TrashSidebar from '../../../../src/components/lifecycle/LifecycleSidebar';
 
 let mockTrashState;
 const navigate = jest.fn();

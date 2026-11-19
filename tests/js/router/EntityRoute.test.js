@@ -80,7 +80,7 @@ jest.mock( '../../../src/components/ExperimentsPane', () => () => null );
 jest.mock( '../../../src/components/ImportPane', () => () => null );
 const mockTrashView = jest.fn( () => null );
 jest.mock(
-	'../../../src/components/trash/TrashView',
+	'../../../src/components/lifecycle/LifecycleView',
 	() =>
 		( ...args ) =>
 			mockTrashView( ...args )

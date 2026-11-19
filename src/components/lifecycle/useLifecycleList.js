@@ -4,13 +4,13 @@ import { Button } from '@wordpress/components';
 import { rotateLeft, trash } from '@wordpress/icons';
 import { useNavigate } from '@tanstack/react-router';
 
-import computeCascadeRoots from './computeCascadeRoots';
-import DocumentIcon from './DocumentIcon';
-import { SidebarListSkeleton } from './Skeleton';
+import computeCascadeRoots from '../computeCascadeRoots';
+import DocumentIcon from '../DocumentIcon';
+import { SidebarListSkeleton } from '../Skeleton';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
-} from '../hooks/useDelayedFlag';
-import { useDocumentRecord } from '../documents';
+} from '../../hooks/useDelayedFlag';
+import { useDocumentRecord } from '../../documents';
 
 export const EMPTY_LIFECYCLE_DOCUMENTS_STATE = {
 	documents: [],

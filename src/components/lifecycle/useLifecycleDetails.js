@@ -2,7 +2,7 @@ import { useMemo } from '@wordpress/element';
 import { useEntityRecords } from '@wordpress/core-data';
 
 import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../page-queries';
-import { originalPath, useTrashedByName } from './trashItems';
+import { originalPath, useTrashedByName } from './lifecycleItems';
 import { computeTrashRoots } from './trashRoots';
 import useTrashedDocuments from '../../hooks/useTrashedDocuments';
 

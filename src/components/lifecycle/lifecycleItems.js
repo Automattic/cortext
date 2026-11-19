@@ -3,7 +3,7 @@ import { store as coreStore } from '@wordpress/core-data';
 import { useSelect } from '@wordpress/data';
 import { humanTimeDiff } from '@wordpress/date';
 
-import { buildBreadcrumb, optionalTitleText } from '../SidebarLifecycleList';
+import { buildBreadcrumb, optionalTitleText } from './useLifecycleList';
 import { documentTitle } from '../../documents';
 import { definesTrait, hasTrait } from '../../documents/capabilities';
 

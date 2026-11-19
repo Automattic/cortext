@@ -1,7 +1,7 @@
 import { __ } from '@wordpress/i18n';
 import { useCallback, useState } from '@wordpress/element';
 
-import { EMPTY_COUNTS } from '../SidebarLifecycleList';
+import { EMPTY_COUNTS } from './useLifecycleList';
 import TrashConfirmDialog from './TrashConfirmDialog';
 import { useDocumentActions } from '../../documents';
 

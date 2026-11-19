@@ -59,7 +59,7 @@ import {
 	READ_ONLY_TRASHED,
 } from '../documents/readOnly';
 import { selectCurrentPostReadOnlyState } from '../documents/readOnlyStore';
-import TrashedNotice from './trash/TrashedNotice';
+import TrashedNotice from './lifecycle/LifecycleNotice';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const HIDDEN_IDENTITY_ACTIONS_STYLE = { visibility: 'hidden' };

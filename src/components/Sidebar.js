@@ -76,8 +76,8 @@ import SidebarSection from './SidebarSection';
 import SidebarSettingsNav from './SidebarSettingsNav';
 import { SidebarListSkeleton } from './Skeleton';
 import SidebarArchive, { computeSidebarArchiveRoots } from './SidebarArchive';
-import { computeTrashRoots } from './trash/trashRoots';
-import TrashSidebar from './trash/TrashSidebar';
+import { computeTrashRoots } from './lifecycle/trashRoots';
+import TrashSidebar from './lifecycle/LifecycleSidebar';
 import ThemeToggle from './ThemeToggle';
 import {
 	computeDocumentUri,

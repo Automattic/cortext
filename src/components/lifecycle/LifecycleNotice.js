@@ -4,12 +4,12 @@ import { Notice } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useNavigate, useParams } from '@tanstack/react-router';
 
-import './TrashedNotice.scss';
+import './LifecycleNotice.scss';
 
 import { useActiveEditor } from '../ActiveEditorContext';
 import TrashConfirmDialog from './TrashConfirmDialog';
-import { deletionLabel } from './trashItems';
-import useTrashDetails from './useTrashDetails';
+import { deletionLabel } from './lifecycleItems';
+import useTrashDetails from './useLifecycleDetails';
 import {
 	permanentlyDeleteDocument,
 	restoreDocument,

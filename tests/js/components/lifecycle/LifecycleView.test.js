@@ -1,5 +1,5 @@
 /**
- * Tests for `src/components/trash/TrashView.js`, the canvas at `trash` before
+ * Tests for `src/components/lifecycle/LifecycleView.js`, the canvas at `trash` before
  * an item is selected.
  */
 
@@ -20,7 +20,7 @@ jest.mock( '../../../../src/hooks/useTrashedDocuments', () => ( {
 	default: () => mockTrashState,
 } ) );
 
-import TrashView from '../../../../src/components/trash/TrashView';
+import TrashView from '../../../../src/components/lifecycle/LifecycleView';
 
 let mockTrashState;
 

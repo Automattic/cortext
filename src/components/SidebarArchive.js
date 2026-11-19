@@ -7,7 +7,7 @@ import computeCascadeRoots from './computeCascadeRoots';
 import SidebarLifecycleList, {
 	EMPTY_LIFECYCLE_DOCUMENTS_STATE,
 	useSidebarLifecycleList,
-} from './SidebarLifecycleList';
+} from './lifecycle/useLifecycleList';
 import { useDocumentActions, useDocumentRecord } from '../documents';
 
 const ARCHIVE_MARKER_META_KEYS = [

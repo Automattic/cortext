@@ -31,7 +31,7 @@ import { RowMutationContext } from '../components/EditableCell';
 import ExperimentsPane from '../components/ExperimentsPane';
 import ImportPane from '../components/ImportPane';
 import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
-import TrashView from '../components/trash/TrashView';
+import TrashView from '../components/lifecycle/LifecycleView';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import CortextSnackbars from '../components/CortextSnackbars';

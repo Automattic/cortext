@@ -2,7 +2,7 @@ import { __ } from '@wordpress/i18n';
 import { Icon } from '@wordpress/components';
 import { trash as trashIcon } from '@wordpress/icons';
 
-import './TrashView.scss';
+import './LifecycleView.scss';
 
 import useTrashedDocuments from '../../hooks/useTrashedDocuments';
 

@@ -19,19 +19,19 @@ import { humanTimeDiff } from '@wordpress/date';
 import { chevronLeft, trash as trashIcon } from '@wordpress/icons';
 import { useNavigate } from '@tanstack/react-router';
 
-import './TrashView.scss';
+import './LifecycleView.scss';
 
 import { SidebarListSkeleton } from '../Skeleton';
 import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../page-queries';
-import { EMPTY_COUNTS, useSidebarLifecycleList } from '../SidebarLifecycleList';
+import { EMPTY_COUNTS, useSidebarLifecycleList } from './useLifecycleList';
 import {
 	filterTrashItems,
 	originalPath,
 	typeFilters,
 	useTrashedByName,
-} from './trashItems';
+} from './lifecycleItems';
 import { TRASH_MARKER_META_KEYS } from './trashRoots';
-import useTrashActions from './useTrashActions';
+import useTrashActions from './useLifecycleActions';
 import {
 	DocumentsProvider,
 	documentTitle,

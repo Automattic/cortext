@@ -1,5 +1,5 @@
 /**
- * Tests for `src/components/trash/TrashedNotice.js`, the banner over a
+ * Tests for `src/components/lifecycle/LifecycleNotice.js`, the banner over a
  * trashed document.
  */
 
@@ -64,7 +64,7 @@ jest.mock( '@tanstack/react-router', () => ( {
 	useParams: () => ( { _splat: mockSplat } ),
 } ) );
 
-jest.mock( '../../../../src/components/trash/useTrashDetails', () => ( {
+jest.mock( '../../../../src/components/lifecycle/useLifecycleDetails', () => ( {
 	__esModule: true,
 	default: () => mockDetails,
 } ) );
@@ -100,7 +100,7 @@ import {
 	permanentlyDeleteDocument,
 	restoreDocument,
 } from '../../../../src/documents/actions';
-import TrashedNotice from '../../../../src/components/trash/TrashedNotice';
+import TrashedNotice from '../../../../src/components/lifecycle/LifecycleNotice';
 
 let mockDetails;
 let mockSplat;
