@@ -17,13 +17,16 @@
 }
 
 .cortext-traits__chip {
+	--cortext-traits-chip-background: var(--wp--preset--color--contrast-3, #f0f0f0);
+
+	position: relative;
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
 	height: $grid-unit-30;
-	padding: 0 4px 0 $grid-unit-10;
+	padding: 0 $grid-unit-10;
 	border-radius: $grid-unit-30;
-	background: var(--wp--preset--color--contrast-3, #f0f0f0);
+	background: var(--cortext-traits-chip-background);
 	font-size: $default-font-size;
 	line-height: 1;
 }
@@ -32,41 +35,64 @@
 	white-space: nowrap;
 }
 
-// The remove button stays in the layout while hidden, so the chip width does
-// not jump when it appears on hover or focus.
+// The remove button overlays the end of the chip, over the chip background,
+// so the padding stays symmetric and the chip keeps its width when the button
+// shows on hover or focus.
 .cortext-traits__chip-remove.components-button.has-icon.is-small {
+	position: absolute;
+	top: 50%;
+	right: 4px;
 	min-width: 16px;
 	width: 16px;
 	height: 16px;
 	padding: 0;
 	border-radius: 999px;
+	background: var(--cortext-traits-chip-background);
+	box-shadow: -4px 0 4px var(--cortext-traits-chip-background);
 	color: inherit;
 	opacity: 0;
+	transform: translateY(-50%);
 
 	svg {
 		width: 16px;
 		height: 16px;
+		opacity: 0.6;
 	}
 
 	&:hover,
 	&:focus-visible {
 		opacity: 1;
-		background: rgba(0, 0, 0, 0.1);
+		background:
+			linear-gradient(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.1)),
+			var(--cortext-traits-chip-background);
+
+		svg {
+			opacity: 1;
+		}
 	}
 }
 
 .cortext-traits__chip:hover,
 .cortext-traits__chip:focus-within {
 
-	.cortext-traits__chip-remove.components-button.has-icon.is-small:not(:hover, :focus-visible) {
-		opacity: 0.6;
+	.cortext-traits__chip-remove.components-button.has-icon.is-small {
+		opacity: 1;
 	}
 }
 
+// Without hover the button is always visible, so it sits in the flow instead
+// of covering the title.
 @media (hover: none) {
 
+	.cortext-traits__chip {
+		padding-right: 4px;
+	}
+
 	.cortext-traits__chip-remove.components-button.has-icon.is-small {
-		opacity: 0.6;
+		position: static;
+		box-shadow: none;
+		opacity: 1;
+		transform: none;
 	}
 }
 
