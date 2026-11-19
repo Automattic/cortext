@@ -177,6 +177,8 @@ final class ArchiveCascade {
 			update_post_meta( (int) $post->ID, self::TIME_META, time() );
 			update_post_meta( (int) $post->ID, self::ARCHIVED_BY_USER_META, get_current_user_id() );
 
+			// A row that still lives in another collection stays there; only
+			// this collection's membership is retired.
 			$this->cascade->cascade(
 				(int) $post->ID,
 				static function ( int $child_id ): void {
@@ -187,7 +189,8 @@ final class ArchiveCascade {
 						),
 						true
 					);
-				}
+				},
+				array( DocumentCascade::class, 'has_other_live_membership' )
 			);
 			return;
 		}
@@ -210,7 +213,8 @@ final class ArchiveCascade {
 						),
 						true
 					);
-				}
+				},
+				true
 			);
 		}
 	}
@@ -532,7 +536,7 @@ final class ArchiveCascade {
 			);
 		}
 
-		$candidates      = $this->descendants_for_root( $post_id );
+		$candidates      = $this->restore_candidates_for_root( $post_id );
 		$restoring_ids   = array_values( array_unique( array_merge( array( $post_id ), $candidates ) ) );
 		$container_error = $this->container_error_for_documents( $restoring_ids, $restoring_ids );
 		if ( $container_error instanceof WP_Error ) {
@@ -577,12 +581,30 @@ final class ArchiveCascade {
 	}
 
 	/**
+	 * Returns archived descendants an Unarchive request would restore. Rows
+	 * that belong to several collections come back when any of them is
+	 * restored, even when another collection's cascade archived them.
+	 *
+	 * @param int $root_id Root document ID.
+	 * @return int[] Archived descendant IDs, excluding the root.
+	 */
+	public function restore_candidates_for_root( int $root_id ): array {
+		return $this->cascade->descendants_for_root( $root_id, null, true );
+	}
+
+	/**
 	 * Checks edit permission for every document an Archive request would move.
 	 *
 	 * @param int $root_id Root document ID.
 	 */
 	public function current_user_can_archive( int $root_id ): bool {
-		$ids = array_merge( array( $root_id ), $this->cascade->candidates_for_cascade( $root_id ) );
+		$ids = array_merge(
+			array( $root_id ),
+			$this->cascade->candidates_for_cascade(
+				$root_id,
+				array( DocumentCascade::class, 'has_other_live_membership' )
+			)
+		);
 		foreach ( array_unique( $ids ) as $post_id ) {
 			if ( ! current_user_can( 'edit_post', $post_id ) ) {
 				return false;
@@ -604,7 +626,7 @@ final class ArchiveCascade {
 			return false;
 		}
 
-		$ids = array_merge( array( $root_id ), $this->descendants_for_root( $root_id ) );
+		$ids = array_merge( array( $root_id ), $this->restore_candidates_for_root( $root_id ) );
 		foreach ( array_unique( $ids ) as $post_id ) {
 			if ( ! current_user_can( 'edit_post', $post_id ) ) {
 				return false;
@@ -628,7 +650,10 @@ final class ArchiveCascade {
 	 * @param int[]   $ignored_container_ids Containers that will become active in the same operation.
 	 */
 	public function container_error_for_document( WP_Post $post, array $ignored_container_ids = array() ): ?WP_Error {
-		return $this->archived_container_error( $this->direct_container_ids( $post ), $ignored_container_ids );
+		return $this->archived_container_error(
+			$this->direct_container_ids( $post, $ignored_container_ids ),
+			$ignored_container_ids
+		);
 	}
 
 	/**
@@ -647,25 +672,52 @@ final class ArchiveCascade {
 				continue;
 			}
 
-			$container_ids = array_merge( $container_ids, $this->direct_container_ids( $post ) );
+			$container_ids = array_merge( $container_ids, $this->direct_container_ids( $post, $ignored_container_ids ) );
 		}
 
 		return $this->archived_container_error( $container_ids, $ignored_container_ids );
 	}
 
 	/**
-	 * Returns the parent and collections a document hangs from.
+	 * Returns the parent and the collections that can hold a document back.
 	 *
-	 * @param WP_Post $post Document to inspect.
+	 * @param WP_Post $post                  Document to inspect.
+	 * @param int[]   $ignored_container_ids Containers that will become active in the same operation.
 	 * @return int[]
 	 */
-	private function direct_container_ids( WP_Post $post ): array {
+	private function direct_container_ids( WP_Post $post, array $ignored_container_ids = array() ): array {
 		$container_ids = array();
 		if ( $post->post_parent > 0 ) {
 			$container_ids[] = (int) $post->post_parent;
 		}
 
-		return array_merge( $container_ids, $this->stored_trait_ids( (int) $post->ID ) );
+		return array_merge(
+			$container_ids,
+			$this->blocking_trait_ids( $this->stored_trait_ids( (int) $post->ID ), $ignored_container_ids )
+		);
+	}
+
+	/**
+	 * Collections that can hold a row back from being active. A row that
+	 * still lives in another collection, or returns to one in the same
+	 * operation, is not held back by its archived memberships.
+	 *
+	 * @param int[] $trait_ids             Collections the row belongs to.
+	 * @param int[] $ignored_container_ids Containers that will become active in the same operation.
+	 * @return int[]
+	 */
+	private function blocking_trait_ids( array $trait_ids, array $ignored_container_ids = array() ): array {
+		$ignored = array_map( 'intval', $ignored_container_ids );
+		foreach ( $trait_ids as $trait_id ) {
+			$collection = get_post( (int) $trait_id );
+			if (
+				in_array( (int) $trait_id, $ignored, true )
+				|| ( $collection instanceof WP_Post && Documents::is_live_status( $collection->post_status ) )
+			) {
+				return array();
+			}
+		}
+		return $trait_ids;
 	}
 
 	private function restore_status_for( int $post_id ): string {
@@ -714,7 +766,10 @@ final class ArchiveCascade {
 				$this->requested_term_trait_ids( $request->get_param( TraitTaxonomy::TAXONOMY ) )
 			);
 		} elseif ( $post instanceof WP_Post ) {
-			$container_ids = array_merge( $container_ids, $this->stored_trait_ids( (int) $post->ID ) );
+			$container_ids = array_merge(
+				$container_ids,
+				$this->blocking_trait_ids( $this->stored_trait_ids( (int) $post->ID ) )
+			);
 		}
 
 		return $this->archived_container_error( $container_ids );

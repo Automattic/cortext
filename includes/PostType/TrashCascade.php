@@ -29,7 +29,6 @@ defined( 'ABSPATH' ) || exit;
 use Cortext\Documents;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Relations;
-use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Post;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -160,16 +159,16 @@ final class TrashCascade {
 
 		update_post_meta( $post_id, self::TRASHED_BY_USER_META, get_current_user_id() );
 
-		// A row stays live while any other active collection still exposes it.
-		// Trashed memberships remain attached for restore, but do not count as
-		// an active home: trashing the last active collection must not leave a
-		// live row visible nowhere.
+		// A row stays live while another live collection still exposes it.
+		// Retired memberships remain attached for restore, but do not count as
+		// a home: retiring the last live collection must not leave a live row
+		// visible nowhere.
 		$this->cascade->cascade(
 			$post_id,
 			static function ( int $child_id ): void {
 				wp_trash_post( $child_id );
 			},
-			fn( int $row_id, int $collection_id ): bool => count( $this->active_collection_memberships( $row_id, $collection_id ) ) > 0
+			array( DocumentCascade::class, 'has_other_live_membership' )
 		);
 	}
 
@@ -235,7 +234,7 @@ final class TrashCascade {
 			// the term later drops only this membership and leaves the document
 			// alive in its other collections. Rows exclusive to this collection
 			// are deleted with it.
-			$other_collection_ids = $this->other_collection_memberships( $row_id, $post_id );
+			$other_collection_ids = DocumentCascade::other_memberships( $row_id, $post_id );
 			if ( count( $other_collection_ids ) > 0 ) {
 				// The row survives, so its delete hook will not detach the reverse
 				// pointers belonging exclusively to fields in the deleted collection.
@@ -257,13 +256,13 @@ final class TrashCascade {
 					Relations::remove_deleted_row_references( $row_id, $detached_field_ids );
 				}
 
-				// A direct force-delete can remove the row's last active collection
+				// A direct force-delete can remove the row's last live collection
 				// without first running the collection trash cascade. Preserve the
-				// row for its trashed memberships, but keep it out of the live set
+				// row for its retired memberships, but keep it out of the live set
 				// until one of those collections is restored.
 				if (
 					in_array( get_post_status( $row_id ), self::ACTIVE_STATUSES, true )
-					&& count( $this->active_collection_memberships( $row_id, $post_id ) ) === 0
+					&& ! DocumentCascade::has_other_live_membership( $row_id, $post_id )
 				) {
 					update_post_meta( $row_id, self::COLLECTION_MARKER_META, $post_id );
 					wp_trash_post( $row_id );
@@ -300,7 +299,7 @@ final class TrashCascade {
 	public function descendants_for_root( int $root_id ): array {
 		return $this->cascade->descendants_for_root(
 			$root_id,
-			fn( int $row_id, int $collection_id ): bool => count( $this->other_collection_memberships( $row_id, $collection_id ) ) > 0
+			static fn( int $row_id, int $collection_id ): bool => count( DocumentCascade::other_memberships( $row_id, $collection_id ) ) > 0
 		);
 	}
 
@@ -354,61 +353,6 @@ final class TrashCascade {
 			return $new_status;
 		}
 		return '' !== $previous_status ? $previous_status : $new_status;
-	}
-
-	/**
-	 * Valid collections a row belongs to other than `$collection_id`.
-	 * Trashed collections count because their membership is deliberately kept for
-	 * restore; stale terms whose mirror collection no longer exists do not.
-	 *
-	 * @param int $row_id        Row document id.
-	 * @param int $collection_id Collection being trashed or deleted.
-	 * @return int[]
-	 */
-	private function other_collection_memberships( int $row_id, int $collection_id ): array {
-		$terms = wp_get_object_terms(
-			$row_id,
-			TraitTaxonomy::TAXONOMY,
-			array( 'fields' => 'all' )
-		);
-		if ( ! is_array( $terms ) ) {
-			return array();
-		}
-
-		$collection_ids = array();
-		foreach ( $terms as $term ) {
-			$other_id = TraitTaxonomy::trait_id_from_slug( (string) $term->slug );
-			if ( $other_id < 1 || $other_id === $collection_id ) {
-				continue;
-			}
-			$other = get_post( $other_id );
-			if (
-				$other instanceof WP_Post
-				&& Document::POST_TYPE === $other->post_type
-				&& Document::is_collection( $other_id )
-			) {
-				$collection_ids[ $other_id ] = true;
-			}
-		}
-
-		return array_keys( $collection_ids );
-	}
-
-	/**
-	 * Active collections a row belongs to, optionally excluding one collection.
-	 *
-	 * @param int $row_id        Row document id.
-	 * @param int $collection_id Collection to exclude, or 0 for none.
-	 * @return int[]
-	 */
-	private function active_collection_memberships( int $row_id, int $collection_id = 0 ): array {
-		$collection_ids = $this->other_collection_memberships( $row_id, $collection_id );
-		return array_values(
-			array_filter(
-				$collection_ids,
-				static fn( int $other_id ): bool => in_array( get_post_status( $other_id ), self::ACTIVE_STATUSES, true )
-			)
-		);
 	}
 
 	/**

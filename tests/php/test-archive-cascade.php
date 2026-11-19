@@ -139,6 +139,87 @@ final class Test_Archive_Cascade extends BaseTestCase {
 		$this->assertSame( '', (string) get_post_meta( $draft_row, ArchiveCascade::COLLECTION_MARKER_META, true ) );
 	}
 
+	public function test_archiving_a_collection_keeps_rows_that_live_in_another_collection(): void {
+		$collection_a = $this->create_collection();
+		$collection_b = $this->create_collection();
+		$shared_row   = $this->create_row( $collection_a, 'private' );
+		$this->add_membership( $shared_row, $collection_b );
+		$exclusive_row = $this->create_row( $collection_b, 'private' );
+
+		$archived = $this->archive_cascade->archive( $collection_b );
+
+		$this->assertEqualsCanonicalizing( array( $collection_b, $exclusive_row ), $archived );
+		$this->assertSame( 'private', get_post_status( $shared_row ) );
+		$this->assertSame( '', (string) get_post_meta( $shared_row, ArchiveCascade::COLLECTION_MARKER_META, true ) );
+		$this->assertEqualsCanonicalizing(
+			array( $collection_a, $collection_b ),
+			( new Documents() )->membership_ids( $shared_row ),
+			'The shared row keeps its archived membership for a later unarchive.'
+		);
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $exclusive_row ) );
+	}
+
+	public function test_unarchiving_any_membership_revives_a_shared_row(): void {
+		$collection_a = $this->create_collection();
+		$collection_b = $this->create_collection();
+		$shared_row   = $this->create_row( $collection_a, 'private' );
+		$this->add_membership( $shared_row, $collection_b );
+
+		$this->archive_cascade->archive( $collection_b );
+		$this->archive_cascade->archive( $collection_a );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $shared_row ) );
+		$this->assertSame( (string) $collection_a, (string) get_post_meta( $shared_row, ArchiveCascade::COLLECTION_MARKER_META, true ) );
+
+		$restored = $this->archive_cascade->unarchive( $collection_b );
+
+		$this->assertContains( $shared_row, $restored );
+		$this->assertSame( 'private', get_post_status( $shared_row ) );
+		$this->assertSame( '', (string) get_post_meta( $shared_row, ArchiveCascade::COLLECTION_MARKER_META, true ) );
+	}
+
+	public function test_trashing_a_collection_does_not_treat_an_archived_one_as_a_home(): void {
+		$collection_a = $this->create_collection();
+		$collection_b = $this->create_collection();
+		$shared_row   = $this->create_row( $collection_a, 'private' );
+		$this->add_membership( $shared_row, $collection_b );
+
+		$this->archive_cascade->archive( $collection_b );
+		wp_trash_post( $collection_a );
+
+		$this->assertSame( 'trash', get_post_status( $shared_row ) );
+		$this->assertSame( (string) $collection_a, (string) get_post_meta( $shared_row, TrashCascade::COLLECTION_MARKER_META, true ) );
+	}
+
+	public function test_archived_memberships_hold_a_row_back_only_without_a_live_collection(): void {
+		$collection_a = $this->create_collection();
+		$collection_b = $this->create_collection();
+		$shared_row   = $this->create_row( $collection_a, 'private' );
+		$this->add_membership( $shared_row, $collection_b );
+		$this->archive_cascade->archive( $collection_b );
+
+		$this->assertNull(
+			$this->archive_cascade->container_error_for_document( get_post( $shared_row ) ),
+			'A row that lives in another collection stays writable.'
+		);
+
+		$stranded_row = $this->create_row( $collection_b, 'private' );
+		$error        = $this->archive_cascade->container_error_for_document( get_post( $stranded_row ) );
+		$this->assertInstanceOf( \WP_Error::class, $error );
+		$this->assertSame( 'cortext_document_archived_container', $error->get_error_code() );
+
+		wp_trash_post( $collection_a );
+		$this->assertSame( 'trash', get_post_status( $shared_row ) );
+		$this->assertNull(
+			$this->archive_cascade->container_error_for_documents( array( $shared_row ), array( $collection_a ) ),
+			'Restoring the trashed collection is not blocked by the archived one.'
+		);
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$this->archive_cascade->container_error_for_documents( array( $shared_row ) ),
+			'Restoring the row alone would leave it with only an archived collection.'
+		);
+	}
+
 	public function test_pre_archived_row_is_not_restored_with_collection(): void {
 		$collection_id = $this->create_collection();
 		$pre_archived  = $this->create_row( $collection_id, 'private' );
@@ -370,6 +451,12 @@ final class Test_Archive_Cascade extends BaseTestCase {
 		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
 
 		return $row_id;
+	}
+
+	private function add_membership( int $row_id, int $collection_id ): void {
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, true );
 	}
 
 	private function create_relation_field( int $collection_id, int $target_collection_id ): int {

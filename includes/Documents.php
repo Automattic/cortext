@@ -557,6 +557,16 @@ final class Documents {
 	}
 
 	/**
+	 * Whether a document status keeps it live: neither archived nor in the
+	 * trash. A row lives in the collections whose status is live.
+	 *
+	 * @param string $status Post status.
+	 */
+	public static function is_live_status( string $status ): bool {
+		return ! in_array( $status, array( self::STATUS_ARCHIVED, self::STATUS_TRASH ), true );
+	}
+
+	/**
 	 * Derives the document kind label from state for internal branching.
 	 * Returns null when the post does not opt into the `cortext-document`
 	 * trait. Not part of the wire shape; consumers derive UI copy from the
