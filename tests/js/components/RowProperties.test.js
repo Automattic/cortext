@@ -769,7 +769,9 @@ describe( 'RowProperties', () => {
 			requests[ 0 ]( { id: 99, meta: { 'field-7': 'Doing' } } );
 			await Promise.resolve();
 		} );
-		await waitFor( () => expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 2 ) );
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 2 )
+		);
 
 		let barrierSettled = false;
 		barrier.then( () => {
