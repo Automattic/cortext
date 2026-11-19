@@ -420,27 +420,32 @@ final class Test_Document_Duplicator extends BaseTestCase {
 		$this->assertSame( '42', (string) get_post_meta( $new_row_id, Relations::meta_key( $field_b ), true ) );
 	}
 
-	public function test_duplicate_row_returns_active_source_while_preserving_trashed_membership(): void {
-		$trashed_collection = $this->create_collection_with_fields( array() );
-		$active_collection  = $this->create_collection_with_fields( array() );
-		$row_id             = $this->create_row( $trashed_collection, 'Shared row' );
-		$this->add_membership( $row_id, $active_collection );
+	public function test_duplicate_row_joins_only_the_collections_the_source_lives_in(): void {
+		$trashed_collection  = $this->create_collection_with_fields( array() );
+		$archived_collection = $this->create_collection_with_fields( array() );
+		$live_collection     = $this->create_collection_with_fields( array() );
+		$row_id              = $this->create_row( $trashed_collection, 'Shared row' );
+		$this->add_membership( $row_id, $archived_collection );
+		$this->add_membership( $row_id, $live_collection );
 		wp_trash_post( $trashed_collection );
+		wp_update_post(
+			array(
+				'ID'          => $archived_collection,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
 
 		$result = $this->duplicator->duplicate( get_post( $row_id ) );
 
 		$this->assertIsArray( $result );
-		$this->assertSame( $active_collection, $result['collection_id'] );
+		$this->assertSame( $live_collection, $result['collection_id'] );
 		$memberships = wp_get_object_terms(
 			(int) $result['document']->ID,
 			TraitTaxonomy::TAXONOMY,
 			array( 'fields' => 'slugs' )
 		);
 		$memberships = is_array( $memberships ) ? array_map( 'intval', $memberships ) : array();
-		sort( $memberships );
-		$expected = array( $trashed_collection, $active_collection );
-		sort( $expected );
-		$this->assertSame( $expected, $memberships );
+		$this->assertSame( array( $live_collection ), $memberships );
 	}
 
 	public function test_duplicate_row_copies_a_field_shared_by_two_schemas_only_once(): void {

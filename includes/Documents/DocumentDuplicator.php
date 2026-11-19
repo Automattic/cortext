@@ -3,9 +3,9 @@
  * Duplicates a document. The duplicate always inherits title, content,
  * excerpt, status, parent, icon, and thumbnail. If the source has
  * `cortext_fields` meta, its field posts are cloned and rollup references
- * remapped. If the source belongs to collections (carries trait terms), all
- * memberships and their field values are copied so the duplicate lands in
- * every collection the source belongs to.
+ * remapped. If the source belongs to collections (carries trait terms), its
+ * live memberships and their field values are copied so the duplicate lands
+ * in every collection the source lives in.
  *
  * @package Cortext
  */
@@ -72,10 +72,12 @@ final class DocumentDuplicator {
 			);
 		}
 
-		// The copy joins every collection the source belongs to, so any archived
-		// one blocks it just like an archived parent.
+		// The copy joins the collections the source lives in and leaves archived
+		// or trashed memberships behind. Without a live collection, an archived
+		// one holds the copy back just like an archived parent.
 		$parent                  = (int) $source->post_parent > 0 ? get_post( (int) $source->post_parent ) : null;
-		$collections             = $this->documents->find_traits_for_document( $source );
+		$collections             = $this->documents->find_visible_traits_for_document( $source );
+		$has_live_collection     = count( $this->documents->find_live_traits_for_document( $source ) ) > 0;
 		$has_archived_collection = count(
 			array_filter(
 				$collections,
@@ -84,7 +86,7 @@ final class DocumentDuplicator {
 		) > 0;
 		if (
 			( $parent instanceof WP_Post && Documents::STATUS_ARCHIVED === $parent->post_status )
-			|| $has_archived_collection
+			|| ( ! $has_live_collection && $has_archived_collection )
 		) {
 			return new WP_Error(
 				'cortext_duplicate_archived_container',
@@ -250,7 +252,7 @@ final class DocumentDuplicator {
 	}
 
 	/**
-	 * Reuses all of the source's trait terms so the duplicate joins the same
+	 * Reuses the given trait terms so the duplicate joins the same
 	 * collections, then copies every distinct writable field once. Formula
 	 * values are recomputed after their inputs have been copied rather than
 	 * carrying over stale materialized output from the source.

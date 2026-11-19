@@ -1046,10 +1046,9 @@ final class DocumentsController {
 		}
 
 		// Duplicating a row creates a new member in every copied collection, so
-		// enforce the same collection capability boundary as PUT /traits. Use the
-		// full term-backed set, including lifecycle-preserved trash memberships;
-		// otherwise duplication would be a back door into a protected collection.
-		foreach ( $this->documents->find_traits_for_document( $post ) as $collection ) {
+		// enforce the same collection capability boundary as PUT /traits on the
+		// collections the copy joins.
+		foreach ( $this->documents->find_visible_traits_for_document( $post ) as $collection ) {
 			if ( ! current_user_can( 'edit_post', $collection->ID ) ) {
 				return new WP_Error(
 					'cortext_duplicate_collection_forbidden',

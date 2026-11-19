@@ -594,11 +594,10 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		);
 	}
 
-	public function test_duplicate_requires_permission_for_lifecycle_preserved_membership(): void {
+	public function test_duplicate_requires_permission_for_every_collection_the_copy_joins(): void {
 		$owner_id = $this->create_user( 'author' );
 		wp_set_current_user( $owner_id );
 		$protected_collection = $this->create_collection( 'protected-duplicate', 'Protected' );
-		wp_trash_post( $protected_collection );
 
 		$attacker_id = $this->create_user( 'author' );
 		wp_set_current_user( $attacker_id );
@@ -612,6 +611,28 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame( 'cortext_duplicate_collection_forbidden', $response->get_data()['code'] );
+	}
+
+	public function test_duplicate_leaves_a_retired_collection_behind_without_needing_access(): void {
+		$owner_id = $this->create_user( 'author' );
+		wp_set_current_user( $owner_id );
+		$protected_collection = $this->create_collection( 'protected-duplicate', 'Protected' );
+		wp_trash_post( $protected_collection );
+
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$own_collection = $this->create_collection( 'mine-duplicate', 'Mine' );
+		$row_id         = $this->create_row( $own_collection, 'Shared row' );
+		$this->add_membership( $row_id, $protected_collection );
+
+		$response = rest_do_request(
+			new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $row_id . '/duplicate' )
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame(
+			array( $own_collection ),
+			( new \Cortext\Documents() )->membership_ids( (int) $response->get_data()['id'] )
+		);
 	}
 
 	public function test_traits_endpoint_rejects_collection_target(): void {
