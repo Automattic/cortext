@@ -444,6 +444,44 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( $stored_expression, get_post_meta( $formula_id, 'expression', true ) );
 	}
 
+	public function test_trashed_collection_blocks_field_mutations(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection_with_slug( 'Trashed schema', 'trashed-schema' );
+		$text_id       = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Notes',
+				'type'  => 'text',
+			)
+		)->get_data()['id'];
+		$stored_fields = $this->stored_collection_field_ids( $collection_id );
+
+		wp_trash_post( $collection_id );
+		$this->assertSame( Documents::STATUS_TRASH, get_post_status( $collection_id ) );
+
+		$core_update = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $text_id );
+		$core_update->set_param( 'title', 'Changed in Trash' );
+		$responses = array(
+			$this->create_field(
+				$collection_id,
+				array(
+					'title' => 'Blocked field',
+					'type'  => 'text',
+				)
+			),
+			$this->convert_field( $text_id, 'number' ),
+			rest_do_request( $core_update ),
+		);
+
+		foreach ( $responses as $response ) {
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'cortext_collection_in_trash', $response->get_data()['code'] );
+		}
+		$this->assertSame( $stored_fields, $this->stored_collection_field_ids( $collection_id ) );
+		$this->assertSame( 'Notes', get_post( $text_id )->post_title );
+		$this->assertSame( 'text', get_post_meta( $text_id, 'type', true ) );
+	}
+
 	public function test_relation_mutations_cannot_change_an_archived_target_schema(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$source_collection_id = $this->create_collection_with_slug( 'Active source', 'active-source' );

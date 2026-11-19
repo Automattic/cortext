@@ -302,7 +302,7 @@ final class FieldsController {
 			return false;
 		}
 
-		return $this->archived_collection_error( $collection_id ) ?? true;
+		return $this->read_only_collection_error( $collection_id ) ?? true;
 	}
 
 	public function can_edit_field( WP_REST_Request $request ): bool|WP_Error {
@@ -320,9 +320,9 @@ final class FieldsController {
 		}
 
 		if ( ! in_array( $request->get_method(), array( 'GET', 'HEAD' ), true ) ) {
-			$archive_error = $this->archived_collection_error_for_fields( array( $field_id ) );
-			if ( $archive_error instanceof WP_Error ) {
-				return $archive_error;
+			$read_only_error = $this->read_only_collection_error_for_fields( array( $field_id ) );
+			if ( $read_only_error instanceof WP_Error ) {
+				return $read_only_error;
 			}
 		}
 
@@ -330,7 +330,7 @@ final class FieldsController {
 	}
 
 	/**
-	 * Blocks core REST updates to fields in archived collections.
+	 * Blocks core REST updates to fields in archived or trashed collections.
 	 *
 	 * @param mixed           $prepared_post Prepared field post.
 	 * @param WP_REST_Request $request       Incoming core REST request.
@@ -347,11 +347,11 @@ final class FieldsController {
 			return $prepared_post;
 		}
 
-		return $this->archived_collection_error_for_fields( array( $field_id ) ) ?? $prepared_post;
+		return $this->read_only_collection_error_for_fields( array( $field_id ) ) ?? $prepared_post;
 	}
 
 	/**
-	 * Blocks core REST deletes that would change an archived collection's schema,
+	 * Blocks core REST deletes that would change a read-only collection's schema,
 	 * including reverse fields and dependent fields.
 	 *
 	 * @param mixed           $dispatch_result Result supplied by an earlier filter.
@@ -385,7 +385,7 @@ final class FieldsController {
 			? ( new Field() )->deletion_cascade_ids( $field_id )
 			: array( $field_id );
 
-		return $this->archived_collection_error_for_fields( $affected_field_ids )
+		return $this->read_only_collection_error_for_fields( $affected_field_ids )
 			?? $dispatch_result;
 	}
 
@@ -856,11 +856,12 @@ final class FieldsController {
 	}
 
 	/**
-	 * Returns an error when a request would change an archived collection's schema.
+	 * Returns an error when a request would change the schema of an archived
+	 * or trashed collection.
 	 *
 	 * @param int $collection_id Collection document ID.
 	 */
-	private function archived_collection_error( int $collection_id ): ?WP_Error {
+	private function read_only_collection_error( int $collection_id ): ?WP_Error {
 		if ( $collection_id < 1 ) {
 			return null;
 		}
@@ -870,33 +871,44 @@ final class FieldsController {
 			return null;
 		}
 
-		$is_archived = Documents::STATUS_ARCHIVED === $collection->post_status;
-		if ( Documents::STATUS_TRASH === $collection->post_status ) {
-			$is_archived = Documents::STATUS_ARCHIVED
-				=== (string) get_post_meta( $collection_id, '_wp_trash_meta_status', true );
-		}
-		if ( ! $is_archived ) {
-			return null;
+		$is_archived = Documents::STATUS_ARCHIVED === $collection->post_status
+			|| (
+				Documents::STATUS_TRASH === $collection->post_status
+				&& Documents::STATUS_ARCHIVED === (string) get_post_meta( $collection_id, '_wp_trash_meta_status', true )
+			);
+		if ( $is_archived ) {
+			return new WP_Error(
+				'cortext_collection_archived',
+				__( 'Restore this collection from Archive before changing its fields.', 'cortext' ),
+				array(
+					'status'        => 409,
+					'collection_id' => $collection_id,
+				)
+			);
 		}
 
-		return new WP_Error(
-			'cortext_collection_archived',
-			__( 'Restore this collection from Archive before changing its fields.', 'cortext' ),
-			array(
-				'status'        => 409,
-				'collection_id' => $collection_id,
-			)
-		);
+		if ( Documents::STATUS_TRASH === $collection->post_status ) {
+			return new WP_Error(
+				'cortext_collection_in_trash',
+				__( 'Move this collection out of Trash before changing its fields.', 'cortext' ),
+				array(
+					'status'        => 409,
+					'collection_id' => $collection_id,
+				)
+			);
+		}
+
+		return null;
 	}
 
 	/**
-	 * Checks each field's collection for Archive status.
+	 * Checks whether any field's collection is read-only.
 	 *
 	 * @param int[] $field_ids Field post IDs.
 	 */
-	private function archived_collection_error_for_fields( array $field_ids ): ?WP_Error {
+	private function read_only_collection_error_for_fields( array $field_ids ): ?WP_Error {
 		foreach ( array_unique( array_map( 'intval', $field_ids ) ) as $field_id ) {
-			$error = $this->archived_collection_error( $this->collection_id_for_field( $field_id ) );
+			$error = $this->read_only_collection_error( $this->collection_id_for_field( $field_id ) );
 			if ( $error instanceof WP_Error ) {
 				return $error;
 			}
@@ -1091,9 +1103,9 @@ final class FieldsController {
 				array( 'status' => 400 )
 			);
 		}
-		$target_archive_error = $this->archived_collection_error( $target_collection_id );
-		if ( $target_archive_error instanceof WP_Error ) {
-			return $target_archive_error;
+		$target_read_only_error = $this->read_only_collection_error( $target_collection_id );
+		if ( $target_read_only_error instanceof WP_Error ) {
+			return $target_read_only_error;
 		}
 
 		$source_collection = get_post( $collection_id );

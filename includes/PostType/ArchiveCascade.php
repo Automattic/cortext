@@ -233,10 +233,6 @@ final class ArchiveCascade {
 			return $prepared_post;
 		}
 
-		if ( $post instanceof WP_Post && Documents::STATUS_ARCHIVED === $post->post_status ) {
-			return $this->archived_write_error();
-		}
-
 		$container_error = $this->rest_container_error( $prepared_post, $post, $request );
 		if ( $container_error instanceof WP_Error ) {
 			return $container_error;
@@ -308,9 +304,6 @@ final class ArchiveCascade {
 		}
 
 		if ( $is_autosave ) {
-			if ( Documents::STATUS_ARCHIVED === $post->post_status ) {
-				return $this->archived_write_error();
-			}
 			$container_error = $this->container_error_for_document( $post );
 			if ( $container_error instanceof WP_Error ) {
 				return $container_error;
@@ -827,14 +820,6 @@ final class ArchiveCascade {
 		}
 
 		return null;
-	}
-
-	private function archived_write_error(): WP_Error {
-		return new WP_Error(
-			'cortext_document_archived',
-			__( 'Restore this document before editing it.', 'cortext' ),
-			array( 'status' => 409 )
-		);
 	}
 
 	private function archive_transition_error( WP_Post $post ): ?WP_Error {

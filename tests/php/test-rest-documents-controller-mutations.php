@@ -17,6 +17,7 @@ use Cortext\Documents;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
+use Cortext\PostType\DocumentWriteGuard;
 use Cortext\PostType\Field;
 use Cortext\PostType\TrashCascade;
 use Cortext\Rest\DocumentsController;
@@ -50,6 +51,8 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 		$this->install_in_memory_term_store();
 		$this->install_in_memory_posts_query();
+
+		( new DocumentWriteGuard() )->register();
 
 		$archive_cascade = new ArchiveCascade();
 		$archive_cascade->register_status();
@@ -197,6 +200,46 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertSame( $before->post_title, get_post( $post_id )->post_title );
 		$this->assertSame( $before->post_content, get_post( $post_id )->post_content );
 		$this->assertSame( $icon, get_post_meta( $post_id, DocumentIdentity::META_KEY, true ) );
+	}
+
+	public function test_core_rest_rejects_writes_to_trashed_documents(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$post_id = $this->create_page(
+			array(
+				'post_title'   => 'Original title',
+				'post_content' => 'Original content',
+			)
+		);
+		$icon    = '{"type":"emoji","value":"A"}';
+		update_post_meta( $post_id, DocumentIdentity::META_KEY, $icon );
+		wp_trash_post( $post_id );
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $post_id );
+		$request->set_param( 'title', 'Changed title' );
+		$request->set_param( 'content', 'Changed content' );
+		$request->set_param(
+			'meta',
+			array( DocumentIdentity::META_KEY => '{"type":"emoji","value":"B"}' )
+		);
+		$autosave = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents/' . $post_id . '/autosaves' );
+		$autosave->set_param( 'content', 'Autosaved content' );
+
+		foreach ( array( rest_do_request( $request ), rest_do_request( $autosave ) ) as $response ) {
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'cortext_document_in_trash', $response->get_data()['code'] );
+		}
+		$this->assertSame( Documents::STATUS_TRASH, get_post_status( $post_id ) );
+		$this->assertSame( 'Original title', get_post( $post_id )->post_title );
+		$this->assertSame( 'Original content', get_post( $post_id )->post_content );
+		$this->assertSame( $icon, get_post_meta( $post_id, DocumentIdentity::META_KEY, true ) );
+
+		$this->assertSame( 200, $this->restore( $post_id )->get_status() );
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $post_id );
+		$request->set_param( 'title', 'Edited after restore' );
+
+		$this->assertSame( 200, rest_do_request( $request )->get_status() );
+		$this->assertSame( 'Edited after restore', get_post( $post_id )->post_title );
 	}
 
 	public function test_core_rest_rejects_stale_status_writes_to_archived_documents(): void {
@@ -605,7 +648,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 		$response = rest_do_request( $request );
 
-		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 409, $response->get_status() );
 		$this->assertSame( 'cortext_document_in_trash', $response->get_data()['code'] );
 		$this->assertSame( Documents::STATUS_TRASH, get_post_status( $post_id ) );
 		$this->assertSame( '', (string) get_post_meta( $post_id, ArchiveCascade::STATUS_META, true ) );

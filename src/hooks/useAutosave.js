@@ -6,13 +6,14 @@ import { store as noticesStore } from '@wordpress/notices';
 import { __ } from '@wordpress/i18n';
 
 import { useRecents } from './useRecents';
+import { getReadOnlyState } from '../documents/readOnly';
 
 const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
 const AUTOSAVE_ERROR_NOTICE_ID = 'cortext-autosave-error';
 
-function isReadOnlyLifecycleStatus( status ) {
-	return status === 'trash' || status === 'crtxt_archived';
+function isReadOnlyStatus( status ) {
+	return getReadOnlyState( { status } ) !== null;
 }
 
 function canSavePost( state ) {
@@ -21,7 +22,7 @@ function canSavePost( state ) {
 		state.isSaveable &&
 		! state.isSaving &&
 		! state.isPostLocked &&
-		! isReadOnlyLifecycleStatus( state.postStatus )
+		! isReadOnlyStatus( state.postStatus )
 	);
 }
 
@@ -179,7 +180,7 @@ export default function useAutosave( options = {} ) {
 				hasPendingEdits &&
 				current.isSaveable &&
 				! current.isPostLocked &&
-				! isReadOnlyLifecycleStatus( current.postStatus )
+				! isReadOnlyStatus( current.postStatus )
 			) {
 				// tech-debt.md#td-autosave-save-completion: WordPress 7.1 may
 				// mark a client edit made during this request as saved. Read the
@@ -291,7 +292,7 @@ export default function useAutosave( options = {} ) {
 		// Trashed and archived documents are read-only in the canvas.
 		// The UI is locked via `<Disabled>`, but a stray edit through any
 		// other path (drag-drop, programmatic) shouldn't persist either.
-		if ( isReadOnlyLifecycleStatus( postStatus ) ) {
+		if ( isReadOnlyStatus( postStatus ) ) {
 			return undefined;
 		}
 		if ( failedEditsReferenceRef.current === editsReference ) {
@@ -318,7 +319,7 @@ export default function useAutosave( options = {} ) {
 				s &&
 				! saving &&
 				! locked &&
-				! isReadOnlyLifecycleStatus( ps ) &&
+				! isReadOnlyStatus( ps ) &&
 				failedEditsReferenceRef.current !== editsRef
 			) {
 				saveCurrentPost();

@@ -54,6 +54,7 @@ import useDelayedFlag, {
 } from '../hooks/useDelayedFlag';
 import { POST_TYPE } from './page-queries';
 import { definesTrait } from '../documents/capabilities';
+import { selectCurrentPostReadOnlyState } from '../documents/readOnly';
 import { unlock } from '../lock-unlock';
 import { useFavorites } from '../hooks/useFavorites';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
@@ -754,23 +755,12 @@ export default function DocumentInspectorSidebar( {
 		Array.isArray( currentRecord?.crtxt_trait ) &&
 		currentRecord.crtxt_trait.length > 0;
 	const documentTabLabel = __( 'Document', 'cortext' );
-	const isTrashed = useSelect(
-		( select ) =>
-			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
-			'trash',
-		[]
-	);
-	const isArchived = useSelect(
-		( select ) =>
-			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
-			'crtxt_archived',
-		[]
-	);
+	const readOnlyState = useSelect( selectCurrentPostReadOnlyState, [] );
 	const isStoreLocked = useSelect(
 		( select ) => select( editorStore ).isPostLocked?.() ?? false,
 		[]
 	);
-	const isReadOnly = isTrashed || isArchived || isLocked || isStoreLocked;
+	const isReadOnly = readOnlyState !== null || isLocked || isStoreLocked;
 	const activeArea = useSelect(
 		( select ) => getActiveInspectorArea( select ),
 		[]

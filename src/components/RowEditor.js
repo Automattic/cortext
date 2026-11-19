@@ -12,6 +12,7 @@ import { SlotFillProvider } from '@wordpress/components';
 import useAutosave from '../hooks/useAutosave';
 import usePostLock from '../hooks/usePostLock';
 import { notifyBacklinksChanged } from '../hooks/backlinksInvalidation';
+import { getReadOnlyState } from '../documents/readOnly';
 import { getEditorSettings } from './initEditor';
 import { useEditorsLocked } from './ActiveEditorContext';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
@@ -131,9 +132,7 @@ function DetailPaneContent( {
 	rowId,
 	shouldAcquirePostLock,
 } ) {
-	const lifecycleStatus = row?.status;
-	const isLifecycleReadOnly =
-		lifecycleStatus === 'trash' || lifecycleStatus === 'crtxt_archived';
+	const isLifecycleReadOnly = getReadOnlyState( row ) !== null;
 	const postLock = usePostLock( {
 		postId: row?.id ?? rowId,
 		postType,

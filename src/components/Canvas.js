@@ -34,6 +34,7 @@ import usePostLock from '../hooks/usePostLock';
 import { withViewTransition } from '../hooks/viewTransition';
 import { notifyBacklinksChanged } from '../hooks/backlinksInvalidation';
 import { definesTrait } from '../documents/capabilities';
+import { READ_ONLY_TRASHED, getReadOnlyState } from '../documents/readOnly';
 import { POST_TYPE } from './page-queries';
 import CortextInserterSidebar from './CortextInserterSidebar';
 import CortextLinkSuggestions from './CortextLinkSuggestions';
@@ -374,8 +375,9 @@ export function CanvasEditor( {
 	recentTarget,
 } ) {
 	const isCollection = definesTrait( post );
-	const isTrashed = post?.status === 'trash';
-	const isLifecycleReadOnly = isTrashed || post?.status === 'crtxt_archived';
+	const readOnlyState = getReadOnlyState( post );
+	const isTrashed = readOnlyState === READ_ONLY_TRASHED;
+	const isLifecycleReadOnly = readOnlyState !== null;
 	const hasTrait =
 		Array.isArray( post?.crtxt_trait ) && post.crtxt_trait.length > 0;
 	const autosaveRecentTarget =

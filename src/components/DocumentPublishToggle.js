@@ -13,6 +13,7 @@ import { useCallback, useState } from '@wordpress/element';
 import PublishToggle from './PublishToggle';
 import useCollectionDependentPages from '../hooks/useCollectionDependentPages';
 import { definesTrait, hasTrait } from '../documents/capabilities';
+import { getReadOnlyState } from '../documents/readOnly';
 import { isPublicWebAffordancesEnabled } from '../settings';
 
 const CASCADE_PUBLISH_ERROR_NOTICE_ID = 'cortext-document-publish-error';
@@ -74,8 +75,8 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	);
 
 	const isPublic = status === 'publish';
-	const isArchived = status === 'crtxt_archived';
-	const isDisabled = disabled || isLocked || isArchived;
+	const isDisabled =
+		disabled || isLocked || getReadOnlyState( { status } ) !== null;
 	// A collection can be embedded in other documents through a data-view block,
 	// so unpublishing it may strand public dependents. Identity is the mirror
 	// term (`cortext_defines_trait`), true even for a collection with no custom
