@@ -764,34 +764,57 @@ function DocumentInspectorContent( {
 	);
 }
 
-// Collection inspector: identity controls first, then the owner data-view panels.
+// Collection inspector: identity and actions first, then the owner data-view
+// panels. Actions get their own frame for the same reason as on a page.
 function CollectionInspectorContent( {
 	postId,
 	postType,
+	isLocked,
+	areActionsLocked,
 	isReadOnlyDocument,
+	isDimmed,
 } ) {
 	return (
 		<div className="cortext-document-inspector">
 			{ ! isReadOnlyDocument && (
-				<PageIdentityInspectorPanel
-					postId={ postId }
-					postType={ postType }
-					title={ __( 'Identity', 'cortext' ) }
-				/>
+				<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+					<PageIdentityInspectorPanel
+						postId={ postId }
+						postType={ postType }
+						title={ __( 'Identity', 'cortext' ) }
+					/>
+				</InspectorFrame>
 			) }
-			<CanvasOwnerInspector.Slot />
-			<BacklinksPanel documentId={ postId } />
+			<InspectorFrame isLocked={ areActionsLocked } isDimmed={ isDimmed }>
+				<PageActionsPanel postId={ postId } />
+			</InspectorFrame>
+			<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+				<CanvasOwnerInspector.Slot />
+				<BacklinksPanel documentId={ postId } />
+			</InspectorFrame>
 		</div>
 	);
 }
 
-// Row inspector for property actions. Values stay in the document block; the
-// sidebar handles visibility and field creation.
-function RowInspectorContent( { postId } ) {
+// Row inspector: property actions, then document actions. Values stay in the
+// document block; the sidebar handles visibility and field creation.
+function RowInspectorContent( {
+	postId,
+	isLocked,
+	areActionsLocked,
+	isDimmed,
+} ) {
 	return (
 		<div className="cortext-row-inspector">
-			<DocumentPropertiesActions />
-			<BacklinksPanel documentId={ postId } />
+			<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+				<DocumentPropertiesActions />
+			</InspectorFrame>
+			<InspectorFrame isLocked={ areActionsLocked } isDimmed={ isDimmed }>
+				<PageActionsPanel postId={ postId } />
+			</InspectorFrame>
+			<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+				<BacklinksPanel documentId={ postId } />
+			</InspectorFrame>
 		</div>
 	);
 }
@@ -847,6 +870,12 @@ export default function DocumentInspectorSidebar( {
 		( readOnlyState !== null && readOnlyState !== READ_ONLY_FROZEN ) ||
 		areActionsLocked ||
 		isStoreLocked;
+	const lockProps = {
+		isLocked: isReadOnly,
+		areActionsLocked: isActionsReadOnly,
+		isReadOnlyDocument: readOnlyState !== null,
+		isDimmed: isLastingReadOnly,
+	};
 	const activeArea = useSelect(
 		( select ) => getActiveInspectorArea( select ),
 		[]
@@ -910,28 +939,20 @@ export default function DocumentInspectorSidebar( {
 				isActiveByDefault
 				tabs={ tabs }
 			>
-				<InspectorFrame
-					isLocked={ isReadOnly }
-					isDimmed={ isLastingReadOnly }
-				>
-					{ isCollection && (
-						<CollectionInspectorContent
-							postId={ postId }
-							postType={ postType }
-							isReadOnlyDocument={ readOnlyState !== null }
-						/>
-					) }
-					{ ! isCollection && hasTrait && (
-						<RowInspectorContent postId={ postId } />
-					) }
-				</InspectorFrame>
+				{ isCollection && (
+					<CollectionInspectorContent
+						postId={ postId }
+						postType={ postType }
+						{ ...lockProps }
+					/>
+				) }
+				{ ! isCollection && hasTrait && (
+					<RowInspectorContent postId={ postId } { ...lockProps } />
+				) }
 				{ ! isCollection && ! hasTrait && (
 					<DocumentInspectorContent
 						postId={ postId }
-						isLocked={ isReadOnly }
-						areActionsLocked={ isActionsReadOnly }
-						isReadOnlyDocument={ readOnlyState !== null }
-						isDimmed={ isLastingReadOnly }
+						{ ...lockProps }
 					/>
 				) }
 			</InspectorComplementaryArea>
