@@ -699,6 +699,35 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 20.0, (float) get_post_meta( $row_id, "field-{$formula_id}", true ) );
 	}
 
+	public function test_recompute_row_only_writes_changed_formula_values(): void {
+		$fixture    = $this->create_collection_fixture( 'formula-unchanged', 'number' );
+		$row_id     = $this->create_row_for_collection( $fixture['collection_id'], 'Invoice A' );
+		$formula_id = $this->create_formula_field( $fixture['collection_id'], 'Total', 'field("Score") * 2' );
+		$key        = "field-{$formula_id}";
+
+		update_post_meta( $row_id, "field-{$fixture['field_id']}", '10' );
+		// MySQL hands meta back as strings, while the formula computes `20.0`.
+		update_post_meta( $row_id, $key, '20' );
+
+		$writes = 0;
+		$count  = static function ( $meta_id, $object_id, $meta_key ) use ( &$writes, $key ): void {
+			if ( $key === $meta_key ) {
+				++$writes;
+			}
+		};
+		add_action( 'updated_post_meta', $count, 10, 3 );
+
+		FormulaMaterializer::recompute_row( $fixture['collection_id'], $row_id );
+		$this->assertSame( 0, $writes );
+
+		update_post_meta( $row_id, "field-{$fixture['field_id']}", '11' );
+		FormulaMaterializer::recompute_row( $fixture['collection_id'], $row_id );
+		remove_action( 'updated_post_meta', $count, 10 );
+
+		$this->assertSame( 1, $writes );
+		$this->assertSame( 22.0, (float) get_post_meta( $row_id, $key, true ) );
+	}
+
 	public function test_recomputing_collection_formulas_includes_archived_rows(): void {
 		( new ArchiveCascade() )->register_status();
 

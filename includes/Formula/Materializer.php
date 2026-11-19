@@ -87,6 +87,17 @@ final class Materializer {
 			delete_post_meta( $row->ID, $key );
 			return;
 		}
+		// Rows are recomputed on every read, so skip the write when the stored
+		// value already matches. Core's own check compares strictly, and a
+		// computed `2.0` never equals the stored `'2'`.
+		$stored = get_metadata_raw( 'post', $row->ID, $key, false );
+		if (
+			is_array( $stored )
+			&& count( $stored ) === 1
+			&& (string) maybe_serialize( $stored[0] ) === (string) maybe_serialize( $value )
+		) {
+			return;
+		}
 		update_post_meta( $row->ID, $key, $value );
 	}
 
