@@ -16,6 +16,7 @@ namespace Cortext\Tests;
 use Cortext\Documents;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentFreeze;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\DocumentWriteGuard;
 use Cortext\PostType\Field;
@@ -53,6 +54,7 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->install_in_memory_posts_query();
 
 		( new DocumentWriteGuard() )->register();
+		( new DocumentFreeze() )->register();
 
 		$archive_cascade = new ArchiveCascade();
 		$archive_cascade->register_status();
@@ -1328,6 +1330,194 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		wp_set_current_user( $this->create_user( 'subscriber' ) );
 
 		$this->assertSame( 403, $this->empty_trash()->get_status() );
+	}
+
+	public function test_freeze_records_who_froze_the_document_and_unfreeze_clears_it(): void {
+		$user_id = $this->create_user( 'editor' );
+		wp_set_current_user( $user_id );
+		$post_id = $this->create_page();
+
+		$response = $this->freeze( $post_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$frozen = $response->get_data()['post'][ DocumentFreeze::REST_FIELD ];
+		$this->assertSame( $user_id, $frozen['frozen_by']['id'] );
+		$this->assertNotSame( '', $frozen['frozen_at'] );
+		$this->assertTrue( DocumentFreeze::is_frozen( $post_id ) );
+
+		$response = $this->unfreeze( $post_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNull( $response->get_data()['post'][ DocumentFreeze::REST_FIELD ] );
+		$this->assertFalse( DocumentFreeze::is_frozen( $post_id ) );
+		$this->assertSame( '', get_post_meta( $post_id, DocumentFreeze::FROZEN_BY_USER_META, true ) );
+	}
+
+	public function test_freeze_requires_permission_to_edit_the_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$post_id = $this->create_page();
+		wp_set_current_user( $this->create_user( 'subscriber' ) );
+
+		$this->assertSame( 403, $this->freeze( $post_id )->get_status() );
+		$this->assertSame( 403, $this->unfreeze( $post_id )->get_status() );
+		$this->assertFalse( DocumentFreeze::is_frozen( $post_id ) );
+		$this->assertSame( 404, $this->freeze( 999999 )->get_status() );
+	}
+
+	public function test_freeze_rejects_archived_and_trashed_documents(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$archived_id = $this->create_page();
+		$this->archive( $archived_id );
+		$trashed_id = $this->create_page();
+		wp_trash_post( $trashed_id );
+
+		$archived = $this->freeze( $archived_id );
+		$trashed  = $this->freeze( $trashed_id );
+
+		$this->assertSame( 409, $archived->get_status() );
+		$this->assertSame( 'cortext_document_archived', $archived->get_data()['code'] );
+		$this->assertSame( 409, $trashed->get_status() );
+		$this->assertSame( 'cortext_document_in_trash', $trashed->get_data()['code'] );
+		$this->assertFalse( DocumentFreeze::is_frozen( $archived_id ) );
+		$this->assertFalse( DocumentFreeze::is_frozen( $trashed_id ) );
+	}
+
+	public function test_core_rest_rejects_writes_to_frozen_documents_until_unfrozen(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_full_page_collection( 'frozen-row-traits' );
+		$post_id       = $this->create_page(
+			array(
+				'post_title'   => 'Original title',
+				'post_content' => 'Original content',
+			)
+		);
+		$icon          = '{"type":"emoji","value":"A"}';
+		update_post_meta( $post_id, DocumentIdentity::META_KEY, $icon );
+		$this->freeze( $post_id );
+
+		$edit = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $post_id );
+		$edit->set_param( 'title', 'Changed title' );
+		$edit->set_param( 'content', 'Changed content' );
+		$meta = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $post_id );
+		$meta->set_param( 'meta', array( DocumentIdentity::META_KEY => '{"type":"emoji","value":"B"}' ) );
+		$trait = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $post_id );
+		$trait->set_param( TraitTaxonomy::TAXONOMY, array( TraitTaxonomy::term_id_for_trait( $collection_id ) ) );
+		$autosave = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents/' . $post_id . '/autosaves' );
+		$autosave->set_param( 'content', 'Autosaved content' );
+
+		foreach ( array( $edit, $meta, $trait, $autosave ) as $request ) {
+			$response = rest_do_request( $request );
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'cortext_document_frozen', $response->get_data()['code'] );
+		}
+		$this->assertSame( 'Original title', get_post( $post_id )->post_title );
+		$this->assertSame( 'Original content', get_post( $post_id )->post_content );
+		$this->assertSame( $icon, get_post_meta( $post_id, DocumentIdentity::META_KEY, true ) );
+		$this->assertSame(
+			array(),
+			wp_get_object_terms( $post_id, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) )
+		);
+
+		$this->unfreeze( $post_id );
+		$edit = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $post_id );
+		$edit->set_param( 'title', 'Edited after unlock' );
+
+		$this->assertSame( 200, rest_do_request( $edit )->get_status() );
+		$this->assertSame( 'Edited after unlock', get_post( $post_id )->post_title );
+		$this->assertSame( 'Original content', get_post( $post_id )->post_content );
+	}
+
+	public function test_frozen_document_can_still_be_moved(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$parent_id = $this->create_page();
+		$post_id   = $this->create_page();
+		$this->freeze( $post_id );
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $post_id );
+		$request->set_param( 'parent', $parent_id );
+		$request->set_param( 'menu_order', 3 );
+
+		$this->assertSame( 200, rest_do_request( $request )->get_status() );
+		$this->assertSame( $parent_id, (int) get_post( $post_id )->post_parent );
+		$this->assertSame( 3, (int) get_post( $post_id )->menu_order );
+		$this->assertTrue( DocumentFreeze::is_frozen( $post_id ) );
+	}
+
+	public function test_archive_trash_and_restore_keep_a_document_frozen_and_published(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$post_id = $this->create_page( array( 'post_status' => 'publish' ) );
+		$this->freeze( $post_id );
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+
+		$this->assertSame( 200, $this->archive( $post_id )->get_status() );
+		$this->assertSame( 200, $this->unarchive( $post_id )->get_status() );
+
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+		$this->assertTrue( DocumentFreeze::is_frozen( $post_id ) );
+
+		$trash = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_documents/' . $post_id );
+		$this->assertSame( 200, rest_do_request( $trash )->get_status() );
+		$this->assertSame( 200, $this->restore( $post_id )->get_status() );
+
+		$this->assertTrue( DocumentFreeze::is_frozen( $post_id ) );
+	}
+
+	public function test_rows_in_a_frozen_collection_stay_editable(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_full_page_collection( 'frozen-collection' );
+		$this->freeze( $collection_id );
+		$collection    = get_post( $collection_id );
+
+		$create = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents' );
+		$create->set_param( 'title', 'New row' );
+		$create->set_param( 'status', 'publish' );
+		$create->set_param( TraitTaxonomy::TAXONOMY, array( TraitTaxonomy::term_id_for_trait( $collection_id ) ) );
+		$created = rest_do_request( $create );
+		$this->assertSame( 201, $created->get_status() );
+		$row_id = (int) $created->get_data()['id'];
+
+		$edit = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $row_id );
+		$edit->set_param( 'title', 'Edited row' );
+		$this->assertSame( 200, rest_do_request( $edit )->get_status() );
+
+		$leave = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $row_id );
+		$leave->set_param( TraitTaxonomy::TAXONOMY, array() );
+		$this->assertSame( 200, rest_do_request( $leave )->get_status() );
+		$this->assertSame(
+			array(),
+			wp_get_object_terms( $row_id, TraitTaxonomy::TAXONOMY, array( 'fields' => 'ids' ) )
+		);
+
+		$trash = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_documents/' . $row_id );
+		$this->assertSame( 200, rest_do_request( $trash )->get_status() );
+
+		$rename = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_documents/' . $collection_id );
+		$rename->set_param( 'title', 'Renamed collection' );
+		$this->assertSame( 409, rest_do_request( $rename )->get_status() );
+		$this->assertSame( $collection->post_title, get_post( $collection_id )->post_title );
+		$this->assertSame( $collection->post_modified_gmt, get_post( $collection_id )->post_modified_gmt );
+	}
+
+	public function test_duplicating_a_frozen_document_makes_an_unlocked_copy(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$post_id = $this->create_page();
+		$this->freeze( $post_id );
+
+		$request  = new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $post_id . '/duplicate' );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 201, $response->get_status() );
+		$copy_id = (int) $response->get_data()['id'];
+		$this->assertGreaterThan( 0, $copy_id );
+		$this->assertFalse( DocumentFreeze::is_frozen( $copy_id ) );
+	}
+
+	private function freeze( int $id ) {
+		return rest_do_request( new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $id . '/freeze' ) );
+	}
+
+	private function unfreeze( int $id ) {
+		return rest_do_request( new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $id . '/unfreeze' ) );
 	}
 
 	private function listing( string $status ): array {

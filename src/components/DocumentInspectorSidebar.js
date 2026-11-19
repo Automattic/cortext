@@ -29,9 +29,11 @@ import { __ } from '@wordpress/i18n';
 import {
 	archive,
 	home as homeIcon,
+	lock as lockIcon,
 	starEmpty,
 	starFilled,
 	trash,
+	unlock as unlockIcon,
 } from '@wordpress/icons';
 import {
 	ComplementaryArea,
@@ -54,15 +56,21 @@ import useDelayedFlag, {
 } from '../hooks/useDelayedFlag';
 import { POST_TYPE } from './page-queries';
 import { definesTrait } from '../documents/capabilities';
-import { selectCurrentPostReadOnlyState } from '../documents/readOnly';
+import { READ_ONLY_FROZEN } from '../documents/readOnly';
+import {
+	selectCurrentPostReadOnlyState,
+	useIsDocumentFrozen,
+} from '../documents/readOnlyStore';
 import { unlock } from '../lock-unlock';
 import { useFavorites } from '../hooks/useFavorites';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import {
 	archiveDocument,
 	archiveSaveFailureMessage,
+	freezeDocument,
 	trashDocument,
 	trashSaveFailureMessage,
+	unfreezeDocument,
 } from '../documents/actions';
 import { useActiveEditor } from './ActiveEditorContext';
 
@@ -519,7 +527,9 @@ export function PageActionsPanel( { postId } ) {
 	} = useFavorites();
 	const [ isTrashing, setIsTrashing ] = useState( false );
 	const [ isArchiving, setIsArchiving ] = useState( false );
+	const [ isFreezing, setIsFreezing ] = useState( false );
 	const [ error, setError ] = useState( null );
+	const isFrozen = useIsDocumentFrozen( postId );
 	const isHome = home?.id === postId;
 	const isFavorite = favorites.some( ( favorite ) => favorite.id === postId );
 
@@ -621,6 +631,27 @@ export function PageActionsPanel( { postId } ) {
 		}
 	}, [ lifecycleCtx, postId ] );
 
+	const toggleFreeze = useCallback( async () => {
+		setError( null );
+		setIsFreezing( true );
+		try {
+			await ( isFrozen ? unfreezeDocument : freezeDocument )(
+				{ id: postId },
+				lifecycleCtx
+			);
+		} catch ( err ) {
+			setError(
+				err?.message ??
+					__(
+						'Could not change the lock on this document.',
+						'cortext'
+					)
+			);
+		} finally {
+			setIsFreezing( false );
+		}
+	}, [ isFrozen, lifecycleCtx, postId ] );
+
 	return (
 		<PanelBody title={ __( 'Actions', 'cortext' ) }>
 			{ error ? (
@@ -664,6 +695,21 @@ export function PageActionsPanel( { postId } ) {
 				<Button
 					className="cortext-document-inspector__action-button"
 					variant="secondary"
+					icon={ isFrozen ? unlockIcon : lockIcon }
+					label={
+						isFrozen
+							? __( 'Unlock', 'cortext' )
+							: __( 'Lock', 'cortext' )
+					}
+					onClick={ toggleFreeze }
+					isPressed={ isFrozen }
+					isBusy={ isFreezing }
+					disabled={ isFreezing || ! postId }
+					size="compact"
+				/>
+				<Button
+					className="cortext-document-inspector__action-button"
+					variant="secondary"
 					icon={ archive }
 					label={ __( 'Archive', 'cortext' ) }
 					onClick={ archivePage }
@@ -687,29 +733,52 @@ export function PageActionsPanel( { postId } ) {
 	);
 }
 
-function DocumentInspectorContent( { postId } ) {
+// Actions stay usable on a locked page so it can be unlocked, archived or
+// trashed; the rest of the inspector is read-only with the page. Identity only
+// edits the page, so a read-only page leaves it out.
+function DocumentInspectorContent( {
+	postId,
+	isLocked,
+	areActionsLocked,
+	isReadOnlyDocument,
+	isDimmed,
+} ) {
 	return (
 		<div className="cortext-document-inspector">
-			<PageIdentityInspectorPanel
-				postId={ postId }
-				postType={ POST_TYPE }
-				title={ __( 'Identity', 'cortext' ) }
-			/>
-			<PageActionsPanel postId={ postId } />
-			<BacklinksPanel documentId={ postId } />
+			{ ! isReadOnlyDocument && (
+				<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+					<PageIdentityInspectorPanel
+						postId={ postId }
+						postType={ POST_TYPE }
+						title={ __( 'Identity', 'cortext' ) }
+					/>
+				</InspectorFrame>
+			) }
+			<InspectorFrame isLocked={ areActionsLocked } isDimmed={ isDimmed }>
+				<PageActionsPanel postId={ postId } />
+			</InspectorFrame>
+			<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+				<BacklinksPanel documentId={ postId } />
+			</InspectorFrame>
 		</div>
 	);
 }
 
 // Collection inspector: identity controls first, then the owner data-view panels.
-function CollectionInspectorContent( { postId, postType } ) {
+function CollectionInspectorContent( {
+	postId,
+	postType,
+	isReadOnlyDocument,
+} ) {
 	return (
 		<div className="cortext-document-inspector">
-			<PageIdentityInspectorPanel
-				postId={ postId }
-				postType={ postType }
-				title={ __( 'Identity', 'cortext' ) }
-			/>
+			{ ! isReadOnlyDocument && (
+				<PageIdentityInspectorPanel
+					postId={ postId }
+					postType={ postType }
+					title={ __( 'Identity', 'cortext' ) }
+				/>
+			) }
 			<CanvasOwnerInspector.Slot />
 			<BacklinksPanel documentId={ postId } />
 		</div>
@@ -729,12 +798,23 @@ function RowInspectorContent( { postId } ) {
 
 // Always mounted, so locking for an archive or trash keeps the panels and
 // their state, such as the message when the request is canceled.
-// `display: contents` leaves the layout to the panels.
+// `display: contents` leaves the layout to the panels. Lasting read-only
+// states (archived, trashed, locked, someone else editing) also dim the
+// panels; the brief lock during an archive or trash request does not, so
+// it doesn't flash.
 const INSPECTOR_FRAME_STYLE = { display: 'contents' };
 
-export function InspectorFrame( { children, isLocked } ) {
+export function InspectorFrame( { children, isLocked, isDimmed = false } ) {
 	return (
-		<Disabled isDisabled={ isLocked } style={ INSPECTOR_FRAME_STYLE }>
+		<Disabled
+			isDisabled={ isLocked }
+			className={
+				isLocked && isDimmed
+					? 'cortext-inspector-frame is-locked'
+					: 'cortext-inspector-frame'
+			}
+			style={ INSPECTOR_FRAME_STYLE }
+		>
 			{ children }
 		</Disabled>
 	);
@@ -742,6 +822,7 @@ export function InspectorFrame( { children, isLocked } ) {
 
 export default function DocumentInspectorSidebar( {
 	isLocked = false,
+	areActionsLocked = isLocked,
 	postId,
 	postType,
 } ) {
@@ -761,6 +842,11 @@ export default function DocumentInspectorSidebar( {
 		[]
 	);
 	const isReadOnly = readOnlyState !== null || isLocked || isStoreLocked;
+	const isLastingReadOnly = readOnlyState !== null || isStoreLocked;
+	const isActionsReadOnly =
+		( readOnlyState !== null && readOnlyState !== READ_ONLY_FROZEN ) ||
+		areActionsLocked ||
+		isStoreLocked;
 	const activeArea = useSelect(
 		( select ) => getActiveInspectorArea( select ),
 		[]
@@ -824,20 +910,30 @@ export default function DocumentInspectorSidebar( {
 				isActiveByDefault
 				tabs={ tabs }
 			>
-				<InspectorFrame isLocked={ isReadOnly }>
+				<InspectorFrame
+					isLocked={ isReadOnly }
+					isDimmed={ isLastingReadOnly }
+				>
 					{ isCollection && (
 						<CollectionInspectorContent
 							postId={ postId }
 							postType={ postType }
+							isReadOnlyDocument={ readOnlyState !== null }
 						/>
 					) }
 					{ ! isCollection && hasTrait && (
 						<RowInspectorContent postId={ postId } />
 					) }
-					{ ! isCollection && ! hasTrait && (
-						<DocumentInspectorContent postId={ postId } />
-					) }
 				</InspectorFrame>
+				{ ! isCollection && ! hasTrait && (
+					<DocumentInspectorContent
+						postId={ postId }
+						isLocked={ isReadOnly }
+						areActionsLocked={ isActionsReadOnly }
+						isReadOnlyDocument={ readOnlyState !== null }
+						isDimmed={ isLastingReadOnly }
+					/>
+				) }
 			</InspectorComplementaryArea>
 			{ showBlockTab && (
 				<InspectorComplementaryArea
@@ -845,7 +941,10 @@ export default function DocumentInspectorSidebar( {
 					title={ __( 'Block', 'cortext' ) }
 					tabs={ tabs }
 				>
-					<InspectorFrame isLocked={ isReadOnly }>
+					<InspectorFrame
+						isLocked={ isReadOnly }
+						isDimmed={ isLastingReadOnly }
+					>
 						<BlockInspector />
 					</InspectorFrame>
 				</InspectorComplementaryArea>

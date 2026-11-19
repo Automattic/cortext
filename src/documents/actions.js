@@ -522,3 +522,55 @@ export async function permanentlyDeleteDocument( record, ctx ) {
 	notifyCollectionRowsChanged();
 	return response;
 }
+
+const FREEZE_NOTICE_ID = 'cortext-document-freeze';
+
+// Locks or unlocks a document. Open editors save first, so nothing typed
+// right before locking is lost, then pick up the read-only state from the
+// returned record.
+async function setDocumentFrozen( record, ctx, frozen ) {
+	// Apply the returned record while the editors are still held, so they go
+	// straight from the brief lock to the new state without a flash between.
+	const response = await runWithEditorsLocked( ctx, async () => {
+		const result = await apiFetch( {
+			path: `/cortext/v1/documents/${ record.id }/${
+				frozen ? 'freeze' : 'unfreeze'
+			}`,
+			method: 'POST',
+		} );
+		receiveLifecyclePost( result, ctx );
+		return result;
+	} );
+	if ( response === false ) {
+		ctx.createErrorNotice?.(
+			__( 'Could not save changes. Lock was canceled.', 'cortext' ),
+			{ id: FREEZE_NOTICE_ID, type: 'snackbar' }
+		);
+		return null;
+	}
+	notifySidebarTreeChanged();
+	notifyCollectionRowsChanged();
+	ctx.createSuccessNotice?.(
+		frozen
+			? __( 'Document locked.', 'cortext' )
+			: __( 'Document unlocked.', 'cortext' ),
+		{
+			id: FREEZE_NOTICE_ID,
+			type: 'snackbar',
+			actions: undoAction(
+				ctx,
+				() => setDocumentFrozen( record, ctx, ! frozen ),
+				FREEZE_NOTICE_ID
+			),
+		}
+	);
+	return response;
+}
+
+export function freezeDocument( record, ctx ) {
+	return setDocumentFrozen( record, ctx, true );
+}
+
+export function unfreezeDocument( record, ctx ) {
+	return setDocumentFrozen( record, ctx, false );
+}

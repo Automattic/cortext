@@ -20,6 +20,7 @@ use Cortext\Formula\FormulaError;
 use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\OptionPalette;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentFreeze;
 use Cortext\PostType\Field;
 use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
@@ -330,7 +331,7 @@ final class FieldsController {
 	}
 
 	/**
-	 * Blocks core REST updates to fields in archived or trashed collections.
+	 * Blocks core REST updates to fields in read-only collections.
 	 *
 	 * @param mixed           $prepared_post Prepared field post.
 	 * @param WP_REST_Request $request       Incoming core REST request.
@@ -856,8 +857,8 @@ final class FieldsController {
 	}
 
 	/**
-	 * Returns an error when a request would change the schema of an archived
-	 * or trashed collection.
+	 * Returns an error when a request would change the schema of an archived,
+	 * trashed or frozen collection.
 	 *
 	 * @param int $collection_id Collection document ID.
 	 */
@@ -891,6 +892,17 @@ final class FieldsController {
 			return new WP_Error(
 				'cortext_collection_in_trash',
 				__( 'Move this collection out of Trash before changing its fields.', 'cortext' ),
+				array(
+					'status'        => 409,
+					'collection_id' => $collection_id,
+				)
+			);
+		}
+
+		if ( DocumentFreeze::is_frozen( $collection_id ) ) {
+			return new WP_Error(
+				'cortext_collection_frozen',
+				__( 'Unlock this collection before changing its fields.', 'cortext' ),
 				array(
 					'status'        => 409,
 					'collection_id' => $collection_id,

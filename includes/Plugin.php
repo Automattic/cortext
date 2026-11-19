@@ -26,6 +26,7 @@ use Cortext\Frontend\Template;
 use Cortext\Media\CortextMedia;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentFreeze;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\DocumentWriteGuard;
 use Cortext\PostType\Field;
@@ -70,6 +71,7 @@ final class Plugin {
 		( new FieldValueIndex() )->register();
 
 		( new DocumentWriteGuard() )->register();
+		( new DocumentFreeze() )->register();
 
 		$archive_cascade = new ArchiveCascade();
 		$archive_cascade->register();

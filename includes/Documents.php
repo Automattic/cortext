@@ -484,7 +484,7 @@ final class Documents {
 				$meta[ ArchiveCascade::COLLECTION_MARKER_META ] = (int) get_post_meta( $post->ID, ArchiveCascade::COLLECTION_MARKER_META, true );
 				$document                                       = array_merge(
 					$document,
-					$this->lifecycle_details(
+					self::lifecycle_details(
 						'archived',
 						(int) get_post_meta( $post->ID, ArchiveCascade::TIME_META, true ),
 						(int) get_post_meta( $post->ID, ArchiveCascade::ARCHIVED_BY_USER_META, true )
@@ -510,7 +510,7 @@ final class Documents {
 	private function trash_details( WP_Post $post ): array {
 		$trashed_at = (int) get_post_meta( $post->ID, '_wp_trash_meta_time', true );
 
-		$details             = $this->lifecycle_details(
+		$details             = self::lifecycle_details(
 			'trashed',
 			$trashed_at,
 			(int) get_post_meta( $post->ID, TrashCascade::TRASHED_BY_USER_META, true )
@@ -524,16 +524,16 @@ final class Documents {
 
 	/**
 	 * When a document entered a lifecycle state and who put it there, as
-	 * `{$state}_at` and `{$state}_by` (`trashed_at`, `archived_by`, ...).
+	 * `{$state}_at` and `{$state}_by` (`trashed_at`, `archived_by`, `frozen_at`, ...).
 	 * The date is empty when none was recorded. The user is null when none
 	 * was recorded or the user is gone.
 	 *
-	 * @param string $state   Key prefix, such as `trashed` or `archived`.
+	 * @param string $state   Key prefix, such as `trashed`, `archived` or `frozen`.
 	 * @param int    $time    Unix timestamp the state was entered, 0 if unknown.
 	 * @param int    $user_id User who moved the document there, 0 if unknown.
 	 * @return array<string, mixed>
 	 */
-	private function lifecycle_details( string $state, int $time, int $user_id ): array {
+	public static function lifecycle_details( string $state, int $time, int $user_id ): array {
 		$user = get_userdata( $user_id );
 
 		return array(

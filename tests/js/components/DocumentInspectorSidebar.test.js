@@ -68,6 +68,7 @@ jest.mock( '@wordpress/data', () => ( {
 			}
 			return {
 				getActiveComplementaryArea: () => mockActiveArea,
+				getEntityRecord: () => null,
 			};
 		} ),
 } ) );
@@ -77,6 +78,8 @@ jest.mock( '@wordpress/i18n', () => ( { __: ( value ) => value } ) );
 jest.mock( '@wordpress/icons', () => ( {
 	archive: 'archive',
 	home: 'home',
+	lock: 'lock',
+	unlock: 'unlock',
 	starEmpty: 'star-empty',
 	starFilled: 'star-filled',
 	trash: 'trash',

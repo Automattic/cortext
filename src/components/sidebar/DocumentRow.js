@@ -12,15 +12,18 @@ import {
 	archive as archiveIcon,
 	chevronRight,
 	home as homeIcon,
+	lock,
 	moreVertical,
 	plus,
 	starEmpty,
 	starFilled,
+	unlock,
 } from '@wordpress/icons';
 import { store as noticesStore } from '@wordpress/notices';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 import { collectionIcon } from '../cortextIcons';
+import FrozenBadge from '../FrozenBadge';
 import { useDocumentActions, useDocumentRecord } from '../../documents';
 import { useSurfaceFocusIntent } from '../SurfaceFocusContext';
 
@@ -86,7 +89,9 @@ export default function DocumentRow( {
 } ) {
 	const { requestFromActivation } = useSurfaceFocusIntent();
 	const { title, icon, features } = useDocumentRecord( record );
-	const { rename, duplicate, archive, trash } = useDocumentActions();
+	const { rename, duplicate, archive, trash, freeze, unfreeze } =
+		useDocumentActions();
+	const isFrozen = Boolean( record.cortext_frozen );
 	const { createErrorNotice } = useDispatch( noticesStore );
 
 	const recordId = record.id;
@@ -298,6 +303,8 @@ export default function DocumentRow( {
 						</Button>
 					) }
 
+					<FrozenBadge frozen={ record.cortext_frozen } />
+
 					{ features.canCreateChild && (
 						<Button
 							className="cortext-sidebar__add-child"
@@ -391,12 +398,38 @@ export default function DocumentRow( {
 									</MenuItem>
 									<MenuItem
 										icon="edit"
+										disabled={ isFrozen }
 										onClick={ () => {
 											startRename();
 											onClose();
 										} }
 									>
 										{ __( 'Rename', 'cortext' ) }
+									</MenuItem>
+									<MenuItem
+										icon={ isFrozen ? unlock : lock }
+										onClick={ () => {
+											( isFrozen ? unfreeze : freeze )(
+												record
+											).catch( ( error ) =>
+												createErrorNotice(
+													error?.message ??
+														__(
+															'Could not change the lock on this document.',
+															'cortext'
+														),
+													{
+														id: 'cortext-document-freeze',
+														type: 'snackbar',
+													}
+												)
+											);
+											onClose();
+										} }
+									>
+										{ isFrozen
+											? __( 'Unlock', 'cortext' )
+											: __( 'Lock', 'cortext' ) }
 									</MenuItem>
 									<MenuItem
 										icon="admin-page"

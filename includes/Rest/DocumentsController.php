@@ -21,6 +21,8 @@ defined( 'ABSPATH' ) || exit;
 use Cortext\Documents;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentFreeze;
+use Cortext\PostType\DocumentWriteGuard;
 use Cortext\PostType\TrashCascade;
 use Cortext\Rest\RowsManualOrder;
 use WP_Error;
@@ -118,6 +120,21 @@ final class DocumentsController {
 				),
 			)
 		);
+
+		foreach ( array( 'freeze', 'unfreeze' ) as $action ) {
+			register_rest_route(
+				self::NAMESPACE,
+				'/documents/(?P<id>\d+)/' . $action,
+				array(
+					array(
+						'methods'             => 'POST',
+						'callback'            => array( $this, $action ),
+						'permission_callback' => array( $this, 'check_freeze_permission' ),
+						'args'                => $id_arg,
+					),
+				)
+			);
+		}
 
 		register_rest_route(
 			self::NAMESPACE,
@@ -344,6 +361,54 @@ final class DocumentsController {
 			),
 			200
 		);
+	}
+
+	/**
+	 * Checks permission to freeze or unfreeze a document. Anyone who can edit
+	 * the document can toggle it.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return bool|WP_Error
+	 */
+	public function check_freeze_permission( WP_REST_Request $request ) {
+		$id   = (int) $request->get_param( 'id' );
+		$post = get_post( $id );
+
+		if ( ! $post instanceof WP_Post || ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return current_user_can( 'edit_post', $id );
+	}
+
+	public function freeze( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		return $this->toggle_freeze( (int) $request->get_param( 'id' ), true );
+	}
+
+	public function unfreeze( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		return $this->toggle_freeze( (int) $request->get_param( 'id' ), false );
+	}
+
+	private function toggle_freeze( int $id, bool $frozen ): WP_REST_Response|WP_Error {
+		$post = get_post( $id );
+
+		// Archived and trashed documents are already read-only; restore them first.
+		$lifecycle_error = DocumentWriteGuard::lifecycle_error( $post );
+		if ( $lifecycle_error instanceof WP_Error ) {
+			return $lifecycle_error;
+		}
+
+		if ( $frozen ) {
+			DocumentFreeze::freeze( $id );
+		} else {
+			DocumentFreeze::unfreeze( $id );
+		}
+
+		return new WP_REST_Response( array( 'post' => $this->prepared_post( $post ) ), 200 );
 	}
 
 	public function restore( WP_REST_Request $request ) {

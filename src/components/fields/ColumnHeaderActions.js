@@ -25,6 +25,7 @@ import FieldActionsMenu from './FieldActionsMenu';
 import { FieldTypeIcon } from './fieldTypes';
 import { RowMutationContext } from '../EditableCell';
 import { useMappedField } from '../CollectionFieldsContext';
+import { useIsSchemaFrozen } from '../collectionFieldsContextObject';
 import { TableCalculationPopover } from '../TableCalculationMenu';
 import { GHOST_FIELD_ID, TITLE_FIELD_ID } from '../dataViewColumns';
 import { withColumnCalculation } from '../tableCalculations';
@@ -51,6 +52,7 @@ export default function ColumnHeaderActions( {
 	onFieldCreated,
 	onRowsChanged,
 } ) {
+	const isSchemaFrozen = useIsSchemaFrozen();
 	const anchorRef = useRef( null );
 	const [ targets, setTargets ] = useState( [] );
 
@@ -139,6 +141,9 @@ export default function ColumnHeaderActions( {
 						target.th,
 						target.key
 					);
+				}
+				if ( isSchemaFrozen ) {
+					return null;
 				}
 				return createPortal(
 					<AddFieldTrigger

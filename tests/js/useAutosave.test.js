@@ -68,6 +68,15 @@ const editorSelectors = {
 		}
 		return undefined;
 	},
+	getCurrentPostAttribute: ( name ) => {
+		if ( name === 'status' ) {
+			return storeState.postStatus;
+		}
+		if ( name === 'cortext_frozen' ) {
+			return storeState.frozen ?? null;
+		}
+		return undefined;
+	},
 };
 const coreDataSelectors = {
 	getReferenceByDistinctEdits: () => editsReference,
@@ -378,6 +387,22 @@ describe( 'useAutosave: debounce', () => {
 		const savePost = jest.fn();
 		useDispatch.mockReturnValue( { savePost } );
 		setStoreState( { isDirty: true, isPostLocked: true } );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not autosave a locked document', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( {
+			isDirty: true,
+			frozen: { frozen_at: '2026-11-19T10:00:00+00:00' },
+		} );
 
 		renderHook( () => useAutosave() );
 

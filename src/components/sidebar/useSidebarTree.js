@@ -32,6 +32,7 @@ const TREE_FIELDS = [
 	'meta',
 	'cortext_defines_trait',
 	'cortext_has_tree_children',
+	'cortext_frozen',
 	'crtxt_trait',
 ];
 

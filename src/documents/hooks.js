@@ -30,6 +30,8 @@ import {
 	restoreDocument,
 	archiveDocument,
 	unarchiveDocument,
+	freezeDocument,
+	unfreezeDocument,
 	permanentlyDeleteDocument,
 	emptyTrash,
 } from './actions';
@@ -179,6 +181,16 @@ export function useDocumentActions() {
 		[ ctx ]
 	);
 
+	const freeze = useCallback(
+		async ( record ) => freezeDocument( record, ctx ),
+		[ ctx ]
+	);
+
+	const unfreeze = useCallback(
+		async ( record ) => unfreezeDocument( record, ctx ),
+		[ ctx ]
+	);
+
 	const permanentDelete = useCallback(
 		async ( record ) => permanentlyDeleteDocument( record, ctx ),
 		[ ctx ]
@@ -197,6 +209,8 @@ export function useDocumentActions() {
 			restore,
 			archive,
 			unarchive,
+			freeze,
+			unfreeze,
 			permanentDelete,
 			emptyTrash: emptyTrashAction,
 		} ),
@@ -207,6 +221,8 @@ export function useDocumentActions() {
 			restore,
 			archive,
 			unarchive,
+			freeze,
+			unfreeze,
 			permanentDelete,
 			emptyTrashAction,
 		]

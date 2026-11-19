@@ -23,7 +23,7 @@ import {
 } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
-import { useCallback, useState } from '@wordpress/element';
+import { useCallback, useEffect, useState } from '@wordpress/element';
 import { store as interfaceStore } from '@wordpress/interface';
 import { cog, link, plus, replace, table } from '@wordpress/icons';
 
@@ -37,6 +37,7 @@ import CollectionPicker from './CollectionPicker';
 import { useEditorSurface } from '../../components/EditorSurfaceContext';
 import { useCreateCollectionDocument } from '../../documents';
 import { toDataViewId } from '../../hooks/fieldIds';
+import { useIsDocumentFrozen } from '../../documents/readOnlyStore';
 import {
 	CollectionFieldsProvider,
 	useCollectionFieldsContext,
@@ -170,7 +171,8 @@ function CollectionToolbarControl( {
 	onSelect,
 	onFieldCreated,
 } ) {
-	const { collection, isResolving } = useCollectionFieldsContext();
+	const { collection, isResolving, isSchemaFrozen } =
+		useCollectionFieldsContext();
 	const { hasBlockInspector } = useEditorSurface();
 	const { enableComplementaryArea } = useDispatch( interfaceStore );
 
@@ -203,7 +205,7 @@ function CollectionToolbarControl( {
 					) }
 				/>
 			) }
-			{ isCollectionValid && (
+			{ isCollectionValid && ! isSchemaFrozen && (
 				<Dropdown
 					contentClassName="cortext-data-view-toolbar-popover"
 					popoverProps={ { placement: 'bottom-start' } }
@@ -263,6 +265,7 @@ function CollectionInspectorControls( {
 		fields: availableFields,
 		collection,
 		isResolving,
+		isSchemaFrozen,
 	} = useCollectionFieldsContext();
 	const isCollectionValid = ! isResolving && collectionId && collection;
 	const visibleFieldIds = view?.fields ?? [];
@@ -374,32 +377,34 @@ function CollectionInspectorControls( {
 			>
 				{ isCollectionValid && (
 					<>
-						<Dropdown
-							contentClassName="cortext-data-view-toolbar-popover"
-							popoverProps={ { placement: 'left-start' } }
-							renderToggle={ ( { isOpen, onToggle } ) => (
-								<Button
-									variant="secondary"
-									icon={ plus }
-									onClick={ onToggle }
-									aria-expanded={ isOpen }
-									__next40pxDefaultSize
-								>
-									{ __( 'Add field', 'cortext' ) }
-								</Button>
-							) }
-							renderContent={ ( { onClose } ) => (
-								<div className="cortext-data-view-toolbar-popover__content">
-									<AddFieldPopover
-										collectionId={ collectionId }
-										onCreate={ ( created ) => {
-											onFieldCreated?.( created );
-											onClose();
-										} }
-									/>
-								</div>
-							) }
-						/>
+						{ ! isSchemaFrozen && (
+							<Dropdown
+								contentClassName="cortext-data-view-toolbar-popover"
+								popoverProps={ { placement: 'left-start' } }
+								renderToggle={ ( { isOpen, onToggle } ) => (
+									<Button
+										variant="secondary"
+										icon={ plus }
+										onClick={ onToggle }
+										aria-expanded={ isOpen }
+										__next40pxDefaultSize
+									>
+										{ __( 'Add field', 'cortext' ) }
+									</Button>
+								) }
+								renderContent={ ( { onClose } ) => (
+									<div className="cortext-data-view-toolbar-popover__content">
+										<AddFieldPopover
+											collectionId={ collectionId }
+											onCreate={ ( created ) => {
+												onFieldCreated?.( created );
+												onClose();
+											} }
+										/>
+									</div>
+								) }
+							/>
+						) }
 						{ orderedFields.length > 0 && (
 							<ul className="cortext-data-view-field-visibility">
 								{ orderedFields.map( ( field ) => (
@@ -537,10 +542,23 @@ export default function Edit( {
 		className: isOwner ? 'is-document-owner' : undefined,
 	} );
 	const [ revealFieldId, setRevealFieldId ] = useState( null );
+	// A frozen collection keeps its saved views. Changes made on its own
+	// canvas apply for this session only and are never written back.
+	const isViewFrozen = useIsDocumentFrozen( isOwner ? collectionId : null );
+	const [ sessionView, setSessionView ] = useState( null );
+	useEffect( () => {
+		if ( ! isViewFrozen ) {
+			setSessionView( null );
+		}
+	}, [ isViewFrozen ] );
+	const activeView = ( isViewFrozen && sessionView ) || view;
 
 	const setView = useCallback(
-		( next ) => setAttributes( { view: next } ),
-		[ setAttributes ]
+		( next ) =>
+			isViewFrozen
+				? setSessionView( next )
+				: setAttributes( { view: next } ),
+		[ isViewFrozen, setAttributes ]
 	);
 
 	const setAlign = useCallback(
@@ -643,7 +661,7 @@ export default function Edit( {
 				/>
 				<CollectionInspectorControls
 					collectionId={ collectionId }
-					view={ view }
+					view={ activeView }
 					align={ align }
 					isOwner={ isOwner }
 					onSelect={ onSelectCollection }
@@ -653,7 +671,7 @@ export default function Edit( {
 				/>
 				<CollectionDataViews
 					collectionId={ collectionId }
-					view={ view }
+					view={ activeView }
 					onChangeView={ setView }
 					onReady={ isOwner ? onCollectionReady : undefined }
 					surfaceFocusRequest={ isOwner ? surfaceFocusRequest : null }

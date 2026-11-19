@@ -90,3 +90,9 @@
 		border-radius: 0;
 	}
 }
+
+// A read-only frame is inert; dim everything in its panels except the
+// panel titles, so it reads as unavailable at a glance.
+.cortext-inspector-frame.is-locked .components-panel__body > :not(.components-panel__body-title) {
+	opacity: 0.45;
+}
