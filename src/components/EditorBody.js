@@ -53,9 +53,16 @@ import { isSurfaceFocusOriginCurrent } from './collectionSurfaceFocus';
 import afterNextPaint from '../hooks/afterNextPaint';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 import { unarchiveDocument } from '../documents/actions';
+import {
+	READ_ONLY_ARCHIVED,
+	READ_ONLY_FROZEN,
+	READ_ONLY_TRASHED,
+} from '../documents/readOnly';
+import { selectCurrentPostReadOnlyState } from '../documents/readOnlyStore';
 import TrashedNotice from './trash/TrashedNotice';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
+const HIDDEN_IDENTITY_ACTIONS_STYLE = { visibility: 'hidden' };
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
 const DOCUMENT_PROPERTIES_BLOCK = 'cortext/document-properties';
 const POST_TITLE_BLOCK = 'core/post-title';
@@ -766,7 +773,7 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 	const actionsRef = useRef( null );
 	const [ meta ] = useEntityProp( 'postType', postType, 'meta', postId );
 	const iconMeta = meta?.cortext_document_icon ?? '';
-	const { hasIcon, hasCover, isArchived, isTrashed, selectedBlockName } =
+	const { hasIcon, hasCover, isReadOnlyDocument, selectedBlockName } =
 		useSelect( ( select ) => {
 			const store = select( blockEditorStore );
 			const blocks = store.getBlocks();
@@ -778,14 +785,8 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 				hasIcon: blocks.some(
 					( block ) => block.name === DOCUMENT_ICON_BLOCK
 				),
-				isTrashed:
-					select( editorStore ).getCurrentPostAttribute(
-						'status'
-					) === 'trash',
-				isArchived:
-					select( editorStore ).getCurrentPostAttribute(
-						'status'
-					) === 'crtxt_archived',
+				isReadOnlyDocument:
+					selectCurrentPostReadOnlyState( select ) !== null,
 				selectedBlockName: selectedClientId
 					? store.getBlockName( selectedClientId )
 					: null,
@@ -795,7 +796,7 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 	const { editEntityRecord, saveEditedEntityRecord } = useDispatch( 'core' );
 
 	useEffect( () => {
-		if ( isTrashed || isArchived || isLocked || hasCover ) {
+		if ( isReadOnlyDocument || isLocked || hasCover ) {
 			return undefined;
 		}
 		const node = actionsRef.current;
@@ -847,11 +848,14 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 				focusFirstActionFromTitle,
 				true
 			);
-	}, [ hasCover, isArchived, isLocked, isTrashed, selectedBlockName ] );
+	}, [ hasCover, isLocked, isReadOnlyDocument, selectedBlockName ] );
 
-	if ( isTrashed || isArchived || isLocked || hasCover ) {
+	if ( hasCover ) {
 		return null;
 	}
+	// A read-only or briefly locked document keeps the bar's space, invisible
+	// and inert, so the title doesn't shift when the state toggles.
+	const isHidden = isReadOnlyDocument || isLocked;
 
 	const ensureIconBlock = () => {
 		if ( hasIcon || isLocked ) {
@@ -889,6 +893,9 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 			className="cortext-canvas__identity-actions"
 			role="group"
 			aria-label={ __( 'Identity actions', 'cortext' ) }
+			aria-hidden={ isHidden || undefined }
+			inert={ isHidden ? '' : undefined }
+			style={ isHidden ? HIDDEN_IDENTITY_ACTIONS_STYLE : undefined }
 		>
 			{ ! hasIcon && ! hasCover && (
 				<DocumentIdentityControls
@@ -973,8 +980,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		protectedLockRepairs,
 		collectionBodyClientIds,
 		lockedCollectionBodyClientIds,
-		isArchived,
-		isTrashed,
+		isReadOnlyDocument,
 	} = useSelect(
 		( select ) => {
 			const store = select( blockEditorStore );
@@ -1098,14 +1104,8 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 					insertionPointRootClientId === ROOT_BLOCK_LIST &&
 					insertionPointIndex <= currentHeaderEndIndex,
 				duplicateHeaderIds: duplicateIds,
-				isTrashed:
-					select( editorStore ).getCurrentPostAttribute(
-						'status'
-					) === 'trash',
-				isArchived:
-					select( editorStore ).getCurrentPostAttribute(
-						'status'
-					) === 'crtxt_archived',
+				isReadOnlyDocument:
+					selectCurrentPostReadOnlyState( select ) !== null,
 				protectedLockRepairs: lockRepairs,
 				collectionBodyClientIds: bodyClientIds,
 				lockedCollectionBodyClientIds: lockedBodyClientIds,
@@ -1147,7 +1147,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	}, [ postId, postType ] );
 
 	useLayoutEffect( () => {
-		if ( isTrashed || isArchived ) {
+		if ( isReadOnlyDocument ) {
 			return;
 		}
 
@@ -1217,8 +1217,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasOwner,
 		hasTitle,
 		isLocked,
-		isArchived,
-		isTrashed,
+		isReadOnlyDocument,
 		lockedCollectionBodyClientIds,
 		ownerBlockName,
 		propertiesClientId,
@@ -1232,8 +1231,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 
 	useLayoutEffect( () => {
 		if (
-			isTrashed ||
-			isArchived ||
+			isReadOnlyDocument ||
 			isLocked ||
 			! shouldHideHeaderInsertionPoint
 		) {
@@ -1242,16 +1240,14 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hideInsertionPoint();
 	}, [
 		hideInsertionPoint,
-		isArchived,
 		isLocked,
-		isTrashed,
+		isReadOnlyDocument,
 		shouldHideHeaderInsertionPoint,
 	] );
 
 	useLayoutEffect( () => {
 		if (
-			isTrashed ||
-			isArchived ||
+			isReadOnlyDocument ||
 			ownerBlockName ||
 			! shouldSeedEmptyBodyBlock ||
 			duplicateHeaderIds.length > 0 ||
@@ -1280,8 +1276,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		iconMeta,
 		insertBlocks,
-		isArchived,
-		isTrashed,
+		isReadOnlyDocument,
 		ownerBlockName,
 		shouldSeedEmptyBodyBlock,
 	] );
@@ -1302,7 +1297,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		// post before EditorProvider hydrates it into core/editor. Header blocks
 		// inserted during that gap are overwritten, so wait for the store to
 		// identify the target post.
-		if ( ! isEditorPostReady || isTrashed || isArchived || isLocked ) {
+		if ( ! isEditorPostReady || isReadOnlyDocument || isLocked ) {
 			return;
 		}
 
@@ -1411,10 +1406,9 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		iconMeta,
 		insertBlocks,
-		isArchived,
 		isEditorPostReady,
 		isLocked,
-		isTrashed,
+		isReadOnlyDocument,
 		ownerBlockName,
 		postId,
 		record,
@@ -1425,8 +1419,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 
 	useLayoutEffect( () => {
 		if (
-			isTrashed ||
-			isArchived ||
+			isReadOnlyDocument ||
 			isLocked ||
 			! bodyBlockBeforeTitleId ||
 			headerEndIndex < 0 ||
@@ -1460,9 +1453,8 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		headerEndIndex,
 		iconMeta,
-		isArchived,
 		isLocked,
-		isTrashed,
+		isReadOnlyDocument,
 		moveBlocksToPosition,
 		startTyping,
 		stopTyping,
@@ -2141,6 +2133,42 @@ function useRepairStaleParsedBlocks( postType, postId ) {
 	}, [ blocks, content, editEntityRecord, postId, postType ] );
 }
 
+/**
+ * Freezes every block of a frozen collection's canvas except the owner
+ * data-view, which keeps its rows editable and locks its own schema and view
+ * controls.
+ *
+ * @param {Object} props
+ * @param {string} props.ownerBlockName Block name of the collection's owner block.
+ */
+function FrozenCollectionHeader( { ownerBlockName } ) {
+	const ownerClientId = useSelect(
+		( select ) =>
+			select( blockEditorStore )
+				.getBlocks()
+				.find( ( block ) => block.name === ownerBlockName )?.clientId ??
+			null,
+		[ ownerBlockName ]
+	);
+	const { setBlockEditingMode, unsetBlockEditingMode } =
+		useDispatch( blockEditorStore );
+
+	useEffect( () => {
+		setBlockEditingMode( '', 'disabled' );
+		if ( ownerClientId ) {
+			setBlockEditingMode( ownerClientId, 'default' );
+		}
+		return () => {
+			unsetBlockEditingMode( '' );
+			if ( ownerClientId ) {
+				unsetBlockEditingMode( ownerClientId );
+			}
+		};
+	}, [ ownerClientId, setBlockEditingMode, unsetBlockEditingMode ] );
+
+	return null;
+}
+
 export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
@@ -2194,21 +2222,15 @@ export default function EditorBody( {
 		.join( ' ' );
 	const blockCanvasRef = useRef( null );
 	const [ readyOwnerKey, setReadyOwnerKey ] = useState( null );
-	const isTrashed = useSelect(
-		( select ) =>
-			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
-			'trash',
-		[]
-	);
-	const isArchived = useSelect(
-		( select ) =>
-			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
-			'crtxt_archived',
-		[]
-	);
-	const isReadOnly = isTrashed || isArchived || isLocked;
+	const readOnlyState = useSelect( selectCurrentPostReadOnlyState, [] );
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
+	// A frozen collection keeps its header, schema and views, but its rows
+	// stay editable, so the canvas stays live and only the header is frozen.
+	const isFrozenCollection =
+		readOnlyState === READ_ONLY_FROZEN && Boolean( ownerBlockName );
+	const isReadOnly =
+		( readOnlyState !== null && ! isFrozenCollection ) || isLocked;
 	const ownerKey = ownerBlockName ? `${ postType }:${ postId }` : null;
 	const ownerContentReady = ! ownerKey || readyOwnerKey === ownerKey;
 	const signalCollectionReady = useCallback(
@@ -2291,9 +2313,14 @@ export default function EditorBody( {
 							postType={ postType }
 							canvasRootRef={ blockCanvasRef }
 						/>
+						{ isFrozenCollection && (
+							<FrozenCollectionHeader
+								ownerBlockName={ ownerBlockName }
+							/>
+						) }
 						<HeaderPrefixToolbarGuard
 							isActive={ isActive }
-							isLocked={ isReadOnly }
+							isLocked={ isReadOnly || isFrozenCollection }
 							postId={ postId }
 							postType={ postType }
 							toolbarRootRef={ blockCanvasRef }
@@ -2334,7 +2361,7 @@ export default function EditorBody( {
 							postType={ postType }
 							canvasRootRef={ blockCanvasRef }
 							ownerContentReady={ ownerContentReady }
-							isReadOnlyLifecycle={ isTrashed || isArchived }
+							isReadOnlyLifecycle={ readOnlyState !== null }
 							onReady={ onReady }
 						/>
 					</BlockCanvasStyleProvider>
@@ -2345,14 +2372,14 @@ export default function EditorBody( {
 
 	return (
 		<div className="cortext-canvas__visual">
-			{ isArchived && (
+			{ readOnlyState === READ_ONLY_ARCHIVED && (
 				<ArchivedNotice
 					postId={ postId }
 					postType={ postType }
 					onRestored={ onRestored }
 				/>
 			) }
-			{ isTrashed && (
+			{ readOnlyState === READ_ONLY_TRASHED && (
 				<TrashedNotice
 					postId={ postId }
 					postType={ postType }

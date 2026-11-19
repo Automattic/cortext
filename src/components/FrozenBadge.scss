@@ -1,0 +1,18 @@
+@use "@wordpress/base-styles/variables" as *;
+
+.cortext-frozen-badge {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: $grid-unit-05;
+	color: var(--cortext-text-muted);
+
+	svg {
+		fill: currentcolor;
+	}
+
+	&--labeled {
+		font-size: $helptext-font-size;
+		line-height: 20px;
+	}
+}

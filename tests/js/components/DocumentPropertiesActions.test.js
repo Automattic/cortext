@@ -27,6 +27,9 @@ jest.mock( '../../../src/components/fields/AddFieldPopover', () => ( {
 	default: () => null,
 } ) );
 
+jest.mock( '../../../src/documents/readOnlyStore', () => ( {
+	useIsDocumentFrozen: () => false,
+} ) );
 jest.mock( '../../../src/components/CollectionFieldsContext', () => ( {
 	CollectionFieldsProvider: ( { children } ) => <>{ children }</>,
 } ) );

@@ -26,7 +26,9 @@ use Cortext\Frontend\Template;
 use Cortext\Media\CortextMedia;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentFreeze;
 use Cortext\PostType\DocumentIdentity;
+use Cortext\PostType\DocumentWriteGuard;
 use Cortext\PostType\Field;
 use Cortext\PostType\TrashCascade;
 use Cortext\Rest\BacklinksController;
@@ -67,6 +69,9 @@ final class Plugin {
 		( new MentionTaxonomy() )->register();
 		( new Field() )->register();
 		( new FieldValueIndex() )->register();
+
+		( new DocumentWriteGuard() )->register();
+		( new DocumentFreeze() )->register();
 
 		$archive_cascade = new ArchiveCascade();
 		$archive_cascade->register();

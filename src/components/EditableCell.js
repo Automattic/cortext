@@ -27,6 +27,7 @@ import EditOptionsPopover from './fields/EditOptionsPopover';
 import { resolveFormatColor } from './fields/formatColors';
 import { toRecordId } from '../hooks/fieldIds';
 import RelationEditor from './relations/RelationEditor';
+import { getReadOnlyState } from '../documents/readOnly';
 import RelationReferences from './relations/RelationReferences';
 
 // Resolves the WordPress site locale into a BCP 47 tag for Intl. WP
@@ -842,7 +843,7 @@ export default function EditableCell( {
 	relation,
 	label,
 	getValue,
-	readOnly = false,
+	readOnly: isFieldReadOnly = false,
 } ) {
 	const {
 		saveRowField,
@@ -861,6 +862,8 @@ export default function EditableCell( {
 	const [ error, setError ] = useState( null );
 	const checkboxRef = useRef( null );
 
+	// Locked, archived and trashed rows render their values read-only.
+	const readOnly = isFieldReadOnly || getReadOnlyState( item ) !== null;
 	const rowId = item?.id;
 	const value = getValue
 		? getValue( { item } )

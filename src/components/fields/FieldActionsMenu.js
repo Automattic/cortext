@@ -27,6 +27,7 @@ import {
 	useCollectionFieldsContext,
 	useMappedField,
 } from '../CollectionFieldsContext';
+import { useIsSchemaFrozen } from '../collectionFieldsContextObject';
 import Infotip from '../Infotip';
 import {
 	useDeleteField,
@@ -80,6 +81,7 @@ export default function FieldActionsMenu( {
 	const remove = useDeleteField( collectionId );
 	const updateFormula = useUpdateFormulaExpression( collectionId );
 	const { fields } = useCollectionFieldsContext();
+	const isSchemaFrozen = useIsSchemaFrozen();
 	const mappedField = useMappedField( recordId );
 	const activeField = useMemo( () => {
 		const source = mappedField ?? field ?? null;
@@ -324,6 +326,16 @@ export default function FieldActionsMenu( {
 		);
 	}
 
+	// A frozen collection's field menu only offers view actions. Without any,
+	// show the plain label instead of an empty menu.
+	if (
+		isSchemaFrozen &&
+		! renderBetweenConfigAndLifecycle &&
+		! renderLifecyclePrefix
+	) {
+		return <span className={ className }>{ triggerContent ?? label }</span>;
+	}
+
 	return (
 		<span className={ className } ref={ optionsAnchorRef }>
 			<Menu
@@ -360,100 +372,113 @@ export default function FieldActionsMenu( {
 					hideOnInteractOutside={ hideMenuOnInteractOutside }
 					style={ { minWidth: '240px' } }
 				>
-					<Menu.Group>
-						<Menu.Item
-							prefix={ <Icon icon={ pencil } /> }
-							onClick={ () => setIsRenaming( true ) }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Rename', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
-						<Menu.Item
-							prefix={ <Icon icon={ cog } /> }
-							onClick={ () => setIsEditingSettings( true ) }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Field settings', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
-						{ canFormat ? (
+					{ ! isSchemaFrozen && (
+						<Menu.Group>
 							<Menu.Item
-								ref={ formatItemRef }
-								className="cortext-column-header-actions__submenu-item"
-								hideOnClick={ false }
-								suffix={
-									<Icon icon={ chevronRight } size={ 18 } />
-								}
-								onClick={ () => openFormat() }
-								onKeyDown={ openFormatFromKeyboard }
-								onMouseEnter={ () => openFormat() }
-								onMouseLeave={ scheduleClose }
+								prefix={ <Icon icon={ pencil } /> }
+								onClick={ () => setIsRenaming( true ) }
 							>
 								<Menu.ItemLabel>
-									{ __( 'Format', 'cortext' ) }
+									{ __( 'Rename', 'cortext' ) }
 								</Menu.ItemLabel>
 							</Menu.Item>
-						) : null }
-						{ supportsOptions ? (
 							<Menu.Item
-								onClick={ () => setIsEditingOptions( true ) }
+								prefix={ <Icon icon={ cog } /> }
+								onClick={ () => setIsEditingSettings( true ) }
 							>
 								<Menu.ItemLabel>
-									{ __( 'Manage choices', 'cortext' ) }
+									{ __( 'Field settings', 'cortext' ) }
 								</Menu.ItemLabel>
 							</Menu.Item>
-						) : null }
-						{ supportsFormula ? (
-							<Menu.Item
-								onClick={ () => {
-									setFormulaError( '' );
-									setIsEditingFormula( true );
-								} }
-							>
-								<Menu.ItemLabel>
-									{ __( 'Edit formula', 'cortext' ) }
-								</Menu.ItemLabel>
-							</Menu.Item>
-						) : null }
-						{ canChangeType ? (
-							<Menu.Item
-								onClick={ () => setIsChangingType( true ) }
-							>
-								<Menu.ItemLabel>
-									{ __( 'Change type…', 'cortext' ) }
-								</Menu.ItemLabel>
-							</Menu.Item>
-						) : null }
-					</Menu.Group>
+							{ canFormat ? (
+								<Menu.Item
+									ref={ formatItemRef }
+									className="cortext-column-header-actions__submenu-item"
+									hideOnClick={ false }
+									suffix={
+										<Icon
+											icon={ chevronRight }
+											size={ 18 }
+										/>
+									}
+									onClick={ () => openFormat() }
+									onKeyDown={ openFormatFromKeyboard }
+									onMouseEnter={ () => openFormat() }
+									onMouseLeave={ scheduleClose }
+								>
+									<Menu.ItemLabel>
+										{ __( 'Format', 'cortext' ) }
+									</Menu.ItemLabel>
+								</Menu.Item>
+							) : null }
+							{ supportsOptions ? (
+								<Menu.Item
+									onClick={ () =>
+										setIsEditingOptions( true )
+									}
+								>
+									<Menu.ItemLabel>
+										{ __( 'Manage choices', 'cortext' ) }
+									</Menu.ItemLabel>
+								</Menu.Item>
+							) : null }
+							{ supportsFormula ? (
+								<Menu.Item
+									onClick={ () => {
+										setFormulaError( '' );
+										setIsEditingFormula( true );
+									} }
+								>
+									<Menu.ItemLabel>
+										{ __( 'Edit formula', 'cortext' ) }
+									</Menu.ItemLabel>
+								</Menu.Item>
+							) : null }
+							{ canChangeType ? (
+								<Menu.Item
+									onClick={ () => setIsChangingType( true ) }
+								>
+									<Menu.ItemLabel>
+										{ __( 'Change type…', 'cortext' ) }
+									</Menu.ItemLabel>
+								</Menu.Item>
+							) : null }
+						</Menu.Group>
+					) }
 					{ renderBetweenConfigAndLifecycle ? (
 						<>
-							<Menu.Separator />
+							{ ! isSchemaFrozen && <Menu.Separator /> }
 							{ renderBetweenConfigAndLifecycle( menuContext ) }
 						</>
 					) : null }
-					<Menu.Separator />
+					{ ( ! isSchemaFrozen || renderLifecyclePrefix ) && (
+						<Menu.Separator />
+					) }
 					<Menu.Group>
 						{ renderLifecyclePrefix?.( menuContext ) }
-						<Menu.Item
-							prefix={ <Icon icon={ copy } /> }
-							onClick={ onDuplicate }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Duplicate', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
-						{ /* tech-debt.md#td-wp-menu-popover-limitations: Menu.Item has no destructive
-						     variant, so style Delete with a class. */ }
-						<Menu.Item
-							className="cortext-column-header-actions__destructive-item"
-							prefix={ <Icon icon={ trash } /> }
-							onClick={ () => setConfirmDelete( true ) }
-						>
-							<Menu.ItemLabel>
-								{ __( 'Delete', 'cortext' ) }
-							</Menu.ItemLabel>
-						</Menu.Item>
+						{ ! isSchemaFrozen && (
+							<>
+								<Menu.Item
+									prefix={ <Icon icon={ copy } /> }
+									onClick={ onDuplicate }
+								>
+									<Menu.ItemLabel>
+										{ __( 'Duplicate', 'cortext' ) }
+									</Menu.ItemLabel>
+								</Menu.Item>
+								{ /* tech-debt.md#td-wp-menu-popover-limitations: Menu.Item has no destructive
+								     variant, so style Delete with a class. */ }
+								<Menu.Item
+									className="cortext-column-header-actions__destructive-item"
+									prefix={ <Icon icon={ trash } /> }
+									onClick={ () => setConfirmDelete( true ) }
+								>
+									<Menu.ItemLabel>
+										{ __( 'Delete', 'cortext' ) }
+									</Menu.ItemLabel>
+								</Menu.Item>
+							</>
+						) }
 					</Menu.Group>
 				</Menu.Popover>
 			</Menu>
