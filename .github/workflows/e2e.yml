@@ -85,11 +85,22 @@ jobs:
 
             - run: pnpm install --frozen-lockfile
 
+            # wp-env spends most of its time building Docker images, so start it
+            # in the background and let the browser install and build run
+            # meanwhile. The process outlives this step; "Wait for wp-env" joins it.
+            - name: Start wp-env in the background
+              run: |
+                  ( pnpm run env:start; echo $? > /tmp/env.status ) > /tmp/env.log 2>&1 < /dev/null &
+                  echo $! > /tmp/env.pid
+
             - run: pnpm exec playwright install --with-deps chromium
 
             - run: pnpm run build
 
-            - run: pnpm run env:start
+            - name: Wait for wp-env
+              run: |
+                  tail -n +1 -f --pid="$(cat /tmp/env.pid)" /tmp/env.log
+                  exit "$(cat /tmp/env.status)"
 
             - run: pnpm run test:e2e --shard=${{ matrix.shard }}/4
               env:
