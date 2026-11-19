@@ -3,8 +3,9 @@
  * Read-only rule for `crtxt_document` posts.
  *
  * Archived and trashed documents keep their data but can't be edited until
- * they are restored. Core REST writes and autosaves to them fail here, before
- * the archive and container checks run.
+ * they are restored, and frozen documents can't be edited until they are
+ * unfrozen. Core REST writes and autosaves to them fail here, before the
+ * archive and container checks run.
  *
  * @package Cortext
  */
@@ -22,6 +23,15 @@ use WP_REST_Request;
 
 final class DocumentWriteGuard {
 
+	/**
+	 * Request keys a move sends. A frozen document can still be moved, since
+	 * its place in the tree isn't part of its content.
+	 */
+	private const MOVE_PARAMS = array( 'parent', 'menu_order' );
+
+	/** Request keys that never change the document. */
+	private const IGNORED_PARAMS = array( 'id', 'context', '_locale', '_fields', '_envelope', '_method' );
+
 	public function register(): void {
 		add_filter( 'rest_pre_insert_' . Document::POST_TYPE, array( $this, 'guard_rest_write' ), 4, 2 );
 		add_filter( 'rest_dispatch_request', array( $this, 'guard_autosave' ), 10, 4 );
@@ -34,6 +44,16 @@ final class DocumentWriteGuard {
 	 * @param WP_Post $post Document about to be written.
 	 */
 	public static function read_only_error( WP_Post $post ): ?WP_Error {
+		return self::lifecycle_error( $post ) ?? self::frozen_error( $post );
+	}
+
+	/**
+	 * Returns the error for a document that is out of circulation (archived
+	 * or trashed), or null.
+	 *
+	 * @param WP_Post $post Document about to be written.
+	 */
+	public static function lifecycle_error( WP_Post $post ): ?WP_Error {
 		if ( Documents::STATUS_ARCHIVED === $post->post_status ) {
 			return new WP_Error(
 				'cortext_document_archived',
@@ -53,6 +73,18 @@ final class DocumentWriteGuard {
 		return null;
 	}
 
+	private static function frozen_error( WP_Post $post ): ?WP_Error {
+		if ( ! DocumentFreeze::is_frozen( (int) $post->ID ) ) {
+			return null;
+		}
+
+		return new WP_Error(
+			'cortext_document_frozen',
+			__( 'Unlock this document before editing it.', 'cortext' ),
+			array( 'status' => 409 )
+		);
+	}
+
 	/**
 	 * Rejects core REST updates to read-only documents.
 	 *
@@ -70,7 +102,16 @@ final class DocumentWriteGuard {
 			return $prepared_post;
 		}
 
-		return self::read_only_error( $post ) ?? $prepared_post;
+		$lifecycle_error = self::lifecycle_error( $post );
+		if ( $lifecycle_error instanceof WP_Error ) {
+			return $lifecycle_error;
+		}
+
+		if ( $this->is_move( $request ) ) {
+			return $prepared_post;
+		}
+
+		return self::frozen_error( $post ) ?? $prepared_post;
 	}
 
 	/**
@@ -104,6 +145,26 @@ final class DocumentWriteGuard {
 		}
 
 		return self::read_only_error( $post ) ?? $dispatch_result;
+	}
+
+	/**
+	 * Whether a request only changes the document's parent or position.
+	 *
+	 * @param WP_REST_Request $request Incoming core REST request.
+	 */
+	private function is_move( WP_REST_Request $request ): bool {
+		$keys = array_diff(
+			array_keys(
+				array_merge(
+					(array) $request->get_json_params(),
+					$request->get_body_params(),
+					$request->get_query_params()
+				)
+			),
+			self::IGNORED_PARAMS
+		);
+
+		return ! empty( $keys ) && empty( array_diff( $keys, self::MOVE_PARAMS ) );
 	}
 
 	private function requested_document( WP_REST_Request $request ): ?WP_Post {

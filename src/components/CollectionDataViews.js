@@ -11,7 +11,15 @@ import {
 	useState,
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { archive, copy, starEmpty, starFilled, trash } from '@wordpress/icons';
+import {
+	archive,
+	copy,
+	lock,
+	starEmpty,
+	starFilled,
+	trash,
+	unlock,
+} from '@wordpress/icons';
 
 import './CollectionDataViews.scss';
 import './CollectionDataViews.grid.scss';
@@ -93,12 +101,14 @@ import { useRecents } from '../hooks/useRecents';
 import { filterFavoritesByDeletedIds, useFavoriteToggle } from '../documents';
 import {
 	archiveSaveFailureMessage,
+	freezeDocument,
 	movedToTrashMessage,
 	restoreDocuments,
 	runWithEditorsLocked,
 	syncLifecycleEntityRecords,
 	trashSaveFailureMessage,
 	undoAction,
+	unfreezeDocument,
 } from '../documents/actions';
 import { duplicateDocumentRecord } from '../documents/mutations';
 import {
@@ -1055,6 +1065,45 @@ export default function CollectionDataViews( {
 		]
 	);
 
+	const toggleRowFreeze = useCallback(
+		async ( item ) => {
+			if ( ! item?.id ) {
+				return;
+			}
+			try {
+				await ( item.cortext_frozen
+					? unfreezeDocument
+					: freezeDocument )(
+					{ id: item.id },
+					{
+						createErrorNotice,
+						createSuccessNotice,
+						flushActiveEditor,
+						invalidateResolution,
+						lockEditors,
+						receiveEntityRecords,
+					}
+				);
+			} catch ( freezeError ) {
+				setRowActionError(
+					freezeError?.message ??
+						__(
+							'Could not change the lock on this document.',
+							'cortext'
+						)
+				);
+			}
+		},
+		[
+			createErrorNotice,
+			createSuccessNotice,
+			flushActiveEditor,
+			invalidateResolution,
+			lockEditors,
+			receiveEntityRecords,
+		]
+	);
+
 	const duplicateRow = useCallback(
 		async ( row ) => {
 			if ( ! collectionId || ! row?.id ) {
@@ -1466,6 +1515,22 @@ export default function CollectionDataViews( {
 			callback: ( items ) => toggleRowFavorite( items?.[ 0 ] ),
 		} );
 		actions.push( {
+			id: 'lock-row',
+			label: __( 'Lock', 'cortext' ),
+			icon: lock,
+			context: 'single',
+			isEligible: ( item ) => ! item?.cortext_frozen,
+			callback: ( items ) => toggleRowFreeze( items?.[ 0 ] ),
+		} );
+		actions.push( {
+			id: 'unlock-row',
+			label: __( 'Unlock', 'cortext' ),
+			icon: unlock,
+			context: 'single',
+			isEligible: ( item ) => Boolean( item?.cortext_frozen ),
+			callback: ( items ) => toggleRowFreeze( items?.[ 0 ] ),
+		} );
+		actions.push( {
 			id: 'archive-row',
 			label: __( 'Archive', 'cortext' ),
 			icon: archive,
@@ -1497,6 +1562,7 @@ export default function CollectionDataViews( {
 		requestArchiveRows,
 		requestDeleteRows,
 		toggleRowFavorite,
+		toggleRowFreeze,
 	] );
 
 	const dataViewActions = rowActions;

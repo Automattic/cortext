@@ -34,7 +34,11 @@ import usePostLock from '../hooks/usePostLock';
 import { withViewTransition } from '../hooks/viewTransition';
 import { notifyBacklinksChanged } from '../hooks/backlinksInvalidation';
 import { definesTrait } from '../documents/capabilities';
-import { READ_ONLY_TRASHED, getReadOnlyState } from '../documents/readOnly';
+import {
+	READ_ONLY_FROZEN,
+	READ_ONLY_TRASHED,
+	getReadOnlyState,
+} from '../documents/readOnly';
 import { POST_TYPE } from './page-queries';
 import CortextInserterSidebar from './CortextInserterSidebar';
 import CortextLinkSuggestions from './CortextLinkSuggestions';
@@ -91,6 +95,7 @@ function InserterToggle( { disabled = false } ) {
 function DocumentActions( {
 	disabled = false,
 	isTrashed = false,
+	isReadOnlyDocument = false,
 	canInsertBlocks = true,
 	isActive,
 	postId,
@@ -123,8 +128,10 @@ function DocumentActions( {
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
 				{ /* Adding blocks, publishing, and the properties layout don't
-				apply to a document in Trash, so only Settings stays. */ }
-				{ canInsertBlocks && ! isTrashed ? (
+				apply to a document in Trash, so only Settings stays. A locked
+				or archived document keeps Publish to show whether it's public,
+				but can't take new blocks or a new properties layout. */ }
+				{ canInsertBlocks && ! isReadOnlyDocument ? (
 					<InserterToggle disabled={ disabled } />
 				) : null }
 				{ ! isTrashed && topBarActions }
@@ -149,19 +156,24 @@ function DocumentActions( {
 							disabled={ disabled }
 							onClick={ onTogglePropertiesVisible }
 						/>
-						<Button
-							className="cortext-document-actions__fields"
-							icon={ pencil }
-							size="compact"
-							label={
-								isPropertiesLayoutEditing
-									? __( 'Done customizing', 'cortext' )
-									: __( 'Customize properties', 'cortext' )
-							}
-							isPressed={ isPropertiesLayoutEditing }
-							disabled={ disabled }
-							onClick={ onEditPropertiesLayout }
-						/>
+						{ ! isReadOnlyDocument && (
+							<Button
+								className="cortext-document-actions__fields"
+								icon={ pencil }
+								size="compact"
+								label={
+									isPropertiesLayoutEditing
+										? __( 'Done customizing', 'cortext' )
+										: __(
+												'Customize properties',
+												'cortext'
+										  )
+								}
+								isPressed={ isPropertiesLayoutEditing }
+								disabled={ disabled }
+								onClick={ onEditPropertiesLayout }
+							/>
+						) }
 					</>
 				) : null }
 				<Button
@@ -389,14 +401,22 @@ export function CanvasEditor( {
 	const postLock = usePostLock( {
 		postId: post.id,
 		postType: post.type ?? postType,
-		// The lock endpoint rejects trashed and archived posts. Disable the lock
-		// as soon as the status changes; the restore notices handle the
-		// read-only state from there.
+		// The lock endpoint rejects trashed, archived and frozen posts. Disable
+		// the lock as soon as one of those applies; the restore notices and
+		// the Locked badge handle the read-only state from there.
 		enabled: isActive && ! isLifecycleReadOnly,
 	} );
 	const isEditorsLocked = useEditorsLocked();
 	const isReadOnly =
 		isLifecycleReadOnly || postLock.isReadOnly || isEditorsLocked;
+	// A frozen document can still be unlocked, archived or trashed, and a
+	// frozen collection's rows stay editable: EditorBody freezes only its
+	// header, schema and views.
+	const isFrozen = readOnlyState === READ_ONLY_FROZEN;
+	const isFrozenEditorBusy = postLock.isReadOnly || isEditorsLocked;
+	const isCanvasLocked =
+		isFrozen && isCollection ? isFrozenEditorBusy : isReadOnly;
+	const areActionsLocked = isFrozen ? isFrozenEditorBusy : isReadOnly;
 	const { resetPost, setIsInserterOpened } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const lastNotifiedBacklinkSaveRef = useRef( null );
@@ -528,6 +548,7 @@ export function CanvasEditor( {
 			<DocumentActions
 				disabled={ isReadOnly }
 				isTrashed={ isTrashed }
+				isReadOnlyDocument={ isLifecycleReadOnly }
 				canInsertBlocks={ ! isCollection }
 				isActive={ isActive }
 				postId={ post.id }
@@ -558,7 +579,7 @@ export function CanvasEditor( {
 							isEditorSurfaceDisplayed={
 								isEditorSurfaceDisplayed
 							}
-							isLocked={ isReadOnly }
+							isLocked={ isCanvasLocked }
 							isSurfaceFocusPending={
 								! isLifecycleReadOnly &&
 								postLock.isReadOnly &&
@@ -590,6 +611,7 @@ export function CanvasEditor( {
 			/>
 			<DocumentInspectorSidebar
 				isLocked={ isReadOnly }
+				areActionsLocked={ areActionsLocked }
 				postId={ post.id }
 				postType={ postType }
 			/>

@@ -25,6 +25,7 @@ use Cortext\Fields\FieldTypeConverter;
 use Cortext\FieldValues\FieldValueReadQuery;
 use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentFreeze;
 use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
@@ -1875,6 +1876,7 @@ final class RowsController {
 				'rendered' => $post->post_title,
 			),
 			'status'         => $post->post_status,
+			'cortext_frozen' => DocumentFreeze::details( (int) $post->ID ),
 			'created_at'     => $this->format_gmt_date( $post->post_date_gmt ),
 			'modified_at'    => $this->format_gmt_date( $post->post_modified_gmt ),
 			'created_by'     => $this->display_name_for( $created_by_id ),

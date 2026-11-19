@@ -4,6 +4,8 @@ import { Fragment } from '@wordpress/element';
 import './Breadcrumbs.scss';
 
 import useBreadcrumbSegments from '../hooks/useBreadcrumbSegments';
+import { useFrozenDetails } from '../documents/readOnlyStore';
+import FrozenBadge from './FrozenBadge';
 
 // Truncate once the bar would carry more than this many segments. A
 // four-deep page hierarchy fits unchanged; anything beyond collapses the
@@ -65,6 +67,7 @@ function Segment( { segment } ) {
 
 export default function Breadcrumbs( { paintedDocumentId } ) {
 	const segments = truncate( useBreadcrumbSegments( paintedDocumentId ) );
+	const frozen = useFrozenDetails( paintedDocumentId );
 
 	if ( segments.length === 0 ) {
 		return null;
@@ -92,6 +95,7 @@ export default function Breadcrumbs( { paintedDocumentId } ) {
 					</Fragment>
 				) ) }
 			</ol>
+			<FrozenBadge frozen={ frozen } showLabel />
 		</nav>
 	);
 }

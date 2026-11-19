@@ -5,6 +5,7 @@ import { pencil, plus, seen, unseen } from '@wordpress/icons';
 import AddFieldPopover from './fields/AddFieldPopover';
 import { CollectionFieldsProvider } from './CollectionFieldsContext';
 import { useDocumentPropertiesContext } from './DocumentPropertiesContext';
+import { useIsDocumentFrozen } from '../documents/readOnlyStore';
 
 import './DocumentPropertiesActions.scss';
 
@@ -13,6 +14,8 @@ import './DocumentPropertiesActions.scss';
 // visibility and field creation.
 export default function DocumentPropertiesActions() {
 	const ctx = useDocumentPropertiesContext();
+	// A frozen collection keeps its fields and row layout.
+	const isSchemaFrozen = useIsDocumentFrozen( ctx?.collectionId );
 	if ( ! ctx ) {
 		return null;
 	}
@@ -48,7 +51,7 @@ export default function DocumentPropertiesActions() {
 							: __( 'Expand', 'cortext' ) }
 					</Button>
 				) }
-				{ onRequestLayoutEdit && hasFields && (
+				{ onRequestLayoutEdit && hasFields && ! isSchemaFrozen && (
 					<Button
 						className="cortext-document-properties-actions__button"
 						variant="secondary"
@@ -62,7 +65,7 @@ export default function DocumentPropertiesActions() {
 							: __( 'Customize', 'cortext' ) }
 					</Button>
 				) }
-				{ collectionId && (
+				{ collectionId && ! isSchemaFrozen && (
 					<Dropdown
 						popoverProps={ { placement: 'bottom-start' } }
 						renderToggle={ ( { isOpen, onToggle } ) => (

@@ -12,6 +12,7 @@ namespace Cortext\Tests;
 use Cortext\Documents;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentFreeze;
 use Cortext\PostType\Field;
 use Cortext\Rest\FieldsController;
 use Cortext\Taxonomy\TraitTaxonomy;
@@ -480,6 +481,63 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( $stored_fields, $this->stored_collection_field_ids( $collection_id ) );
 		$this->assertSame( 'Notes', get_post( $text_id )->post_title );
 		$this->assertSame( 'text', get_post_meta( $text_id, 'type', true ) );
+	}
+
+	public function test_frozen_collection_blocks_field_mutations(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection_with_slug( 'Frozen schema', 'frozen-schema' );
+		$source_id     = $this->create_collection_with_slug( 'Frozen source', 'frozen-source' );
+		$text_id       = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Notes',
+				'type'  => 'text',
+			)
+		)->get_data()['id'];
+		$stored_fields = $this->stored_collection_field_ids( $collection_id );
+		$source_fields = $this->stored_collection_field_ids( $source_id );
+
+		DocumentFreeze::freeze( $collection_id );
+
+		$core_update = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $text_id );
+		$core_update->set_param( 'title', 'Changed notes' );
+		$core_delete = new WP_REST_Request( 'DELETE', '/wp/v2/crtxt_fields/' . $text_id );
+		$core_delete->set_param( 'force', true );
+		$responses = array(
+			$this->create_field(
+				$collection_id,
+				array(
+					'title' => 'Blocked field',
+					'type'  => 'text',
+				)
+			),
+			$this->convert_field( $text_id, 'number' ),
+			rest_do_request( $core_update ),
+			rest_do_request( $core_delete ),
+			// The reverse field of a relation would land on the frozen collection.
+			$this->create_field(
+				$source_id,
+				array(
+					'title'                 => 'Frozen target',
+					'type'                  => 'relation',
+					'related_collection_id' => $collection_id,
+				)
+			),
+		);
+
+		foreach ( $responses as $response ) {
+			$this->assertSame( 409, $response->get_status() );
+			$this->assertSame( 'cortext_collection_frozen', $response->get_data()['code'] );
+		}
+		$this->assertSame( $stored_fields, $this->stored_collection_field_ids( $collection_id ) );
+		$this->assertSame( $source_fields, $this->stored_collection_field_ids( $source_id ) );
+		$this->assertSame( 'Notes', get_post( $text_id )->post_title );
+		$this->assertSame( 'text', get_post_meta( $text_id, 'type', true ) );
+
+		DocumentFreeze::unfreeze( $collection_id );
+
+		$this->assertSame( 200, rest_do_request( $core_update )->get_status() );
+		$this->assertSame( 'Changed notes', get_post( $text_id )->post_title );
 	}
 
 	public function test_relation_mutations_cannot_change_an_archived_target_schema(): void {

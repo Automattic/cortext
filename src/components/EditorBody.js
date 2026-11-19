@@ -55,12 +55,14 @@ import { whenViewTransitionsSettled } from '../hooks/viewTransition';
 import { unarchiveDocument } from '../documents/actions';
 import {
 	READ_ONLY_ARCHIVED,
+	READ_ONLY_FROZEN,
 	READ_ONLY_TRASHED,
-	selectCurrentPostReadOnlyState,
 } from '../documents/readOnly';
+import { selectCurrentPostReadOnlyState } from '../documents/readOnlyStore';
 import TrashedNotice from './trash/TrashedNotice';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
+const HIDDEN_IDENTITY_ACTIONS_STYLE = { visibility: 'hidden' };
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
 const DOCUMENT_PROPERTIES_BLOCK = 'cortext/document-properties';
 const POST_TITLE_BLOCK = 'core/post-title';
@@ -848,9 +850,12 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 			);
 	}, [ hasCover, isLocked, isReadOnlyDocument, selectedBlockName ] );
 
-	if ( isReadOnlyDocument || isLocked || hasCover ) {
+	if ( hasCover ) {
 		return null;
 	}
+	// A read-only or briefly locked document keeps the bar's space, invisible
+	// and inert, so the title doesn't shift when the state toggles.
+	const isHidden = isReadOnlyDocument || isLocked;
 
 	const ensureIconBlock = () => {
 		if ( hasIcon || isLocked ) {
@@ -888,6 +893,9 @@ function DocumentIdentityActions( { isLocked = false, postId, postType } ) {
 			className="cortext-canvas__identity-actions"
 			role="group"
 			aria-label={ __( 'Identity actions', 'cortext' ) }
+			aria-hidden={ isHidden || undefined }
+			inert={ isHidden ? '' : undefined }
+			style={ isHidden ? HIDDEN_IDENTITY_ACTIONS_STYLE : undefined }
 		>
 			{ ! hasIcon && ! hasCover && (
 				<DocumentIdentityControls
@@ -2125,6 +2133,42 @@ function useRepairStaleParsedBlocks( postType, postId ) {
 	}, [ blocks, content, editEntityRecord, postId, postType ] );
 }
 
+/**
+ * Freezes every block of a frozen collection's canvas except the owner
+ * data-view, which keeps its rows editable and locks its own schema and view
+ * controls.
+ *
+ * @param {Object} props
+ * @param {string} props.ownerBlockName Block name of the collection's owner block.
+ */
+function FrozenCollectionHeader( { ownerBlockName } ) {
+	const ownerClientId = useSelect(
+		( select ) =>
+			select( blockEditorStore )
+				.getBlocks()
+				.find( ( block ) => block.name === ownerBlockName )?.clientId ??
+			null,
+		[ ownerBlockName ]
+	);
+	const { setBlockEditingMode, unsetBlockEditingMode } =
+		useDispatch( blockEditorStore );
+
+	useEffect( () => {
+		setBlockEditingMode( '', 'disabled' );
+		if ( ownerClientId ) {
+			setBlockEditingMode( ownerClientId, 'default' );
+		}
+		return () => {
+			unsetBlockEditingMode( '' );
+			if ( ownerClientId ) {
+				unsetBlockEditingMode( ownerClientId );
+			}
+		};
+	}, [ ownerClientId, setBlockEditingMode, unsetBlockEditingMode ] );
+
+	return null;
+}
+
 export default function EditorBody( {
 	featuredMedia,
 	isActive = true,
@@ -2179,9 +2223,14 @@ export default function EditorBody( {
 	const blockCanvasRef = useRef( null );
 	const [ readyOwnerKey, setReadyOwnerKey ] = useState( null );
 	const readOnlyState = useSelect( selectCurrentPostReadOnlyState, [] );
-	const isReadOnly = readOnlyState !== null || isLocked;
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
+	// A frozen collection keeps its header, schema and views, but its rows
+	// stay editable, so the canvas stays live and only the header is frozen.
+	const isFrozenCollection =
+		readOnlyState === READ_ONLY_FROZEN && Boolean( ownerBlockName );
+	const isReadOnly =
+		( readOnlyState !== null && ! isFrozenCollection ) || isLocked;
 	const ownerKey = ownerBlockName ? `${ postType }:${ postId }` : null;
 	const ownerContentReady = ! ownerKey || readyOwnerKey === ownerKey;
 	const signalCollectionReady = useCallback(
@@ -2264,9 +2313,14 @@ export default function EditorBody( {
 							postType={ postType }
 							canvasRootRef={ blockCanvasRef }
 						/>
+						{ isFrozenCollection && (
+							<FrozenCollectionHeader
+								ownerBlockName={ ownerBlockName }
+							/>
+						) }
 						<HeaderPrefixToolbarGuard
 							isActive={ isActive }
-							isLocked={ isReadOnly }
+							isLocked={ isReadOnly || isFrozenCollection }
 							postId={ postId }
 							postType={ postType }
 							toolbarRootRef={ blockCanvasRef }
