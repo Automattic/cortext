@@ -24,7 +24,9 @@ import apiFetch from '@wordpress/api-fetch';
 import {
 	archiveDocument,
 	createDocument,
+	emptyTrash,
 	restoreDocument,
+	restoreDocuments,
 	trashDocument,
 	unarchiveDocument,
 	useCreateCollectionDocument,
@@ -686,6 +688,7 @@ describe( 'document archive lifecycle', () => {
 			{
 				id: 'cortext-document-restore-success',
 				type: 'snackbar',
+				actions: [ expect.objectContaining( { label: 'Undo' } ) ],
 			}
 		);
 	} );
@@ -729,6 +732,7 @@ describe( 'document archive lifecycle', () => {
 			expect( ctx.createSuccessNotice ).toHaveBeenCalledWith( message, {
 				id: 'cortext-document-restore-success',
 				type: 'snackbar',
+				actions: [ expect.objectContaining( { label: 'Undo' } ) ],
 			} );
 		}
 	);
@@ -750,5 +754,172 @@ describe( 'document archive lifecycle', () => {
 			'getEntityRecord',
 			[ 'postType', 'crtxt_document', 11 ]
 		);
+	} );
+} );
+
+describe( 'Trash snackbars', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	function undoFrom( notice ) {
+		const [ , options ] = notice.mock.calls.at( -1 );
+		return options.actions.find( ( action ) => action.label === 'Undo' );
+	}
+
+	it( 'says what moved to Trash and restores it on Undo', async () => {
+		const ctx = makeCtx();
+		apiFetch.mockResolvedValueOnce( {
+			id: 9,
+			status: 'trash',
+			cascade_deleted: [ 10, 11 ],
+		} );
+
+		await trashDocument( { id: 9 }, ctx );
+
+		expect( ctx.createSuccessNotice ).toHaveBeenCalledWith(
+			'Document and 2 nested documents moved to Trash.',
+			expect.objectContaining( {
+				id: 'cortext-document-trash-success',
+				type: 'snackbar',
+			} )
+		);
+
+		apiFetch.mockResolvedValueOnce( {
+			restored: [ 9, 10, 11 ],
+			post: { id: 9, status: 'private' },
+		} );
+		await act( () => undoFrom( ctx.createSuccessNotice ).onClick() );
+
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/cortext/v1/documents/9/restore',
+			method: 'POST',
+		} );
+	} );
+
+	it( 'moves a restored document back to Trash on Undo', async () => {
+		const ctx = makeCtx();
+		apiFetch.mockResolvedValueOnce( {
+			restored: [ 9 ],
+			post: { id: 9, status: 'draft' },
+		} );
+
+		await restoreDocument( { id: 9 }, ctx );
+
+		apiFetch.mockResolvedValueOnce( { id: 9, status: 'trash' } );
+		await act( () => undoFrom( ctx.createSuccessNotice ).onClick() );
+
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/wp/v2/crtxt_documents/9',
+			method: 'DELETE',
+		} );
+	} );
+
+	it( 'reports a failed Undo in the same snackbar slot', async () => {
+		const ctx = makeCtx();
+		apiFetch.mockResolvedValueOnce( {
+			restored: [ 9 ],
+			post: { id: 9, status: 'draft' },
+		} );
+		await restoreDocument( { id: 9 }, ctx );
+
+		apiFetch.mockRejectedValueOnce( new Error( 'Nope' ) );
+		await act( () => undoFrom( ctx.createSuccessNotice ).onClick() );
+
+		expect( ctx.createErrorNotice ).toHaveBeenCalledWith( 'Nope', {
+			id: 'cortext-document-restore-success',
+			type: 'snackbar',
+		} );
+	} );
+
+	it( 'restores documents trashed together and refreshes the lists once', async () => {
+		const ctx = makeCtx();
+		const onTrashChanged = jest.fn();
+		window.addEventListener( DOCUMENT_TRASH_CHANGED_EVENT, onTrashChanged );
+		apiFetch.mockImplementation( ( { path } ) =>
+			Promise.resolve( {
+				restored: [],
+				post: { id: Number( path.match( /\d+/ )[ 0 ] ) },
+			} )
+		);
+
+		try {
+			await restoreDocuments( [ { id: 1 }, { id: 2 }, { id: 3 } ], ctx );
+		} finally {
+			window.removeEventListener(
+				DOCUMENT_TRASH_CHANGED_EVENT,
+				onTrashChanged
+			);
+		}
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
+		expect( onTrashChanged ).toHaveBeenCalledTimes( 1 );
+		expectLifecycleInvalidations( ctx );
+		expect( ctx.createSuccessNotice ).toHaveBeenCalledTimes( 1 );
+		expect( ctx.createSuccessNotice ).toHaveBeenCalledWith(
+			'3 documents restored.',
+			{ id: 'cortext-document-restore-success', type: 'snackbar' }
+		);
+	} );
+
+	it( 'restores at most four documents at a time', async () => {
+		const ctx = makeCtx();
+		let inFlight = 0;
+		let maxInFlight = 0;
+		apiFetch.mockImplementation( async () => {
+			inFlight++;
+			maxInFlight = Math.max( maxInFlight, inFlight );
+			await Promise.resolve();
+			inFlight--;
+			return { restored: [], post: null };
+		} );
+
+		await restoreDocuments(
+			Array.from( { length: 10 }, ( _, index ) => ( { id: index + 1 } ) ),
+			ctx
+		);
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 10 );
+		expect( maxInFlight ).toBe( 4 );
+	} );
+
+	it( 'says how many documents could not be restored', async () => {
+		const ctx = makeCtx();
+		apiFetch
+			.mockResolvedValueOnce( { restored: [ 1 ], post: { id: 1 } } )
+			.mockRejectedValueOnce( new Error( 'Nope' ) );
+
+		await restoreDocuments( [ { id: 1 }, { id: 2 } ], ctx );
+
+		expect( ctx.createSuccessNotice ).not.toHaveBeenCalled();
+		expect( ctx.createErrorNotice ).toHaveBeenCalledWith(
+			'1 of 2 documents could not be restored.',
+			{ id: 'cortext-document-restore-success', type: 'snackbar' }
+		);
+	} );
+
+	it( 'empties Trash and refreshes the lists', async () => {
+		const ctx = makeCtx();
+		const onTrashChanged = jest.fn();
+		window.addEventListener( DOCUMENT_TRASH_CHANGED_EVENT, onTrashChanged );
+		apiFetch.mockResolvedValueOnce( { deleted: [ 1, 2 ] } );
+
+		let response;
+		try {
+			response = await emptyTrash( ctx );
+		} finally {
+			window.removeEventListener(
+				DOCUMENT_TRASH_CHANGED_EVENT,
+				onTrashChanged
+			);
+		}
+
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/empty-trash',
+			method: 'POST',
+		} );
+		expect( response ).toEqual( { deleted: [ 1, 2 ] } );
+		expect( onTrashChanged ).toHaveBeenCalledTimes( 1 );
+		expectLifecycleInvalidations( ctx );
 	} );
 } );

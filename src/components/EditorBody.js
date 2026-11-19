@@ -52,7 +52,8 @@ import { parseDocumentIcon } from './DocumentIcon';
 import { isSurfaceFocusOriginCurrent } from './collectionSurfaceFocus';
 import afterNextPaint from '../hooks/afterNextPaint';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
-import { restoreDocument, unarchiveDocument } from '../documents/actions';
+import { unarchiveDocument } from '../documents/actions';
+import TrashedNotice from './trash/TrashedNotice';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const DOCUMENT_COVER_BLOCK = 'cortext/document-cover';
@@ -1678,57 +1679,6 @@ function HeaderAwareRootAppender( { ownerBlockName, postId, record } ) {
 				__experimentalIsQuick
 			/>
 		</div>
-	);
-}
-
-function TrashedNotice( { postId, postType, onRestored } ) {
-	const [ isRestoring, setIsRestoring ] = useState( false );
-	const [ error, setError ] = useState( null );
-	const { invalidateResolution, receiveEntityRecords } =
-		useDispatch( 'core' );
-	const { createSuccessNotice } = useDispatch( 'core/notices' );
-
-	const restore = async () => {
-		setError( null );
-		setIsRestoring( true );
-		try {
-			const response = await restoreDocument(
-				{ id: postId },
-				{
-					createSuccessNotice,
-					invalidateResolution,
-					receiveEntityRecords,
-				}
-			);
-			onRestored?.( postId, postType, response );
-		} catch ( err ) {
-			setError(
-				err?.message ??
-					__( 'Could not restore this document.', 'cortext' )
-			);
-		} finally {
-			setIsRestoring( false );
-		}
-	};
-
-	return (
-		<Notice
-			className="cortext-canvas__notice"
-			status="warning"
-			isDismissible={ false }
-			actions={ [
-				{
-					label: __( 'Restore', 'cortext' ),
-					onClick: restore,
-					disabled: isRestoring,
-					variant: 'primary',
-				},
-			] }
-		>
-			{ error
-				? error
-				: __( 'This document is in the Trash.', 'cortext' ) }
-		</Notice>
 	);
 }
 

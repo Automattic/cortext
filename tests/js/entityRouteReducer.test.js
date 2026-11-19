@@ -14,6 +14,7 @@ const redirectTarget = ( to ) => ( { kind: 'redirect', to, tail: '' } );
 const publishedTarget = { kind: 'published', tail: '' };
 const importTarget = { kind: 'import', tail: '' };
 const experimentsTarget = { kind: 'experiments', tail: '' };
+const trashTarget = { kind: 'trash', tail: '' };
 
 function activate( state, target ) {
 	let next = reducer( state, { type: 'TARGET_CHANGED', target } );
@@ -62,6 +63,29 @@ describe( 'EntityRoute reducer', () => {
 			expect( parseTarget( 'settings/import' ) ).toEqual( {
 				kind: 'import',
 				tail: '',
+			} );
+		} );
+
+		it( 'opens Trash from `trash`', () => {
+			expect( parseTarget( 'trash' ) ).toEqual( {
+				kind: 'trash',
+				tail: '',
+			} );
+		} );
+
+		it( 'opens a trashed document from `trash/<id>`, marked as coming from Trash', () => {
+			expect( parseTarget( 'trash/42' ) ).toEqual( {
+				kind: 'document',
+				id: 42,
+				tail: '42',
+				inTrash: true,
+			} );
+		} );
+
+		it( 'leaves documents whose slug starts with trash alone', () => {
+			expect( parseTarget( 'trash-day-12' ) ).toMatchObject( {
+				kind: 'document',
+				id: 12,
 			} );
 		} );
 
@@ -150,6 +174,12 @@ describe( 'EntityRoute reducer', () => {
 			} );
 		} );
 
+		it( 'starts a trash target on the trash pane', () => {
+			expect( init( trashTarget ).active ).toEqual( {
+				kind: 'trash',
+			} );
+		} );
+
 		it( 'starts a deep-linked redirect on the loading pane', () => {
 			expect(
 				init( redirectTarget( 'settings/import' ) ).active
@@ -208,6 +238,16 @@ describe( 'EntityRoute reducer', () => {
 			// Switching back to a previously displayed doc requires
 			// remount before reactivation; the previous paint is preserved.
 			expect( state.active ).toEqual( { kind: 'document', id: 2 } );
+		} );
+
+		it( 'switches to trash immediately', () => {
+			const state = activate(
+				init( documentTarget( 1 ) ),
+				documentTarget( 1 )
+			);
+			expect( activate( state, trashTarget ).active ).toEqual( {
+				kind: 'trash',
+			} );
 		} );
 
 		it( 'switches to published immediately', () => {

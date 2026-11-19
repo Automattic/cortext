@@ -142,6 +142,7 @@ export const SETTINGS_IMPORT_URI = 'settings/import';
 export const SETTINGS_PUBLISHED_URI = 'settings/published';
 export const PUBLISHED_DOCUMENTS_URI = 'published';
 export const IMPORT_URI = 'import';
+export const TRASH_URI = 'trash';
 
 // Strips the prefix from a splat URI and returns { prefix, tail }.
 export function parseSplatUri( uri ) {
@@ -153,6 +154,15 @@ export function parseSplatUri( uri ) {
 		prefix: uri.slice( 0, slash ),
 		tail: uri.slice( slash + 1 ),
 	};
+}
+
+// `trash` opens the Trash view, `trash/<id>` with that item selected.
+export function trashUri( id = null ) {
+	return id ? `${ TRASH_URI }/${ id }` : TRASH_URI;
+}
+
+export function isTrashUri( uri ) {
+	return uri === TRASH_URI || parseSplatUri( uri ).prefix === TRASH_URI;
 }
 
 export function isSettingsUri( uri ) {

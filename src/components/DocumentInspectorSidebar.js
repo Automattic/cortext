@@ -505,6 +505,8 @@ function PageIdentityInspectorPanel( { postId, postType, title } ) {
 export function PageActionsPanel( { postId } ) {
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( coreStore );
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch( 'core/notices' );
 	const { home, setHome, isUpdating: isHomeUpdating } = useWorkspaceHome();
 	const { flushActiveEditor, lockEditors, waitForOpenDocuments } =
 		useActiveEditor();
@@ -554,6 +556,8 @@ export function PageActionsPanel( { postId } ) {
 
 	const lifecycleCtx = useMemo(
 		() => ( {
+			createErrorNotice,
+			createSuccessNotice,
 			flushActiveEditor,
 			lockEditors,
 			waitForOpenDocuments,
@@ -563,6 +567,8 @@ export function PageActionsPanel( { postId } ) {
 			onFavoritesError: setError,
 		} ),
 		[
+			createErrorNotice,
+			createSuccessNotice,
 			flushActiveEditor,
 			invalidateResolution,
 			lockEditors,

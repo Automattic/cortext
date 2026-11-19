@@ -2,9 +2,9 @@
  * E2E coverage for the page trash flow in the Cortext shell.
  *
  * Walks the user-visible path the unit tests can't: open a page, trash it
- * from the sidebar dropdown, see the Trash panel pick it up with the
- * nested document count, the canvas locked behind a notice, and Restore
- * via the banner unwinding the whole thing.
+ * from the sidebar dropdown, see the snackbar and the canvas locked behind a
+ * notice, then find it in Trash with its nested document, open it there and
+ * restore the whole thing from its banner.
  */
 
 const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
@@ -29,7 +29,7 @@ async function deleteIfCreated( requestUtils, id ) {
 }
 
 test.describe( 'Page trash flow', () => {
-	test( 'trash a parent from the sidebar, restore via the canvas banner', async ( {
+	test( 'trash a parent from the sidebar, restore it from the Trash view', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -90,8 +90,8 @@ test.describe( 'Page trash flow', () => {
 				.click( { force: true } );
 			await page.getByRole( 'menuitem', { name: 'Trash' } ).click();
 
-			// Active sidebar drops the whole subtree; the Trash panel
-			// shows the cascade root with the nested document count.
+			// Active sidebar drops the whole subtree, and a snackbar says what
+			// went to Trash.
 			await expect(
 				sidebar.getByRole( 'button', {
 					name: PARENT_TITLE,
@@ -104,46 +104,70 @@ test.describe( 'Page trash flow', () => {
 					exact: true,
 				} )
 			).toHaveCount( 0 );
-
-			const trashList = page.locator( '.cortext-sidebar__trash-list' );
-			await expect( trashList ).toContainText( PARENT_TITLE );
-			await expect( trashList ).toContainText( '1 nested document' );
+			await expect(
+				page.locator( '.components-snackbar' ).filter( {
+					hasText: 'Document and 1 nested document moved to Trash.',
+				} )
+			).toBeVisible();
 
 			// Canvas keeps the parent open with a trashed banner.
-			const notice = page
-				.locator( '.cortext-canvas__notice' )
-				.filter( { hasText: 'This document is in the Trash.' } );
-			const restoreButton = notice.getByRole( 'button', {
-				name: 'Restore',
-				exact: true,
-			} );
-			await expect( notice ).toContainText(
-				'This document is in the Trash.'
-			);
 			await expect(
 				page
-					.locator( '.cortext-document-actions' )
-					.getByRole( 'button', { name: 'Publish', exact: true } )
-			).toBeDisabled();
+					.locator( '.cortext-trashed-notice' )
+					.filter( { hasText: 'This document is in the Trash.' } )
+			).toBeVisible();
+			// Publishing and adding blocks don't apply to a deleted document.
+			const documentActions = page.locator( '.cortext-document-actions' );
+			await expect(
+				documentActions.getByRole( 'button', {
+					name: 'Publish',
+					exact: true,
+				} )
+			).toHaveCount( 0 );
+			await expect(
+				documentActions.getByRole( 'button', { name: 'Add block' } )
+			).toHaveCount( 0 );
 
-			// Restore via the banner. Subtree returns; banner disappears.
-			await restoreButton.click();
+			// The Trash view lists the parent as one item that brings its
+			// child back with it.
+			await sidebar.locator( '.cortext-sidebar__trash-footer' ).click();
+			// Trash takes over the sidebar with its list, and the selected item
+			// opens in the canvas.
+			const trashList = page.locator( '.cortext-sidebar__trash' );
+			const parentItem = trashList
+				.getByRole( 'option' )
+				.filter( { hasText: PARENT_TITLE } );
+			await expect( parentItem ).toContainText( '+1' );
+			await expect(
+				trashList
+					.getByRole( 'option' )
+					.filter( { hasText: CHILD_TITLE } )
+			).toHaveCount( 0 );
 
-			await expect( notice ).toHaveCount( 0 );
+			await parentItem.click();
+			const banner = page.locator( '.cortext-trashed-notice' );
+			await expect( banner ).toContainText(
+				'1 nested document comes back with it'
+			);
+
+			// Leaving a Trash that still has items stays left.
+			await trashList.getByRole( 'button', { name: 'Back' } ).click();
+			await expect( page ).not.toHaveURL( /p=%2Ftrash/ );
+
+			await sidebar.locator( '.cortext-sidebar__trash-footer' ).click();
+			await parentItem.click();
+			await banner.getByRole( 'button', { name: 'Restore' } ).click();
+			await expect( parentItem ).toHaveCount( 0 );
+
+			// Back hands the sidebar back to the document tree, where the
+			// restored parent is again.
+			await trashList.getByRole( 'button', { name: 'Back' } ).click();
 			await expect(
 				sidebar.getByRole( 'button', {
 					name: PARENT_TITLE,
 					exact: true,
 				} )
 			).toBeVisible();
-			await expect(
-				page
-					.locator( '#cortext-sidebar-trash-panel' )
-					.getByRole( 'button', {
-						name: PARENT_TITLE,
-						exact: true,
-					} )
-			).toHaveCount( 0 );
 		} finally {
 			await deleteIfCreated( requestUtils, child?.id );
 			await deleteIfCreated( requestUtils, parent?.id );

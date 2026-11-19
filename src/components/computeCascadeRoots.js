@@ -7,7 +7,8 @@
  *
  * @param {Array}    documents  Document records to group.
  * @param {string[]} markerKeys Meta keys that may contain a cascade parent ID.
- * @return {{roots: Array, descendantCountById: Map}} Root records and descendant counts.
+ * @return {{roots: Array, descendantCountById: Map, descendantsById: Map}} Root
+ *         records, their descendant counts, and the descendant records.
  */
 export default function computeCascadeRoots( documents = [], markerKeys = [] ) {
 	const all = Array.isArray( documents ) ? documents : [];
@@ -43,8 +44,10 @@ export default function computeCascadeRoots( documents = [], markerKeys = [] ) {
 	} );
 
 	const descendantCountById = new Map();
+	const descendantsById = new Map();
 	roots.forEach( ( root ) => {
 		const counts = { total: 0 };
+		const descendants = [];
 		const stack = [ ...( childrenByMarker.get( root.id ) ?? [] ) ];
 		const visited = new Set();
 		while ( stack.length ) {
@@ -54,13 +57,15 @@ export default function computeCascadeRoots( documents = [], markerKeys = [] ) {
 			}
 			visited.add( node.id );
 			counts.total++;
+			descendants.push( node );
 			const children = childrenByMarker.get( node.id );
 			if ( children ) {
 				stack.push( ...children );
 			}
 		}
 		descendantCountById.set( root.id, counts );
+		descendantsById.set( root.id, descendants );
 	} );
 
-	return { roots, descendantCountById };
+	return { roots, descendantCountById, descendantsById };
 }

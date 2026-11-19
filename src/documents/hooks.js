@@ -31,6 +31,7 @@ import {
 	archiveDocument,
 	unarchiveDocument,
 	permanentlyDeleteDocument,
+	emptyTrash,
 } from './actions';
 import { computeDocumentUri } from '../router/useResolveEntity';
 import { useActiveEditor } from '../components/ActiveEditorContext';
@@ -183,6 +184,11 @@ export function useDocumentActions() {
 		[ ctx ]
 	);
 
+	const emptyTrashAction = useCallback(
+		async () => emptyTrash( ctx ),
+		[ ctx ]
+	);
+
 	return useMemo(
 		() => ( {
 			rename,
@@ -192,6 +198,7 @@ export function useDocumentActions() {
 			archive,
 			unarchive,
 			permanentDelete,
+			emptyTrash: emptyTrashAction,
 		} ),
 		[
 			rename,
@@ -201,6 +208,7 @@ export function useDocumentActions() {
 			archive,
 			unarchive,
 			permanentDelete,
+			emptyTrashAction,
 		]
 	);
 }

@@ -26,6 +26,7 @@ import {
 } from './page-queries';
 import { computeDocumentUri } from '../router/useResolveEntity';
 import { definesTrait, hasTrait } from '../documents/capabilities';
+import { documentTypeLabel } from '../documents/labels';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
@@ -67,16 +68,6 @@ function documentTypeValue( record ) {
 		return TYPE_COLLECTION_ITEM;
 	}
 	return TYPE_PAGE;
-}
-
-function documentTypeLabel( record ) {
-	if ( definesTrait( record ) ) {
-		return __( 'Collection', 'cortext' );
-	}
-	if ( hasTrait( record ) ) {
-		return __( 'Collection item', 'cortext' );
-	}
-	return __( 'Page', 'cortext' );
 }
 
 function buildItems( documents ) {

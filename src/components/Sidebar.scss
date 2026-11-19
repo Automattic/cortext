@@ -123,25 +123,28 @@
 		transition: transform 160ms ease, opacity 160ms ease;
 	}
 
-	&__view--settings {
+	&__view--settings,
+	&__view--trash {
 		transform: translateX(100%);
 		opacity: 0;
 		pointer-events: none;
 	}
 
-	&__views[data-settings="true"] {
+	&__views[data-mode="settings"],
+	&__views[data-mode="trash"] {
 
 		.cortext-sidebar__view--main {
 			transform: translateX(-25%);
 			opacity: 0;
 			pointer-events: none;
 		}
+	}
 
-		.cortext-sidebar__view--settings {
-			transform: translateX(0);
-			opacity: 1;
-			pointer-events: auto;
-		}
+	&__views[data-mode="settings"] .cortext-sidebar__view--settings,
+	&__views[data-mode="trash"] .cortext-sidebar__view--trash {
+		transform: translateX(0);
+		opacity: 1;
+		pointer-events: auto;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
@@ -356,10 +359,24 @@
 		justify-content: center;
 	}
 
-	&__trash-footer.components-button {
+	&__archive-footer.components-button {
 		width: auto;
 		gap: $grid-unit-05;
 		padding: 0 $grid-unit-10;
+	}
+
+	&__trash-footer.components-button {
+		position: relative;
+	}
+
+	&__footer-dot {
+		position: absolute;
+		top: 5px;
+		right: 5px;
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: currentcolor;
 	}
 
 	&__footer-count {
@@ -382,7 +399,7 @@
 		flex: 0 1 auto;
 		max-height: min(280px, 38vh);
 		overflow-y: auto;
-		padding: 0 $grid-unit-15 $grid-unit-10;
+		padding: $grid-unit-10 $grid-unit-15;
 		border-top: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
 	}
 
@@ -395,30 +412,6 @@
 	&__trash-panel-header &__section-title {
 		margin: 0;
 		padding: 0;
-	}
-
-	&__trash-panel-tabs {
-		display: flex;
-		gap: $grid-unit-05;
-		padding: $grid-unit-10 $grid-unit-05 $grid-unit-05;
-	}
-
-	&__trash-panel-tab.components-button {
-		height: $grid-unit-30;
-		padding: 0 $grid-unit-10;
-		gap: $grid-unit-05;
-		font-size: 12px;
-		font-weight: 500;
-
-		&[aria-selected="true"] {
-			background: var(--cortext-state-selected);
-			color: var(--cortext-text);
-		}
-
-		span {
-			color: var(--cortext-text-muted);
-			font-size: 10px;
-		}
 	}
 
 	/* stylelint-disable-next-line no-descending-specificity */
@@ -965,7 +958,7 @@
 			box-shadow: none;
 		}
 
-		.cortext-sidebar__trash-footer.components-button {
+		.cortext-sidebar__archive-footer.components-button {
 			width: $grid-unit-40;
 			min-width: $grid-unit-40;
 			padding: 0;

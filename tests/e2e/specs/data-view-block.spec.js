@@ -2879,7 +2879,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'trashes a row from the DataViews menu and restores it from Trash', async ( {
+	test( 'trashes a row from the DataViews menu and undoes it from the snackbar', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -2955,27 +2955,14 @@ test.describe( 'Collection view block', () => {
 
 			await expect( rowTitle ).toHaveCount( 0 );
 
-			const sidebar = page.locator( '.cortext-sidebar' );
-			await sidebar.locator( '.cortext-sidebar__trash-footer' ).click();
-			await page.locator( '#cortext-sidebar-trash-tab' ).click();
-			const trashPanel = page.locator(
-				'#cortext-sidebar-trash-tabpanel'
-			);
-			await expect( trashPanel ).toContainText(
-				'The Left Hand of Darkness'
-			);
-			await expect( trashPanel ).toContainText(
-				fixture.collection.title.rendered
-			);
-
-			await trashPanel
-				.getByRole( 'button', { name: 'Restore' } )
-				.click( { force: true } );
+			// The snackbar offers to undo it, which brings the row back
+			// without leaving the collection.
+			const snackbar = page
+				.locator( '.components-snackbar' )
+				.filter( { hasText: 'Document moved to Trash.' } );
+			await snackbar.getByRole( 'button', { name: 'Undo' } ).click();
 
 			await expect( rowTitle ).toBeVisible();
-			await expect( trashPanel ).not.toContainText(
-				'The Left Hand of Darkness'
-			);
 		} finally {
 			await deleteIfCreated(
 				requestUtils,

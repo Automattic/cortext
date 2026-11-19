@@ -11,7 +11,7 @@ import { __ } from '@wordpress/i18n';
 
 import EditableCell from './EditableCell';
 import DocumentIcon from './DocumentIcon';
-import { ROW_DETAIL_MODE_ICONS } from './RowDetailView';
+import { ROW_DETAIL_MODE_ICONS } from './rowDetailUtils';
 import { COVER_FIELD_ID, TITLE_FIELD_ID } from './dataViewColumns';
 import { dataViewsFilterByForType } from '../hooks/fieldMapping';
 
