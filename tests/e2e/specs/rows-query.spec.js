@@ -41,14 +41,13 @@ function rowIds( response ) {
 	return response.rows.map( ( row ) => row.id );
 }
 
-async function createField( requestUtils, title, type ) {
+async function createField( requestUtils, collectionId, title, type ) {
 	return requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_fields',
+		path: `/cortext/v1/collections/${ collectionId }/fields`,
 		data: {
 			title,
-			status: 'private',
-			meta: { type },
+			type,
 		},
 	} );
 }
@@ -68,24 +67,32 @@ async function createRowsQueryFixture( requestUtils ) {
 	} );
 
 	const fields = {
-		status: await createField( requestUtils, 'Status', 'text' ),
-		notes: await createField( requestUtils, 'Notes', 'text' ),
-		score: await createField( requestUtils, 'Score', 'number' ),
-		due: await createField( requestUtils, 'Due', 'date' ),
-		phase: await createField( requestUtils, 'Phase', 'select' ),
+		status: await createField(
+			requestUtils,
+			collection.id,
+			'Status',
+			'text'
+		),
+		notes: await createField(
+			requestUtils,
+			collection.id,
+			'Notes',
+			'text'
+		),
+		score: await createField(
+			requestUtils,
+			collection.id,
+			'Score',
+			'number'
+		),
+		due: await createField( requestUtils, collection.id, 'Due', 'date' ),
+		phase: await createField(
+			requestUtils,
+			collection.id,
+			'Phase',
+			'select'
+		),
 	};
-
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: {
-			meta: {
-				cortext_fields: Object.values( fields ).map( ( field ) =>
-					String( field.id )
-				),
-			},
-		},
-	} );
 
 	const rows = {};
 	// Create rows out of title order so ID order never matches a sorted result.

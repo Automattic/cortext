@@ -438,19 +438,10 @@ async function createCollectionFixture( requestUtils ) {
 
 	const field = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_fields',
+		path: `/cortext/v1/collections/${ collection.id }/fields`,
 		data: {
 			title: 'Author',
-			status: 'private',
-			meta: { type: 'text' },
-		},
-	} );
-
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: {
-			meta: { cortext_fields: [ String( field.id ) ] },
+			type: 'text',
 		},
 	} );
 
@@ -491,26 +482,13 @@ async function createCalculationFixture( requestUtils ) {
 	} ) ) {
 		fields[ key ] = await requestUtils.rest( {
 			method: 'POST',
-			path: '/wp/v2/crtxt_fields',
+			path: `/cortext/v1/collections/${ collection.id }/fields`,
 			data: {
 				title: config.title,
-				status: 'private',
-				meta: { type: config.type },
+				type: config.type,
 			},
 		} );
 	}
-
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: {
-			meta: {
-				cortext_fields: Object.values( fields ).map( ( field ) =>
-					String( field.id )
-				),
-			},
-		},
-	} );
 
 	const rows = [];
 	for ( const row of [
@@ -575,18 +553,10 @@ async function createManualOrderFixture( requestUtils ) {
 	// without it, `cortext_trait` on row inserts is a silent no-op).
 	const field = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_fields',
+		path: `/cortext/v1/collections/${ collection.id }/fields`,
 		data: {
 			title: 'Title',
-			status: 'private',
-			meta: { type: 'text' },
-		},
-	} );
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: {
-			meta: { cortext_fields: [ String( field.id ) ] },
+			type: 'text',
 		},
 	} );
 
@@ -2402,38 +2372,25 @@ test.describe( 'Collection view block', () => {
 			} );
 			fixture.relatedField = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.relatedCollection.id }/fields`,
 				data: {
 					title: 'Name',
-					status: 'private',
-					meta: { type: 'text' },
-				},
-			} );
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.relatedCollection.id }`,
-				data: {
-					meta: {
-						cortext_fields: [ String( fixture.relatedField.id ) ],
-					},
+					type: 'text',
 				},
 			} );
 			fixture.statusField = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Status',
-					status: 'private',
-					meta: {
-						type: 'select',
-						options: JSON.stringify( [
-							{
-								value: 'finished',
-								label: 'Finished',
-								color: 'green',
-							},
-						] ),
-					},
+					type: 'select',
+					options: [
+						{
+							value: 'finished',
+							label: 'Finished',
+							color: 'green',
+						},
+					],
 				},
 			} );
 			fixture.relationField = await requestUtils.rest( {
@@ -2465,20 +2422,6 @@ test.describe( 'Collection view block', () => {
 			const statusFieldKey = `field-${ fixture.statusField.id }`;
 			const relationFieldKey = `field-${ fixture.relationField.id }`;
 			fixture.media = [];
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: {
-						cortext_fields: [
-							String( fixture.field.id ),
-							String( fixture.statusField.id ),
-							String( fixture.relationField.id ),
-						],
-					},
-				},
-			} );
 
 			for ( const row of fixture.rows ) {
 				const media = await uploadCoverMedia(
@@ -2660,37 +2603,21 @@ test.describe( 'Collection view block', () => {
 			);
 			fixture.statusField = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Status',
-					status: 'private',
-					meta: {
-						type: 'select',
-						options: JSON.stringify( [
-							{
-								value: 'finished',
-								label: 'Finished',
-								color: 'green',
-							},
-						] ),
-					},
+					type: 'select',
+					options: [
+						{
+							value: 'finished',
+							label: 'Finished',
+							color: 'green',
+						},
+					],
 				},
 			} );
 			const fieldKey = `field-${ fixture.statusField.id }`;
 			fixture.media = [];
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: {
-						cortext_fields: [
-							String( fixture.field.id ),
-							String( fixture.statusField.id ),
-						],
-					},
-				},
-			} );
 
 			for ( const row of fixture.rows ) {
 				const media = await uploadCoverMedia(
@@ -3310,34 +3237,19 @@ test.describe( 'Collection view block', () => {
 
 			fixture.fieldA = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Author',
-					status: 'private',
-					meta: { type: 'text' },
+					type: 'text',
 				},
 			} );
 
 			fixture.fieldB = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Notes',
-					status: 'private',
-					meta: { type: 'text' },
-				},
-			} );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: {
-						cortext_fields: [
-							String( fixture.fieldA.id ),
-							String( fixture.fieldB.id ),
-						],
-					},
+					type: 'text',
 				},
 			} );
 
@@ -4313,45 +4225,27 @@ test.describe( 'Collection view block', () => {
 
 			fixture.tagsField = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Tags',
-					status: 'private',
-					meta: {
-						type: 'multiselect',
-						options: JSON.stringify( [
-							{
-								value: 'research',
-								label: 'Research',
-								color: 'blue',
-							},
-							{ value: 'data', label: 'Data', color: 'green' },
-						] ),
-					},
+					type: 'multiselect',
+					options: [
+						{
+							value: 'research',
+							label: 'Research',
+							color: 'blue',
+						},
+						{ value: 'data', label: 'Data', color: 'green' },
+					],
 				},
 			} );
 
 			fixture.yearField = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Year',
-					status: 'private',
-					meta: { type: 'number' },
-				},
-			} );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: {
-						cortext_fields: [
-							String( fixture.field.id ),
-							String( fixture.tagsField.id ),
-							String( fixture.yearField.id ),
-						],
-					},
+					type: 'number',
 				},
 			} );
 
@@ -4958,14 +4852,14 @@ test.describe( 'Collection view block', () => {
 			} );
 
 			const createField = async ( title, type, options ) => {
-				const meta = { type };
+				const data = { title, type };
 				if ( options ) {
-					meta.options = JSON.stringify( options );
+					data.options = options;
 				}
 				const field = await requestUtils.rest( {
 					method: 'POST',
-					path: '/wp/v2/crtxt_fields',
-					data: { title, status: 'private', meta },
+					path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
+					data,
 				} );
 				fixture.fieldIds.push( field.id );
 				return field;
@@ -4982,16 +4876,6 @@ test.describe( 'Collection view block', () => {
 				{ value: 'a', label: 'Alpha', color: '#ddebf1' },
 				{ value: 'b', label: 'Beta', color: '#ddedea' },
 			] );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: {
-						cortext_fields: fixture.fieldIds.map( String ),
-					},
-				},
-			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
@@ -5142,19 +5026,10 @@ test.describe( 'Collection view block', () => {
 
 			fixture.field = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Score',
-					status: 'private',
-					meta: { type: 'number' },
-				},
-			} );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: { cortext_fields: [ String( fixture.field.id ) ] },
+					type: 'number',
 				},
 			} );
 
@@ -5310,19 +5185,10 @@ test.describe( 'Collection view block', () => {
 
 			fixture.field = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Note',
-					status: 'private',
-					meta: { type: 'text' },
-				},
-			} );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: { cortext_fields: [ String( fixture.field.id ) ] },
+					type: 'text',
 				},
 			} );
 
@@ -6352,20 +6218,13 @@ test.describe( 'Collection view block', () => {
 
 			const field = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Done?',
-					status: 'private',
-					meta: { type: 'checkbox' },
+					type: 'checkbox',
 				},
 			} );
 			fixture.fieldIds.push( field.id );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: { meta: { cortext_fields: [ String( field.id ) ] } },
-			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
@@ -6608,14 +6467,14 @@ test.describe( 'Collection view block', () => {
 			} );
 
 			const createField = async ( title, type, options ) => {
-				const meta = { type };
+				const data = { title, type };
 				if ( options ) {
-					meta.options = JSON.stringify( options );
+					data.options = options;
 				}
 				const field = await requestUtils.rest( {
 					method: 'POST',
-					path: '/wp/v2/crtxt_fields',
-					data: { title, status: 'private', meta },
+					path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
+					data,
 				} );
 				fixture.fieldIds.push( field.id );
 				return field;
@@ -6626,14 +6485,6 @@ test.describe( 'Collection view block', () => {
 				{ value: 'docs', label: 'docs', color: '#e8def8' },
 			] );
 			const dueField = await createField( 'Due', 'date' );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: { cortext_fields: fixture.fieldIds.map( String ) },
-				},
-			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
@@ -6755,8 +6606,8 @@ test.describe( 'Collection view block', () => {
 			const createField = async ( title ) => {
 				const f = await requestUtils.rest( {
 					method: 'POST',
-					path: '/wp/v2/crtxt_fields',
-					data: { title, status: 'private', meta: { type: 'text' } },
+					path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
+					data: { title, type: 'text' },
 				} );
 				fixture.fieldIds.push( f.id );
 				return f;
@@ -6764,14 +6615,6 @@ test.describe( 'Collection view block', () => {
 
 			const fieldA = await createField( 'Author' );
 			const fieldB = await createField( 'Notes' );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: { cortext_fields: fixture.fieldIds.map( String ) },
-				},
-			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',

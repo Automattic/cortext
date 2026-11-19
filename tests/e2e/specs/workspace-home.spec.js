@@ -176,23 +176,15 @@ test.describe( 'Workspace home', () => {
 					status: 'private',
 				},
 			} );
-			field = await requestUtils.rest( {
-				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
-				data: {
-					title: 'Title',
-					status: 'private',
-					meta: { type: 'text' },
-				},
-			} );
 			// Promote the document to a collection by attaching at least one
 			// field to its schema; without `cortext_fields` the canvas renders
 			// as a plain page.
-			await requestUtils.rest( {
+			field = await requestUtils.rest( {
 				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ collection.id }`,
+				path: `/cortext/v1/collections/${ collection.id }/fields`,
 				data: {
-					meta: { cortext_fields: [ String( field.id ) ] },
+					title: 'Title',
+					type: 'text',
 				},
 			} );
 
