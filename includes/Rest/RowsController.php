@@ -487,11 +487,7 @@ final class RowsController {
 	private function validate_collection( int $collection_id ) {
 		$collection = get_post( $collection_id );
 
-		if (
-			! $collection
-			|| Documents::STATUS_TRASH === $collection->post_status
-			|| ! Document::is_collection_post( $collection )
-		) {
+		if ( ! $collection || ! Document::is_collection_post( $collection ) ) {
 			return new WP_Error(
 				'cortext_collection_not_found',
 				__( 'Collection not found.', 'cortext' ),

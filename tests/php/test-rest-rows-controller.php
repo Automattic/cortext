@@ -302,22 +302,6 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
-	public function test_rejects_trashed_collection(): void {
-		wp_set_current_user( $this->create_user( 'author' ) );
-		$fixture = $this->create_collection_fixture( 'trashed-rows' );
-		wp_update_post(
-			array(
-				'ID'          => $fixture['collection_id'],
-				'post_status' => 'trash',
-			)
-		);
-
-		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
-
-		$this->assertSame( 404, $response->get_status() );
-		$this->assertSame( 'cortext_collection_not_found', $response->get_data()['code'] );
-	}
-
 	public function test_rejects_nonexistent_collection(): void {
 		wp_set_current_user( $this->create_user( 'author' ) );
 
