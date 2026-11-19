@@ -169,7 +169,7 @@ final class Test_Documents extends BaseTestCase {
 		);
 		$active_ids   = array_map(
 			static fn( \WP_Post $collection ): int => (int) $collection->ID,
-			$this->documents->find_active_traits_for_document( $row )
+			$this->documents->find_live_traits_for_document( $row )
 		);
 		$legacy_trait = $this->documents->find_trait_for_document( $row );
 		$target       = $this->documents->format_target( $row_id );
@@ -521,6 +521,47 @@ final class Test_Documents extends BaseTestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'cortext_document_target_hidden', $result->get_error_code() );
+	}
+
+	public function test_shared_row_with_an_archived_collection_targets_its_live_one(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$archived_collection = $this->create_collection( 'archived-projects', 'Archived projects' );
+		$live_collection     = $this->create_collection( 'people', 'People' );
+		$row_id              = $this->create_row( $archived_collection, 'Ada' );
+		$this->documents->set_memberships( $row_id, array( $archived_collection, $live_collection ) );
+		wp_update_post(
+			array(
+				'ID'          => $archived_collection,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$target      = $this->documents->format_target( $row_id );
+		$memberships = array_column( $this->documents->get_memberships( $row_id ), 'active', 'id' );
+
+		$this->assertIsArray( $target );
+		$this->assertSame( $live_collection, $target['collection']['id'] );
+		$this->assertTrue( $memberships[ $live_collection ] );
+		$this->assertFalse( $memberships[ $archived_collection ] );
+	}
+
+	public function test_archive_listing_keeps_the_collection_of_an_archived_row(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'archived-projects', 'Archived projects' );
+		$row_id        = $this->create_row( $collection_id, 'Archived with it' );
+		foreach ( array( $collection_id, $row_id ) as $post_id ) {
+			wp_update_post(
+				array(
+					'ID'          => $post_id,
+					'post_status' => Documents::STATUS_ARCHIVED,
+				)
+			);
+		}
+
+		$document = $this->documents->format_document( get_post( $row_id ), array( 'include_archive_meta' => true ) );
+
+		$this->assertIsArray( $document );
+		$this->assertSame( $collection_id, $document['collection']['id'] );
 	}
 
 	public function test_list_excludes_trashed_documents(): void {

@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
 use Cortext\PostType\Document;
 use Cortext\Rest\DocumentLocatorController;
 use Cortext\Taxonomy\TraitTaxonomy;
@@ -141,6 +142,76 @@ final class Test_Rest_Document_Locator_Controller extends BaseTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( $active_collection ), $response->get_data()['trait_ids'] );
+	}
+
+	public function test_trait_ids_exclude_archived_memberships_of_a_live_row(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$live_collection     = $this->create_collection( 'Live collection' );
+		$archived_collection = $this->create_collection( 'Archived collection' );
+		$row_id              = $this->create_row_in( array( $live_collection, $archived_collection ) );
+		wp_update_post(
+			array(
+				'ID'          => $archived_collection,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = $this->locate( $row_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $live_collection ), $response->get_data()['trait_ids'] );
+	}
+
+	public function test_trait_ids_keep_the_collection_of_a_row_retired_with_it(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'Old tasks' );
+		$row_id        = $this->create_row_in( array( $collection_id ) );
+		wp_update_post(
+			array(
+				'ID'          => $collection_id,
+				'post_status' => 'trash',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'          => $row_id,
+				'post_status' => 'trash',
+			)
+		);
+
+		$response = $this->locate( $row_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $collection_id ), $response->get_data()['trait_ids'] );
+	}
+
+	private function create_collection( string $title ): int {
+		$collection_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => $title,
+			)
+		);
+		( new TraitTaxonomy() )->ensure_mirror_term( $collection_id );
+		return $collection_id;
+	}
+
+	private function create_row_in( array $collection_ids ): int {
+		$row_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Row',
+			)
+		);
+		wp_set_object_terms(
+			$row_id,
+			array_map( array( TraitTaxonomy::class, 'term_id_for_trait' ), $collection_ids ),
+			TraitTaxonomy::TAXONOMY,
+			false
+		);
+		return $row_id;
 	}
 
 	private function locate( int $id ) {

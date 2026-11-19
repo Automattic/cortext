@@ -182,16 +182,15 @@ export default function TraitControl( {
 		] );
 	};
 
-	const activeCollectionCount = collections.filter(
+	// Archived and trashed traits stay in every write so restore can bring the
+	// row back to them, but they are not places the row lives, so no chip.
+	const liveCollections = collections.filter(
 		( collection ) => collection.active !== false
-	).length;
-	const canRemoveCollection = ( collection ) =>
-		collection.active === false
-			? activeCollectionCount > 0
-			: activeCollectionCount > 1;
+	);
+	const canRemoveLiveCollection = liveCollections.length > 1;
 
 	const removeCollection = ( collection ) => {
-		if ( ! canRemoveCollection( collection ) ) {
+		if ( ! canRemoveLiveCollection ) {
 			return;
 		}
 		writeMemberships(
@@ -219,7 +218,7 @@ export default function TraitControl( {
 					</span>
 				</div>
 				<div className="cortext-row-detail__property-value cortext-traits__chips">
-					{ collections.map( ( collection ) => (
+					{ liveCollections.map( ( collection ) => (
 						<span
 							key={ collection.id }
 							className="cortext-traits__chip"
@@ -233,7 +232,7 @@ export default function TraitControl( {
 							<span className="cortext-traits__chip-title">
 								{ collection.title }
 							</span>
-							{ canRemoveCollection( collection ) ? (
+							{ canRemoveLiveCollection ? (
 								<Button
 									className="cortext-traits__chip-remove"
 									icon={ closeSmall }

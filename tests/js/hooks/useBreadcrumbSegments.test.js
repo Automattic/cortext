@@ -185,6 +185,52 @@ describe( 'useBreadcrumbSegments', () => {
 			expect( result.chips ).toEqual( [] );
 		} );
 
+		it( 'skips an archived collection as parent and chip while another one is live', () => {
+			lists.terms.push( { id: 55, slug: '5' } );
+			byId.postType[ 5 ] = {
+				id: 5,
+				parent: 0,
+				status: 'crtxt_archived',
+				title: { raw: 'Old projects' },
+			};
+
+			const result = render( {
+				id: 100,
+				title: { raw: 'Ada' },
+				crtxt_trait: [ 55, 11, 22 ],
+				parent: 0,
+			} );
+
+			expect( labelsOf( result.segments ) ).toEqual( [ 'Ada' ] );
+			expect( labelsOf( result.chips ) ).toEqual( [
+				'Projects',
+				'People',
+			] );
+		} );
+
+		it( 'keeps the collection of a row retired together with it', () => {
+			lists.terms.push( { id: 33, slug: '3' } );
+			byId.postType[ 3 ] = {
+				id: 3,
+				parent: 0,
+				status: 'trash',
+				title: { raw: 'Old tasks' },
+			};
+
+			const result = render( {
+				id: 100,
+				title: { raw: 'Ada' },
+				crtxt_trait: [ 33 ],
+				parent: 0,
+			} );
+
+			expect( labelsOf( result.segments ) ).toEqual( [
+				'Old tasks',
+				'Ada',
+			] );
+			expect( result.chips ).toEqual( [] );
+		} );
+
 		it( 'shows the item alone with its collections as chips when it belongs to several', () => {
 			const result = render( {
 				id: 100,

@@ -35,11 +35,16 @@ function termIdsOf( record ) {
 	return Array.isArray( record?.crtxt_trait ) ? record.crtxt_trait : [];
 }
 
-// A trashed collection keeps its rows' membership for restore, but it is not a
-// place the row lives in, so it never shows as a parent or a chip.
+const RETIRED_STATUSES = [ 'trash', 'crtxt_archived' ];
+
+// An archived or trashed collection keeps its rows' membership for restore,
+// but it is not a place a live row lives in, so it shows as neither a parent
+// nor a chip while the row has a live collection.
 function liveCollectionForTerm( termId, lookup ) {
 	const collection = lookup.collectionForTerm( Number( termId ) );
-	return collection && collection.status !== 'trash' ? collection : null;
+	return collection && ! RETIRED_STATUSES.includes( collection.status )
+		? collection
+		: null;
 }
 
 // Every live collection a row belongs to, deduplicated and in term order.
@@ -57,13 +62,21 @@ function collectionsOfRecord( record, lookup ) {
 }
 
 // Walks one step up the breadcrumb chain. A document's parent is the first
-// live collection among its trait terms (if any), then its `post_parent` (if
-// any). Collections, pages, and rows all use the same rule; the difference is
-// which slots are filled. `lookup` answers from the cached lists first and
-// falls back to a single-record fetch for anything past their first page.
+// live collection among its trait terms, or the first collection at all when
+// the row was retired together with them, then its `post_parent` (if any).
+// Collections, pages, and rows all use the same rule; the difference is which
+// slots are filled. `lookup` answers from the cached lists first and falls
+// back to a single-record fetch for anything past their first page.
 function parentOf( record, lookup ) {
-	for ( const termId of termIdsOf( record ) ) {
+	const termIds = termIdsOf( record );
+	for ( const termId of termIds ) {
 		const collection = liveCollectionForTerm( termId, lookup );
+		if ( collection ) {
+			return collection;
+		}
+	}
+	for ( const termId of termIds ) {
+		const collection = lookup.collectionForTerm( Number( termId ) );
 		if ( collection ) {
 			return collection;
 		}

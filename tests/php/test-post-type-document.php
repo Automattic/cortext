@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Cortext\Tests;
 
+use Cortext\Documents;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
@@ -1019,6 +1020,41 @@ final class Test_Post_Type_Document extends BaseTestCase {
 
 		$this->assertContains( 'field-' . $own_field, $keys );
 		$this->assertNotContains( 'field-' . $protected_field, $keys );
+	}
+
+	public function test_rest_field_meta_keys_hide_an_archived_membership_of_a_live_row(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		[ $live_collection, $live_field ]         = $this->create_collection_with_field();
+		[ $archived_collection, $archived_field ] = $this->create_collection_with_field();
+		$row_id                                   = $this->create_row_in( $live_collection );
+		$this->add_membership( $row_id, $archived_collection );
+		wp_update_post(
+			array(
+				'ID'          => $archived_collection,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$keys = Document::rest_field_meta_keys( get_post( $row_id ) );
+
+		$this->assertContains( 'field-' . $live_field, $keys );
+		$this->assertNotContains( 'field-' . $archived_field, $keys );
+	}
+
+	public function test_rest_field_meta_keys_keep_the_fields_of_a_row_retired_with_its_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		[ $collection_id, $field_id ] = $this->create_collection_with_field();
+		$row_id                       = $this->create_row_in( $collection_id );
+		foreach ( array( $collection_id, $row_id ) as $post_id ) {
+			wp_update_post(
+				array(
+					'ID'          => $post_id,
+					'post_status' => 'trash',
+				)
+			);
+		}
+
+		$this->assertContains( 'field-' . $field_id, Document::rest_field_meta_keys( get_post( $row_id ) ) );
 	}
 
 	public function test_rest_field_meta_keys_is_empty_for_pages_and_collections(): void {

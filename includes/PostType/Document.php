@@ -160,7 +160,7 @@ final class Document {
 	 * Returns the `field-<id>` meta keys a document carries in REST `meta`.
 	 * `field-<id>` is registered on every `crtxt_document`, so without this the
 	 * response would carry every collection's fields on every document. A row
-	 * keeps the writable fields of every active collection it belongs to that
+	 * keeps the writable fields of every collection it shows that
 	 * the request may see. Rollups and formulas stay out of `meta` because they
 	 * are computed and read-only, exposed in `cortext_hydrated_meta`. Pages and
 	 * collections carry no field values.
@@ -171,7 +171,7 @@ final class Document {
 	 */
 	public static function rest_field_meta_keys( WP_Post $post, string $context = 'edit' ): array {
 		$keys = array();
-		foreach ( ( new Documents() )->find_active_traits_for_document( $post ) as $trait_post ) {
+		foreach ( ( new Documents() )->find_visible_traits_for_document( $post ) as $trait_post ) {
 			if ( ! self::can_access_collection_fields( $trait_post, $context ) ) {
 				continue;
 			}
@@ -189,16 +189,13 @@ final class Document {
 	/**
 	 * Whether the current request may expose a collection's row-property values.
 	 * Editor responses only expose fields the user can also write; public view
-	 * responses may expose fields of a published collection.
+	 * responses may expose fields of a published collection. Which collections
+	 * a row shows at all comes from `Documents::find_visible_traits_for_document`.
 	 *
 	 * @param WP_Post $collection Collection document.
 	 * @param string  $context    REST context (`edit` or `view`).
 	 */
 	public static function can_access_collection_fields( WP_Post $collection, string $context = 'edit' ): bool {
-		if ( Documents::STATUS_TRASH === $collection->post_status ) {
-			return false;
-		}
-
 		if ( 'view' === $context ) {
 			return 'publish' === $collection->post_status
 				|| current_user_can( 'read_post', (int) $collection->ID );
@@ -685,7 +682,7 @@ final class Document {
 			);
 		}
 
-		$trait_posts = ( new Documents() )->find_active_traits_for_document( $post );
+		$trait_posts = ( new Documents() )->find_visible_traits_for_document( $post );
 
 		return $this->reject_field_meta_for_collections( $trait_posts, $meta );
 	}
@@ -693,9 +690,9 @@ final class Document {
 	/**
 	 * Rejects field writes outside the supplied schemas or inside a collection
 	 * the current user cannot edit. Shared field definitions remain writable
-	 * when at least one active owning collection is editable.
+	 * when at least one owning collection the row shows is editable.
 	 *
-	 * @param WP_Post[]           $collections Active collection memberships.
+	 * @param WP_Post[]           $collections Collections the row shows.
 	 * @param array<string,mixed> $meta        Meta payload from the REST request.
 	 */
 	private function reject_field_meta_for_collections( array $collections, array $meta ): ?WP_Error {
@@ -889,7 +886,7 @@ final class Document {
 		// Only rows carry indexable field meta. A row can belong to several
 		// collections, so keep the complete membership set for formula
 		// materialization while the index resolves ordinary fields by owner.
-		$trait_posts = ( new Documents() )->find_active_traits_for_document( $post );
+		$trait_posts = ( new Documents() )->find_visible_traits_for_document( $post );
 		if ( count( $trait_posts ) === 0 ) {
 			return;
 		}

@@ -420,16 +420,19 @@ final class Documents {
 			return null;
 		}
 
-		// A row needs at least one active parent collection to be openable.
+		// A row needs at least one live parent collection to be openable.
 		$source_collection = null;
 		if ( self::KIND_ROW === $kind ) {
-			$active_collections = $this->find_active_traits_for_document( $post );
-			$source_collection  = $active_collections[0] ?? null;
+			$live_collections  = $this->find_live_traits_for_document( $post );
+			$source_collection = $live_collections[0] ?? null;
 
-			// Trash responses still need their collection shape even when the
-			// collection was trashed with the row. Normal live targets must have an
-			// active source or Favorites/Recents would retain an orphaned row.
-			if ( ! $source_collection instanceof WP_Post && ! empty( $opts['include_trash_meta'] ) ) {
+			// Trash and Archive listings still need their collection shape when the
+			// collection was retired with the row. Normal live targets must have a
+			// live source or Favorites/Recents would retain an orphaned row.
+			if (
+				! $source_collection instanceof WP_Post
+				&& ( ! empty( $opts['include_trash_meta'] ) || ! empty( $opts['include_archive_meta'] ) )
+			) {
 				$source_collection = $this->find_traits_for_document( $post )[0] ?? null;
 			}
 			if ( ! $source_collection instanceof WP_Post ) {
@@ -623,8 +626,8 @@ final class Documents {
 	 * In the universal model, traits are just `crtxt_document` posts with a
 	 * `cortext_fields` meta. A row can belong to multiple traits (multi-trait
 	 * membership), but most legacy callers expect a singular "owning trait" —
-	 * this helper returns the first non-trashed one found. Callers that need all
-	 * traits, including lifecycle-preserved trash memberships, should use
+	 * this helper returns the first live one found. Callers that need all
+	 * traits, including retired memberships kept for restore, should use
 	 * `find_traits_for_document`.
 	 *
 	 * @param WP_Post $document Row document post.
@@ -635,15 +638,15 @@ final class Documents {
 			$cached = $this->trait_cache[ $document_id ];
 			if ( $cached instanceof WP_Post ) {
 				$fresh = get_post( $cached->ID );
-				if ( $fresh instanceof WP_Post && self::STATUS_TRASH !== $fresh->post_status ) {
+				if ( $fresh instanceof WP_Post && self::is_live_status( $fresh->post_status ) ) {
 					return $fresh;
 				}
 			}
 			unset( $this->trait_cache[ $document_id ] );
 		}
 
-		$active_traits = $this->find_active_traits_for_document( $document );
-		$trait         = $active_traits[0] ?? null;
+		$live_traits = $this->find_live_traits_for_document( $document );
+		$trait       = $live_traits[0] ?? null;
 
 		$this->trait_cache[ $document_id ] = $trait;
 		return $trait;
@@ -683,21 +686,33 @@ final class Documents {
 	}
 
 	/**
-	 * Returns the row's active collection memberships. Full membership lookup
-	 * intentionally retains trashed collection terms so trash/restore can
-	 * reconstruct shared rows; normal row hydration and legacy source selection
-	 * must ignore those inactive owners.
+	 * Returns the row's live collection memberships: those neither archived
+	 * nor in the trash. Full membership lookup keeps retired collections so
+	 * their cascades can restore shared rows; source selection ignores them.
 	 *
 	 * @param WP_Post $document Row document post.
 	 * @return WP_Post[]
 	 */
-	public function find_active_traits_for_document( WP_Post $document ): array {
+	public function find_live_traits_for_document( WP_Post $document ): array {
 		return array_values(
 			array_filter(
 				$this->find_traits_for_document( $document ),
-				static fn( WP_Post $collection ): bool => self::STATUS_TRASH !== $collection->post_status
+				static fn( WP_Post $collection ): bool => self::is_live_status( $collection->post_status )
 			)
 		);
+	}
+
+	/**
+	 * Returns the collections whose properties a row shows. A row that still
+	 * lives somewhere shows only its live collections; a row retired together
+	 * with all of its collections keeps showing them, read-only.
+	 *
+	 * @param WP_Post $document Row document post.
+	 * @return WP_Post[]
+	 */
+	public function find_visible_traits_for_document( WP_Post $document ): array {
+		$live = $this->find_live_traits_for_document( $document );
+		return count( $live ) > 0 ? $live : $this->find_traits_for_document( $document );
 	}
 
 	/**
@@ -722,10 +737,9 @@ final class Documents {
 	/**
 	 * Formatted `{id,title,path,icon,active}` summaries for every collection a
 	 * document belongs to. The traits REST endpoint and the membership chips
-	 * render this. `active` is false for memberships whose collection is in the
-	 * trash: those stay in the set so trash/restore keeps working, but their
-	 * fields are stripped from row responses and rejected on write, so clients
-	 * must not render them as editable.
+	 * render this. `active` is false for memberships whose collection is
+	 * archived or in the trash: those stay in the set so restore keeps working,
+	 * but a row that lives elsewhere does not show or write their fields.
 	 *
 	 * @param int $document_id Document id.
 	 * @return array<int,array<string,mixed>>
@@ -738,7 +752,7 @@ final class Documents {
 		return array_map(
 			function ( WP_Post $collection ): array {
 				$summary           = $this->format_collection_summary( $collection );
-				$summary['active'] = self::STATUS_TRASH !== $collection->post_status;
+				$summary['active'] = self::is_live_status( $collection->post_status );
 				return $summary;
 			},
 			$this->find_traits_for_document( $post )
@@ -899,21 +913,16 @@ final class Documents {
 	 * @param bool    $require_edit Enforce `edit_post` on both row and trait.
 	 */
 	private function validate_row_target( WP_Post $row, bool $require_edit ): ?WP_Error {
-		// A shared row stays reachable through any collection that is neither
-		// trashed nor archived; it is hidden only when every live one is archived.
-		$active_traits = $this->find_active_traits_for_document( $row );
-		$trait         = $active_traits[0] ?? null;
-		foreach ( $active_traits as $candidate ) {
-			if ( self::STATUS_ARCHIVED !== $candidate->post_status ) {
-				$trait = $candidate;
-				break;
-			}
-		}
+		// A shared row stays reachable through any live collection. Without one,
+		// an archived collection hides it and a trashed one makes it unreachable.
+		$trait = $this->find_live_traits_for_document( $row )[0] ?? null;
 		if ( ! $trait instanceof WP_Post ) {
+			foreach ( $this->find_traits_for_document( $row ) as $collection ) {
+				if ( self::STATUS_ARCHIVED === $collection->post_status ) {
+					return $this->target_hidden_error();
+				}
+			}
 			return $this->target_not_found_error();
-		}
-		if ( self::STATUS_ARCHIVED === $trait->post_status ) {
-			return $this->target_hidden_error();
 		}
 
 		if ( $require_edit

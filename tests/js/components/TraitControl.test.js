@@ -119,7 +119,34 @@ describe( 'TraitControl', () => {
 		expect( screen.queryByLabelText( 'Remove trait' ) ).toBeNull();
 	} );
 
-	it( 'never offers to remove the last active membership', async () => {
+	it( 'hides retired traits but keeps them in the written set', async () => {
+		render(
+			<TraitControl
+				documentId={ 5 }
+				collections={ [
+					{ ...membership( 1, 'Projects' ), active: true },
+					{ ...membership( 2, 'People' ), active: true },
+					{ ...membership( 3, 'Archived' ), active: false },
+				] }
+				onChange={ () => {} }
+			/>
+		);
+
+		expect( screen.queryByText( 'Archived' ) ).toBeNull();
+		const removeButtons = screen.getAllByLabelText( 'Remove trait' );
+		expect( removeButtons ).toHaveLength( 2 );
+		fireEvent.click( removeButtons[ 1 ] );
+
+		await waitFor( () =>
+			expect( apiFetch ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					data: { collection_ids: [ 1, 3 ] },
+				} )
+			)
+		);
+	} );
+
+	it( 'never offers to remove the last live trait', () => {
 		render(
 			<TraitControl
 				documentId={ 5 }
@@ -131,17 +158,7 @@ describe( 'TraitControl', () => {
 			/>
 		);
 
-		const removeButton = screen.getByLabelText( 'Remove trait' );
-		expect( screen.getAllByLabelText( 'Remove trait' ) ).toHaveLength( 1 );
-		fireEvent.click( removeButton );
-
-		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledWith(
-				expect.objectContaining( {
-					data: { collection_ids: [ 1 ] },
-				} )
-			)
-		);
+		expect( screen.queryByLabelText( 'Remove trait' ) ).toBeNull();
 	} );
 
 	it( 'removes a membership and writes the reduced set', async () => {

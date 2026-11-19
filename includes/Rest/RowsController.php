@@ -1727,7 +1727,7 @@ final class RowsController {
 		$context     = $request instanceof WP_REST_Request ? (string) $request->get_param( 'context' ) : 'edit';
 		$collections = array_values(
 			array_filter(
-				( new Documents() )->find_active_traits_for_document( $post ),
+				( new Documents() )->find_visible_traits_for_document( $post ),
 				static fn( WP_Post $collection ): bool => Document::can_access_collection_fields(
 					$collection,
 					$context

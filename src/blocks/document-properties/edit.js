@@ -77,21 +77,22 @@ export default function Edit() {
 	}, [ collectionId, traitsEnabled, traitMemberships ] );
 	const membershipsAreActionable =
 		! traitsEnabled || ( ! membershipsResolving && ! membershipsUnknown );
-	// Trashed memberships stay in `memberships` so the chips can show them and
-	// a PUT preserves them for restore, but the server strips their field
-	// values from row responses and rejects writes to them, so only active
-	// memberships render property groups or count toward layout editing.
-	const activeMemberships = useMemo(
-		() =>
-			memberships.filter( ( collection ) => collection.active !== false ),
-		[ memberships ]
-	);
+	// Archived and trashed memberships stay in `memberships` so a PUT keeps them
+	// for restore. A row that lives in another collection does not show or
+	// write their fields, so only live memberships render property groups. A
+	// row retired together with all of its collections still shows them.
+	const visibleMemberships = useMemo( () => {
+		const live = memberships.filter(
+			( collection ) => collection.active !== false
+		);
+		return live.length > 0 ? live : memberships;
+	}, [ memberships ] );
 	const currentMembershipIds = useMemo(
 		() =>
-			activeMemberships
+			visibleMemberships
 				.map( ( collection ) => Number( collection.id ) )
 				.filter( ( id ) => id > 0 ),
-		[ activeMemberships ]
+		[ visibleMemberships ]
 	);
 	const canEditAnyCurrentLayout = useSelect(
 		( select ) =>
@@ -108,28 +109,28 @@ export default function Edit() {
 	);
 	const additionalCollections = useMemo(
 		() =>
-			activeMemberships.filter(
+			visibleMemberships.filter(
 				( collection ) => collection.id !== collectionId
 			),
-		[ activeMemberships, collectionId ]
+		[ visibleMemberships, collectionId ]
 	);
 	const sourceCollection = useMemo(
 		() =>
-			activeMemberships.find(
+			visibleMemberships.find(
 				( collection ) => collection.id === collectionId
 			) ?? null,
-		[ activeMemberships, collectionId ]
+		[ visibleMemberships, collectionId ]
 	);
-	const isMultiMembership = activeMemberships.length > 1;
+	const isMultiMembership = visibleMemberships.length > 1;
 	// Once memberships have loaded, if the source collection is no longer one of
-	// the active ones (the user just removed the collection they opened the row
-	// from, or that collection is in the trash), drop the now-stale source
+	// the visible ones (the user just removed the collection they opened the row
+	// from, or that collection was archived or trashed), drop the now-stale source
 	// group. Also hide it while refreshing: those fields and layout handlers
 	// target a membership whose continued existence is not yet known.
 	const sourceInactive =
 		traitsEnabled &&
 		membershipsAreActionable &&
-		! activeMemberships.some(
+		! visibleMemberships.some(
 			( collection ) => collection.id === collectionId
 		);
 	const showSourceGroup = membershipsAreActionable && ! sourceInactive;

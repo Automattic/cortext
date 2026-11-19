@@ -1311,6 +1311,23 @@ describe( 'document-properties Customize properties mode', () => {
 		expect( mockAdditionalProps[ 88 ].includeSystemFields ).toBe( true );
 	} );
 
+	it( 'keeps showing the collections of a row retired together with them', () => {
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '', active: false },
+				{ id: 88, title: 'People', icon: '', active: false },
+			],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+
+		render( <Edit /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect( mockAdditionalProps[ 88 ] ).toBeDefined();
+	} );
+
 	it( 'offers a retry when the traits request fails', () => {
 		const refresh = jest.fn();
 		mockTraits = {

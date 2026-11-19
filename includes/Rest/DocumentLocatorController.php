@@ -114,7 +114,7 @@ final class DocumentLocatorController {
 
 		return array_map(
 			static fn( WP_Post $collection ): int => (int) $collection->ID,
-			( new Documents() )->find_active_traits_for_document( $post )
+			( new Documents() )->find_visible_traits_for_document( $post )
 		);
 	}
 }
