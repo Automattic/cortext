@@ -90,7 +90,7 @@ jobs:
             # meanwhile. The process outlives this step; "Wait for wp-env" joins it.
             - name: Start wp-env in the background
               run: |
-                  ( pnpm run env:start; echo $? > /tmp/env.status ) > /tmp/env.log 2>&1 < /dev/null &
+                  ( set +e; pnpm run env:start; echo $? > /tmp/env.status ) > /tmp/env.log 2>&1 < /dev/null &
                   echo $! > /tmp/env.pid
 
             - run: pnpm exec playwright install --with-deps chromium
