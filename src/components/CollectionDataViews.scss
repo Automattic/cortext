@@ -203,13 +203,19 @@ thead > tr > th.dataviews-view-table__checkbox-column {
 	tr:is(:hover, .is-hovered, :focus-within, .is-selected)
 	td.dataviews-view-table__checkbox-column
 	.dataviews-selection-checkbox
-),
-.cortext-data-view
-.dataviews-view-table:has(tbody tr.is-selected)
-thead
-th.dataviews-view-table__checkbox-column [role="checkbox"] {
+) {
 	opacity: 1;
 	pointer-events: auto;
+}
+
+// tech-debt.md#td-dataviews-selection-page-local: DataViews' header toolbar
+// only sees the current page. The footer controls act on the whole selection.
+.cortext-data-view
+:is(
+	.dataviews-view-table__bulk-actions-overlay,
+	.dataviews-view-grid__bulk-actions-header
+) {
+	display: none;
 }
 
 // Touch users cannot reveal controls that only appear on hover, so follow
@@ -229,6 +235,18 @@ th.dataviews-view-table__checkbox-column [role="checkbox"] {
 		opacity: 1;
 		pointer-events: auto;
 	}
+}
+
+// tech-debt.md#td-dataviews-selection-page-local: once rows are selected,
+// DataViews makes the header checkbox inert and expects its hidden toolbar to
+// take over. The footer has the same checkbox next to the selection count.
+.cortext-data-view
+.dataviews-view-table
+thead
+th.dataviews-view-table__checkbox-column > [aria-hidden="true"]
+[role="checkbox"] {
+	opacity: 0;
+	pointer-events: none;
 }
 
 // The add-field button is portaled into DataViews' actions column header.

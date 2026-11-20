@@ -151,6 +151,28 @@ function getSelectionClickTarget( target ) {
 	return target;
 }
 
+// tech-debt.md#td-dataviews-selection-page-local: after a header select-all,
+// DataViews moves focus to its own toolbar, which Cortext hides. Land on the
+// footer's select-all checkbox when focus would otherwise be lost.
+function moveLostFocusToFooterCheckbox( wrapper ) {
+	window.requestAnimationFrame( () => {
+		const ownerDocument = wrapper?.ownerDocument;
+		const active = ownerDocument?.activeElement;
+		if (
+			active &&
+			active !== ownerDocument.body &&
+			! active.closest( '[inert]' )
+		) {
+			return;
+		}
+		wrapper
+			.querySelector(
+				'.dataviews-bulk-actions-footer__container .dataviews-view-table-selection-checkbox input'
+			)
+			?.focus();
+	} );
+}
+
 export default function CollectionDataViews( {
 	collectionId,
 	view,
@@ -457,6 +479,9 @@ export default function CollectionDataViews( {
 			if ( interaction.targetId ) {
 				setSelectionAnchorId( interaction.targetId );
 			}
+			if ( interaction.source === 'select-all' ) {
+				moveLostFocusToFooterCheckbox( tableWrapperRef.current );
+			}
 		},
 		[ supportsRowSelection, updateSelectedRowIds, visibleRowIds ]
 	);
@@ -513,7 +538,10 @@ export default function CollectionDataViews( {
 			}
 
 			if ( target.closest( SELECT_ALL_CHECKBOX_SELECTOR ) ) {
-				selectionInteractionRef.current = { type: 'merge' };
+				selectionInteractionRef.current = {
+					type: 'merge',
+					source: 'select-all',
+				};
 				return;
 			}
 
