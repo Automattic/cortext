@@ -97,7 +97,7 @@ export default function TemplateEditorModal( {
 	// or a slower response can overwrite a newer field value.
 	const fieldValuesRef = useRef( fieldValues );
 	const fieldSaveChainRef = useRef( Promise.resolve() );
-	const { record, isResolving } = useEntityRecord(
+	const { record, hasResolved } = useEntityRecord(
 		'postType',
 		TEMPLATE_POST_TYPE,
 		templateId
@@ -224,11 +224,21 @@ export default function TemplateEditorModal( {
 							{ error }
 						</Notice>
 					) : null }
-					{ isResolving || ! record ? (
+					{ ! record && hasResolved ? (
+						<Notice
+							className="cortext-row-detail__notice"
+							status="error"
+							isDismissible={ false }
+						>
+							{ __( "Couldn't open the template.", 'cortext' ) }
+						</Notice>
+					) : null }
+					{ ! record && ! hasResolved ? (
 						<div className="cortext-row-detail__pane cortext-row-detail__pane--loading">
 							<Spinner />
 						</div>
-					) : (
+					) : null }
+					{ record ? (
 						<EditorProvider
 							post={ record }
 							settings={ getEditorSettings() }
@@ -275,7 +285,7 @@ export default function TemplateEditorModal( {
 								</EditorSurfaceProvider>
 							</SlotFillProvider>
 						</EditorProvider>
-					) }
+					) : null }
 				</div>
 			</div>
 		</Modal>

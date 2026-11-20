@@ -1,4 +1,4 @@
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 
 let mockSaveRowField;
 
@@ -100,7 +100,7 @@ describe( 'TemplateEditorModal', () => {
 		updateTemplate.mockReset();
 		notifyTemplatesChanged.mockReset();
 		useEntityRecord.mockReturnValue( {
-			isResolving: false,
+			hasResolved: true,
 			record: {
 				id: 123,
 				title: { raw: 'Template' },
@@ -177,5 +177,32 @@ describe( 'TemplateEditorModal', () => {
 			kind: 'row',
 			collectionId: 7,
 		} );
+	} );
+
+	it( 'shows a spinner while the template loads', () => {
+		useEntityRecord.mockReturnValue( {
+			hasResolved: false,
+			record: undefined,
+		} );
+
+		render( <TemplateEditorModal kind="page" templateId={ 123 } /> );
+
+		expect( screen.getByText( 'Loading' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'alert' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'shows an error instead of spinning when the template does not load', () => {
+		useEntityRecord.mockReturnValue( {
+			hasResolved: true,
+			record: undefined,
+		} );
+
+		render( <TemplateEditorModal kind="page" templateId={ 123 } /> );
+
+		expect( screen.getByRole( 'alert' ) ).toHaveTextContent(
+			"Couldn't open the template."
+		);
+		expect( screen.queryByText( 'Loading' ) ).not.toBeInTheDocument();
+		expect( screen.queryByTestId( 'editor-body' ) ).not.toBeInTheDocument();
 	} );
 } );
