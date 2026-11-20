@@ -1,8 +1,8 @@
 === Cortext ===
 Contributors: priethor, mcsf
 Tags: knowledge-base, collections, custom-post-types, block-editor, publishing
-Requires at least: 7.1
-Tested up to: 7.1
+Requires at least: 7.2
+Tested up to: 7.2
 Requires PHP: 8.1
 Stable tag: 0.3.0
 License: GPLv2 or later
