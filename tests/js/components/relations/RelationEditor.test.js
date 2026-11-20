@@ -291,7 +291,7 @@ describe( 'RelationEditor', () => {
 
 		expect(
 			screen.queryByRole( 'button', {
-				name: 'Create "New Row"',
+				name: 'Create “New Row”',
 			} )
 		).toBeNull();
 		await flushPopoverEffects();
@@ -318,7 +318,7 @@ describe( 'RelationEditor', () => {
 
 		expect(
 			screen.queryByRole( 'button', {
-				name: 'Create "Exact Match"',
+				name: 'Create “Exact Match”',
 			} )
 		).toBeNull();
 		await flushPopoverEffects();
@@ -399,7 +399,7 @@ describe( 'RelationEditor', () => {
 
 		fireEvent.click(
 			screen.getByRole( 'button', {
-				name: 'Create "New Ada"',
+				name: 'Create “New Ada”',
 			} )
 		);
 
@@ -441,7 +441,7 @@ describe( 'RelationEditor', () => {
 		} );
 		fireEvent.click(
 			screen.getByRole( 'button', {
-				name: 'Create "New Ada"',
+				name: 'Create “New Ada”',
 			} )
 		);
 

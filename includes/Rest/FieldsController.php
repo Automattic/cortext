@@ -1322,7 +1322,7 @@ final class FieldsController {
 					'cortext_formula_dependent_invalid',
 					sprintf(
 						/* translators: 1: dependent formula field title, 2: formula error message. */
-						__( 'Changing this would break "%1$s": %2$s', 'cortext' ),
+						__( 'Changing this would break “%1$s”: %2$s', 'cortext' ),
 						$title,
 						$compiled->get_error_message()
 					),

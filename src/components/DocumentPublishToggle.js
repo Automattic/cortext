@@ -234,7 +234,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 					<h2>
 						{ sprintf(
 							/* translators: %s: document title */
-							__( 'Unpublish "%s"?', 'cortext' ),
+							__( 'Unpublish “%s”?', 'cortext' ),
 							title || __( '(untitled)', 'cortext' )
 						) }
 					</h2>

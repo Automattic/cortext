@@ -123,8 +123,8 @@ export default function DeleteOptionDialog( {
 				{ sprintf(
 					/* translators: 1: option label, 2: number of documents referencing it */
 					_n(
-						'%2$d document currently uses "%1$s".',
-						'%2$d documents currently use "%1$s".',
+						'%2$d document currently uses “%1$s”.',
+						'%2$d documents currently use “%1$s”.',
 						count,
 						'cortext'
 					),

@@ -465,7 +465,7 @@ export default function RelationEditor( {
 								<span className="cortext-relation-edit__row-title">
 									{ sprintf(
 										/* translators: %s: item title */
-										__( 'Create "%s"', 'cortext' ),
+										__( 'Create “%s”', 'cortext' ),
 										createTitle
 									) }
 								</span>
