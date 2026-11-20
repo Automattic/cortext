@@ -477,3 +477,71 @@ describe( 'EditableCell option overrides', () => {
 		).toHaveValue( 'https://example.com/path' );
 	} );
 } );
+
+describe( 'EditableCell on a locked row', () => {
+	const lockedItem = ( meta ) => ( {
+		id: 1,
+		status: 'publish',
+		cortext_frozen: { frozen_at: '2026-11-19T10:00:00' },
+		meta,
+	} );
+
+	function renderLocked( props ) {
+		return render(
+			<RowMutationContext.Provider
+				value={ { saveRowField: jest.fn(), canEditCells: true } }
+			>
+				<EditableCell { ...props } />
+			</RowMutationContext.Provider>
+		);
+	}
+
+	it( 'keeps the editable shell box without the edit affordance', () => {
+		const { container } = renderLocked( {
+			item: lockedItem( { notes: 'Hello' } ),
+			fieldId: 'notes',
+			fieldType: 'text',
+			label: 'Notes',
+		} );
+
+		const shell = container.querySelector(
+			'.cortext-editable-cell__shell'
+		);
+		expect( shell ).toHaveClass( 'cortext-editable-cell__shell--readonly' );
+		expect( shell ).not.toHaveAttribute( 'role' );
+		expect( shell ).toHaveTextContent( 'Hello' );
+		expect(
+			container.querySelector( '.cortext-cell-readonly' )
+		).toBeNull();
+
+		fireEvent.click( screen.getByText( 'Hello' ) );
+		expect( screen.queryByRole( 'textbox' ) ).toBeNull();
+	} );
+
+	it( 'renders checkboxes as disabled controls', () => {
+		renderLocked( {
+			item: lockedItem( { done: true } ),
+			fieldId: 'done',
+			fieldType: 'checkbox',
+			label: 'Done',
+		} );
+
+		const checkbox = screen.getByRole( 'checkbox', { name: 'Done' } );
+		expect( checkbox ).toBeChecked();
+		expect( checkbox ).toBeDisabled();
+	} );
+
+	it( 'keeps read-only fields on the plain read-only display', () => {
+		const { container } = renderLocked( {
+			item: lockedItem( { total: '3' } ),
+			fieldId: 'total',
+			fieldType: 'text',
+			label: 'Total',
+			readOnly: true,
+		} );
+
+		expect(
+			container.querySelector( '.cortext-cell-readonly' )
+		).toHaveTextContent( '3' );
+	} );
+} );

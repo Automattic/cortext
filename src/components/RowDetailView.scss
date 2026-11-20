@@ -369,6 +369,13 @@
 
 		&--end {
 			margin-left: auto;
+
+			// The detail stays light in dark mode, so the badge takes the
+			// detail's muted color instead of the shell's.
+			.cortext-frozen-badge {
+				margin-inline-end: $grid-unit-10;
+				color: var(--cortext-row-detail-muted);
+			}
 		}
 	}
 

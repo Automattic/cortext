@@ -11,6 +11,7 @@ import { __ } from '@wordpress/i18n';
 
 import EditableCell from './EditableCell';
 import DocumentIcon from './DocumentIcon';
+import FrozenBadge from './FrozenBadge';
 import { ROW_DETAIL_MODE_ICONS } from './rowDetailUtils';
 import { COVER_FIELD_ID, TITLE_FIELD_ID } from './dataViewColumns';
 import { dataViewsFilterByForType } from '../hooks/fieldMapping';
@@ -122,6 +123,9 @@ function TitleCell( { item } ) {
 					ctx.item?.title?.raw ?? ctx.item?.title?.rendered ?? ''
 				}
 			/>
+			{ item?.cortext_frozen ? (
+				<FrozenBadge frozen={ item.cortext_frozen } />
+			) : null }
 			{ canOpenRow && showInlineOpen ? (
 				<Button
 					className="cortext-title-cell__open"
