@@ -80,7 +80,7 @@ import { saveRowDocumentField } from './rowDocumentMutations';
 import { useActiveEditor } from './ActiveEditorContext';
 import {
 	ROW_DETAIL_MODE_ICONS,
-	ROW_DETAIL_MODE_LABELS,
+	ROW_DETAIL_MODE_OPEN_LABELS,
 	getRowDetailMode,
 	withRowDetailMode,
 } from './rowDetailUtils';
@@ -1517,11 +1517,7 @@ export default function CollectionDataViews( {
 		for ( const mode of [ 'side', 'modal', 'full' ] ) {
 			actions.push( {
 				id: `open-in-${ mode }`,
-				label: sprintf(
-					/* translators: %s: document detail mode (Side peek, Center modal, Full view). */
-					__( 'Open in %s', 'cortext' ),
-					ROW_DETAIL_MODE_LABELS[ mode ]
-				),
+				label: ROW_DETAIL_MODE_OPEN_LABELS[ mode ],
 				icon: ROW_DETAIL_MODE_ICONS[ mode ],
 				context: 'single',
 				callback: ( items ) => openRowInMode( items?.[ 0 ], mode ),

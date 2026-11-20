@@ -490,7 +490,7 @@ function CollectionInspectorControls( {
 							__nextHasNoMarginBottom
 						/>
 						<ToggleGroupControl
-							label={ __( 'Detail view', 'cortext' ) }
+							label={ __( 'Open documents in', 'cortext' ) }
 							value={
 								view?.rowDetailMode ?? DEFAULT_ROW_DETAIL_MODE
 							}

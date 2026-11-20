@@ -103,7 +103,7 @@ jest.mock( '../../../src/components/RowDetailView', () => ( {
 	ROW_DETAIL_MODE_ICONS: { side: null, modal: null, full: null },
 	ROW_DETAIL_MODE_LABELS: {
 		side: 'Side peek',
-		modal: 'Center modal',
+		modal: 'Center peek',
 		full: 'Full page',
 	},
 } ) );

@@ -14,8 +14,14 @@ export const ROW_DETAIL_MODE_ICONS = {
 
 export const ROW_DETAIL_MODE_LABELS = {
 	side: __( 'Side peek', 'cortext' ),
-	modal: __( 'Center modal', 'cortext' ),
-	full: __( 'Full view', 'cortext' ),
+	modal: __( 'Center peek', 'cortext' ),
+	full: __( 'Full screen', 'cortext' ),
+};
+
+export const ROW_DETAIL_MODE_OPEN_LABELS = {
+	side: __( 'Open in side peek', 'cortext' ),
+	modal: __( 'Open in center peek', 'cortext' ),
+	full: __( 'Open full screen', 'cortext' ),
 };
 
 export function normalizeRowDetailMode( mode ) {

@@ -4264,7 +4264,7 @@ test.describe( 'Collection view block', () => {
 			expect( afterSideAttributes ).toEqual( beforeAttributes );
 
 			await detail
-				.getByRole( 'button', { name: 'Center modal' } )
+				.getByRole( 'button', { name: 'Center peek' } )
 				.click();
 			const modalDetail = page.locator(
 				'.components-modal__frame.cortext-row-detail-modal'
@@ -4708,32 +4708,32 @@ test.describe( 'Collection view block', () => {
 			await yearProperty.pressSequentially( '2026' );
 
 			await expect(
-				detail.getByRole( 'button', { name: 'Center modal' } )
+				detail.getByRole( 'button', { name: 'Center peek' } )
 			).toBeVisible();
 			await expect(
-				detail.getByRole( 'button', { name: 'Full view' } )
+				detail.getByRole( 'button', { name: 'Full screen' } )
 			).toBeVisible();
 			await expect(
 				detail.getByRole( 'button', { name: 'Change layout' } )
 			).toHaveCount( 0 );
 			await detail
-				.getByRole( 'button', { name: 'Center modal' } )
+				.getByRole( 'button', { name: 'Center peek' } )
 				.click();
 			const modalDetail = page.locator(
 				'.components-modal__frame.cortext-row-detail-modal'
 			);
 			await expect( modalDetail ).toBeVisible();
 			await expect(
-				modalDetail.getByRole( 'button', { name: 'Center modal' } )
+				modalDetail.getByRole( 'button', { name: 'Center peek' } )
 			).toHaveCount( 0 );
 			await expect(
 				modalDetail.getByRole( 'button', { name: 'Side peek' } )
 			).toBeVisible();
 			await expect(
-				modalDetail.getByRole( 'button', { name: 'Full view' } )
+				modalDetail.getByRole( 'button', { name: 'Full screen' } )
 			).toBeVisible();
 			await modalDetail
-				.getByRole( 'button', { name: 'Full view' } )
+				.getByRole( 'button', { name: 'Full screen' } )
 				.click();
 			await expect( detail ).toBeHidden();
 			await expect(
