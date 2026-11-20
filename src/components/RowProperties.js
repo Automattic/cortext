@@ -57,6 +57,7 @@ import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
 import Infotip from './Infotip';
 import MultiselectEdit from './MultiselectEdit';
 import { toRecordId } from '../hooks/fieldIds';
+import { rollupInvalidLabel } from '../hooks/fieldMapping';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import useRelationTargetStatuses from '../hooks/useRelationTargetStatuses';
@@ -95,7 +96,16 @@ function emptyLabel() {
 	);
 }
 
-function ReadOnlyProperty( { value, type, elements, format } ) {
+function ReadOnlyProperty( { value, type, elements, format, rollupInvalid } ) {
+	if ( rollupInvalid ) {
+		return (
+			<div className="cortext-row-detail__readonly">
+				<span className="cortext-row-detail__empty-value">
+					{ rollupInvalidLabel() }
+				</span>
+			</div>
+		);
+	}
 	const display = formatDisplay( value, type, { elements, format } );
 	return (
 		<div className="cortext-row-detail__readonly">
@@ -206,6 +216,7 @@ function RowPropertyDragOverlay( {
 						type={ displayType }
 						elements={ elements }
 						format={ format }
+						rollupInvalid={ field.cortextRollupInvalid }
 					/>
 				</div>
 			</div>
@@ -867,6 +878,7 @@ function RowProperty( {
 			type={ displayType }
 			elements={ elements }
 			format={ format }
+			rollupInvalid={ field.cortextRollupInvalid }
 		/>
 	);
 	if ( isEditable ) {
