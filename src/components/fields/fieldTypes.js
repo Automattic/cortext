@@ -37,7 +37,7 @@ const numberIcon = (
 );
 
 // Inline SVG for "date and time": a calendar with a clock face. Mirrors
-// Keep Date and Date & time as separate field choices.
+// Keep "Date" and "Date and time" as separate field choices.
 const datetimeIcon = (
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
@@ -76,7 +76,7 @@ export const FIELD_TYPES = [
 	{ value: 'date', label: __( 'Date', 'cortext' ), icon: calendar },
 	{
 		value: 'datetime',
-		label: __( 'Date & time', 'cortext' ),
+		label: __( 'Date and time', 'cortext' ),
 		icon: datetimeIcon,
 	},
 	{ value: 'checkbox', label: __( 'Checkbox', 'cortext' ), icon: check },

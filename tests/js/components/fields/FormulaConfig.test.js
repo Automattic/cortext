@@ -5,7 +5,7 @@ jest.mock( '@wordpress/i18n', () => ( {
 		( {
 			'Built-in field': 'Campo integrado',
 			Created: 'Creación',
-			'Date & time': 'Fecha y hora',
+			'Date and time': 'Fecha y hora',
 			'Last edited': 'Última edición',
 			Text: 'Texto',
 			Title: 'Título',

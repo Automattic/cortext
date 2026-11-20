@@ -10,7 +10,7 @@ This page covers the main pieces and what you can do with them. Cortext is in be
 
 **Collections** are documents that hold structured records. A collection describes a kind of thing you want to track, such as Books, People, or Tasks, and it defines a schema: the fields every record shares.
 
-**Fields** are the typed properties on a collection. When you add a field you pick its type: Text, Number, Select, Multi-select, Date, Date & time, Checkbox, URL, Email, Relation, or Rollup. The type decides how you enter a value and how Cortext shows it. You can change a field's type later.
+**Fields** are the typed properties on a collection. When you add a field you pick its type: Text, Number, Select, Multi-select, Date, Date and time, Checkbox, URL, Email, Relation, or Rollup. The type decides how you enter a value and how Cortext shows it. You can change a field's type later.
 
 **Rows** are the records inside a collection. Each row has its own values for the collection's fields. A row is also a document, so you can open it and write longer content below its properties.
 

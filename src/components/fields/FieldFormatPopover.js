@@ -103,7 +103,7 @@ const NUMBER_FORMATS = [
 	{ id: 'percent', label: __( 'Percent', 'cortext' ), style: 'percent' },
 	{
 		id: 'usd',
-		label: __( 'US Dollar (USD)', 'cortext' ),
+		label: __( 'US dollar (USD)', 'cortext' ),
 		style: 'currency',
 		currency: 'USD',
 	},
@@ -115,13 +115,13 @@ const NUMBER_FORMATS = [
 	},
 	{
 		id: 'gbp',
-		label: __( 'Pound (GBP)', 'cortext' ),
+		label: __( 'Pound sterling (GBP)', 'cortext' ),
 		style: 'currency',
 		currency: 'GBP',
 	},
 	{
 		id: 'jpy',
-		label: __( 'Yen (JPY)', 'cortext' ),
+		label: __( 'Japanese yen (JPY)', 'cortext' ),
 		style: 'currency',
 		currency: 'JPY',
 	},
