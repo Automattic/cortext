@@ -35,6 +35,18 @@ final class Relations {
 		return in_array( $text, array( '1', 'true', 'yes', 'on' ), true );
 	}
 
+	/**
+	 * Whether the related document can point back at more than one row.
+	 * When it can't, copying a relation onto a new row would take the target
+	 * away from the row that already has it.
+	 *
+	 * @param int $field_id Forward relation field id.
+	 */
+	public static function reverse_accepts_many( int $field_id ): bool {
+		$reverse_id = (int) get_post_meta( $field_id, 'relation_reverse_field_id', true );
+		return $reverse_id > 0 && self::relation_is_multiple( $reverse_id );
+	}
+
 	public static function relation_is_multiple( int $field_id ): bool {
 		$value = get_post_meta( $field_id, 'relation_multiple', true );
 		if ( '' === $value || null === $value ) {

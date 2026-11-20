@@ -441,7 +441,11 @@ final class Templates {
 				$store->write_value( $row_id, $field_id, $type, $value, $collection_id, 'private' );
 				continue;
 			}
-			// A default can point at a row deleted after the template was saved.
+			// Skip a default the target can't take twice, and one that points
+			// at a row deleted after the template was saved.
+			if ( ! Relations::reverse_accepts_many( $field_id ) ) {
+				continue;
+			}
 			if ( Relations::sync_relation_value( $row_id, $field_id, $value ) instanceof WP_Error ) {
 				continue;
 			}

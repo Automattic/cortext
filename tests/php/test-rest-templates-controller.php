@@ -422,6 +422,33 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		$this->assertSame( '', (string) get_post_meta( (int) $row->get_data()['document']['id'], $key, true ) );
 	}
 
+	public function test_instantiate_row_template_skips_relation_whose_target_takes_one_row(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$tasks_id  = $this->create_collection( 'Tasks' );
+		$people_id = $this->create_collection( 'People' );
+		$owner_id  = $this->attach_field( $tasks_id, 'Owner', 'relation' );
+		$owns_rel  = $this->attach_field( $people_id, 'Owns', 'relation' );
+		$person_id = $this->create_row( $people_id, 'Ada' );
+		update_post_meta( $owner_id, 'related_collection_id', (string) $people_id );
+		update_post_meta( $owner_id, 'relation_reverse_field_id', (string) $owns_rel );
+		update_post_meta( $owns_rel, 'related_collection_id', (string) $tasks_id );
+		update_post_meta( $owns_rel, 'relation_reverse_field_id', (string) $owner_id );
+		update_post_meta( $owns_rel, 'relation_multiple', '0' );
+		$template_id = $this->create_template(
+			array(
+				'kind'          => Templates::KIND_ROW,
+				'collection_id' => $tasks_id,
+				'title'         => 'Task starter',
+				'field_values'  => array( 'field-' . $owner_id => array( $person_id ) ),
+			)
+		);
+
+		$row = $this->request( 'POST', '/cortext/v1/templates/' . $template_id . '/instantiate' );
+
+		$this->assertSame( 201, $row->get_status(), wp_json_encode( $row->get_data() ) );
+		$this->assertSame( array(), Relations::relation_values( (int) $row->get_data()['document']['id'], $owner_id ) );
+	}
+
 	public function test_list_default_keeps_its_first_entry_after_the_property_changes_type(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'Tasks' );
