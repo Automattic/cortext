@@ -1625,7 +1625,7 @@ describe( 'DataViewRowReorder', () => {
 
 		await waitFor( () =>
 			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-				"Couldn't move the document.",
+				'Could not move the document.',
 				{
 					id: 'cortext-row-reorder-failed',
 					type: 'snackbar',
@@ -1888,7 +1888,7 @@ describe( 'DataViewRowReorder', () => {
 
 		await waitFor( () =>
 			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-				"Couldn't move the document.",
+				'Could not move the document.',
 				{
 					id: 'cortext-row-reorder-failed',
 					type: 'snackbar',
@@ -1913,7 +1913,7 @@ describe( 'DataViewRowReorder', () => {
 
 		await waitFor( () =>
 			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-				"Couldn't move the document.",
+				'Could not move the document.',
 				{
 					id: 'cortext-row-reorder-failed',
 					type: 'snackbar',

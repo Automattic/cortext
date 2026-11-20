@@ -163,7 +163,7 @@ final class Compiler {
 			'call' => $this->resolve_call( $node, $field_map, $self_field_id, $previous_refs ),
 			default => throw new FormulaParseError(
 				'cortext_formula_invalid_ast',
-				__( 'We couldn\'t read this formula.', 'cortext' )
+				__( 'Could not read this formula.', 'cortext' )
 			),
 		};
 	}

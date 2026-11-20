@@ -43,7 +43,7 @@ final class Evaluator {
 			'call' => $this->evaluate_call( $node, $row ),
 			default => throw new FormulaEvalError(
 				'cortext_formula_invalid_ast',
-				__( 'We couldn\'t calculate this formula.', 'cortext' )
+				__( 'Could not calculate this formula.', 'cortext' )
 			),
 		};
 	}

@@ -853,7 +853,7 @@ export default function Sidebar( {
 												role="alert"
 											>
 												{ __(
-													"We couldn't load these documents.",
+													'Could not load these documents.',
 													'cortext'
 												) }
 											</p>

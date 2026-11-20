@@ -285,7 +285,7 @@ describe( 'ExperimentsPane', () => {
 		expect( second ).toBeChecked();
 		expect( second ).not.toBeDisabled();
 		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-			"We couldn't save that change.",
+			'Could not save that change.',
 			expect.objectContaining( {
 				id: 'cortext-experiments-update-failed',
 				type: 'snackbar',
@@ -309,7 +309,7 @@ describe( 'ExperimentsPane', () => {
 		render( <ExperimentsPane /> );
 
 		expect(
-			await screen.findByText( "We couldn't load experiments." )
+			await screen.findByText( 'Could not load experiments.' )
 		).toBeInTheDocument();
 	} );
 } );

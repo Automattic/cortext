@@ -554,7 +554,7 @@ export default function DocumentRow( {
 									role="alert"
 								>
 									{ __(
-										"We couldn't load these documents.",
+										'Could not load these documents.',
 										'cortext'
 									) }
 								</p>

@@ -62,7 +62,7 @@ function defaultPostLockUtils() {
 function errorMessage( error ) {
 	return (
 		error?.message ??
-		__( "Couldn't check whether this document is locked.", 'cortext' )
+		__( 'Could not check whether this document is locked.', 'cortext' )
 	);
 }
 

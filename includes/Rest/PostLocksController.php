@@ -103,7 +103,7 @@ final class PostLocksController {
 		if ( ! $active_post_lock ) {
 			return new WP_Error(
 				'cortext_document_lock_failed',
-				__( "Couldn't lock this document.", 'cortext' ),
+				__( 'Could not lock this document.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}

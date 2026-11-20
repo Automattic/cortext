@@ -232,7 +232,7 @@ describe( 'DocumentPublishToggle', () => {
 
 		await waitFor( () =>
 			expect( noticesDispatch.createErrorNotice ).toHaveBeenCalledWith(
-				"Couldn't publish this document because it references an archived collection. Restore the collection first.",
+				'Could not publish this document because it references an archived collection. Unarchive the collection first.',
 				{
 					id: 'cortext-document-publish-error',
 					type: 'snackbar',

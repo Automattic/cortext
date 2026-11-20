@@ -96,7 +96,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	const showCascadePublishError = useCallback( () => {
 		createErrorNotice(
 			__(
-				"Couldn't publish referenced documents that contain rows. The document was not published.",
+				'Could not publish referenced documents that contain rows. The document was not published.',
 				'cortext'
 			),
 			{
@@ -108,7 +108,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	const showArchivedReferenceError = useCallback( () => {
 		createErrorNotice(
 			__(
-				"Couldn't publish this document because it references an archived collection. Restore the collection first.",
+				'Could not publish this document because it references an archived collection. Unarchive the collection first.',
 				'cortext'
 			),
 			{

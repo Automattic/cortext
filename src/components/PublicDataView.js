@@ -173,7 +173,7 @@ export function normalizePublicView( view ) {
 export function PublicDataViewErrorFallback() {
 	return (
 		<div className="cortext-public-data-view-error" role="status">
-			{ __( "We couldn't load this collection view.", 'cortext' ) }
+			{ __( 'Could not load this collection view.', 'cortext' ) }
 		</div>
 	);
 }

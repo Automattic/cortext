@@ -347,7 +347,7 @@ final class RowsManualOrder {
 		if ( ! TraitTaxonomy::set_member_order( $row_id, $tt_id, $menu_order ) ) {
 			return new WP_Error(
 				'cortext_reorder_update_failed',
-				__( 'Couldn\'t save the row order.', 'cortext' ),
+				__( 'Could not save the row order.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}

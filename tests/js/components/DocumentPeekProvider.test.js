@@ -321,7 +321,7 @@ describe( 'DocumentPeekProvider', () => {
 
 		expect( result.current.state.peek?.docId ).toBe( 1 );
 		expect( result.current.surface.saveError ).toBe(
-			'Cortext could not save changes. Retry or discard your edits to continue.'
+			'Could not save changes. Retry or discard your edits to continue.'
 		);
 	} );
 } );

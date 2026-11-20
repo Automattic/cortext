@@ -455,7 +455,7 @@ final class FieldsController {
 		if ( $collection_id < 1 ) {
 			return new WP_Error(
 				'cortext_field_collection_missing',
-				__( 'We couldn\'t find this field\'s collection.', 'cortext' ),
+				__( 'Could not find this field\'s collection.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -760,7 +760,7 @@ final class FieldsController {
 			if ( $trait_term_id < 1 ) {
 				return new WP_Error(
 					'cortext_field_collection_missing',
-					__( 'We couldn\'t find this field\'s collection.', 'cortext' ),
+					__( 'Could not find this field\'s collection.', 'cortext' ),
 					array( 'status' => 400 )
 				);
 			}
