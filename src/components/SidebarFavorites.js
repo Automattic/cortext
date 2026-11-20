@@ -421,7 +421,7 @@ export default function SidebarFavorites( {
 			{ isEmpty ? (
 				<p className="cortext-sidebar__empty cortext-sidebar__empty--inline">
 					{ __(
-						'Star from the title menu to pin it here.',
+						'Use “Add to favorites” on any document to keep it here.',
 						'cortext'
 					) }
 				</p>
