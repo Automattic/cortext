@@ -114,7 +114,7 @@ test.describe( 'Page trash flow', () => {
 			await expect(
 				page
 					.locator( '.cortext-lifecycle-notice' )
-					.filter( { hasText: 'This document is in the Trash.' } )
+					.filter( { hasText: 'This document is in Trash.' } )
 			).toBeVisible();
 			// Publishing and adding blocks don't apply to a deleted document.
 			const documentActions = page.locator( '.cortext-document-actions' );

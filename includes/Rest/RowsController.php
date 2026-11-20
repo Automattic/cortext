@@ -1298,7 +1298,7 @@ final class RowsController {
 	 *
 	 * @param int                   $field_id Rollup field post ID.
 	 * @param RowFormatContext|null $ctx      Optional formatting context.
-	 * @return array{relation_field_id: int, target_field_id: int, aggregator: string}
+	 * @return array{relation_field_id: int, target_field_id: int, aggregator: string, invalid: bool}
 	 */
 	private function rollup_field_meta_for( int $field_id, ?RowFormatContext $ctx ): array {
 		if ( null !== $ctx && isset( $ctx->rollup_field_meta[ $field_id ] ) ) {
@@ -1309,6 +1309,7 @@ final class RowsController {
 			'relation_field_id' => (int) get_post_meta( $field_id, 'rollup_relation_field_id', true ),
 			'target_field_id'   => (int) get_post_meta( $field_id, 'rollup_target_field_id', true ),
 			'aggregator'        => '' === $aggregator ? 'count' : $aggregator,
+			'invalid'           => '' !== (string) get_post_meta( $field_id, 'rollup_invalid', true ),
 		);
 		if ( null !== $ctx ) {
 			$ctx->rollup_field_meta[ $field_id ] = $entry;
@@ -1369,7 +1370,14 @@ final class RowsController {
 	}
 
 	private function compute_rollup_value( int $row_id, int $field_id, ?RowFormatContext $ctx = null ): mixed {
-		$rollup_meta       = $this->rollup_field_meta_for( $field_id, $ctx );
+		$rollup_meta = $this->rollup_field_meta_for( $field_id, $ctx );
+		// The target changed shape under this rollup, so the stored aggregator
+		// no longer describes something computable. Render empty and let the
+		// field editor offer a repair rather than aggregate the wrong thing.
+		if ( $rollup_meta['invalid'] ) {
+			return null;
+		}
+
 		$relation_field_id = $rollup_meta['relation_field_id'];
 		$target_field_id   = $rollup_meta['target_field_id'];
 		$aggregator        = $rollup_meta['aggregator'];

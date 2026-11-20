@@ -39,6 +39,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		( new Field() )->register_post_type();
 
 		$this->install_in_memory_term_store();
+		$this->install_in_memory_posts_query();
 
 		self::$fixture_collection_ids = array();
 		add_filter( 'get_post_metadata', array( $this, 'force_fixture_collection_meta' ), 10, 3 );
@@ -51,6 +52,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 	public function tear_down(): void {
 		remove_filter( 'get_post_metadata', array( $this, 'force_fixture_collection_meta' ), 10 );
 		self::$fixture_collection_ids = array();
+		$this->uninstall_in_memory_posts_query();
 		$this->uninstall_in_memory_term_store();
 		wp_set_current_user( 0 );
 
@@ -968,6 +970,458 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 			'cortext_rollup_of_rollup_unsupported',
 			$response->get_data()['code']
 		);
+	}
+
+	public function test_core_rest_cannot_repoint_a_relation_target(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-guard' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-guard' );
+		$other_collection_id  = $this->create_collection_with_slug( 'Clients', 'clients-guard' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $relation_id );
+		$request->set_param( 'meta', array( 'related_collection_id' => $other_collection_id ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'rest_cannot_update', $response->get_data()['code'] );
+		$this->assertSame(
+			$target_collection_id,
+			(int) get_post_meta( $relation_id, 'related_collection_id', true )
+		);
+	}
+
+	public function test_core_rest_cannot_change_relation_cardinality(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-card' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-card' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+				'relation_multiple'     => true,
+			)
+		)->get_data()['id'];
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $relation_id );
+		$request->set_param( 'meta', array( 'relation_multiple' => false ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( '1', get_post_meta( $relation_id, 'relation_multiple', true ) );
+	}
+
+	public function test_core_rest_cannot_change_a_rollup_aggregator(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-agg' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-agg' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$amount_id   = (int) $this->create_field(
+			$target_collection_id,
+			array(
+				'title' => 'Amount',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		$rollup_id   = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                    => 'Total',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation_id,
+				'rollup_target_field_id'   => $amount_id,
+				'rollup_aggregator'        => 'sum',
+			)
+		)->get_data()['id'];
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $rollup_id );
+		$request->set_param( 'meta', array( 'rollup_aggregator' => 'avg' ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'sum', get_post_meta( $rollup_id, 'rollup_aggregator', true ) );
+	}
+
+	public function test_core_rest_cannot_retype_a_relation_and_orphan_its_reverse(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-retype' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-retype' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$reverse_id  = (int) get_post_meta( $relation_id, 'relation_reverse_field_id', true );
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $relation_id );
+		$request->set_param( 'meta', array( 'type' => 'text' ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'relation', get_post_meta( $relation_id, 'type', true ) );
+		$this->assertSame( 'relation', get_post_meta( $reverse_id, 'type', true ) );
+		$this->assertSame( $relation_id, (int) get_post_meta( $reverse_id, 'relation_reverse_field_id', true ) );
+	}
+
+	public function test_core_rest_cannot_swap_select_options_without_migrating_rows(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-swap' );
+
+		$field_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'todo',
+						'label' => 'To do',
+					),
+				),
+			)
+		)->get_data()['id'];
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $field_id );
+		$request->set_param( 'meta', array( 'options' => '[{"value":"gone","label":"Gone"}]' ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame(
+			array( 'todo' ),
+			array_column( json_decode( (string) get_post_meta( $field_id, 'options', true ), true ), 'value' )
+		);
+	}
+
+	public function test_converting_a_target_field_refreshes_the_rollup_snapshot(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-snap' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-snap' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$amount_id   = (int) $this->create_field(
+			$target_collection_id,
+			array(
+				'title' => 'Amount',
+				'type'  => 'text',
+			)
+		)->get_data()['id'];
+		$rollup_id   = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                    => 'Amounts',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation_id,
+				'rollup_target_field_id'   => $amount_id,
+				'rollup_aggregator'        => 'show_original',
+			)
+		)->get_data()['id'];
+
+		$this->assertSame( 'text', get_post_meta( $rollup_id, 'rollup_target_type', true ) );
+
+		$this->assertSame( 200, $this->convert_field( $amount_id, 'number' )->get_status() );
+
+		$this->assertSame( 'number', get_post_meta( $rollup_id, 'rollup_target_type', true ) );
+		$this->assertSame( '', get_post_meta( $rollup_id, 'rollup_invalid', true ) );
+	}
+
+	public function test_updating_target_options_refreshes_the_rollup_snapshot(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-opts' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-opts' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$status_id   = (int) $this->create_field(
+			$target_collection_id,
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'todo',
+						'label' => 'To do',
+					),
+				),
+			)
+		)->get_data()['id'];
+		$rollup_id   = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                    => 'Statuses',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation_id,
+				'rollup_target_field_id'   => $status_id,
+				'rollup_aggregator'        => 'show_original',
+			)
+		)->get_data()['id'];
+
+		$response = $this->update_options(
+			$status_id,
+			array(
+				'options' => array(
+					array(
+						'value' => 'todo',
+						'label' => 'To do',
+					),
+					array(
+						'value' => 'done',
+						'label' => 'Done',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$snapshot = json_decode( (string) get_post_meta( $rollup_id, 'rollup_target_options', true ), true );
+		$this->assertSame( array( 'todo', 'done' ), array_column( $snapshot, 'value' ) );
+	}
+
+	public function test_converting_a_target_to_an_incompatible_type_flags_the_rollup(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-flag' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-flag' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$amount_id   = (int) $this->create_field(
+			$target_collection_id,
+			array(
+				'title' => 'Amount',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		$rollup_id   = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                    => 'Total',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation_id,
+				'rollup_target_field_id'   => $amount_id,
+				'rollup_aggregator'        => 'sum',
+			)
+		)->get_data()['id'];
+
+		$this->assertSame( '', get_post_meta( $rollup_id, 'rollup_invalid', true ) );
+
+		$this->assertSame( 200, $this->convert_field( $amount_id, 'text' )->get_status() );
+
+		$this->assertSame( '1', get_post_meta( $rollup_id, 'rollup_invalid', true ) );
+		$this->assertSame( 'text', get_post_meta( $rollup_id, 'rollup_target_type', true ) );
+		$this->assertSame( $amount_id, (int) get_post_meta( $rollup_id, 'rollup_target_field_id', true ) );
+	}
+
+	public function test_duplicating_a_flagged_rollup_keeps_the_copy_flagged(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-dupflag' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-dupflag' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$amount_id   = (int) $this->create_field(
+			$target_collection_id,
+			array(
+				'title' => 'Amount',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		$rollup_id   = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                    => 'Total',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation_id,
+				'rollup_target_field_id'   => $amount_id,
+				'rollup_aggregator'        => 'sum',
+			)
+		)->get_data()['id'];
+		$this->convert_field( $amount_id, 'text' );
+
+		$copy_id = (int) $this->duplicate_field( $source_collection_id, $rollup_id )->get_data()['id'];
+
+		$this->assertSame( 'sum', get_post_meta( $copy_id, 'rollup_aggregator', true ) );
+		$this->assertSame( '1', get_post_meta( $copy_id, 'rollup_invalid', true ) );
+	}
+
+	public function test_a_rollup_stored_without_an_aggregator_validates_as_a_count(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-noagg' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-noagg' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$amount_id   = (int) $this->create_field(
+			$target_collection_id,
+			array(
+				'title' => 'Amount',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		$rollup_id   = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                    => 'Invoice count',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation_id,
+				'rollup_target_field_id'   => $amount_id,
+				'rollup_aggregator'        => 'count',
+			)
+		)->get_data()['id'];
+		delete_post_meta( $rollup_id, 'rollup_aggregator' );
+
+		$this->assertSame( 200, $this->convert_field( $amount_id, 'text' )->get_status() );
+
+		$this->assertSame( 'text', get_post_meta( $rollup_id, 'rollup_target_type', true ) );
+		$this->assertSame( '', get_post_meta( $rollup_id, 'rollup_invalid', true ) );
+	}
+
+	public function test_changing_a_target_format_refreshes_the_rollup_snapshot(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-fmt' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-fmt' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$amount_id   = (int) $this->create_field(
+			$target_collection_id,
+			array(
+				'title' => 'Amount',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		update_post_meta( $amount_id, 'number_format', wp_json_encode( array( 'currency' => 'USD' ) ) );
+
+		$rollup_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                    => 'Total',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation_id,
+				'rollup_target_field_id'   => $amount_id,
+				'rollup_aggregator'        => 'sum',
+			)
+		)->get_data()['id'];
+
+		$this->assertSame(
+			wp_json_encode( array( 'currency' => 'USD' ) ),
+			get_post_meta( $rollup_id, 'rollup_target_number_format', true )
+		);
+
+		update_post_meta( $amount_id, 'number_format', wp_json_encode( array( 'currency' => 'EUR' ) ) );
+
+		$this->assertSame(
+			wp_json_encode( array( 'currency' => 'EUR' ) ),
+			get_post_meta( $rollup_id, 'rollup_target_number_format', true )
+		);
+	}
+
+	/**
+	 * The format popover clears a format by writing an empty string rather than
+	 * deleting the meta, which is the path this covers. WorDBless never fires
+	 * `deleted_post_meta`, so the delete path the CLI seeder uses cannot be
+	 * exercised here.
+	 */
+	public function test_clearing_a_target_format_clears_the_rollup_snapshot(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-fmtclear' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-fmtclear' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$amount_id   = (int) $this->create_field(
+			$target_collection_id,
+			array(
+				'title' => 'Amount',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		update_post_meta( $amount_id, 'number_format', wp_json_encode( array( 'currency' => 'USD' ) ) );
+
+		$rollup_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                    => 'Total',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation_id,
+				'rollup_target_field_id'   => $amount_id,
+				'rollup_aggregator'        => 'sum',
+			)
+		)->get_data()['id'];
+
+		update_post_meta( $amount_id, 'number_format', '' );
+
+		$this->assertSame( '', get_post_meta( $rollup_id, 'rollup_target_number_format', true ) );
 	}
 
 	public function test_create_formula_compiles_refs_and_materializes_existing_rows(): void {

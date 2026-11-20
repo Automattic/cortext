@@ -61,7 +61,7 @@ export default function RenameFieldInline( {
 				} }
 				onBlur={ commit }
 				disabled={ isBusy }
-				aria-label={ __( 'Field name', 'cortext' ) }
+				aria-label={ __( 'Property name', 'cortext' ) }
 				__nextHasNoMarginBottom
 			/>
 		</span>

@@ -152,7 +152,7 @@ final class Functions {
 			$message        = match ( $expected_count ) {
 				0 => sprintf(
 					/* translators: %s: function name. */
-					__( '%s() does not take any values.', 'cortext' ),
+					__( '%s() doesn\'t take any values.', 'cortext' ),
 					$name
 				),
 				1 => sprintf(

@@ -21,6 +21,7 @@ import {
 } from '@wordpress/icons';
 
 import BacklinksToolbarButton from './BacklinksToolbarButton';
+import FrozenBadge from './FrozenBadge';
 
 import './RowDetailView.scss';
 
@@ -130,6 +131,7 @@ function DetailShell( {
 	children,
 	documentId,
 	fields,
+	frozen,
 	isPinned,
 	isPropertiesLayoutEditing,
 	mode,
@@ -148,7 +150,7 @@ function DetailShell( {
 } ) {
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
-		_n( '%d field', '%d fields', fields.length, 'cortext' ),
+		_n( '%d property', '%d properties', fields.length, 'cortext' ),
 		fields.length
 	);
 
@@ -230,6 +232,7 @@ function DetailShell( {
 					) : null }
 					<BacklinksToolbarButton documentId={ documentId } />
 					<div className="cortext-row-detail__toolbar-group cortext-row-detail__toolbar-group--end">
+						<FrozenBadge frozen={ frozen } showLabel />
 						<Button
 							className="cortext-row-detail__toolbar-button cortext-row-detail__toolbar-button--close"
 							icon={ closeSmall }
@@ -536,6 +539,7 @@ export default function RowDetailView( {
 				canGoPrevious={ canUseRowControls && canGoPrevious }
 				documentId={ row?.id ?? rowId }
 				fields={ propertyFields }
+				frozen={ targetDetail?.record?.cortext_frozen }
 				isPinned={ isPinned }
 				isPropertiesLayoutEditing={ isPropertiesLayoutEditing }
 				mode={ normalizedMode }

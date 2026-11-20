@@ -51,7 +51,7 @@ export default function DeleteOptionDialog( {
 				if ( ! cancelled ) {
 					setError(
 						__(
-							'Could not check whether documents use this option.',
+							"Couldn't check whether documents use this option.",
 							'cortext'
 						)
 					);
@@ -123,8 +123,8 @@ export default function DeleteOptionDialog( {
 				{ sprintf(
 					/* translators: 1: option label, 2: number of documents referencing it */
 					_n(
-						'%2$d document currently uses "%1$s".',
-						'%2$d documents currently use "%1$s".',
+						'%2$d document currently uses “%1$s”.',
+						'%2$d documents currently use “%1$s”.',
 						count,
 						'cortext'
 					),

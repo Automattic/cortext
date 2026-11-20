@@ -57,6 +57,7 @@ import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
 import Infotip from './Infotip';
 import MultiselectEdit from './MultiselectEdit';
 import { toRecordId } from '../hooks/fieldIds';
+import { rollupInvalidLabel } from '../hooks/fieldMapping';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import useRelationTargetStatuses from '../hooks/useRelationTargetStatuses';
@@ -95,7 +96,16 @@ function emptyLabel() {
 	);
 }
 
-function ReadOnlyProperty( { value, type, elements, format } ) {
+function ReadOnlyProperty( { value, type, elements, format, rollupInvalid } ) {
+	if ( rollupInvalid ) {
+		return (
+			<div className="cortext-row-detail__readonly">
+				<span className="cortext-row-detail__empty-value">
+					{ rollupInvalidLabel() }
+				</span>
+			</div>
+		);
+	}
 	const display = formatDisplay( value, type, { elements, format } );
 	return (
 		<div className="cortext-row-detail__readonly">
@@ -206,6 +216,7 @@ function RowPropertyDragOverlay( {
 						type={ displayType }
 						elements={ elements }
 						format={ format }
+						rollupInvalid={ field.cortextRollupInvalid }
 					/>
 				</div>
 			</div>
@@ -250,7 +261,7 @@ function withoutKey( object, key ) {
 }
 
 function saveErrorMessage( error ) {
-	return error?.message || __( 'Could not save property.', 'cortext' );
+	return error?.message || __( "Couldn't save this value.", 'cortext' );
 }
 
 function shouldDebouncePropertySave( field ) {
@@ -715,7 +726,7 @@ function PropertyLabel( {
 
 	const configureLabel = sprintf(
 		/* translators: %s: Field label. */
-		__( 'Configure %s field', 'cortext' ),
+		__( 'Configure %s property', 'cortext' ),
 		field.label
 	);
 
@@ -867,6 +878,7 @@ function RowProperty( {
 			type={ displayType }
 			elements={ elements }
 			format={ format }
+			rollupInvalid={ field.cortextRollupInvalid }
 		/>
 	);
 	if ( isEditable ) {
@@ -952,8 +964,8 @@ function RowProperty( {
 						icon={ isVisibleInLayout ? seen : unseen }
 						label={
 							isVisibleInLayout
-								? __( 'Hide property', 'cortext' )
-								: __( 'Show property', 'cortext' )
+								? __( 'Hide in documents', 'cortext' )
+								: __( 'Show in documents', 'cortext' )
 						}
 						isPressed={ isVisibleInLayout }
 						size="small"
@@ -1646,7 +1658,7 @@ export default function RowProperties( {
 		activeLayoutOverId === HIDDEN_PROPERTIES_DROP_TARGET;
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
-		_n( '%d field', '%d fields', propertyFields.length, 'cortext' ),
+		_n( '%d property', '%d properties', propertyFields.length, 'cortext' ),
 		propertyFields.length
 	);
 	const renderProperty = ( field ) =>

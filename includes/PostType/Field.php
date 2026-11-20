@@ -57,6 +57,31 @@ final class Field {
 	);
 
 	/**
+	 * The string-typed meta a Cortext field route has to own, because writing
+	 * it means doing something else at the same time: migrating row values,
+	 * keeping a relation pair in step, reconciling a default, or rebuilding a
+	 * rollup's copy of its target. The generic post route does none of that,
+	 * so every key here and every integer and boolean key registered below
+	 * stay readable there and stop being writable.
+	 *
+	 * `type` and `options` are the sharp ones. Writing `type` straight to meta
+	 * turns a relation into a text field while its reverse still points back at
+	 * it, and writing `options` swaps a select's vocabulary out from under the
+	 * rows already using it.
+	 *
+	 * @var string[]
+	 */
+	private const STRUCTURAL_STRING_META = array(
+		'type',
+		'options',
+		'rollup_aggregator',
+		'rollup_target_type',
+		'rollup_target_options',
+		'rollup_target_number_format',
+		'rollup_target_date_format',
+	);
+
+	/**
 	 * Creates or updates a `crtxt_field` post. Same shape covers create
 	 * (no `id`) and update (with `id`).
 	 *
@@ -250,15 +275,32 @@ final class Field {
 	}
 
 	/**
-	 * Finds rollup fields that use a field as their relation or target.
+	 * Finds rollup fields that read a field as their target property.
 	 *
-	 * @param int $field_id Dependency field post ID.
+	 * A rollup copies its target's type, options, and formats at configuration
+	 * time, so whoever changes the target has to find these and refresh them.
+	 *
+	 * @param int $target_field_id Target field post ID.
 	 * @return int[]
 	 */
-	private function dependent_rollup_ids( int $field_id ): array {
+	public function rollup_ids_targeting( int $target_field_id ): array {
+		return $this->dependent_rollup_ids( $target_field_id, array( 'rollup_target_field_id' ) );
+	}
+
+	/**
+	 * Finds rollup fields that use a field as their relation or target.
+	 *
+	 * @param int      $field_id  Dependency field post ID.
+	 * @param string[] $meta_keys Rollup meta keys to match the field against.
+	 * @return int[]
+	 */
+	private function dependent_rollup_ids(
+		int $field_id,
+		array $meta_keys = array( 'rollup_relation_field_id', 'rollup_target_field_id' )
+	): array {
 		$field_id_str = (string) $field_id;
 		$rollup_ids   = array();
-		foreach ( array( 'rollup_relation_field_id', 'rollup_target_field_id' ) as $meta_key ) {
+		foreach ( $meta_keys as $meta_key ) {
 			$dependents = get_posts(
 				array(
 					'post_type'      => self::POST_TYPE,
@@ -550,16 +592,11 @@ final class Field {
 	}
 
 	private function register_meta(): void {
+		// Formats stay writable here: the format popover saves them straight to
+		// meta.
 		$string_meta = array(
-			'type',
-			'options',
 			'number_format',
 			'date_format',
-			'rollup_aggregator',
-			'rollup_target_type',
-			'rollup_target_options',
-			'rollup_target_number_format',
-			'rollup_target_date_format',
 		);
 
 		foreach ( $string_meta as $key ) {
@@ -571,6 +608,20 @@ final class Field {
 					'single'            => true,
 					'show_in_rest'      => true,
 					'sanitize_callback' => 'sanitize_text_field',
+				)
+			);
+		}
+
+		foreach ( self::STRUCTURAL_STRING_META as $key ) {
+			register_post_meta(
+				self::POST_TYPE,
+				$key,
+				array(
+					'type'              => 'string',
+					'single'            => true,
+					'show_in_rest'      => true,
+					'sanitize_callback' => 'sanitize_text_field',
+					'auth_callback'     => '__return_false',
 				)
 			);
 		}
@@ -636,9 +687,10 @@ final class Field {
 			self::POST_TYPE,
 			'related_collection_id',
 			array(
-				'type'         => 'integer',
-				'single'       => true,
-				'show_in_rest' => true,
+				'type'          => 'integer',
+				'single'        => true,
+				'show_in_rest'  => true,
+				'auth_callback' => '__return_false',
 			)
 		);
 
@@ -654,9 +706,10 @@ final class Field {
 				self::POST_TYPE,
 				$key,
 				array(
-					'type'         => 'integer',
-					'single'       => true,
-					'show_in_rest' => true,
+					'type'          => 'integer',
+					'single'        => true,
+					'show_in_rest'  => true,
+					'auth_callback' => '__return_false',
 				)
 			);
 		}
@@ -665,9 +718,10 @@ final class Field {
 			self::POST_TYPE,
 			'relation_multiple',
 			array(
-				'type'         => 'boolean',
-				'single'       => true,
-				'show_in_rest' => true,
+				'type'          => 'boolean',
+				'single'        => true,
+				'show_in_rest'  => true,
+				'auth_callback' => '__return_false',
 			)
 		);
 
@@ -675,9 +729,21 @@ final class Field {
 			self::POST_TYPE,
 			'rollup_target_relation_multiple',
 			array(
-				'type'         => 'boolean',
-				'single'       => true,
-				'show_in_rest' => true,
+				'type'          => 'boolean',
+				'single'        => true,
+				'show_in_rest'  => true,
+				'auth_callback' => '__return_false',
+			)
+		);
+
+		register_post_meta(
+			self::POST_TYPE,
+			'rollup_invalid',
+			array(
+				'type'          => 'boolean',
+				'single'        => true,
+				'show_in_rest'  => true,
+				'auth_callback' => '__return_false',
 			)
 		);
 

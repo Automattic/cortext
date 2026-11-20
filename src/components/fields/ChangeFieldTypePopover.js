@@ -82,7 +82,7 @@ export default function ChangeFieldTypePopover( {
 				{ commit.error && (
 					<Notice status="error" isDismissible={ false }>
 						{ commit.error?.message ??
-							__( 'Could not change type.', 'cortext' ) }
+							__( "Couldn't change type.", 'cortext' ) }
 					</Notice>
 				) }
 			</div>

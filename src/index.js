@@ -2,6 +2,7 @@ import { createRoot } from '@wordpress/element';
 
 import './index.scss';
 import './components/registerBlocks';
+import './components/dataViewsFieldTerms';
 
 import { router, RouterProvider } from './router';
 

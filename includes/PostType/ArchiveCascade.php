@@ -496,7 +496,7 @@ final class ArchiveCascade {
 		if ( $result instanceof WP_Error || 0 === $result ) {
 			return new WP_Error(
 				'cortext_document_archive_failed',
-				__( 'Document could not be archived.', 'cortext' ),
+				__( 'Couldn\'t archive the document.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}
@@ -550,7 +550,7 @@ final class ArchiveCascade {
 		if ( $result instanceof WP_Error || 0 === $result ) {
 			return new WP_Error(
 				'cortext_document_unarchive_failed',
-				__( 'Document could not be restored.', 'cortext' ),
+				__( 'Couldn\'t restore the document.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}
@@ -806,7 +806,7 @@ final class ArchiveCascade {
 			if ( ! isset( $ignored[ $container_id ] ) && $is_archived ) {
 				return new WP_Error(
 					'cortext_document_archived_container',
-					__( 'Restore this document\'s parent or collection from Archive first.', 'cortext' ),
+					__( 'Unarchive this document\'s parent or collection first.', 'cortext' ),
 					array(
 						'status'       => 409,
 						'container_id' => $container_id,

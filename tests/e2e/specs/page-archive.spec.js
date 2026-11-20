@@ -39,13 +39,8 @@ async function createArchivedCollection( requestUtils ) {
 	} );
 	const field = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_fields',
-		data: { title: 'Author', status: 'private', meta: { type: 'text' } },
-	} );
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: { meta: { cortext_fields: [ String( field.id ) ] } },
+		path: `/cortext/v1/collections/${ collection.id }/fields`,
+		data: { title: 'Author', type: 'text' },
 	} );
 	const row = await requestUtils.rest( {
 		method: 'POST',
@@ -180,7 +175,7 @@ test.describe( 'Archived view', () => {
 			await expect( banner ).toContainText(
 				'1 nested document comes back with it'
 			);
-			await banner.getByRole( 'button', { name: 'Restore' } ).click();
+			await banner.getByRole( 'button', { name: 'Unarchive' } ).click();
 			await expect( parentItem ).toHaveCount( 0 );
 
 			// The archived collection opens with its archived rows.

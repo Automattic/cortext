@@ -358,6 +358,42 @@ describe( 'mapField', () => {
 		).toBe( '12.3' );
 	} );
 
+	it( 'renders a repair hint for a rollup the server flagged invalid', () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'sum',
+				rollup_target_type: 'text',
+				rollup_invalid: true,
+			} )
+		);
+
+		expect( mapped.cortextRollupInvalid ).toBe( true );
+
+		render( <mapped.render item={ { 'field-5': null } } /> );
+
+		expect( screen.getByText( 'Target field changed type' ) ).toBeVisible();
+	} );
+
+	it( 'leaves a valid rollup rendering its value', () => {
+		const mapped = mapField(
+			baseField( {
+				type: 'rollup',
+				rollup_aggregator: 'sum',
+				rollup_target_type: 'number',
+			} )
+		);
+
+		expect( mapped.cortextRollupInvalid ).toBe( false );
+
+		const { container } = render(
+			mapped.render( { item: { meta: { 'field-5': 30 } } } )
+		);
+
+		expect( container.textContent ).toContain( '30' );
+		expect( screen.queryByText( 'Target field changed type' ) ).toBeNull();
+	} );
+
 	it( 'sorts numeric rollups through the DataViews client pipeline', () => {
 		const mapped = mapField(
 			baseField( { type: 'rollup', rollup_aggregator: 'sum' } )

@@ -182,7 +182,7 @@ async function startParentToolbarOverlapFlashLog( page ) {
 		);
 		const iframeDocument = iframe?.contentDocument;
 		if ( ! canvasRoot || ! iframeDocument?.body ) {
-			throw new Error( 'Could not instrument the editor canvas.' );
+			throw new Error( "Couldn't instrument the editor canvas." );
 		}
 
 		let stopped = false;
@@ -359,7 +359,7 @@ async function selectParentDataViewBlock( page ) {
 			.getBlocks()
 			.find( ( block ) => block.name === 'cortext/data-view' );
 		if ( ! dataViewBlock ) {
-			throw new Error( 'Could not find the DataView block.' );
+			throw new Error( "Couldn't find the DataView block." );
 		}
 		window.wp.data
 			.dispatch( 'core/block-editor' )
@@ -374,7 +374,7 @@ async function getParentDataViewAttributes( page ) {
 			.getBlocks()
 			.find( ( block ) => block.name === 'cortext/data-view' );
 		if ( ! dataViewBlock ) {
-			throw new Error( 'Could not find the DataView block.' );
+			throw new Error( "Couldn't find the DataView block." );
 		}
 		return JSON.parse( JSON.stringify( dataViewBlock.attributes ) );
 	} );
@@ -404,7 +404,7 @@ async function expectRowToolbarIsolated( page, detail, blockText ) {
 		page.getByRole( 'button', { name: 'Change collection' } )
 	).toHaveCount( 0 );
 	await expect(
-		page.getByRole( 'button', { name: 'Add field', exact: true } )
+		page.getByRole( 'button', { name: 'Add property', exact: true } )
 	).toHaveCount( 0 );
 	await expect(
 		page.getByRole( 'button', { name: 'View settings' } )
@@ -438,19 +438,10 @@ async function createCollectionFixture( requestUtils ) {
 
 	const field = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_fields',
+		path: `/cortext/v1/collections/${ collection.id }/fields`,
 		data: {
 			title: 'Author',
-			status: 'private',
-			meta: { type: 'text' },
-		},
-	} );
-
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: {
-			meta: { cortext_fields: [ String( field.id ) ] },
+			type: 'text',
 		},
 	} );
 
@@ -491,26 +482,13 @@ async function createCalculationFixture( requestUtils ) {
 	} ) ) {
 		fields[ key ] = await requestUtils.rest( {
 			method: 'POST',
-			path: '/wp/v2/crtxt_fields',
+			path: `/cortext/v1/collections/${ collection.id }/fields`,
 			data: {
 				title: config.title,
-				status: 'private',
-				meta: { type: config.type },
+				type: config.type,
 			},
 		} );
 	}
-
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: {
-			meta: {
-				cortext_fields: Object.values( fields ).map( ( field ) =>
-					String( field.id )
-				),
-			},
-		},
-	} );
 
 	const rows = [];
 	for ( const row of [
@@ -575,18 +553,10 @@ async function createManualOrderFixture( requestUtils ) {
 	// without it, `cortext_trait` on row inserts is a silent no-op).
 	const field = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_fields',
+		path: `/cortext/v1/collections/${ collection.id }/fields`,
 		data: {
 			title: 'Title',
-			status: 'private',
-			meta: { type: 'text' },
-		},
-	} );
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: {
-			meta: { cortext_fields: [ String( field.id ) ] },
+			type: 'text',
 		},
 	} );
 
@@ -2402,38 +2372,25 @@ test.describe( 'Collection view block', () => {
 			} );
 			fixture.relatedField = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.relatedCollection.id }/fields`,
 				data: {
 					title: 'Name',
-					status: 'private',
-					meta: { type: 'text' },
-				},
-			} );
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.relatedCollection.id }`,
-				data: {
-					meta: {
-						cortext_fields: [ String( fixture.relatedField.id ) ],
-					},
+					type: 'text',
 				},
 			} );
 			fixture.statusField = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Status',
-					status: 'private',
-					meta: {
-						type: 'select',
-						options: JSON.stringify( [
-							{
-								value: 'finished',
-								label: 'Finished',
-								color: 'green',
-							},
-						] ),
-					},
+					type: 'select',
+					options: [
+						{
+							value: 'finished',
+							label: 'Finished',
+							color: 'green',
+						},
+					],
 				},
 			} );
 			fixture.relationField = await requestUtils.rest( {
@@ -2465,20 +2422,6 @@ test.describe( 'Collection view block', () => {
 			const statusFieldKey = `field-${ fixture.statusField.id }`;
 			const relationFieldKey = `field-${ fixture.relationField.id }`;
 			fixture.media = [];
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: {
-						cortext_fields: [
-							String( fixture.field.id ),
-							String( fixture.statusField.id ),
-							String( fixture.relationField.id ),
-						],
-					},
-				},
-			} );
 
 			for ( const row of fixture.rows ) {
 				const media = await uploadCoverMedia(
@@ -2660,37 +2603,21 @@ test.describe( 'Collection view block', () => {
 			);
 			fixture.statusField = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Status',
-					status: 'private',
-					meta: {
-						type: 'select',
-						options: JSON.stringify( [
-							{
-								value: 'finished',
-								label: 'Finished',
-								color: 'green',
-							},
-						] ),
-					},
+					type: 'select',
+					options: [
+						{
+							value: 'finished',
+							label: 'Finished',
+							color: 'green',
+						},
+					],
 				},
 			} );
 			const fieldKey = `field-${ fixture.statusField.id }`;
 			fixture.media = [];
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: {
-						cortext_fields: [
-							String( fixture.field.id ),
-							String( fixture.statusField.id ),
-						],
-					},
-				},
-			} );
 
 			for ( const row of fixture.rows ) {
 				const media = await uploadCoverMedia(
@@ -3310,34 +3237,19 @@ test.describe( 'Collection view block', () => {
 
 			fixture.fieldA = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Author',
-					status: 'private',
-					meta: { type: 'text' },
+					type: 'text',
 				},
 			} );
 
 			fixture.fieldB = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Notes',
-					status: 'private',
-					meta: { type: 'text' },
-				},
-			} );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: {
-						cortext_fields: [
-							String( fixture.fieldA.id ),
-							String( fixture.fieldB.id ),
-						],
-					},
+					type: 'text',
 				},
 			} );
 
@@ -4263,9 +4175,7 @@ test.describe( 'Collection view block', () => {
 				await getParentDataViewAttributes( page );
 			expect( afterSideAttributes ).toEqual( beforeAttributes );
 
-			await detail
-				.getByRole( 'button', { name: 'Center modal' } )
-				.click();
+			await detail.getByRole( 'button', { name: 'Center peek' } ).click();
 			const modalDetail = page.locator(
 				'.components-modal__frame.cortext-row-detail-modal'
 			);
@@ -4313,45 +4223,27 @@ test.describe( 'Collection view block', () => {
 
 			fixture.tagsField = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Tags',
-					status: 'private',
-					meta: {
-						type: 'multiselect',
-						options: JSON.stringify( [
-							{
-								value: 'research',
-								label: 'Research',
-								color: 'blue',
-							},
-							{ value: 'data', label: 'Data', color: 'green' },
-						] ),
-					},
+					type: 'multiselect',
+					options: [
+						{
+							value: 'research',
+							label: 'Research',
+							color: 'blue',
+						},
+						{ value: 'data', label: 'Data', color: 'green' },
+					],
 				},
 			} );
 
 			fixture.yearField = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Year',
-					status: 'private',
-					meta: { type: 'number' },
-				},
-			} );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: {
-						cortext_fields: [
-							String( fixture.field.id ),
-							String( fixture.tagsField.id ),
-							String( fixture.yearField.id ),
-						],
-					},
+					type: 'number',
 				},
 			} );
 
@@ -4471,7 +4363,7 @@ test.describe( 'Collection view block', () => {
 				'The Left Hand of Darkness'
 			);
 			const authorLabelButton = detailCanvas.getByRole( 'button', {
-				name: 'Configure Author field',
+				name: 'Configure Author property',
 			} );
 			await expect( authorLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await authorLabelButton.click();
@@ -4482,7 +4374,7 @@ test.describe( 'Collection view block', () => {
 			).toBeVisible();
 			await page.keyboard.press( 'Escape' );
 			const yearLabelButton = detailCanvas.getByRole( 'button', {
-				name: 'Configure Year field',
+				name: 'Configure Year property',
 			} );
 			await expect( yearLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await yearLabelButton.click();
@@ -4552,7 +4444,7 @@ test.describe( 'Collection view block', () => {
 				.filter( { hasText: 'Tags' } );
 			await expect( tagsLabel ).toBeVisible();
 			const tagsLabelButton = detailCanvas.getByRole( 'button', {
-				name: 'Configure Tags field',
+				name: 'Configure Tags property',
 			} );
 			await expect( tagsLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await tagsLabelButton.click();
@@ -4708,32 +4600,30 @@ test.describe( 'Collection view block', () => {
 			await yearProperty.pressSequentially( '2026' );
 
 			await expect(
-				detail.getByRole( 'button', { name: 'Center modal' } )
+				detail.getByRole( 'button', { name: 'Center peek' } )
 			).toBeVisible();
 			await expect(
-				detail.getByRole( 'button', { name: 'Full view' } )
+				detail.getByRole( 'button', { name: 'Full screen' } )
 			).toBeVisible();
 			await expect(
 				detail.getByRole( 'button', { name: 'Change layout' } )
 			).toHaveCount( 0 );
-			await detail
-				.getByRole( 'button', { name: 'Center modal' } )
-				.click();
+			await detail.getByRole( 'button', { name: 'Center peek' } ).click();
 			const modalDetail = page.locator(
 				'.components-modal__frame.cortext-row-detail-modal'
 			);
 			await expect( modalDetail ).toBeVisible();
 			await expect(
-				modalDetail.getByRole( 'button', { name: 'Center modal' } )
+				modalDetail.getByRole( 'button', { name: 'Center peek' } )
 			).toHaveCount( 0 );
 			await expect(
 				modalDetail.getByRole( 'button', { name: 'Side peek' } )
 			).toBeVisible();
 			await expect(
-				modalDetail.getByRole( 'button', { name: 'Full view' } )
+				modalDetail.getByRole( 'button', { name: 'Full screen' } )
 			).toBeVisible();
 			await modalDetail
-				.getByRole( 'button', { name: 'Full view' } )
+				.getByRole( 'button', { name: 'Full screen' } )
 				.click();
 			await expect( detail ).toBeHidden();
 			await expect(
@@ -4958,14 +4848,14 @@ test.describe( 'Collection view block', () => {
 			} );
 
 			const createField = async ( title, type, options ) => {
-				const meta = { type };
+				const data = { title, type };
 				if ( options ) {
-					meta.options = JSON.stringify( options );
+					data.options = options;
 				}
 				const field = await requestUtils.rest( {
 					method: 'POST',
-					path: '/wp/v2/crtxt_fields',
-					data: { title, status: 'private', meta },
+					path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
+					data,
 				} );
 				fixture.fieldIds.push( field.id );
 				return field;
@@ -4982,16 +4872,6 @@ test.describe( 'Collection view block', () => {
 				{ value: 'a', label: 'Alpha', color: '#ddebf1' },
 				{ value: 'b', label: 'Beta', color: '#ddedea' },
 			] );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: {
-						cortext_fields: fixture.fieldIds.map( String ),
-					},
-				},
-			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
@@ -5142,19 +5022,10 @@ test.describe( 'Collection view block', () => {
 
 			fixture.field = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Score',
-					status: 'private',
-					meta: { type: 'number' },
-				},
-			} );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: { cortext_fields: [ String( fixture.field.id ) ] },
+					type: 'number',
 				},
 			} );
 
@@ -5310,19 +5181,10 @@ test.describe( 'Collection view block', () => {
 
 			fixture.field = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Note',
-					status: 'private',
-					meta: { type: 'text' },
-				},
-			} );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: { cortext_fields: [ String( fixture.field.id ) ] },
+					type: 'text',
 				},
 			} );
 
@@ -6291,7 +6153,7 @@ test.describe( 'Collection view block', () => {
 			const ghostAdd = canvas
 				.locator( 'th' )
 				.last()
-				.getByRole( 'button', { name: 'Add field' } );
+				.getByRole( 'button', { name: 'Add property' } );
 			await ghostAdd.click();
 			const popover = page.locator(
 				'.cortext-data-view-toolbar-popover'
@@ -6352,20 +6214,13 @@ test.describe( 'Collection view block', () => {
 
 			const field = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Done?',
-					status: 'private',
-					meta: { type: 'checkbox' },
+					type: 'checkbox',
 				},
 			} );
 			fixture.fieldIds.push( field.id );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: { meta: { cortext_fields: [ String( field.id ) ] } },
-			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
@@ -6608,14 +6463,14 @@ test.describe( 'Collection view block', () => {
 			} );
 
 			const createField = async ( title, type, options ) => {
-				const meta = { type };
+				const data = { title, type };
 				if ( options ) {
-					meta.options = JSON.stringify( options );
+					data.options = options;
 				}
 				const field = await requestUtils.rest( {
 					method: 'POST',
-					path: '/wp/v2/crtxt_fields',
-					data: { title, status: 'private', meta },
+					path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
+					data,
 				} );
 				fixture.fieldIds.push( field.id );
 				return field;
@@ -6626,14 +6481,6 @@ test.describe( 'Collection view block', () => {
 				{ value: 'docs', label: 'docs', color: '#e8def8' },
 			] );
 			const dueField = await createField( 'Due', 'date' );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: { cortext_fields: fixture.fieldIds.map( String ) },
-				},
-			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
@@ -6755,8 +6602,8 @@ test.describe( 'Collection view block', () => {
 			const createField = async ( title ) => {
 				const f = await requestUtils.rest( {
 					method: 'POST',
-					path: '/wp/v2/crtxt_fields',
-					data: { title, status: 'private', meta: { type: 'text' } },
+					path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
+					data: { title, type: 'text' },
 				} );
 				fixture.fieldIds.push( f.id );
 				return f;
@@ -6764,14 +6611,6 @@ test.describe( 'Collection view block', () => {
 
 			const fieldA = await createField( 'Author' );
 			const fieldB = await createField( 'Notes' );
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: { cortext_fields: fixture.fieldIds.map( String ) },
-				},
-			} );
 
 			fixture.entry = await requestUtils.rest( {
 				method: 'POST',
@@ -7009,7 +6848,7 @@ test.describe( 'Collection view block', () => {
 			} );
 
 			await page
-				.getByRole( 'button', { name: 'Add field', exact: true } )
+				.getByRole( 'button', { name: 'Add property', exact: true } )
 				.first()
 				.click();
 			const popover = page.locator(
@@ -7045,7 +6884,7 @@ test.describe( 'Collection view block', () => {
 			await openColumnDropdown( notesHeader, 'Notes' );
 			await columnMenuItem( 'Rename' ).click();
 
-			const renameInput = canvas.getByLabel( 'Field name' );
+			const renameInput = canvas.getByLabel( 'Property name' );
 			await renameInput.fill( 'Description' );
 			await renameInput.press( 'Enter' );
 
@@ -7100,7 +6939,7 @@ test.describe( 'Collection view block', () => {
 			const ghostAdd = canvas
 				.locator( 'th' )
 				.last()
-				.getByRole( 'button', { name: 'Add field' } );
+				.getByRole( 'button', { name: 'Add property' } );
 			await ghostAdd.click();
 			const ghostPopover = page.locator(
 				'.cortext-data-view-toolbar-popover'

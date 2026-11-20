@@ -121,7 +121,7 @@ function RelationConfig( {
 				__( 'Related %s', 'cortext' ),
 				titleOf( sourceCollection )
 		  )
-		: __( 'Related items', 'cortext' );
+		: __( 'Related documents', 'cortext' );
 
 	const submit = async () => {
 		if ( ! targetCollectionId || isBusy ) {
@@ -140,7 +140,7 @@ function RelationConfig( {
 		} catch ( apiError ) {
 			onError(
 				apiError?.message ||
-					__( 'Relation could not be created.', 'cortext' )
+					__( "Couldn't create the relation.", 'cortext' )
 			);
 		}
 	};
@@ -171,7 +171,7 @@ function RelationConfig( {
 				__nextHasNoMarginBottom
 			/>
 			<ToggleControl
-				label={ __( 'Add related field', 'cortext' ) }
+				label={ __( 'Add related property', 'cortext' ) }
 				checked={ showReverseOptions }
 				onChange={ setShowReverseOptions }
 				disabled={ isBusy }
@@ -180,7 +180,7 @@ function RelationConfig( {
 			{ showReverseOptions ? (
 				<>
 					<TextControl
-						label={ __( 'Related field name', 'cortext' ) }
+						label={ __( 'Related property name', 'cortext' ) }
 						placeholder={ defaultReverseTitle }
 						value={ reverseTitle }
 						onChange={ setReverseTitle }
@@ -188,7 +188,7 @@ function RelationConfig( {
 						__nextHasNoMarginBottom
 					/>
 					<SelectControl
-						label={ __( 'Related field limit', 'cortext' ) }
+						label={ __( 'Related property limit', 'cortext' ) }
 						value={ reverseMultiple ? 'many' : 'one' }
 						options={ RELATION_LIMIT_OPTIONS }
 						onChange={ ( next ) =>
@@ -264,7 +264,7 @@ function RollupConfig( {
 
 	const targetOptions = useMemo(
 		() => [
-			{ value: '', label: __( 'Choose field…', 'cortext' ) },
+			{ value: '', label: __( 'Choose property…', 'cortext' ) },
 			...( targetFields ?? [] )
 				.filter( ( field ) => field.meta?.type !== 'rollup' )
 				.map( ( field ) => ( {
@@ -371,7 +371,7 @@ function RollupConfig( {
 		} catch ( apiError ) {
 			onError(
 				apiError?.message ||
-					__( 'Rollup could not be created.', 'cortext' )
+					__( "Couldn't create the rollup.", 'cortext' )
 			);
 		}
 	};
@@ -399,7 +399,7 @@ function RollupConfig( {
 				__nextHasNoMarginBottom
 			/>
 			<SelectControl
-				label={ __( 'Target field', 'cortext' ) }
+				label={ __( 'Target property', 'cortext' ) }
 				value={ targetFieldId }
 				options={ targetOptions }
 				onChange={ ( next ) => {
@@ -484,7 +484,7 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 		} catch ( apiError ) {
 			setSubmitError(
 				apiError?.message ||
-					__( 'Field could not be created.', 'cortext' )
+					__( "Couldn't create the property.", 'cortext' )
 			);
 		}
 	};
@@ -497,7 +497,7 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 		? configuredType.label
 		: fieldTypeLabel( 'text' );
 	let nameLabel = __( 'Name', 'cortext' );
-	let namePlaceholder = __( 'Type field name…', 'cortext' );
+	let namePlaceholder = __( 'Type property name…', 'cortext' );
 	if ( configType === 'relation' ) {
 		nameLabel = __( 'Relation name', 'cortext' );
 		namePlaceholder = __( 'Relation name', 'cortext' );

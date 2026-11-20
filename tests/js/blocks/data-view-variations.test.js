@@ -3,7 +3,7 @@
  *
  * The inserter should offer two single-purpose entries: "New collection"
  * (create a new collection inline, the default that replaces the bare block) and
- * "Linked collection view" (point at an existing collection). They are told
+ * "Existing collection" (point at a collection that already exists). They are told
  * apart by a transient `intent` attribute the block clears on mount.
  */
 import { DATA_VIEW_VARIATIONS } from '../../../src/blocks/data-view/variations';

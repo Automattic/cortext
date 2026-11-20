@@ -25,7 +25,7 @@ import {
 	PUBLISHED_DOCUMENTS_QUERY,
 } from './page-queries';
 import { computeDocumentUri } from '../router/useResolveEntity';
-import { definesTrait, hasTrait } from '../documents/capabilities';
+import { definesTrait } from '../documents/capabilities';
 import { documentTypeLabel } from '../documents/labels';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
@@ -48,8 +48,7 @@ const DEFAULT_VIEW = {
 	layout: { density: 'compact' },
 };
 
-const TYPE_PAGE = 'page';
-const TYPE_COLLECTION_ITEM = 'collection-item';
+const TYPE_DOCUMENT = 'document';
 const TYPE_COLLECTION = 'collection';
 
 function titleText( entity ) {
@@ -64,10 +63,7 @@ function documentTypeValue( record ) {
 	if ( definesTrait( record ) ) {
 		return TYPE_COLLECTION;
 	}
-	if ( hasTrait( record ) ) {
-		return TYPE_COLLECTION_ITEM;
-	}
-	return TYPE_PAGE;
+	return TYPE_DOCUMENT;
 }
 
 function buildItems( documents ) {
@@ -150,10 +146,9 @@ export default function PublishedDocumentsPane( { isActive } ) {
 				id: 'type',
 				label: __( 'Type', 'cortext' ),
 				elements: [
-					{ value: TYPE_PAGE, label: __( 'Page', 'cortext' ) },
 					{
-						value: TYPE_COLLECTION_ITEM,
-						label: __( 'Collection item', 'cortext' ),
+						value: TYPE_DOCUMENT,
+						label: __( 'Document', 'cortext' ),
 					},
 					{
 						value: TYPE_COLLECTION,

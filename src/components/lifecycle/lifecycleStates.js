@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { box as archiveIcon, trash as trashIcon } from '@wordpress/icons';
 
 import ArchivedTrashConfirmDialog from './ArchivedTrashConfirmDialog';
@@ -50,16 +50,24 @@ export const TRASH = {
 	HeaderAction: EmptyTrashButton,
 	copy: () => ( {
 		title: __( 'Trash', 'cortext' ),
-		listLabel: __( 'Items in Trash', 'cortext' ),
+		listLabel: __( 'Documents in Trash', 'cortext' ),
 		searchLabel: __( 'Search Trash', 'cortext' ),
-		loadError: __( 'Could not load Trash.', 'cortext' ),
+		loadError: __( "Couldn't load Trash.", 'cortext' ),
 		emptyList: __( 'Trash is empty.', 'cortext' ),
 		primaryShortcut: __( 'restore', 'cortext' ),
 		secondaryShortcut: __( 'delete', 'cortext' ),
+		restoreLabel: ( parentTitle ) =>
+			parentTitle
+				? sprintf(
+						/* translators: %s: title of the page or collection the document is restored into */
+						__( 'Restore to %s', 'cortext' ),
+						parentTitle
+				  )
+				: __( 'Restore', 'cortext' ),
 		secondaryLabel: __( 'Delete permanently', 'cortext' ),
-		restoreError: __( 'Could not restore this document.', 'cortext' ),
-		secondaryError: __( 'Could not delete this document.', 'cortext' ),
-		noticeTitle: __( 'This document is in the Trash.', 'cortext' ),
+		restoreError: __( "Couldn't restore this document.", 'cortext' ),
+		secondaryError: __( "Couldn't delete this document.", 'cortext' ),
+		noticeTitle: __( 'This document is in Trash.', 'cortext' ),
 		emptyTitle: __( 'Nothing in Trash', 'cortext' ),
 		emptyBody: __(
 			'Documents you move to Trash show up here with where they came from. They stay for 30 days, then they are deleted for good.',
@@ -90,16 +98,17 @@ export const ARCHIVED = {
 	HeaderAction: null,
 	copy: () => ( {
 		title: __( 'Archived', 'cortext' ),
-		listLabel: __( 'Archived items', 'cortext' ),
+		listLabel: __( 'Archived documents', 'cortext' ),
 		searchLabel: __( 'Search Archived', 'cortext' ),
-		loadError: __( 'Could not load archived documents.', 'cortext' ),
+		loadError: __( "Couldn't load archived documents.", 'cortext' ),
 		emptyList: __( 'No archived documents.', 'cortext' ),
-		primaryShortcut: __( 'restore', 'cortext' ),
+		primaryShortcut: __( 'unarchive', 'cortext' ),
 		secondaryShortcut: __( 'trash', 'cortext' ),
+		restoreLabel: () => __( 'Unarchive', 'cortext' ),
 		secondaryLabel: __( 'Move to Trash', 'cortext' ),
-		restoreError: __( 'Could not restore this document.', 'cortext' ),
+		restoreError: __( "Couldn't unarchive this document.", 'cortext' ),
 		secondaryError: __(
-			'Could not move this document to Trash.',
+			"Couldn't move this document to Trash.",
 			'cortext'
 		),
 		noticeTitle: __(

@@ -133,7 +133,7 @@ function CollectionCreator( { onCreate } ) {
 		} catch ( apiError ) {
 			setError(
 				apiError?.message ||
-					__( 'Collection could not be created.', 'cortext' )
+					__( "Couldn't create the collection.", 'cortext' )
 			);
 		} finally {
 			setIsSaving( false );
@@ -212,7 +212,7 @@ function CollectionToolbarControl( {
 					renderToggle={ ( { isOpen, onToggle } ) => (
 						<ToolbarButton
 							icon={ plus }
-							label={ __( 'Add field', 'cortext' ) }
+							label={ __( 'Add property', 'cortext' ) }
 							onClick={ onToggle }
 							isPressed={ isOpen }
 						/>
@@ -372,7 +372,7 @@ function CollectionInspectorControls( {
 				</PanelBody>
 			) }
 			<PanelBody
-				title={ __( 'Fields', 'cortext' ) }
+				title={ __( 'Properties', 'cortext' ) }
 				initialOpen={ fieldsPanelInitialOpen }
 			>
 				{ isCollectionValid && (
@@ -389,7 +389,7 @@ function CollectionInspectorControls( {
 										aria-expanded={ isOpen }
 										__next40pxDefaultSize
 									>
-										{ __( 'Add field', 'cortext' ) }
+										{ __( 'Add property', 'cortext' ) }
 									</Button>
 								) }
 								renderContent={ ( { onClose } ) => (
@@ -490,7 +490,7 @@ function CollectionInspectorControls( {
 							__nextHasNoMarginBottom
 						/>
 						<ToggleGroupControl
-							label={ __( 'Detail view', 'cortext' ) }
+							label={ __( 'Open documents in', 'cortext' ) }
 							value={
 								view?.rowDetailMode ?? DEFAULT_ROW_DETAIL_MODE
 							}
@@ -695,7 +695,7 @@ export default function Edit( {
 					}
 					error={
 						<Notice status="error" isDismissible={ false }>
-							{ __( 'Could not load documents.', 'cortext' ) }
+							{ __( "Couldn't load documents.", 'cortext' ) }
 						</Notice>
 					}
 				/>

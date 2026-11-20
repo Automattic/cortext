@@ -106,8 +106,8 @@ function SidebarRecentsRow( {
 	const { listIcon } = useDocumentRecord( merged );
 	const displayTitle = recentDisplayTitle( recent );
 	const duplicateContext = definesTrait( merged )
-		? __( 'contains rows', 'cortext' )
-		: __( 'plain document', 'cortext' );
+		? __( 'collection', 'cortext' )
+		: __( 'document', 'cortext' );
 
 	const ariaLabel = isDuplicateLabel
 		? sprintf(

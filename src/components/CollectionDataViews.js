@@ -80,7 +80,7 @@ import { saveRowDocumentField } from './rowDocumentMutations';
 import { useActiveEditor } from './ActiveEditorContext';
 import {
 	ROW_DETAIL_MODE_ICONS,
-	ROW_DETAIL_MODE_LABELS,
+	ROW_DETAIL_MODE_OPEN_LABELS,
 	getRowDetailMode,
 	withRowDetailMode,
 } from './rowDetailUtils';
@@ -1090,7 +1090,7 @@ export default function CollectionDataViews( {
 				setRowActionError(
 					freezeError?.message ??
 						__(
-							'Could not change the lock on this document.',
+							"Couldn't change the lock on this document.",
 							'cortext'
 						)
 				);
@@ -1128,7 +1128,7 @@ export default function CollectionDataViews( {
 			} catch ( apiError ) {
 				setRowActionError(
 					apiError?.message ??
-						__( 'Could not duplicate this document.', 'cortext' )
+						__( "Couldn't duplicate this document.", 'cortext' )
 				);
 			}
 		},
@@ -1310,20 +1310,20 @@ export default function CollectionDataViews( {
 				let deleteErrorMessage;
 				if ( nextRows.length === 1 ) {
 					deleteErrorMessage = __(
-						'Could not move document to Trash.',
+						"Couldn't move document to Trash.",
 						'cortext'
 					);
 				} else if ( failedRows.length === nextRows.length ) {
 					deleteErrorMessage = __(
-						'Could not move selected documents to Trash.',
+						"Couldn't move selected documents to Trash.",
 						'cortext'
 					);
 				} else {
 					deleteErrorMessage = sprintf(
 						/* translators: %d: number of documents that failed to move to Trash. */
 						_n(
-							'%d document could not be moved to Trash.',
-							'%d documents could not be moved to Trash.',
+							"%d document couldn't be moved to Trash.",
+							"%d documents couldn't be moved to Trash.",
 							failedRows.length,
 							'cortext'
 						),
@@ -1463,20 +1463,20 @@ export default function CollectionDataViews( {
 				let archiveErrorMessage;
 				if ( nextRows.length === 1 ) {
 					archiveErrorMessage = __(
-						'Could not archive this document.',
+						"Couldn't archive this document.",
 						'cortext'
 					);
 				} else if ( failedRows.length === nextRows.length ) {
 					archiveErrorMessage = __(
-						'Could not archive selected documents.',
+						"Couldn't archive selected documents.",
 						'cortext'
 					);
 				} else {
 					archiveErrorMessage = sprintf(
 						/* translators: %d: number of documents that could not be archived */
 						_n(
-							'%d document could not be archived.',
-							'%d documents could not be archived.',
+							"%d document couldn't be archived.",
+							"%d documents couldn't be archived.",
 							failedRows.length,
 							'cortext'
 						),
@@ -1517,11 +1517,7 @@ export default function CollectionDataViews( {
 		for ( const mode of [ 'side', 'modal', 'full' ] ) {
 			actions.push( {
 				id: `open-in-${ mode }`,
-				label: sprintf(
-					/* translators: %s: document detail mode (Side peek, Center modal, Full view). */
-					__( 'Open in %s', 'cortext' ),
-					ROW_DETAIL_MODE_LABELS[ mode ]
-				),
+				label: ROW_DETAIL_MODE_OPEN_LABELS[ mode ],
 				icon: ROW_DETAIL_MODE_ICONS[ mode ],
 				context: 'single',
 				callback: ( items ) => openRowInMode( items?.[ 0 ], mode ),
@@ -2012,7 +2008,7 @@ export default function CollectionDataViews( {
 		return (
 			<DataViewStateShell status="error">
 				{ error ?? (
-					<p>{ __( 'Could not load documents.', 'cortext' ) }</p>
+					<p>{ __( "Couldn't load documents.", 'cortext' ) }</p>
 				) }
 			</DataViewStateShell>
 		);

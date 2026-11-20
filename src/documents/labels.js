@@ -1,10 +1,9 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 
-import { definesTrait, hasTrait } from './capabilities';
+import { definesTrait } from './capabilities';
 
 /**
- * Kind of document, as shown to people: a page, a collection, or one of a
- * collection's items.
+ * Kind of document, as shown to people: a collection or any other document.
  *
  * @param {Object} record Document record.
  */
@@ -12,10 +11,7 @@ export function documentTypeLabel( record ) {
 	if ( definesTrait( record ) ) {
 		return __( 'Collection', 'cortext' );
 	}
-	if ( hasTrait( record ) ) {
-		return __( 'Collection item', 'cortext' );
-	}
-	return __( 'Page', 'cortext' );
+	return __( 'Document', 'cortext' );
 }
 
 /**
@@ -46,7 +42,7 @@ export function permanentDeleteDocumentConfirmation( record, counts ) {
 		return {
 			title: __( 'Delete this document permanently?', 'cortext' ),
 			message: __(
-				"Delete this document and all rows it contains? This can't be undone.",
+				"Delete this collection and all documents in it? This can't be undone.",
 				'cortext'
 			),
 			requireTypeToConfirm: true,

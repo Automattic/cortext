@@ -1,4 +1,4 @@
-import { __, _n, sprintf } from '@wordpress/i18n';
+import { _n, sprintf } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
 import { Notice } from '@wordpress/components';
 import { useNavigate, useParams } from '@tanstack/react-router';
@@ -74,13 +74,9 @@ function LifecycleNoticeContent( { state, postId, postType, onRestored } ) {
 					: '',
 		  ].filter( Boolean )
 		: [];
-	const restoreLabel = details?.path.length
-		? sprintf(
-				/* translators: %s: title of the page or collection the document is restored into */
-				__( 'Restore to %s', 'cortext' ),
-				details.path[ details.path.length - 1 ]
-		  )
-		: __( 'Restore', 'cortext' );
+	const restoreLabel = copy.restoreLabel(
+		details?.path.length ? details.path[ details.path.length - 1 ] : ''
+	);
 	const { SecondaryConfirmDialog } = state;
 
 	return (

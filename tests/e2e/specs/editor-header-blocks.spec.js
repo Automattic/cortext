@@ -255,7 +255,7 @@ async function moveParagraphAfterTitle( page, content ) {
 				getParagraphText( candidate ) === paragraphContent
 		);
 		if ( ! block || titleIndex === -1 ) {
-			throw new Error( 'Could not move paragraph after title.' );
+			throw new Error( "Couldn't move paragraph after title." );
 		}
 		window.wp.data
 			.dispatch( 'core/block-editor' )
@@ -521,18 +521,10 @@ async function createRowFixture(
 	if ( withField ) {
 		field = await requestUtils.rest( {
 			method: 'POST',
-			path: '/wp/v2/crtxt_fields',
+			path: `/cortext/v1/collections/${ collection.id }/fields`,
 			data: {
 				title: `E2E Header Field ${ suffix }`,
-				status: 'private',
-				meta: { type: 'text' },
-			},
-		} );
-		await requestUtils.rest( {
-			method: 'POST',
-			path: `/wp/v2/crtxt_documents/${ collection.id }`,
-			data: {
-				meta: { cortext_fields: [ String( field.id ) ] },
+				type: 'text',
 			},
 		} );
 	}

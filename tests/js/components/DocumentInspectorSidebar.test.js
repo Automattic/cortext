@@ -244,7 +244,7 @@ describe( 'PageActionsPanel', () => {
 
 		expect(
 			await screen.findByText(
-				'Could not save changes. Move to Trash was canceled.'
+				"Couldn't save changes. Move to Trash was canceled."
 			)
 		).toBeInTheDocument();
 		expect( apiFetch ).not.toHaveBeenCalled();
@@ -263,7 +263,7 @@ describe( 'PageActionsPanel', () => {
 
 		expect(
 			await screen.findByText(
-				'Could not save changes. Archive was canceled.'
+				"Couldn't save changes. Archive was canceled."
 			)
 		).toBeInTheDocument();
 		await waitFor( () =>

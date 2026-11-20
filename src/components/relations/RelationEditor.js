@@ -243,7 +243,7 @@ export default function RelationEditor( {
 			const createdId = Number( created?.id );
 			if ( ! createdId ) {
 				throw new Error(
-					__( 'Related item could not be created.', 'cortext' )
+					__( "Couldn't create the related document.", 'cortext' )
 				);
 			}
 			touchRecent( {
@@ -265,7 +265,7 @@ export default function RelationEditor( {
 		} catch ( error ) {
 			setCreateError(
 				error?.message ||
-					__( 'Related item could not be created.', 'cortext' )
+					__( "Couldn't create the related document.", 'cortext' )
 			);
 		} finally {
 			setIsCreating( false );
@@ -465,7 +465,7 @@ export default function RelationEditor( {
 								<span className="cortext-relation-edit__row-title">
 									{ sprintf(
 										/* translators: %s: item title */
-										__( 'Create "%s"', 'cortext' ),
+										__( 'Create “%s”', 'cortext' ),
 										createTitle
 									) }
 								</span>

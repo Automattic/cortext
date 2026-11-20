@@ -90,7 +90,7 @@ describe( 'AddFieldPopover rollup config', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
 		const relation = await screen.findByLabelText( 'Relation' );
-		const target = screen.getByLabelText( 'Target field' );
+		const target = screen.getByLabelText( 'Target property' );
 		const calculate = screen.getByLabelText( 'Calculate' );
 		const controls = screen.getAllByRole( 'combobox' );
 
@@ -105,7 +105,7 @@ describe( 'AddFieldPopover rollup config', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
 		await waitFor( () =>
-			expect( screen.getByLabelText( 'Target field' ) ).toHaveValue(
+			expect( screen.getByLabelText( 'Target property' ) ).toHaveValue(
 				'88'
 			)
 		);
@@ -131,7 +131,7 @@ describe( 'AddFieldPopover rollup config', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
 		await waitFor( () =>
-			expect( screen.getByLabelText( 'Target field' ) ).toHaveValue(
+			expect( screen.getByLabelText( 'Target property' ) ).toHaveValue(
 				'88'
 			)
 		);
@@ -198,13 +198,13 @@ describe( 'AddFieldPopover rollup config', () => {
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
-		await screen.findByLabelText( 'Target field' );
+		await screen.findByLabelText( 'Target property' );
 		expect( screen.queryByRole( 'option', { name: 'Sum' } ) ).toBeNull();
 		expect(
 			screen.queryByRole( 'option', { name: 'Latest date' } )
 		).toBeNull();
 
-		fireEvent.change( screen.getByLabelText( 'Target field' ), {
+		fireEvent.change( screen.getByLabelText( 'Target property' ), {
 			target: { value: '88' },
 		} );
 
@@ -231,12 +231,12 @@ describe( 'AddFieldPopover rollup config', () => {
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Rollup' } ) );
 
-		await screen.findByLabelText( 'Target field' );
+		await screen.findByLabelText( 'Target property' );
 		expect(
 			screen.queryByRole( 'option', { name: 'Earliest date' } )
 		).toBeNull();
 
-		fireEvent.change( screen.getByLabelText( 'Target field' ), {
+		fireEvent.change( screen.getByLabelText( 'Target property' ), {
 			target: { value: '89' },
 		} );
 

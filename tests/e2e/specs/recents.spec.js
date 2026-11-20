@@ -83,19 +83,10 @@ async function createCollectionFixture( requestUtils ) {
 
 	const field = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_fields',
+		path: `/cortext/v1/collections/${ collection.id }/fields`,
 		data: {
 			title: 'Author',
-			status: 'private',
-			meta: { type: 'text' },
-		},
-	} );
-
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: {
-			meta: { cortext_fields: [ String( field.id ) ] },
+			type: 'text',
 		},
 	} );
 
@@ -168,18 +159,10 @@ test.describe( 'Sidebar recents', () => {
 			// data view and the sidebar labels it as a collection.
 			field = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ collection.id }/fields`,
 				data: {
 					title: 'Title',
-					status: 'private',
-					meta: { type: 'text' },
-				},
-			} );
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ collection.id }`,
-				data: {
-					meta: { cortext_fields: [ String( field.id ) ] },
+					type: 'text',
 				},
 			} );
 

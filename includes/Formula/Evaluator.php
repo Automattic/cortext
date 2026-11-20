@@ -43,7 +43,7 @@ final class Evaluator {
 			'call' => $this->evaluate_call( $node, $row ),
 			default => throw new FormulaEvalError(
 				'cortext_formula_invalid_ast',
-				__( 'We couldn\'t calculate this formula.', 'cortext' )
+				__( 'Couldn\'t calculate this formula.', 'cortext' )
 			),
 		};
 	}
@@ -133,7 +133,7 @@ final class Evaluator {
 		if ( '/' === $operator && 0.0 === $b ) {
 			throw new FormulaEvalError(
 				'cortext_formula_divide_by_zero',
-				__( 'You cannot divide by zero.', 'cortext' )
+				__( 'You can\'t divide by zero.', 'cortext' )
 			);
 		}
 

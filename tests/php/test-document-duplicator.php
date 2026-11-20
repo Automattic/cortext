@@ -317,6 +317,37 @@ final class Test_Document_Duplicator extends BaseTestCase {
 		);
 	}
 
+	public function test_duplicate_collection_keeps_a_flagged_rollup_flagged(): void {
+		$collection_id = (int) wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Metrics',
+			)
+		);
+		$rollup_id     = (int) wp_insert_post(
+			array(
+				'post_type'   => Field::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Total',
+				'meta_input'  => array(
+					'type'               => 'rollup',
+					'rollup_aggregator'  => 'sum',
+					'rollup_target_type' => 'text',
+					'rollup_invalid'     => '1',
+				),
+			)
+		);
+		add_post_meta( $collection_id, 'cortext_fields', (string) $rollup_id );
+
+		$result = $this->duplicator->duplicate( get_post( $collection_id ) );
+
+		$this->assertIsArray( $result );
+		$cloned_field_ids = array_map( 'intval', $this->stored_collection_field_ids( (int) $result['document']->ID ) );
+		$this->assertCount( 1, $cloned_field_ids );
+		$this->assertSame( '1', get_post_meta( $cloned_field_ids[0], 'rollup_invalid', true ) );
+	}
+
 	public function test_duplicate_row_keeps_trait_and_copies_field_values(): void {
 		$collection_id = $this->create_collection_with_fields(
 			array( array( 'Status', 'text' ) )

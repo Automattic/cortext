@@ -362,15 +362,26 @@ describe( 'LifecycleSidebar as Trash', () => {
 		);
 	} );
 
-	it( 'filters by type', () => {
+	it( 'filters by type, with rows counted as documents', () => {
 		const books = { id: 12, title: 'Books', path: 'collection/books-12' };
-		setTrash( [ page( 1, 'Notes' ), row( 2, 'Beloved', books ) ] );
+		setTrash( [
+			page( 1, 'Notes' ),
+			row( 2, 'Beloved', books ),
+			page( 3, 'Reading list', { cortext_defines_trait: true } ),
+		] );
 		renderTrash( 1 );
 
-		fireEvent.click( screen.getByRole( 'button', { name: 'Rows' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Documents' } ) );
+
+		expect( screen.getAllByRole( 'option' ) ).toHaveLength( 2 );
+		expect( option( 'Beloved' ) ).toHaveTextContent( 'Books' );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Collections' } )
+		);
 
 		expect( screen.getAllByRole( 'option' ) ).toHaveLength( 1 );
-		expect( option( 'Beloved' ) ).toHaveTextContent( 'Books' );
+		expect( option( 'Reading list' ) ).toBeInTheDocument();
 	} );
 
 	it( 'moves with the arrows, restores with Enter and asks before deleting with Backspace', async () => {
@@ -423,7 +434,7 @@ describe( 'LifecycleSidebar as Trash', () => {
 			screen.getByRole( 'button', { name: 'Empty Trash…' } )
 		);
 		expect( screen.getByRole( 'dialog' ) ).toHaveTextContent(
-			'Delete all 2 items in Trash permanently?'
+			'Delete all 2 documents in Trash permanently?'
 		);
 		await act( async () => {
 			fireEvent.click( screen.getByTestId( 'confirm-dialog-confirm' ) );

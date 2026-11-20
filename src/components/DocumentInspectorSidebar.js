@@ -546,7 +546,7 @@ export function PageActionsPanel( { postId } ) {
 			} );
 		} catch ( err ) {
 			setError(
-				err?.message ?? __( 'Could not update favorites.', 'cortext' )
+				err?.message ?? __( "Couldn't update favorites.", 'cortext' )
 			);
 		}
 	}, [ postId, setFavorites ] );
@@ -560,7 +560,7 @@ export function PageActionsPanel( { postId } ) {
 			await setHome( { id: postId } );
 		} catch ( err ) {
 			setError(
-				err?.message ?? __( 'Could not set as home.', 'cortext' )
+				err?.message ?? __( "Couldn't set as home.", 'cortext' )
 			);
 		}
 	}, [ isHome, postId, setHome ] );
@@ -603,7 +603,7 @@ export function PageActionsPanel( { postId } ) {
 		} catch ( err ) {
 			setError(
 				err?.message ??
-					__( 'Could not move document to Trash.', 'cortext' )
+					__( "Couldn't move document to Trash.", 'cortext' )
 			);
 		} finally {
 			setIsTrashing( false );
@@ -624,7 +624,7 @@ export function PageActionsPanel( { postId } ) {
 		} catch ( err ) {
 			setError(
 				err?.message ??
-					__( 'Could not archive this document.', 'cortext' )
+					__( "Couldn't archive this document.", 'cortext' )
 			);
 		} finally {
 			setIsArchiving( false );
@@ -643,7 +643,7 @@ export function PageActionsPanel( { postId } ) {
 			setError(
 				err?.message ??
 					__(
-						'Could not change the lock on this document.',
+						"Couldn't change the lock on this document.",
 						'cortext'
 					)
 			);

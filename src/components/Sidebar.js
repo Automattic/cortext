@@ -330,7 +330,7 @@ export default function Sidebar( {
 			} catch ( err ) {
 				setFavoritesError(
 					err?.message ??
-						__( 'Could not reorder favorites.', 'cortext' )
+						__( "Couldn't reorder favorites.", 'cortext' )
 				);
 			}
 		},
@@ -400,8 +400,8 @@ export default function Sidebar( {
 			? sprintf(
 					/* translators: %d: number of archived items */
 					_n(
-						'Archived, %d item',
-						'Archived, %d items',
+						'Archived, %d document',
+						'Archived, %d documents',
 						archivedCount,
 						'cortext'
 					),
@@ -411,10 +411,10 @@ export default function Sidebar( {
 	const trashButtonLabel =
 		trashCount > 0
 			? sprintf(
-					/* translators: %d: number of items in Trash */
+					/* translators: %d: number of documents in Trash */
 					_n(
-						'Trash, %d item',
-						'Trash, %d items',
+						'Trash, %d document',
+						'Trash, %d documents',
 						trashCount,
 						'cortext'
 					),
@@ -550,7 +550,7 @@ export default function Sidebar( {
 			createAndOpenWith(
 				create,
 				input,
-				__( 'Could not create a document.', 'cortext' )
+				__( "Couldn't create a document.", 'cortext' )
 			),
 		[ create, createAndOpenWith ]
 	);
@@ -562,7 +562,7 @@ export default function Sidebar( {
 			return createAndOpenWith(
 				( nextInput ) => instantiateTemplate( template.id, nextInput ),
 				input,
-				__( 'Could not create a document.', 'cortext' )
+				__( "Couldn't create a document.", 'cortext' )
 			);
 		},
 		[ createAndOpen, createAndOpenWith, instantiateTemplate ]
@@ -572,7 +572,7 @@ export default function Sidebar( {
 			createAndOpenWith(
 				createCollection,
 				input,
-				__( 'Collection could not be created.', 'cortext' )
+				__( "Couldn't create the collection.", 'cortext' )
 			),
 		[ createCollection, createAndOpenWith ]
 	);
@@ -1012,7 +1012,7 @@ export default function Sidebar( {
 												role="alert"
 											>
 												{ __(
-													"We couldn't load these documents.",
+													"Couldn't load these documents.",
 													'cortext'
 												) }
 											</p>

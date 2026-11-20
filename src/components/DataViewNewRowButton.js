@@ -110,7 +110,8 @@ export default function DataViewNewRowButton( {
 				onCreated( created );
 			} catch ( err ) {
 				setError(
-					err?.message ?? __( "Couldn't create the row.", 'cortext' )
+					err?.message ??
+						__( "Couldn't create a document.", 'cortext' )
 				);
 			} finally {
 				setIsCreating( false );
