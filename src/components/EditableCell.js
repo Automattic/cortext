@@ -480,13 +480,25 @@ export function formatDisplay( value, type, options = {} ) {
 	return String( value );
 }
 
+// Plain-text content gets the ellipsis wrapper so narrow columns truncate
+// cleanly. JSX content (chips, links, icons) carries its own truncation/wrap
+// rules and renders directly: `white-space: nowrap` above `flex-wrap: wrap`
+// chips made multiselect cells overflow into adjacent columns.
+function CellContent( { children } ) {
+	return (
+		<span className="cortext-editable-cell__content">
+			{ typeof children === 'string' ? (
+				<span className="cortext-editable-cell__display">
+					{ children }
+				</span>
+			) : (
+				children
+			) }
+		</span>
+	);
+}
+
 function CellShell( { children, onActivate, ariaLabel, className, disabled } ) {
-	// Plain-text content gets the ellipsis wrapper so narrow columns
-	// truncate cleanly. JSX content (chips, links, icons) carries its own
-	// truncation/wrap rules and renders directly — putting `white-space:
-	// nowrap` above `flex-wrap: wrap` chips made multiselect cells overflow
-	// into adjacent columns.
-	const isText = typeof children === 'string';
 	const activateFromNestedInteractive = ( event ) => {
 		if ( disabled ) {
 			return;
@@ -535,15 +547,7 @@ function CellShell( { children, onActivate, ariaLabel, className, disabled } ) {
 			aria-label={ ariaLabel }
 			aria-hidden={ disabled }
 		>
-			<span className="cortext-editable-cell__content">
-				{ isText ? (
-					<span className="cortext-editable-cell__display">
-						{ children }
-					</span>
-				) : (
-					children
-				) }
-			</span>
+			<CellContent>{ children }</CellContent>
 			{ ! disabled && (
 				<Icon
 					className="cortext-editable-cell__edit-indicator"
@@ -863,7 +867,8 @@ export default function EditableCell( {
 	const checkboxRef = useRef( null );
 
 	// Locked, archived and trashed rows render their values read-only.
-	const readOnly = isFieldReadOnly || getReadOnlyState( item ) !== null;
+	const isRowReadOnly = getReadOnlyState( item ) !== null;
+	const readOnly = isFieldReadOnly || isRowReadOnly;
 	const rowId = item?.id;
 	const value = getValue
 		? getValue( { item } )
@@ -917,7 +922,34 @@ export default function EditableCell( {
 		clearEditRequest,
 	] );
 
-	if ( readOnly || ! canEditCells || ! saveRowField ) {
+	const canEdit = canEditCells && saveRowField;
+
+	// A read-only row in an editable view keeps the editable cell's box, so
+	// locking or unlocking a row doesn't change its height or shift its text.
+	if ( isRowReadOnly && ! isFieldReadOnly && canEdit ) {
+		if ( fieldType === 'checkbox' ) {
+			return (
+				<div className="cortext-cell-checkbox">
+					<CheckboxControl
+						checked={ Boolean( value ) }
+						onChange={ () => {} }
+						disabled
+						aria-label={ label }
+						__nextHasNoMarginBottom
+					/>
+				</div>
+			);
+		}
+		return (
+			<div className="cortext-editable-cell">
+				<div className="cortext-editable-cell__shell cortext-editable-cell__shell--readonly">
+					<CellContent>{ display }</CellContent>
+				</div>
+			</div>
+		);
+	}
+
+	if ( readOnly || ! canEdit ) {
 		return <span className="cortext-cell-readonly">{ display }</span>;
 	}
 

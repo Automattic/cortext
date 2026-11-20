@@ -398,6 +398,16 @@ tbody > tr > td:not(:first-child) {
 			background: $gray-100;
 			outline: none;
 		}
+
+		// Locked, archived and trashed rows keep the shell's box but aren't
+		// editable, so they drop the edit affordance.
+		&--readonly {
+			cursor: default;
+
+			&:hover {
+				background: none;
+			}
+		}
 	}
 
 	&__content {
@@ -594,6 +604,18 @@ tbody
 tr:has(.cortext-title-cell--is-opening)
 .cortext-title-cell--with-open-action {
 	padding-inline-end: $grid-unit-10;
+}
+
+// A locked row adds its lock icon between the title and Open. These only set
+// the grid columns, so the padding rules above don't conflict with them.
+/* stylelint-disable-next-line no-descending-specificity */
+.cortext-title-cell--with-open-action:has(.cortext-frozen-badge) {
+	grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+/* stylelint-disable-next-line no-descending-specificity */
+.cortext-title-cell--with-open-action:has(.cortext-title-cell__icon):has(.cortext-frozen-badge) {
+	grid-template-columns: auto minmax(0, 1fr) auto auto;
 }
 
 .cortext-title-cell:focus-within .cortext-title-cell__open.components-button,
@@ -1180,8 +1202,8 @@ tr:has(.cortext-title-cell--is-opening)
 		// When wrapped chips make one cell taller, neighboring editable
 		// shells keep their fixed density height. Paint the td hover/focus
 		// state too so the affordance covers the full row height.
-		tbody > tr > td:has(.cortext-editable-cell):hover,
-		tbody > tr > td:has(.cortext-editable-cell__shell:focus-visible) {
+		tbody > tr > td:has(.cortext-editable-cell__shell:focus-visible),
+		tbody > tr > td:has(.cortext-editable-cell__shell:not(.cortext-editable-cell__shell--readonly)):hover {
 			background: $gray-100;
 		}
 
