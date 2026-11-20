@@ -409,13 +409,38 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		);
 		$path          = '/cortext/v1/templates/' . $template_id;
 
-		$checked   = $this->request( 'POST', $path, array( 'field_values' => array( $key => true ) ) );
-		$unchecked = $this->request( 'POST', $path, array( 'field_values' => array( $key => false ) ) );
-		$row       = $this->request( 'POST', $path . '/instantiate' );
+		$checked     = $this->request( 'POST', $path, array( 'field_values' => array( $key => true ) ) );
+		$checked_row = $this->request( 'POST', $path . '/instantiate' );
+		$unchecked   = $this->request( 'POST', $path, array( 'field_values' => array( $key => false ) ) );
+		$row         = $this->request( 'POST', $path . '/instantiate' );
 
 		$this->assertSame( 1, $checked->get_data()['template']['field_values'][ $key ] );
 		$this->assertSame( 0, $unchecked->get_data()['template']['field_values'][ $key ] );
-		$this->assertSame( '0', (string) get_post_meta( (int) $row->get_data()['document']['id'], $key, true ) );
+		$this->assertSame( '1', (string) get_post_meta( (int) $checked_row->get_data()['document']['id'], $key, true ) );
+		// Unchecked rows store an empty value, which is what the "is
+		// unchecked" filter matches.
+		$this->assertSame( '', (string) get_post_meta( (int) $row->get_data()['document']['id'], $key, true ) );
+	}
+
+	public function test_list_default_keeps_its_first_entry_after_the_property_changes_type(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'Tasks' );
+		$field_id      = $this->attach_field( $collection_id, 'Tags', 'multiselect' );
+		$key           = 'field-' . $field_id;
+		$template_id   = $this->create_template(
+			array(
+				'kind'          => Templates::KIND_ROW,
+				'collection_id' => $collection_id,
+				'title'         => 'Task starter',
+				'field_values'  => array( $key => array( 'frontend', 'urgent' ) ),
+			)
+		);
+		update_post_meta( $field_id, 'type', 'select' );
+
+		$row = $this->request( 'POST', '/cortext/v1/templates/' . $template_id . '/instantiate' );
+
+		$this->assertSame( 201, $row->get_status(), wp_json_encode( $row->get_data() ) );
+		$this->assertSame( array( 'frontend' ), get_post_meta( (int) $row->get_data()['document']['id'], $key, false ) );
 	}
 
 	public function test_rejects_row_template_defaults_for_fields_outside_collection(): void {

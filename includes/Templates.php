@@ -12,6 +12,7 @@ namespace Cortext;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\FieldValues\FieldValueIndex;
+use Cortext\FieldValues\FieldValueStore;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\Template as TemplatePostType;
@@ -413,11 +414,17 @@ final class Templates {
 	}
 
 	private function normalize_value_for_type( $value, string $type ) {
+		$is_list = in_array( $type, array( 'multiselect', 'relation' ), true );
+		if ( is_array( $value ) && ! $is_list ) {
+			// A list saved before the property changed type. Rows converted
+			// the same way keep only the first entry, so this does too.
+			$value = array_values( $value )[0] ?? null;
+		}
 		if ( 'checkbox' === $type ) {
 			// Numbers, because the editor reads the string '0' as checked.
 			return rest_sanitize_boolean( $value ) ? 1 : 0;
 		}
-		if ( in_array( $type, array( 'multiselect', 'relation' ), true ) ) {
+		if ( $is_list ) {
 			return is_array( $value ) ? array_values( $value ) : array( $value );
 		}
 		return $value;
@@ -425,34 +432,18 @@ final class Templates {
 
 	private function write_row_field_values( int $row_id, int $collection_id, array $field_values ): void {
 		$index = new FieldValueIndex();
+		$store = new FieldValueStore( $index );
 
 		foreach ( $field_values as $key => $value ) {
 			$field_id = (int) substr( $key, 6 );
 			$type     = (string) get_post_meta( $field_id, 'type', true );
-			if ( 'relation' === $type ) {
-				// A default can point at a row that was deleted after the
-				// template was saved. Skip it, as with removed fields.
-				if ( Relations::sync_relation_value( $row_id, $field_id, $value ) instanceof WP_Error ) {
-					continue;
-				}
-				$index->index_row_field( $row_id, $field_id, $collection_id );
+			if ( 'relation' !== $type ) {
+				$store->write_value( $row_id, $field_id, $type, $value, $collection_id, 'private' );
 				continue;
 			}
-
-			$meta_key = Relations::meta_key( $field_id );
-			if ( is_array( $value ) ) {
-				delete_post_meta( $row_id, $meta_key );
-				foreach ( $value as $entry ) {
-					if ( '' !== $entry && null !== $entry ) {
-						add_post_meta( $row_id, $meta_key, wp_slash( $entry ) );
-					}
-				}
-				$index->index_row_field( $row_id, $field_id, $collection_id );
+			// A default can point at a row deleted after the template was saved.
+			if ( Relations::sync_relation_value( $row_id, $field_id, $value ) instanceof WP_Error ) {
 				continue;
-			}
-
-			if ( '' !== $value && null !== $value ) {
-				update_post_meta( $row_id, $meta_key, wp_slash( $value ) );
 			}
 			$index->index_row_field( $row_id, $field_id, $collection_id );
 		}
