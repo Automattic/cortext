@@ -116,7 +116,16 @@ describe( 'DocumentPeekProvider', () => {
 		expect( mockNavigate ).toHaveBeenCalledWith( {
 			to: '/$',
 			params: { _splat: 'about-42' },
+			search: expect.any( Function ),
 		} );
+		const navigateOptions = mockNavigate.mock.calls[ 0 ][ 0 ];
+		expect(
+			navigateOptions.search( {
+				collection: 99,
+				collectionRow: 98,
+				filter: 'open',
+			} )
+		).toEqual( { filter: 'open' } );
 		expect( result.current.state.peek ).toBe( null );
 	} );
 
@@ -133,6 +142,7 @@ describe( 'DocumentPeekProvider', () => {
 		expect( mockNavigate ).toHaveBeenCalledWith( {
 			to: '/$',
 			params: { _splat: '5' },
+			search: expect.any( Function ),
 		} );
 	} );
 
@@ -227,6 +237,13 @@ describe( 'DocumentPeekProvider', () => {
 		expect( mockNavigate ).toHaveBeenCalledWith( {
 			to: '/$',
 			params: { _splat: 'ada-lovelace-12' },
+			search: expect.any( Function ),
+		} );
+		const navigateOptions = mockNavigate.mock.calls[ 0 ][ 0 ];
+		expect( navigateOptions.search( { filter: 'open' } ) ).toEqual( {
+			filter: 'open',
+			collection: 7,
+			collectionRow: 12,
 		} );
 		expect( result.current.state.peek ).toBe( null );
 	} );

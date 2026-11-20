@@ -66,7 +66,9 @@ function Segment( { segment } ) {
 }
 
 export default function Breadcrumbs( { paintedDocumentId } ) {
-	const segments = truncate( useBreadcrumbSegments( paintedDocumentId ) );
+	const { segments: rawSegments, chips } =
+		useBreadcrumbSegments( paintedDocumentId );
+	const segments = truncate( rawSegments );
 	const frozen = useFrozenDetails( paintedDocumentId );
 
 	if ( segments.length === 0 ) {
@@ -96,6 +98,27 @@ export default function Breadcrumbs( { paintedDocumentId } ) {
 				) ) }
 			</ol>
 			<FrozenBadge frozen={ frozen } showLabel />
+			{ chips.length > 0 ? (
+				<ul
+					className="cortext-breadcrumbs__chips"
+					aria-label={ __( 'Traits', 'cortext' ) }
+				>
+					{ chips.map( ( chip ) => (
+						<li
+							key={ chip.key }
+							className="cortext-breadcrumbs__chip-item"
+						>
+							<button
+								type="button"
+								className="cortext-breadcrumbs__chip"
+								onClick={ chip.onClick }
+							>
+								{ chip.label }
+							</button>
+						</li>
+					) ) }
+				</ul>
+			) : null }
 		</nav>
 	);
 }

@@ -30,7 +30,7 @@ final class FieldValueIndex {
 	public const STATUS_STALE       = 'stale';
 	public const STATUS_DISABLED    = 'disabled';
 
-	private const SCHEMA_VERSION         = 2;
+	private const SCHEMA_VERSION         = 3;
 	private const STATUS_OPTION          = 'cortext_field_values_index_status';
 	private const STATUS_ERROR_OPTION    = 'cortext_field_values_index_error';
 	private const SCHEMA_VERSION_OPTION  = 'cortext_field_values_schema_version';
@@ -122,6 +122,9 @@ final class FieldValueIndex {
 			return false;
 		}
 
+		$previous_schema_version = (int) get_option( self::SCHEMA_VERSION_OPTION, 0 );
+		$previous_status         = (string) get_option( self::STATUS_OPTION, '' );
+
 		update_option( self::INSTALL_ATTEMPT_OPTION, self::SCHEMA_VERSION, false );
 		$this->set_status( self::STATUS_INSTALLING );
 
@@ -135,10 +138,25 @@ final class FieldValueIndex {
 		}
 
 		update_option( self::SCHEMA_VERSION_OPTION, self::SCHEMA_VERSION, false );
-		if ( self::STATUS_READY !== (string) get_option( self::STATUS_OPTION, '' ) ) {
-			$this->set_status( self::STATUS_STALE );
-		}
+		$this->set_post_install_status( $previous_schema_version, $previous_status );
 		return true;
+	}
+
+	/**
+	 * Restores READY after a no-op same-version install, but always invalidates
+	 * data when the schema version changed. A v2→v3 key migration makes room for
+	 * duplicate shared-field rows; only the scheduled rebuild can populate them.
+	 *
+	 * @param int    $previous_schema_version Schema version before installation.
+	 * @param string $previous_status         Index status before installation.
+	 */
+	private function set_post_install_status( int $previous_schema_version, string $previous_status ): void {
+		if ( self::SCHEMA_VERSION !== $previous_schema_version || self::STATUS_READY !== $previous_status ) {
+			$this->set_status( self::STATUS_STALE );
+			return;
+		}
+
+		$this->set_status( self::STATUS_READY );
 	}
 
 	public function activate(): void {
@@ -412,13 +430,29 @@ final class FieldValueIndex {
 			return 0;
 		}
 
-		$collection_id = $collection_id ?? $this->collection_id_for_row( $row_id );
-		if ( $collection_id < 1 ) {
-			return 0;
+		$collection_ids = null === $collection_id
+			? $this->owning_collections_for_field( $row_id, $field_id )
+			: array( $collection_id );
+
+		$indexed = 0;
+		foreach ( $collection_ids as $owner_id ) {
+			$owner_id = (int) $owner_id;
+			if ( $owner_id < 1 ) {
+				continue;
+			}
+
+			$rows     = $this->index_rows_for_row_field( $row_id, $field_id, $owner_id );
+			$indexed += $this->write_index_rows(
+				$row_id,
+				$field_id,
+				$owner_id,
+				$rows,
+				$delete_existing,
+				$this->field_can_have_multiple_values( $field_id )
+			);
 		}
 
-		$rows = $this->index_rows_for_row_field( $row_id, $field_id, $collection_id );
-		return $this->write_index_rows( $row_id, $field_id, $rows, $delete_existing, $this->field_can_have_multiple_values( $field_id ) );
+		return $indexed;
 	}
 
 	public function index_known_value( int $row_id, int $field_id, string $field_type, mixed $value, ?int $collection_id = null, ?string $post_status = null ): int {
@@ -426,31 +460,54 @@ final class FieldValueIndex {
 			return 0;
 		}
 
-		$collection_id = $collection_id ?? $this->collection_id_for_row( $row_id );
-		if ( $collection_id < 1 ) {
-			return 0;
-		}
+		$post_status    = $post_status ?? (string) get_post_status( $row_id );
+		$collection_ids = null === $collection_id
+			? $this->owning_collections_for_field( $row_id, $field_id )
+			: array( $collection_id );
 
-		$post_status = $post_status ?? (string) get_post_status( $row_id );
-		$rows        = array();
-		foreach ( $this->normalized_value_rows( $field_id, $field_type, $value, $post_status ) as $row ) {
-			$rows[] = array(
-				'row_id'            => $row_id,
-				'collection_id'     => $collection_id,
-				'field_id'          => $row['field_id'],
-				'value_seq'         => $row['value_seq'],
-				'value_text'        => $row['value_text'],
-				'value_text_length' => $row['value_text_length'],
-				'value_number'      => $row['value_number'],
-				'value_date'        => $row['value_date'],
-				'post_status'       => $row['post_status'],
+		$indexed = 0;
+		foreach ( $collection_ids as $owner_id ) {
+			$owner_id = (int) $owner_id;
+			if ( $owner_id < 1 ) {
+				continue;
+			}
+
+			$rows = array();
+			foreach ( $this->normalized_value_rows( $field_id, $field_type, $value, $post_status ) as $row ) {
+				$rows[] = array(
+					'row_id'            => $row_id,
+					'collection_id'     => $owner_id,
+					'field_id'          => $row['field_id'],
+					'value_seq'         => $row['value_seq'],
+					'value_text'        => $row['value_text'],
+					'value_text_length' => $row['value_text_length'],
+					'value_number'      => $row['value_number'],
+					'value_date'        => $row['value_date'],
+					'post_status'       => $row['post_status'],
+				);
+			}
+
+			$indexed += $this->write_index_rows(
+				$row_id,
+				$field_id,
+				$owner_id,
+				$rows,
+				true,
+				$this->known_type_can_have_multiple_values( $field_id, $field_type )
 			);
 		}
 
-		return $this->write_index_rows( $row_id, $field_id, $rows, true, $this->known_type_can_have_multiple_values( $field_id, $field_type ) );
+		return $indexed;
 	}
 
-	private function write_index_rows( int $row_id, int $field_id, array $rows, bool $delete_existing, bool $can_have_multiple_values ): int {
+	private function write_index_rows(
+		int $row_id,
+		int $field_id,
+		int $collection_id,
+		array $rows,
+		bool $delete_existing,
+		bool $can_have_multiple_values
+	): int {
 		global $wpdb;
 
 		if ( $delete_existing && ! $can_have_multiple_values ) {
@@ -459,10 +516,11 @@ final class FieldValueIndex {
 				$wpdb->delete(
 					$this->table_name(),
 					array(
-						'row_id'   => $row_id,
-						'field_id' => $field_id,
+						'row_id'        => $row_id,
+						'collection_id' => $collection_id,
+						'field_id'      => $field_id,
 					),
-					array( '%d', '%d' )
+					array( '%d', '%d', '%d' )
 				);
 				return 0;
 			}
@@ -485,10 +543,11 @@ final class FieldValueIndex {
 			$wpdb->delete(
 				$this->table_name(),
 				array(
-					'row_id'   => $row_id,
-					'field_id' => $field_id,
+					'row_id'        => $row_id,
+					'collection_id' => $collection_id,
+					'field_id'      => $field_id,
 				),
-				array( '%d', '%d' )
+				array( '%d', '%d', '%d' )
 			);
 		}
 
@@ -952,6 +1011,13 @@ final class FieldValueIndex {
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
+		// Move an existing v2 table off its old primary key before dbDelta sees
+		// the new definition; otherwise dbDelta may try to add a second PRIMARY
+		// key instead of replacing the one whose columns changed.
+		if ( $this->table_exists( true ) && ! $this->ensure_current_primary_key() ) {
+			return false;
+		}
+
 		$sql = "CREATE TABLE {$table} (
 			row_id bigint(20) unsigned NOT NULL,
 			collection_id bigint(20) unsigned NOT NULL,
@@ -962,7 +1028,7 @@ final class FieldValueIndex {
 			value_number decimal(20,6) DEFAULT NULL,
 			value_date datetime DEFAULT NULL,
 			post_status varchar(20) NOT NULL DEFAULT 'publish',
-			PRIMARY KEY  (row_id, field_id, value_seq),
+			PRIMARY KEY  (row_id, collection_id, field_id, value_seq),
 			KEY collection_field_text_len (collection_id, field_id, value_text, value_text_length, row_id),
 			KEY collection_field_number (collection_id, field_id, value_number, row_id),
 			KEY collection_field_date (collection_id, field_id, value_date, row_id),
@@ -970,7 +1036,51 @@ final class FieldValueIndex {
 		) {$charset_collate};";
 
 		dbDelta( $sql );
-		return $this->table_exists( true );
+		if ( ! $this->table_exists( true ) ) {
+			return false;
+		}
+
+		return $this->ensure_current_primary_key();
+	}
+
+	/**
+	 * Upgrades the v2 primary key so the same row/field pair can carry one
+	 * derived value per collection membership. `dbDelta()` adds indexes but does
+	 * not reliably replace an existing primary key, so perform the narrow ALTER
+	 * explicitly when the live key still omits `collection_id`.
+	 */
+	private function ensure_current_primary_key(): bool {
+		global $wpdb;
+
+		$table = $this->table_name();
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- The derived table name comes from this plugin's trusted prefix.
+		$primary = $wpdb->get_results( "SHOW INDEX FROM {$table} WHERE Key_name = 'PRIMARY'", ARRAY_A );
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+		if ( ! is_array( $primary ) || count( $primary ) === 0 ) {
+			return false;
+		}
+
+		usort(
+			$primary,
+			static fn( array $left, array $right ): int => (int) ( $left['Seq_in_index'] ?? 0 ) <=> (int) ( $right['Seq_in_index'] ?? 0 )
+		);
+		$columns = array_map(
+			static fn( array $entry ): string => (string) ( $entry['Column_name'] ?? '' ),
+			$primary
+		);
+		if ( array( 'row_id', 'collection_id', 'field_id', 'value_seq' ) === $columns ) {
+			return true;
+		}
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB.UnescapedDBParameter -- The derived table name comes from this plugin's trusted prefix.
+		$result = $wpdb->query(
+			"ALTER TABLE {$table}
+			 DROP PRIMARY KEY,
+			 ADD PRIMARY KEY (row_id, collection_id, field_id, value_seq)"
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+		return false !== $result;
 	}
 
 	private function table_exists( bool $refresh = false ): bool {
@@ -1060,6 +1170,33 @@ final class FieldValueIndex {
 			$this->table_name(),
 			array( 'row_id' => $row_id ),
 			array( '%d' )
+		);
+	}
+
+	/**
+	 * Drops the derived index rows for a single (row, collection) pair. Called
+	 * when a row leaves a collection (trait removed): its field values must
+	 * stop surfacing in that collection's filtered and sorted reads while staying
+	 * indexed under the collections it still belongs to.
+	 *
+	 * @param int $row_id        Row document id.
+	 * @param int $collection_id Collection the row left.
+	 */
+	public function delete_row_for_collection( int $row_id, int $collection_id ): void {
+		if ( ! $this->can_write() ) {
+			return;
+		}
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Clears the derived index for one row in one collection.
+		$wpdb->delete(
+			$this->table_name(),
+			array(
+				'row_id'        => $row_id,
+				'collection_id' => $collection_id,
+			),
+			array( '%d', '%d' )
 		);
 	}
 
@@ -1174,6 +1311,48 @@ final class FieldValueIndex {
 		}
 
 		return TraitTaxonomy::trait_id_from_slug( (string) $terms[0]->slug );
+	}
+
+	/**
+	 * Resolves every collection a row field is indexed under. A row can belong to
+	 * several collections, and the same field definition can appear
+	 * in more than one of their schemas, so each matching membership gets its own
+	 * sidecar row. A field no current schema owns is not indexable; this also
+	 * prevents retained meta from a removed membership being resurrected under
+	 * an unrelated collection by a later meta hook.
+	 *
+	 * @param int $row_id   Row document id.
+	 * @param int $field_id Field id whose value is being indexed.
+	 * @return int[]
+	 */
+	private function owning_collections_for_field( int $row_id, int $field_id ): array {
+		$post = get_post( $row_id );
+		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+			return array();
+		}
+
+		$terms = wp_get_object_terms(
+			$row_id,
+			TraitTaxonomy::TAXONOMY,
+			array( 'fields' => 'all' )
+		);
+		if ( ! is_array( $terms ) || count( $terms ) === 0 ) {
+			return array();
+		}
+
+		$owners = array();
+		foreach ( $terms as $term ) {
+			$collection_id = TraitTaxonomy::trait_id_from_slug( (string) $term->slug );
+			if ( $collection_id < 1 ) {
+				continue;
+			}
+			$field_ids = array_map( 'intval', Document::collection_field_ids( $collection_id ) );
+			if ( in_array( $field_id, $field_ids, true ) ) {
+				$owners[ $collection_id ] = true;
+			}
+		}
+
+		return array_keys( $owners );
 	}
 
 	private function is_field_meta_key( string $meta_key ): bool {

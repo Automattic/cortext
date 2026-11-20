@@ -27,6 +27,7 @@ namespace Cortext\PostType;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Documents;
+use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Relations;
 use WP_Post;
 use WP_REST_Request;
@@ -43,9 +44,10 @@ final class TrashCascade {
 	public const PARENT_MARKER_META = '_cortext_trashed_by_parent';
 
 	/**
-	 * Marks a row as trashed by its collection. The value is the collection's
-	 * id, so restoring the collection brings back only the rows its own
-	 * cascade trashed. Rows already in trash stay unmarked.
+	 * Marks a row as trashed after its last active collection is trashed. The
+	 * value records the collection that caused that transition. Restoring any
+	 * collection the row still belongs to revives it; rows already in trash
+	 * stay unmarked.
 	 */
 	public const COLLECTION_MARKER_META = '_cortext_trashed_by_collection';
 
@@ -157,11 +159,16 @@ final class TrashCascade {
 
 		update_post_meta( $post_id, self::TRASHED_BY_USER_META, get_current_user_id() );
 
+		// A row stays live while another live collection still exposes it.
+		// Retired memberships remain attached for restore, but do not count as
+		// a home: retiring the last live collection must not leave a live row
+		// visible nowhere.
 		$this->cascade->cascade(
 			$post_id,
 			static function ( int $child_id ): void {
 				wp_trash_post( $child_id );
-			}
+			},
+			array( DocumentCascade::class, 'has_other_live_membership' )
 		);
 	}
 
@@ -179,7 +186,8 @@ final class TrashCascade {
 			$post_id,
 			static function ( int $child_id ): void {
 				wp_untrash_post( $child_id );
-			}
+			},
+			true
 		);
 	}
 
@@ -208,14 +216,71 @@ final class TrashCascade {
 			return;
 		}
 
-		foreach (
-			$this->cascade->row_ids_for_collection(
-				$post_id,
-				array_merge( self::ACTIVE_STATUSES, array( Documents::STATUS_TRASH ) )
-			) as $row_id
-		) {
+		$rows               = $this->cascade->row_ids_for_collection(
+			$post_id,
+			array_merge( self::ACTIVE_STATUSES, array( Documents::STATUS_TRASH ) )
+		);
+		$relation_field_ids = array_values(
+			array_filter(
+				Document::collection_field_ids( $post_id ),
+				static fn( int $field_id ): bool => 'relation' === (string) get_post_meta( $field_id, 'type', true )
+			)
+		);
+
+		foreach ( $rows as $row_id ) {
+			// Keep rows that still belong to another collection. This hook runs
+			// before `TraitTaxonomy::sync_term_on_delete` removes the collection's
+			// term, so a shared row still reports both memberships here; deleting
+			// the term later drops only this membership and leaves the document
+			// alive in its other collections. Rows exclusive to this collection
+			// are deleted with it.
+			$other_collection_ids = DocumentCascade::other_memberships( $row_id, $post_id );
+			if ( count( $other_collection_ids ) > 0 ) {
+				// The row survives, so its delete hook will not detach the reverse
+				// pointers belonging exclusively to fields in the deleted collection.
+				// A field can be shared by schemas, so keep pointers for definitions
+				// the row still owns through another membership.
+				$retained_fields = array();
+				foreach ( $other_collection_ids as $other_collection_id ) {
+					foreach ( Document::collection_field_ids( $other_collection_id ) as $field_id ) {
+						$retained_fields[ (int) $field_id ] = true;
+					}
+				}
+				$detached_field_ids = array_values(
+					array_filter(
+						$relation_field_ids,
+						static fn( int $field_id ): bool => ! isset( $retained_fields[ $field_id ] )
+					)
+				);
+				if ( count( $detached_field_ids ) > 0 ) {
+					Relations::remove_deleted_row_references( $row_id, $detached_field_ids );
+				}
+
+				// A direct force-delete can remove the row's last live collection
+				// without first running the collection trash cascade. Preserve the
+				// row for its retired memberships, but keep it out of the live set
+				// until one of those collections is restored.
+				if (
+					in_array( get_post_status( $row_id ), self::ACTIVE_STATUSES, true )
+					&& ! DocumentCascade::has_other_live_membership( $row_id, $post_id )
+				) {
+					update_post_meta( $row_id, self::COLLECTION_MARKER_META, $post_id );
+					wp_trash_post( $row_id );
+				}
+				continue;
+			}
 			wp_delete_post( $row_id, true );
 		}
+
+		// Relation detachment can re-index surviving shared targets while the
+		// collection's mirror term still exists. FieldValueIndex's normal hook
+		// runs after that term is removed and can no longer recognize the post as
+		// a collection, so make this the final collection-scoped sidecar write.
+		$post = get_post( $post_id );
+		( new FieldValueIndex() )->cleanup_deleted_post(
+			$post_id,
+			$post instanceof WP_Post ? $post : null
+		);
 	}
 
 	/**
@@ -223,15 +288,32 @@ final class TrashCascade {
 	 * cascade rules with a BFS so a trashed collection nested under a page
 	 * brings down its own rows.
 	 *
-	 * REST restore and permanent-delete call this before mutating the root,
-	 * because the synchronous WordPress hooks have already changed the
-	 * descendants by the time the call returns.
+	 * Permanent-delete calls this before mutating the root, because the
+	 * synchronous WordPress hooks have already changed the descendants by the
+	 * time the call returns. Shared rows are omitted so another membership can
+	 * retain them.
 	 *
 	 * @param int $root_id Root document id to walk from.
 	 * @return int[] Trashed descendant ids (root excluded), no guaranteed order.
 	 */
 	public function descendants_for_root( int $root_id ): array {
-		return $this->cascade->descendants_for_root( $root_id );
+		return $this->cascade->descendants_for_root(
+			$root_id,
+			static fn( int $row_id, int $collection_id ): bool => count( DocumentCascade::other_memberships( $row_id, $collection_id ) ) > 0
+		);
+	}
+
+	/**
+	 * Walks the subtree that restoring a document will revive. Unlike the
+	 * permanent-delete walk, this includes shared rows marked by any collection
+	 * cascade: restoring one of their memberships makes them live again even
+	 * when a different collection caused the original trash transition.
+	 *
+	 * @param int $root_id Root document id to walk from.
+	 * @return int[] Trashed candidate ids (root excluded), no guaranteed order.
+	 */
+	public function restore_candidates_for_root( int $root_id ): array {
+		return $this->cascade->descendants_for_root( $root_id, null, true );
 	}
 
 	/**
@@ -252,7 +334,7 @@ final class TrashCascade {
 			return $response;
 		}
 
-		$data['cascade_deleted'] = $this->descendants_for_root( (int) $post->ID );
+		$data['cascade_deleted'] = $this->cascade->descendants_for_root( (int) $post->ID );
 		$response->set_data( $data );
 		return $response;
 	}

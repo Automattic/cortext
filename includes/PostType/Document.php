@@ -63,6 +63,7 @@ final class Document {
 		// Relation meta writes need pre-validation (the desired targets must be
 		// valid rows of the related collection) and post-write reverse-pointer
 		// sync. WP REST writes the forward meta itself between these two hooks.
+		add_filter( 'rest_pre_insert_' . self::POST_TYPE, array( $this, 'validate_membership_update' ), 9, 2 );
 		add_filter( 'rest_pre_insert_' . self::POST_TYPE, array( $this, 'prepare_meta_updates' ), 10, 2 );
 		add_action( 'rest_after_insert_' . self::POST_TYPE, array( $this, 'apply_meta_updates' ), 20, 3 );
 		// Defense in depth for a collection's body invariant. The block editor
@@ -159,28 +160,48 @@ final class Document {
 	 * Returns the `field-<id>` meta keys a document carries in REST `meta`.
 	 * `field-<id>` is registered on every `crtxt_document`, so without this the
 	 * response would carry every collection's fields on every document. A row
-	 * keeps its collection's writable fields. Rollups and formulas stay out of
-	 * `meta` because they are computed and read-only, exposed in
-	 * `cortext_hydrated_meta`. Pages and collections carry no field values.
+	 * keeps the writable fields of every collection it shows that
+	 * the request may see. Rollups and formulas stay out of `meta` because they
+	 * are computed and read-only, exposed in `cortext_hydrated_meta`. Pages and
+	 * collections carry no field values.
 	 *
-	 * @param WP_Post $post Document.
+	 * @param WP_Post $post    Document.
+	 * @param string  $context REST context (`edit` or `view`).
 	 * @return string[]
 	 */
-	public static function rest_field_meta_keys( WP_Post $post ): array {
-		$trait_post = ( new Documents() )->find_trait_for_document( $post );
-		if ( ! $trait_post instanceof WP_Post ) {
-			return array();
-		}
-
+	public static function rest_field_meta_keys( WP_Post $post, string $context = 'edit' ): array {
 		$keys = array();
-		foreach ( self::collection_field_ids( (int) $trait_post->ID ) as $field_id ) {
-			$field_type = (string) get_post_meta( $field_id, 'type', true );
-			if ( in_array( $field_type, array( 'rollup', 'formula' ), true ) ) {
+		foreach ( ( new Documents() )->find_visible_traits_for_document( $post ) as $trait_post ) {
+			if ( ! self::can_access_collection_fields( $trait_post, $context ) ) {
 				continue;
 			}
-			$keys[] = 'field-' . $field_id;
+			foreach ( self::collection_field_ids( (int) $trait_post->ID ) as $field_id ) {
+				$field_type = (string) get_post_meta( $field_id, 'type', true );
+				if ( in_array( $field_type, array( 'rollup', 'formula' ), true ) ) {
+					continue;
+				}
+				$keys[ 'field-' . $field_id ] = true;
+			}
 		}
-		return $keys;
+		return array_keys( $keys );
+	}
+
+	/**
+	 * Whether the current request may expose a collection's row-property values.
+	 * Editor responses only expose fields the user can also write; public view
+	 * responses may expose fields of a published collection. Which collections
+	 * a row shows at all comes from `Documents::find_visible_traits_for_document`.
+	 *
+	 * @param WP_Post $collection Collection document.
+	 * @param string  $context    REST context (`edit` or `view`).
+	 */
+	public static function can_access_collection_fields( WP_Post $collection, string $context = 'edit' ): bool {
+		if ( 'view' === $context ) {
+			return 'publish' === $collection->post_status
+				|| current_user_can( 'read_post', (int) $collection->ID );
+		}
+
+		return current_user_can( 'edit_post', (int) $collection->ID );
 	}
 
 	/**
@@ -480,13 +501,18 @@ final class Document {
 	 * @param bool             $creating Whether this is a create or update.
 	 */
 	public function assign_trait_from_request( \WP_Post $post, \WP_REST_Request $request, bool $creating ): void {
-		unset( $creating ); // The caller may pass an update; assigning is idempotent either way.
-
 		// `cortext_collection` designates this document a collection: create its
 		// mirror term even with zero custom fields (a brand-new collection only
 		// has the implicit title). The term is the collection's identity.
 		if ( $request->get_param( 'cortext_collection' ) ) {
 			( new TraitTaxonomy() )->ensure_mirror_term( (int) $post->ID );
+		}
+
+		// `cortext_trait` is the legacy create-only shortcut. Membership changes
+		// on existing documents must go through `/documents/<id>/traits`, which
+		// validates every collection and reconciles relations and the value index.
+		if ( ! $creating ) {
+			return;
 		}
 
 		$trait_id = (int) $request->get_param( 'cortext_trait' );
@@ -498,6 +524,79 @@ final class Document {
 			return;
 		}
 		wp_set_object_terms( (int) $post->ID, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+	}
+
+	/**
+	 * Prevents core document REST writes from bypassing the membership endpoint.
+	 *
+	 * `cortext_trait` remains available while creating a row for backwards
+	 * compatibility. On updates, and for direct writes to core's `crtxt_trait`
+	 * taxonomy field on either create or update, callers must use the traits
+	 * endpoint so capability checks and derived-state reconciliation run.
+	 *
+	 * @param \stdClass|WP_Error $prepared_post Prepared post (or earlier error).
+	 * @param WP_REST_Request    $request       REST request.
+	 * @return \stdClass|WP_Error
+	 */
+	public function validate_membership_update( $prepared_post, WP_REST_Request $request ) {
+		if ( $prepared_post instanceof WP_Error ) {
+			return $prepared_post;
+		}
+
+		$post_id = (int) ( $prepared_post->ID ?? $request->get_param( 'id' ) );
+		if ( $request->has_param( TraitTaxonomy::TAXONOMY ) ) {
+			return new WP_Error(
+				'cortext_membership_endpoint_required',
+				__( 'Update collection memberships through the document traits endpoint.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( ! $request->has_param( 'cortext_trait' ) ) {
+			return $prepared_post;
+		}
+
+		if ( $post_id > 0 ) {
+			return new WP_Error(
+				'cortext_membership_endpoint_required',
+				__( 'Update collection memberships through the document traits endpoint.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( $request->get_param( 'cortext_collection' ) ) {
+			return new WP_Error(
+				'cortext_membership_unsupported',
+				__( 'A collection cannot also be created as a row.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$collection_id = (int) $request->get_param( 'cortext_trait' );
+		$collection    = get_post( $collection_id );
+		if (
+			$collection_id < 1
+			|| ! $collection instanceof WP_Post
+			|| Documents::STATUS_TRASH === $collection->post_status
+			|| ! self::is_collection_post( $collection )
+			|| TraitTaxonomy::term_id_for_trait( $collection_id ) < 1
+		) {
+			return new WP_Error(
+				'cortext_trait_not_found',
+				__( 'Collection not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( ! current_user_can( 'edit_post', $collection_id ) ) {
+			return new WP_Error(
+				'cortext_membership_collection_forbidden',
+				__( 'You are not allowed to create a row in this collection.', 'cortext' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
+
+		return $prepared_post;
 	}
 
 	/**
@@ -583,17 +682,68 @@ final class Document {
 			);
 		}
 
-		$trait_post = ( new Documents() )->find_trait_for_document( $post );
-		$allowed    = $trait_post instanceof WP_Post
-			? array_flip( self::collection_field_ids( (int) $trait_post->ID ) )
-			: array();
+		$trait_posts = ( new Documents() )->find_visible_traits_for_document( $post );
+
+		return $this->reject_field_meta_for_collections( $trait_posts, $meta );
+	}
+
+	/**
+	 * Rejects field writes outside the supplied schemas or inside a collection
+	 * the current user cannot edit. Shared field definitions remain writable
+	 * when at least one owning collection the row shows is editable.
+	 *
+	 * @param WP_Post[]           $collections Collections the row shows.
+	 * @param array<string,mixed> $meta        Meta payload from the REST request.
+	 */
+	private function reject_field_meta_for_collections( array $collections, array $meta ): ?WP_Error {
+		$field_keys = array();
+		foreach ( $meta as $key => $_ ) {
+			if ( ! is_string( $key ) || ! str_starts_with( $key, 'field-' ) ) {
+				continue;
+			}
+			$field_id = (int) substr( $key, 6 );
+			if ( $field_id > 0 ) {
+				$field_keys[ $field_id ] = $key;
+			}
+		}
+		if ( count( $field_keys ) === 0 ) {
+			return null;
+		}
+
+		$owned    = array();
+		$editable = array();
+		foreach ( $collections as $collection ) {
+			$can_edit = current_user_can( 'edit_post', (int) $collection->ID );
+			foreach ( self::collection_field_ids( (int) $collection->ID ) as $field_id ) {
+				$field_id           = (int) $field_id;
+				$owned[ $field_id ] = true;
+				if ( $can_edit ) {
+					$editable[ $field_id ] = true;
+				}
+			}
+		}
 
 		foreach ( $field_keys as $field_id => $key ) {
-			if ( ! isset( $allowed[ $field_id ] ) ) {
+			if ( isset( $editable[ $field_id ] ) ) {
+				continue;
+			}
+
+			if ( isset( $owned[ $field_id ] ) ) {
+				return new WP_Error(
+					'cortext_field_collection_forbidden',
+					__( 'You are not allowed to edit fields from this collection.', 'cortext' ),
+					array(
+						'status' => rest_authorization_required_code(),
+						'key'    => $key,
+					)
+				);
+			}
+
+			if ( ! isset( $owned[ $field_id ] ) ) {
 				return new WP_Error(
 					'cortext_field_not_in_collection',
 					/* translators: %s: meta key being rejected. */
-					sprintf( __( 'Field meta "%s" does not belong to this row\'s collection.', 'cortext' ), $key ),
+					sprintf( __( 'Field meta "%s" does not belong to any of this row\'s collections.', 'cortext' ), $key ),
 					array(
 						'status' => 400,
 						'key'    => $key,
@@ -650,10 +800,20 @@ final class Document {
 			$post_id = (int) $request->get_param( 'id' );
 		}
 		if ( $post_id < 1 ) {
-			// Creating a row: the post id does not exist yet, so relation
-			// targets cannot be validated and their reverse pointers cannot be
-			// synced here. `apply_meta_updates` does both after core REST
-			// inserts the row and its trait is assigned.
+			// Validate create-time field ownership against the requested legacy
+			// collection before core inserts the post. Relation targets and reverse
+			// pointers still wait for `apply_meta_updates`, once the row has an id.
+			$collection  = get_post( (int) $request->get_param( 'cortext_trait' ) );
+			$collections = $collection instanceof WP_Post
+				&& Documents::STATUS_TRASH !== $collection->post_status
+				&& self::is_collection_post( $collection )
+				? array( $collection )
+				: array();
+			$reject      = $this->reject_field_meta_for_collections( $collections, $meta );
+			if ( $reject instanceof WP_Error ) {
+				return $reject;
+			}
+
 			return $prepared_post;
 		}
 
@@ -723,12 +883,14 @@ final class Document {
 
 		$meta     = $request->get_param( 'meta' );
 		$has_meta = is_array( $meta ) && count( $meta ) > 0;
-		$trait    = ( new Documents() )->find_trait_for_document( $post );
-		if ( ! $trait instanceof WP_Post ) {
+		// Only rows carry indexable field meta. A row can belong to several
+		// collections, so keep the complete membership set for formula
+		// materialization while the index resolves ordinary fields by owner.
+		$trait_posts = ( new Documents() )->find_visible_traits_for_document( $post );
+		if ( count( $trait_posts ) === 0 ) {
 			return;
 		}
-		$collection_id = (int) $trait->ID;
-		$index         = new FieldValueIndex();
+		$index = new FieldValueIndex();
 
 		// On create, `prepare_meta_updates` ran before the row's id existed, so
 		// relation fields were written by core REST without their reverse
@@ -764,7 +926,7 @@ final class Document {
 				if ( '' === $field_type || in_array( $field_type, array( 'rollup', 'formula' ), true ) ) {
 					continue;
 				}
-				$index->index_row_field( $row_id, $field_id, $collection_id );
+				$index->index_row_field( $row_id, $field_id );
 			}
 		}
 
@@ -773,13 +935,19 @@ final class Document {
 		// the source row's forward field here so `query_relation_contains_ids`
 		// doesn't return stale results after a relation update.
 		foreach ( $relation_field_ids as $field_id ) {
-			$index->index_row_field( $row_id, $field_id, $collection_id );
+			$index->index_row_field( $row_id, $field_id );
 		}
 
-		FormulaMaterializer::recompute_row( $collection_id, $row_id );
-		foreach ( self::collection_field_ids( $collection_id ) as $field_id ) {
-			if ( 'formula' === (string) get_post_meta( $field_id, 'type', true ) ) {
-				$index->index_row_field( $row_id, $field_id, $collection_id );
+		// Formula values are materialized per collection. Recompute and index the
+		// formulas for every membership so edits to a secondary collection's
+		// inputs cannot leave its display, filters, or sort index stale.
+		foreach ( $trait_posts as $trait_post ) {
+			$collection_id = (int) $trait_post->ID;
+			FormulaMaterializer::recompute_row( $collection_id, $row_id );
+			foreach ( self::collection_field_ids( $collection_id ) as $field_id ) {
+				if ( 'formula' === (string) get_post_meta( $field_id, 'type', true ) ) {
+					$index->index_row_field( $row_id, $field_id, $collection_id );
+				}
 			}
 		}
 	}

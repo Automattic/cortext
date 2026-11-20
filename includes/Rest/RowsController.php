@@ -185,11 +185,20 @@ final class RowsController {
 	 * @return bool|WP_Error
 	 */
 	public function can_read( WP_REST_Request $request ) {
-		if ( current_user_can( 'edit_posts' ) ) {
-			return true;
+		$collection_id = (int) $request->get_param( 'trait' );
+		$collection    = $this->validate_collection( $collection_id );
+		if ( $collection instanceof WP_Error ) {
+			return $collection;
 		}
 
 		if ( 'edit' === $request['context'] ) {
+			if (
+				current_user_can( 'edit_posts' )
+				&& current_user_can( 'edit_post', $collection_id )
+			) {
+				return true;
+			}
+
 			return new WP_Error(
 				'rest_forbidden_context',
 				__( 'Sorry, you are not allowed to edit posts in this post type.', 'cortext' ),
@@ -197,19 +206,12 @@ final class RowsController {
 			);
 		}
 
-		// context=view: allow if the collection document is published.
-		$collection_id = (int) $request->get_param( 'trait' );
-		$collection    = get_post( $collection_id );
-
-		if ( ! $collection || ! Document::is_collection_post( $collection ) ) {
-			return new WP_Error(
-				'cortext_collection_not_found',
-				__( 'Collection not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		if ( 'publish' !== $collection->post_status ) {
+		// context=view: published collections are public; unpublished collections
+		// retain normal per-post read capabilities for their owners/editors.
+		if (
+			'publish' !== $collection->post_status
+			&& ! current_user_can( 'read_post', $collection_id )
+		) {
 			return new WP_Error(
 				'cortext_collection_not_public',
 				__( 'Collection is not public.', 'cortext' ),
@@ -1718,8 +1720,17 @@ final class RowsController {
 			return $response;
 		}
 
-		$collection = $this->find_trait_for_document( $post->ID );
-		if ( ! $collection instanceof WP_Post ) {
+		$context     = $request instanceof WP_REST_Request ? (string) $request->get_param( 'context' ) : 'edit';
+		$collections = array_values(
+			array_filter(
+				( new Documents() )->find_visible_traits_for_document( $post ),
+				static fn( WP_Post $collection ): bool => Document::can_access_collection_fields(
+					$collection,
+					$context
+				)
+			)
+		);
+		if ( count( $collections ) === 0 ) {
 			return $response;
 		}
 
@@ -1748,14 +1759,24 @@ final class RowsController {
 			$data['cover'] = $this->cover_data_for_post( $post );
 		}
 
-		$field_ids = $include_hydrated ? Document::collection_field_ids( $collection->ID ) : array();
+		// Hydrate relation and rollup values for every collection the row belongs
+		// to, de-duplicated, so a multi-collection row's detail shows values for
+		// all of its groups instead of only the source collection.
+		$field_ids = array();
+		if ( $include_hydrated ) {
+			foreach ( $collections as $collection ) {
+				FormulaMaterializer::recompute_row( (int) $collection->ID, $post->ID );
+				foreach ( Document::collection_field_ids( $collection->ID ) as $field_id ) {
+					$field_ids[ (int) $field_id ] = (int) $field_id;
+				}
+			}
+			$field_ids = array_values( $field_ids );
+		}
 		if ( count( $field_ids ) > 0 ) {
-			FormulaMaterializer::recompute_row( $collection->ID, $post->ID );
-
 			// Keep hydrated values out of `meta`. Those keys are registered as
 			// strings; if autosave sends hydrated objects back, REST rejects the
 			// save with 400. `cortext_hydrated_meta` is read-only display data.
-			$ctx             = $this->row_format_context_for_collection( $request, $collection->ID, $field_ids );
+			$ctx             = $this->row_format_context_for_collection( $request, (int) $collections[0]->ID, $field_ids );
 			$related_row_ids = $this->collect_related_row_ids( array( $post ), $field_ids, $ctx );
 			if ( count( $related_row_ids ) > 0 ) {
 				_prime_post_caches( $related_row_ids, false, true );
@@ -1810,27 +1831,6 @@ final class RowsController {
 
 		$fields = array_map( 'trim', wp_parse_list( $request['_fields'] ) );
 		return count( $fields ) > 0 ? $fields : null;
-	}
-
-	/**
-	 * Resolves the trait (collection) that a document is a row of, by reading
-	 * the document's `crtxt_trait` term and extracting the trait id
-	 * from the deterministic mirror-term slug.
-	 *
-	 * @param int $document_id Document post id.
-	 * @return WP_Post|null
-	 */
-	private function find_trait_for_document( int $document_id ): ?WP_Post {
-		$terms = get_the_terms( $document_id, TraitTaxonomy::TAXONOMY );
-		if ( ! is_array( $terms ) || count( $terms ) === 0 ) {
-			return null;
-		}
-		$trait_id = TraitTaxonomy::trait_id_from_slug( (string) $terms[0]->slug );
-		if ( $trait_id < 1 ) {
-			return null;
-		}
-		$trait = get_post( $trait_id );
-		return $trait instanceof WP_Post && Document::is_collection_post( $trait ) ? $trait : null;
 	}
 
 	/**

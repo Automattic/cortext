@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useEntityRecords } from '@wordpress/core-data';
 import { __ } from '@wordpress/i18n';
 import {
@@ -60,6 +60,10 @@ import {
 	rememberRowDocumentContext,
 	rowDocumentContextForEditorPost,
 } from './rowContextCache';
+import {
+	activeRowSourceCollectionId,
+	rowSourceCollectionHint,
+} from './rowSourceCollection';
 
 function LoadingPane( { active } ) {
 	const showProgress = useDelayedFlag( active );
@@ -169,6 +173,7 @@ function isContentPane( active ) {
 
 export default function EntityRoute( { history } ) {
 	const params = useParams( { strict: false } );
+	const search = useSearch( { strict: false } );
 	const navigate = useNavigate();
 	const splat = params._splat ?? '';
 	const publicWebAffordances = isPublicWebAffordancesEnabled();
@@ -283,12 +288,15 @@ export default function EntityRoute( { history } ) {
 		target.kind === 'document' ? target.tail : ''
 	);
 
-	// For document targets that turn out to be rows, we still need the
-	// row's collection field schema (rendered as the property panel). The
-	// resolver hands us the trait ids the document belongs to. Today only
-	// the first trait drives the row peek's parent collection; multi-trait
-	// UX can use the rest later.
-	const rowParentCollectionId = documentResolution.traitIds?.[ 0 ] ?? null;
+	// For document targets that turn out to be rows, we still need a collection
+	// field schema for the property panel. Prefer the collection the row was
+	// opened from. It is persisted in the URL
+	// so peek -> full navigation and reloads keep the same field/layout context,
+	// but only while the locator still reports it as an active membership.
+	const rowParentCollectionId = activeRowSourceCollectionId(
+		documentResolution.traitIds,
+		rowSourceCollectionHint( search, target.id )
+	);
 	const rowFieldsState = useCollectionFields( rowParentCollectionId );
 	const rowFields = useMemo( () => {
 		if ( ! rowParentCollectionId || ! rowFieldsState?.detailFields ) {

@@ -1,5 +1,6 @@
-import { useState, useEffect } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
+import { useDocumentLocatorInvalidation } from '../hooks/documentLocatorInvalidation';
 
 // Resolves a document URI like `<slug>-<id>` or bare `<id>` to a post entity.
 // Only the trailing id is authoritative; the slug is cosmetic, so renames
@@ -29,6 +30,8 @@ function normalizeTraitIds( raw ) {
 
 export function useResolveDocument( uri ) {
 	const id = parseIdFromUri( uri );
+	const [ locatorRevision, setLocatorRevision ] = useState( 0 );
+	const requestIdRef = useRef( 0 );
 	const [ state, setState ] = useState( {
 		entity: null,
 		traitIds: [],
@@ -36,12 +39,33 @@ export function useResolveDocument( uri ) {
 		notFound: false,
 		id,
 	} );
+	const invalidateLocator = useCallback(
+		( { traitIds } ) => {
+			// Mark the current request stale synchronously. Waiting for the next
+			// effect cleanup leaves a small window where an older locator response
+			// could overwrite the memberships returned by the successful PUT.
+			requestIdRef.current += 1;
+			if ( Array.isArray( traitIds ) ) {
+				setState( ( current ) =>
+					current.id === id
+						? { ...current, traitIds, isResolving: true }
+						: current
+				);
+			}
+			setLocatorRevision( ( current ) => current + 1 );
+		},
+		[ id ]
+	);
+	useDocumentLocatorInvalidation( id, invalidateLocator );
 
 	// Once `id` is real, this collapses to the id so canonicalization rewrites
 	// (`/42` → `/about-us-42`) don't re-fetch. When `id` is null, distinct
 	// unparseable URIs each get their own key so empty → malformed (and
 	// malformed-A → malformed-B) re-run the effect and flip notFound.
-	const fetchKey = id !== null ? `id:${ id }` : `uri:${ uri ?? '' }`;
+	const fetchKey =
+		id !== null
+			? `id:${ id }:locator:${ locatorRevision }`
+			: `uri:${ uri ?? '' }`;
 
 	useEffect( () => {
 		if ( ! id ) {
@@ -56,28 +80,45 @@ export function useResolveDocument( uri ) {
 		}
 
 		let cancelled = false;
-		setState( {
-			entity: null,
-			traitIds: [],
-			isResolving: true,
-			notFound: false,
-			id,
-		} );
+		const requestId = ++requestIdRef.current;
+		const isCurrentRequest = () =>
+			! cancelled && requestId === requestIdRef.current;
+		const finishFailedResolution = () => {
+			if ( ! isCurrentRequest() ) {
+				return;
+			}
+			setState( ( current ) =>
+				current.id === id && current.entity
+					? { ...current, isResolving: false, notFound: false }
+					: {
+							entity: null,
+							traitIds: [],
+							isResolving: false,
+							notFound: true,
+							id,
+					  }
+			);
+		};
+		setState( ( current ) =>
+			current.id === id && current.entity
+				? { ...current, isResolving: true, notFound: false }
+				: {
+						entity: null,
+						traitIds: [],
+						isResolving: true,
+						notFound: false,
+						id,
+				  }
+		);
 
 		apiFetch( { path: `/cortext/v1/documents/${ id }` } )
 			.then( async ( locator ) => {
-				if ( cancelled ) {
+				if ( ! isCurrentRequest() ) {
 					return;
 				}
 				const restBase = locator?.rest_base ?? locator?.type;
 				if ( ! restBase ) {
-					setState( {
-						entity: null,
-						traitIds: [],
-						isResolving: false,
-						notFound: true,
-						id,
-					} );
+					finishFailedResolution();
 					return;
 				}
 				const traitIds = normalizeTraitIds( locator?.trait_ids );
@@ -85,7 +126,7 @@ export function useResolveDocument( uri ) {
 					const entity = await apiFetch( {
 						path: `/wp/v2/${ restBase }/${ id }?context=edit&_fields=id,slug,parent,type,created_at,created_by,modified_at,modified_by,cortext_hydrated_meta`,
 					} );
-					if ( ! cancelled ) {
+					if ( isCurrentRequest() ) {
 						setState( {
 							entity,
 							traitIds,
@@ -95,28 +136,10 @@ export function useResolveDocument( uri ) {
 						} );
 					}
 				} catch {
-					if ( ! cancelled ) {
-						setState( {
-							entity: null,
-							traitIds: [],
-							isResolving: false,
-							notFound: true,
-							id,
-						} );
-					}
+					finishFailedResolution();
 				}
 			} )
-			.catch( () => {
-				if ( ! cancelled ) {
-					setState( {
-						entity: null,
-						traitIds: [],
-						isResolving: false,
-						notFound: true,
-						id,
-					} );
-				}
-			} );
+			.catch( finishFailedResolution );
 
 		return () => {
 			cancelled = true;

@@ -16,6 +16,7 @@ import {
 } from './rowDetailUtils';
 import { rowRoute } from './relations/relationUtils';
 import { useActiveEditor } from './ActiveEditorContext';
+import { rowSourceCollectionSearch } from '../router/rowSourceCollection';
 
 // Split the contexts so callers don't rerender on state they do not use:
 // chips need actions, tables need peek state, and the host needs save and
@@ -149,6 +150,10 @@ export function DocumentPeekProvider( { children } ) {
 				navigate( {
 					to: '/$',
 					params: { _splat: transition.uri },
+					search: rowSourceCollectionSearch(
+						transition.documentId,
+						transition.collectionId
+					),
 				} );
 			}
 		},
@@ -223,7 +228,12 @@ export function DocumentPeekProvider( { children } ) {
 			if ( nextMode === 'full' ) {
 				const uri = rowRoute( { id, slug } );
 				if ( uri ) {
-					runTransition( { type: 'full', uri } );
+					runTransition( {
+						type: 'full',
+						uri,
+						documentId: id,
+						collectionId,
+					} );
 				}
 				return;
 			}
@@ -261,7 +271,12 @@ export function DocumentPeekProvider( { children } ) {
 					slug: current.slug,
 				} );
 				if ( uri ) {
-					runTransition( { type: 'full', uri } );
+					runTransition( {
+						type: 'full',
+						uri,
+						documentId: current.docId,
+						collectionId: current.collectionId,
+					} );
 				}
 				return;
 			}

@@ -91,7 +91,7 @@ describe( 'RelationReferences', () => {
 		const link = screen.getByRole( 'link', { name: 'Ada Lovelace' } );
 		expect( link ).toHaveAttribute(
 			'href',
-			'https://example.test/wp-admin/admin.php?page=cortext&p=%2Fada-lovelace-12'
+			'https://example.test/wp-admin/admin.php?page=cortext&p=%2Fada-lovelace-12&collection=7&collectionRow=12'
 		);
 		expect( link ).toHaveAttribute( 'target', '_top' );
 	} );

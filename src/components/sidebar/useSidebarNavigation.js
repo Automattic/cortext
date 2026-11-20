@@ -55,6 +55,7 @@ export default function useSidebarNavigation( { pages, homePath } ) {
 			navigate( {
 				to: '/$',
 				params: { _splat: canonical },
+				search: true,
 				replace: true,
 			} );
 		}

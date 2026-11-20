@@ -1,3 +1,5 @@
+export const TRAITS_EXPERIMENT_ID = 'traits';
+
 const DEFAULT_FEATURES = {
 	publicWebAffordances: true,
 	wordpressAffordances: true,
