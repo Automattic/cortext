@@ -519,7 +519,7 @@ export default function FieldSettingsPopover( {
 			} catch ( apiError ) {
 				setError(
 					apiError?.message ||
-						__( "Couldn't save field settings.", 'cortext' )
+						__( "Couldn't save property settings.", 'cortext' )
 				);
 				return false;
 			} finally {

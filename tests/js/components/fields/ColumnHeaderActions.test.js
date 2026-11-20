@@ -316,7 +316,7 @@ describe( 'ColumnHeaderActions', () => {
 		const { rerender } = render( <Harness collectionId={ 5 } /> );
 
 		fireEvent.click(
-			await screen.findByRole( 'button', { name: 'Add field' } )
+			await screen.findByRole( 'button', { name: 'Add property' } )
 		);
 
 		expect( screen.getByRole( 'dialog' ) ).toHaveTextContent(
@@ -458,7 +458,7 @@ describe( 'ColumnHeaderActions', () => {
 		);
 
 		fireEvent.click(
-			await screen.findByRole( 'button', { name: 'Field settings' } )
+			await screen.findByRole( 'button', { name: 'Property settings' } )
 		);
 		fireEvent.change( screen.getByLabelText( 'Description' ), {
 			target: { value: 'How editors should fill this field.' },
@@ -544,7 +544,7 @@ describe( 'ColumnHeaderActions', () => {
 		);
 
 		fireEvent.click(
-			await screen.findByRole( 'button', { name: 'Field settings' } )
+			await screen.findByRole( 'button', { name: 'Property settings' } )
 		);
 
 		expect(
@@ -593,7 +593,7 @@ describe( 'ColumnHeaderActions', () => {
 		);
 
 		fireEvent.click(
-			await screen.findByRole( 'button', { name: 'Field settings' } )
+			await screen.findByRole( 'button', { name: 'Property settings' } )
 		);
 
 		expect( screen.getByLabelText( 'Description' ) ).toBeInTheDocument();
@@ -616,7 +616,7 @@ describe( 'ColumnHeaderActions', () => {
 		);
 
 		fireEvent.click(
-			await screen.findByRole( 'button', { name: 'Add field' } )
+			await screen.findByRole( 'button', { name: 'Add property' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', {
@@ -637,7 +637,7 @@ describe( 'ColumnHeaderActions', () => {
 		);
 
 		fireEvent.click(
-			await screen.findByRole( 'button', { name: 'Add field' } )
+			await screen.findByRole( 'button', { name: 'Add property' } )
 		);
 		fireEvent.click(
 			screen.getByRole( 'button', {

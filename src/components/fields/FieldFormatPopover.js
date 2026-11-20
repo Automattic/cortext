@@ -955,7 +955,7 @@ export default function FieldFormatPopover( {
 				) }
 				<p className="cortext-format-submenu__note">
 					{ __(
-						'Changes apply to all views showing this field.',
+						'Changes apply to all views showing this property.',
 						'cortext'
 					) }
 				</p>

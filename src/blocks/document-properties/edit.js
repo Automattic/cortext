@@ -274,7 +274,7 @@ export default function Edit() {
 				setOptimisticEntries( previousOptimisticEntries );
 				setSaveError(
 					error?.message ??
-						__( "Couldn't save the field layout.", 'cortext' )
+						__( "Couldn't save the property layout.", 'cortext' )
 				);
 			}
 		},
@@ -391,8 +391,8 @@ export default function Edit() {
 						icon={ isVisible ? unseen : seen }
 						label={
 							isVisible
-								? __( 'Collapse fields', 'cortext' )
-								: __( 'Expand fields', 'cortext' )
+								? __( 'Collapse properties', 'cortext' )
+								: __( 'Expand properties', 'cortext' )
 						}
 						onClick={ onToggleVisible }
 					/>
@@ -405,7 +405,7 @@ export default function Edit() {
 						label={
 							isEditingLayout
 								? __( 'Done customizing', 'cortext' )
-								: __( 'Customize fields', 'cortext' )
+								: __( 'Customize properties', 'cortext' )
 						}
 						isPressed={ isEditingLayout }
 						onClick={ toggleEditingLayout }
@@ -428,8 +428,8 @@ export default function Edit() {
 		const label = sprintf(
 			/* translators: %d: number of collapsed fields. */
 			_n(
-				'%d field collapsed',
-				'%d fields collapsed',
+				'%d property collapsed',
+				'%d properties collapsed',
 				visibleFieldCount,
 				'cortext'
 			),
@@ -504,7 +504,7 @@ export default function Edit() {
 					) }
 					{ showEmptyProperties ? (
 						<p className="cortext-document-properties__empty">
-							{ __( 'No fields are visible.', 'cortext' ) }
+							{ __( 'No properties are visible.', 'cortext' ) }
 						</p>
 					) : null }
 				</div>

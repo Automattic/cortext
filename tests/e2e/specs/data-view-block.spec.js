@@ -404,7 +404,7 @@ async function expectRowToolbarIsolated( page, detail, blockText ) {
 		page.getByRole( 'button', { name: 'Change collection' } )
 	).toHaveCount( 0 );
 	await expect(
-		page.getByRole( 'button', { name: 'Add field', exact: true } )
+		page.getByRole( 'button', { name: 'Add property', exact: true } )
 	).toHaveCount( 0 );
 	await expect(
 		page.getByRole( 'button', { name: 'View settings' } )
@@ -4469,7 +4469,7 @@ test.describe( 'Collection view block', () => {
 				'The Left Hand of Darkness'
 			);
 			const authorLabelButton = detailCanvas.getByRole( 'button', {
-				name: 'Configure Author field',
+				name: 'Configure Author property',
 			} );
 			await expect( authorLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await authorLabelButton.click();
@@ -4480,7 +4480,7 @@ test.describe( 'Collection view block', () => {
 			).toBeVisible();
 			await page.keyboard.press( 'Escape' );
 			const yearLabelButton = detailCanvas.getByRole( 'button', {
-				name: 'Configure Year field',
+				name: 'Configure Year property',
 			} );
 			await expect( yearLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await yearLabelButton.click();
@@ -4550,7 +4550,7 @@ test.describe( 'Collection view block', () => {
 				.filter( { hasText: 'Tags' } );
 			await expect( tagsLabel ).toBeVisible();
 			const tagsLabelButton = detailCanvas.getByRole( 'button', {
-				name: 'Configure Tags field',
+				name: 'Configure Tags property',
 			} );
 			await expect( tagsLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await tagsLabelButton.click();
@@ -4664,7 +4664,7 @@ test.describe( 'Collection view block', () => {
 				name: 'Detail tools',
 			} );
 			await rowDetailToolbar
-				.getByRole( 'button', { name: 'Collapse fields' } )
+				.getByRole( 'button', { name: 'Collapse properties' } )
 				.click();
 			await expect( detailTitle ).toBeVisible();
 			await expect( propertiesSlot ).toHaveClass(
@@ -4672,11 +4672,11 @@ test.describe( 'Collection view block', () => {
 			);
 			await expect(
 				rowDetailToolbar.getByRole( 'button', {
-					name: 'Expand fields',
+					name: 'Expand properties',
 				} )
 			).toBeVisible();
 			await rowDetailToolbar
-				.getByRole( 'button', { name: 'Expand fields' } )
+				.getByRole( 'button', { name: 'Expand properties' } )
 				.click();
 			await expect( propertiesSlot ).toBeVisible();
 			await expect( propertiesSlot ).not.toHaveClass(
@@ -6287,7 +6287,7 @@ test.describe( 'Collection view block', () => {
 			const ghostAdd = canvas
 				.locator( 'th' )
 				.last()
-				.getByRole( 'button', { name: 'Add field' } );
+				.getByRole( 'button', { name: 'Add property' } );
 			await ghostAdd.click();
 			const popover = page.locator(
 				'.cortext-data-view-toolbar-popover'
@@ -7005,7 +7005,7 @@ test.describe( 'Collection view block', () => {
 			} );
 
 			await page
-				.getByRole( 'button', { name: 'Add field', exact: true } )
+				.getByRole( 'button', { name: 'Add property', exact: true } )
 				.first()
 				.click();
 			const popover = page.locator(
@@ -7041,7 +7041,7 @@ test.describe( 'Collection view block', () => {
 			await openColumnDropdown( notesHeader, 'Notes' );
 			await columnMenuItem( 'Rename' ).click();
 
-			const renameInput = canvas.getByLabel( 'Field name' );
+			const renameInput = canvas.getByLabel( 'Property name' );
 			await renameInput.fill( 'Description' );
 			await renameInput.press( 'Enter' );
 
@@ -7096,7 +7096,7 @@ test.describe( 'Collection view block', () => {
 			const ghostAdd = canvas
 				.locator( 'th' )
 				.last()
-				.getByRole( 'button', { name: 'Add field' } );
+				.getByRole( 'button', { name: 'Add property' } );
 			await ghostAdd.click();
 			const ghostPopover = page.locator(
 				'.cortext-data-view-toolbar-popover'

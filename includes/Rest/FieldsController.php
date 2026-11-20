@@ -404,7 +404,7 @@ final class FieldsController {
 		if ( '' === $title ) {
 			return new WP_Error(
 				'cortext_field_title_required',
-				__( 'Field name is required.', 'cortext' ),
+				__( 'Property name is required.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -446,7 +446,7 @@ final class FieldsController {
 		if ( 'formula' !== (string) get_post_meta( $field_id, 'type', true ) ) {
 			return new WP_Error(
 				'cortext_field_type_unsupported',
-				__( 'This field isn\'t a formula.', 'cortext' ),
+				__( 'This property isn\'t a formula.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -455,7 +455,7 @@ final class FieldsController {
 		if ( $collection_id < 1 ) {
 			return new WP_Error(
 				'cortext_field_collection_missing',
-				__( 'Couldn\'t find this field\'s collection.', 'cortext' ),
+				__( 'Couldn\'t find this property\'s collection.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -598,7 +598,7 @@ final class FieldsController {
 		if ( ! $this->type_supports_options( $type ) ) {
 			return new WP_Error(
 				'cortext_field_type_unsupported',
-				__( 'This field type doesn\'t support options.', 'cortext' ),
+				__( 'This property type doesn\'t support options.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -760,7 +760,7 @@ final class FieldsController {
 			if ( $trait_term_id < 1 ) {
 				return new WP_Error(
 					'cortext_field_collection_missing',
-					__( 'Couldn\'t find this field\'s collection.', 'cortext' ),
+					__( 'Couldn\'t find this property\'s collection.', 'cortext' ),
 					array( 'status' => 400 )
 				);
 			}
@@ -880,7 +880,7 @@ final class FieldsController {
 		if ( $is_archived ) {
 			return new WP_Error(
 				'cortext_collection_archived',
-				__( 'Unarchive this collection before changing its fields.', 'cortext' ),
+				__( 'Unarchive this collection before changing its properties.', 'cortext' ),
 				array(
 					'status'        => 409,
 					'collection_id' => $collection_id,
@@ -891,7 +891,7 @@ final class FieldsController {
 		if ( Documents::STATUS_TRASH === $collection->post_status ) {
 			return new WP_Error(
 				'cortext_collection_in_trash',
-				__( 'Restore this collection from Trash before changing its fields.', 'cortext' ),
+				__( 'Restore this collection from Trash before changing its properties.', 'cortext' ),
 				array(
 					'status'        => 409,
 					'collection_id' => $collection_id,
@@ -902,7 +902,7 @@ final class FieldsController {
 		if ( DocumentFreeze::is_frozen( $collection_id ) ) {
 			return new WP_Error(
 				'cortext_collection_frozen',
-				__( 'Unlock this collection before changing its fields.', 'cortext' ),
+				__( 'Unlock this collection before changing its properties.', 'cortext' ),
 				array(
 					'status'        => 409,
 					'collection_id' => $collection_id,

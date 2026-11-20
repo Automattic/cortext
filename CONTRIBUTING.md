@@ -22,13 +22,13 @@ Use the words in the [Glossary](docs/glossary.md), and write them like this:
 -   **Name what people do, not how it is built.** "Side peek" says what you are doing; "side panel", "pop-up", and "modal" describe the widget. The same goes for "drawer", "popover", and "toggle".
 -   **Sentence case** for every label, button, menu item, and title: "Add to favorites", not "Add To Favorites". WordPress admin post type labels follow core's own casing.
 -   **Errors** start with "Couldn't", then say what failed: "Couldn't save the formula." Do not use "We couldn't" or "Cortext could not", or blame the user. Use contractions in the rest of the copy too ("This can't be undone.").
--   **Next step.** When the user can fix the problem, say how and use the term from the glossary: "Unarchive this collection before changing its fields."
+-   **Next step.** When the user can fix the problem, say how and use the term from the glossary: "Unarchive this collection before changing its properties."
 -   **Quotes.** Put curly quotes around names the user typed, like “%s”. Keep straight quotes in formula examples and in REST errors about field IDs or operators.
 -   **Ellipsis.** Use the single character `…`. Add it to menu items that open another step ("Change type…", "Empty Trash…") and to progress states ("Saving…").
 -   **No title.** A document without a title shows as `(untitled)`.
 -   **Whole sentences.** Do not build a label by dropping another label into a sentence, like "Open in %s". It breaks sentence case and translation. Write each variant out.
--   **Say where an action applies** when the same action exists in more than one place: "Hide in view" in a table hides the field in that view, and "Hide in documents" hides it on every document in the collection.
--   **"Row" and "column"** describe only the shape of the table, as in "Resize column" or moving a row to a new position. They are not names for documents or fields.
+-   **Say where an action applies** when the same action exists in more than one place: "Hide in view" in a table hides the property in that view, and "Hide in documents" hides it on every document in the collection.
+-   **"Row" and "column"** describe only the shape of the table, as in "Resize column" or moving a row to a new position. They are not names for documents or properties.
 -   **Other apps.** Name Notion only in import copy. Do not compare Cortext to other apps in interface text.
 
 ## Checks

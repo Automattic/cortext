@@ -401,8 +401,8 @@ export async function duplicateDocument( record, ctx ) {
 			sprintf(
 				/* translators: %d: number of fields skipped while duplicating a collection. */
 				_n(
-					"%d field wasn't copied to the new collection. Add it again if you need it.",
-					"%d fields weren't copied to the new collection. Add them again if you need them.",
+					"%d property wasn't copied to the new collection. Add it again if you need it.",
+					"%d properties weren't copied to the new collection. Add them again if you need them.",
 					skipped.length,
 					'cortext'
 				),

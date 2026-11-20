@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 jest.mock( '@wordpress/i18n', () => ( {
 	__: ( value ) =>
 		( {
-			'Built-in field': 'Campo integrado',
+			'Built-in property': 'Campo integrado',
 			Created: 'Creación',
 			'Date and time': 'Fecha y hora',
 			'Last edited': 'Última edición',

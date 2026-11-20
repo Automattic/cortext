@@ -212,7 +212,7 @@ function CollectionToolbarControl( {
 					renderToggle={ ( { isOpen, onToggle } ) => (
 						<ToolbarButton
 							icon={ plus }
-							label={ __( 'Add field', 'cortext' ) }
+							label={ __( 'Add property', 'cortext' ) }
 							onClick={ onToggle }
 							isPressed={ isOpen }
 						/>
@@ -372,7 +372,7 @@ function CollectionInspectorControls( {
 				</PanelBody>
 			) }
 			<PanelBody
-				title={ __( 'Fields', 'cortext' ) }
+				title={ __( 'Properties', 'cortext' ) }
 				initialOpen={ fieldsPanelInitialOpen }
 			>
 				{ isCollectionValid && (
@@ -389,7 +389,7 @@ function CollectionInspectorControls( {
 										aria-expanded={ isOpen }
 										__next40pxDefaultSize
 									>
-										{ __( 'Add field', 'cortext' ) }
+										{ __( 'Add property', 'cortext' ) }
 									</Button>
 								) }
 								renderContent={ ( { onClose } ) => (

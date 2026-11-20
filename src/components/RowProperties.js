@@ -120,14 +120,17 @@ function EmptyHiddenPropertiesDropZone( { placeholderHeight } ) {
 				/>
 			) : null }
 			<div className="cortext-row-detail__property-hidden-separator">
-				<span>{ __( 'Hidden fields', 'cortext' ) }</span>
+				<span>{ __( 'Hidden properties', 'cortext' ) }</span>
 			</div>
 			<div
 				className={
 					'cortext-row-detail__property-hidden-dropzone' +
 					( isOver ? ' is-over' : '' )
 				}
-				aria-label={ __( 'Drop fields here to hide them', 'cortext' ) }
+				aria-label={ __(
+					'Drop properties here to hide them',
+					'cortext'
+				) }
 			/>
 		</div>
 	);
@@ -224,7 +227,7 @@ function HiddenPropertiesSeparator() {
 			style={ style }
 			className="cortext-row-detail__property-hidden-separator"
 		>
-			<span>{ __( 'Hidden fields', 'cortext' ) }</span>
+			<span>{ __( 'Hidden properties', 'cortext' ) }</span>
 		</div>
 	);
 }
@@ -712,7 +715,7 @@ function PropertyLabel( {
 
 	const configureLabel = sprintf(
 		/* translators: %s: Field label. */
-		__( 'Configure %s field', 'cortext' ),
+		__( 'Configure %s property', 'cortext' ),
 		field.label
 	);
 
@@ -913,7 +916,7 @@ function RowProperty( {
 					{ canReorderLayout ? (
 						<Button
 							className="cortext-row-detail__property-layout-chip"
-							aria-label={ __( 'Reorder field', 'cortext' ) }
+							aria-label={ __( 'Reorder property', 'cortext' ) }
 							icon={ dragHandle }
 							size="small"
 							variant="tertiary"
@@ -1640,7 +1643,7 @@ export default function RowProperties( {
 		activeLayoutOverId === HIDDEN_PROPERTIES_DROP_TARGET;
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
-		_n( '%d field', '%d fields', propertyFields.length, 'cortext' ),
+		_n( '%d property', '%d properties', propertyFields.length, 'cortext' ),
 		propertyFields.length
 	);
 	const renderProperty = ( field ) =>

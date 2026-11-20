@@ -387,7 +387,7 @@ export default function FieldActionsMenu( {
 								onClick={ () => setIsEditingSettings( true ) }
 							>
 								<Menu.ItemLabel>
-									{ __( 'Field settings', 'cortext' ) }
+									{ __( 'Property settings', 'cortext' ) }
 								</Menu.ItemLabel>
 							</Menu.Item>
 							{ canFormat ? (
@@ -506,7 +506,7 @@ export default function FieldActionsMenu( {
 				>
 					<p>
 						{ __(
-							'Delete this field? Existing values for this field will be removed from every document.',
+							'Delete this property? Existing values for this property will be removed from every document.',
 							'cortext'
 						) }
 					</p>

@@ -150,8 +150,8 @@ function DocumentActions( {
 							size="compact"
 							label={
 								arePropertiesVisible
-									? __( 'Collapse fields', 'cortext' )
-									: __( 'Expand fields', 'cortext' )
+									? __( 'Collapse properties', 'cortext' )
+									: __( 'Expand properties', 'cortext' )
 							}
 							isPressed={ arePropertiesVisible }
 							disabled={ disabled }
@@ -165,7 +165,10 @@ function DocumentActions( {
 								label={
 									isPropertiesLayoutEditing
 										? __( 'Done customizing', 'cortext' )
-										: __( 'Customize fields', 'cortext' )
+										: __(
+												'Customize properties',
+												'cortext'
+										  )
 								}
 								isPressed={ isPropertiesLayoutEditing }
 								disabled={ disabled }

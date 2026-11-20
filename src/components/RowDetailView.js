@@ -148,7 +148,7 @@ function DetailShell( {
 } ) {
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
-		_n( '%d field', '%d fields', fields.length, 'cortext' ),
+		_n( '%d property', '%d properties', fields.length, 'cortext' ),
 		fields.length
 	);
 
@@ -170,8 +170,8 @@ function DetailShell( {
 							icon={ arePropertiesVisible ? unseen : seen }
 							label={
 								arePropertiesVisible
-									? __( 'Collapse fields', 'cortext' )
-									: __( 'Expand fields', 'cortext' )
+									? __( 'Collapse properties', 'cortext' )
+									: __( 'Expand properties', 'cortext' )
 							}
 							onClick={ () =>
 								setArePropertiesVisible(
@@ -185,7 +185,7 @@ function DetailShell( {
 							label={
 								isPropertiesLayoutEditing
 									? __( 'Done customizing', 'cortext' )
-									: __( 'Customize fields', 'cortext' )
+									: __( 'Customize properties', 'cortext' )
 							}
 							isPressed={ isPropertiesLayoutEditing }
 							onClick={ onRequestLayoutEdit }

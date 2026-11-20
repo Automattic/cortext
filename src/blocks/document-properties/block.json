@@ -2,10 +2,10 @@
 	"$schema": "https://schemas.wp.org/trunk/block.json",
 	"apiVersion": 3,
 	"name": "cortext/document-properties",
-	"title": "Fields",
+	"title": "Properties",
 	"category": "collections",
 	"icon": "list-view",
-	"description": "Fields shown between the title and body, using the collection schema and saved metadata.",
+	"description": "Properties shown between the title and body, using the collection schema and saved metadata.",
 	"textdomain": "cortext",
 	"usesContext": [ "postId", "postType" ],
 	"supports": {

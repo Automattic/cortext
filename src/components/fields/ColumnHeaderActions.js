@@ -507,7 +507,7 @@ function AddFieldTrigger( { collectionId, onFieldCreated, onRowsChanged } ) {
 				renderToggle={ ( { isOpen, onToggle } ) => (
 					<Button
 						icon={ plus }
-						label={ __( 'Add field', 'cortext' ) }
+						label={ __( 'Add property', 'cortext' ) }
 						size="compact"
 						onClick={ onToggle }
 						isPressed={ isOpen }
