@@ -14,6 +14,7 @@ use Cortext\Formula\Compiler as FormulaCompiler;
 use Cortext\Plugin;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentFreeze;
 use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\PostType\TrashCascade;
@@ -520,7 +521,23 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 	public static function retired_row_statuses(): array {
 		return array(
 			'archived' => array( Documents::STATUS_ARCHIVED, 'cortext_document_archived' ),
-			'trashed'  => array( 'trash', 'cortext_document_trashed' ),
+			'trashed'  => array( 'trash', 'cortext_document_in_trash' ),
+		);
+	}
+
+	public function test_put_traits_changes_collections_on_a_locked_row(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_a = $this->create_collection( 'locked-a', 'A' );
+		$collection_b = $this->create_collection( 'locked-b', 'B' );
+		$row_id       = $this->create_row( $collection_a, 'Ada' );
+		DocumentFreeze::freeze( $row_id );
+
+		$response = $this->request_traits( $row_id, array( $collection_a, $collection_b ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing(
+			array( $collection_a, $collection_b ),
+			( new \Cortext\Documents() )->membership_ids( $row_id )
 		);
 	}
 

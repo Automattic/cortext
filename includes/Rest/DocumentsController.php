@@ -539,14 +539,11 @@ final class DocumentsController {
 		$id  = (int) $request->get_param( 'id' );
 		$raw = $request->get_param( 'collection_ids' );
 
-		// Archived and trashed documents are read-only, their traits included.
-		$status = (string) get_post_status( $id );
-		if ( ! Documents::is_live_status( $status ) ) {
-			return new WP_Error(
-				Documents::STATUS_ARCHIVED === $status ? 'cortext_document_archived' : 'cortext_document_trashed',
-				__( 'Restore this document before editing it.', 'cortext' ),
-				array( 'status' => 409 )
-			);
+		// Archived and trashed documents are read-only, their traits included. A
+		// locked row can still change collections, like it can still be moved.
+		$lifecycle_error = DocumentWriteGuard::lifecycle_error( get_post( $id ) );
+		if ( $lifecycle_error instanceof WP_Error ) {
+			return $lifecycle_error;
 		}
 
 		$collection_ids = is_array( $raw )
