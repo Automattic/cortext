@@ -906,7 +906,7 @@ export default function Sidebar( {
 																				{ sprintf(
 																					/* translators: %s: template title */
 																					__(
-																						'Create from %s',
+																						'Create from “%s”',
 																						'cortext'
 																					),
 																					template.title ||

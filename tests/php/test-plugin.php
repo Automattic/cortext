@@ -26,7 +26,7 @@ final class Test_Plugin extends BaseTestCase {
 			array(
 				'id'          => Templates::EXPERIMENT_ID,
 				'label'       => 'Templates',
-				'description' => 'Start documents and collection rows from saved templates.',
+				'description' => 'Start documents from saved templates.',
 				'group'       => 'Content',
 				'default'     => false,
 			),

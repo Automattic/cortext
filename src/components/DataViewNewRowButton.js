@@ -184,7 +184,7 @@ export default function DataViewNewRowButton( {
 					variant="tertiary"
 					icon={ chevronDown }
 					onClick={ onToggle }
-					label={ __( 'Choose how to create a row', 'cortext' ) }
+					label={ __( 'Choose how to create a document', 'cortext' ) }
 					disabled={
 						disabled ||
 						isCreating ||
@@ -206,7 +206,7 @@ export default function DataViewNewRowButton( {
 								onClose();
 							} }
 						>
-							{ __( 'Blank row', 'cortext' ) }
+							{ __( 'Blank document', 'cortext' ) }
 						</MenuItem>
 						{ templates.map( ( template ) => (
 							<MenuItem
@@ -219,7 +219,7 @@ export default function DataViewNewRowButton( {
 							>
 								{ sprintf(
 									/* translators: %s: template title. */
-									__( 'Create from %s', 'cortext' ),
+									__( 'Create from “%s”', 'cortext' ),
 									template.title ||
 										__( 'Untitled template', 'cortext' )
 								) }

@@ -384,7 +384,7 @@ export default function DocumentRow( {
 															{ sprintf(
 																/* translators: %s: template title */
 																__(
-																	'Add document from %s',
+																	'Add document from “%s”',
 																	'cortext'
 																),
 																template.title ||

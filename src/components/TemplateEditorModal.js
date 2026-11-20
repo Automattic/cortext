@@ -186,11 +186,7 @@ export default function TemplateEditorModal( {
 	return (
 		<Modal
 			className="cortext-row-detail-modal"
-			title={
-				isRowTemplate
-					? __( 'Row template', 'cortext' )
-					: __( 'Document template', 'cortext' )
-			}
+			title={ __( 'Document template', 'cortext' ) }
 			onRequestClose={ closeAfterSave }
 			__experimentalHideHeader
 		>
@@ -203,14 +199,10 @@ export default function TemplateEditorModal( {
 						<div
 							className="cortext-row-detail__toolbar"
 							role="toolbar"
-							aria-label={
-								isRowTemplate
-									? __( 'Row template actions', 'cortext' )
-									: __(
-											'Document template actions',
-											'cortext'
-									  )
-							}
+							aria-label={ __(
+								'Document template actions',
+								'cortext'
+							) }
 						>
 							<div className="cortext-row-detail__toolbar-group cortext-row-detail__toolbar-group--end">
 								<Button

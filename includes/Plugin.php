@@ -118,7 +118,7 @@ final class Plugin {
 		$experiments[] = array(
 			'id'          => Templates::EXPERIMENT_ID,
 			'label'       => __( 'Templates', 'cortext' ),
-			'description' => __( 'Start documents and collection rows from saved templates.', 'cortext' ),
+			'description' => __( 'Start documents from saved templates.', 'cortext' ),
 			'group'       => __( 'Content', 'cortext' ),
 			'default'     => false,
 		);

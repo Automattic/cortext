@@ -207,7 +207,7 @@ describe( 'DataViewNewRowButton templates', () => {
 
 		const primaryButton = screen.getByRole( 'button', { name: 'New' } );
 		const optionsButton = screen.getByRole( 'button', {
-			name: 'Choose how to create a row',
+			name: 'Choose how to create a document',
 		} );
 
 		expect( primaryButton ).toBeEnabled();
@@ -234,7 +234,7 @@ describe( 'DataViewNewRowButton templates', () => {
 		} );
 		expect(
 			screen.queryByRole( 'button', {
-				name: 'Choose how to create a row',
+				name: 'Choose how to create a document',
 			} )
 		).toBeNull();
 		expect(
@@ -262,12 +262,12 @@ describe( 'DataViewNewRowButton templates', () => {
 
 		fireEvent.click(
 			screen.getByRole( 'button', {
-				name: 'Choose how to create a row',
+				name: 'Choose how to create a document',
 			} )
 		);
 		fireEvent.click(
 			screen.getByRole( 'menuitem', {
-				name: 'Create from Alpha',
+				name: 'Create from “Alpha”',
 			} )
 		);
 
@@ -292,12 +292,12 @@ describe( 'DataViewNewRowButton templates', () => {
 
 		fireEvent.click(
 			screen.getByRole( 'button', {
-				name: 'Choose how to create a row',
+				name: 'Choose how to create a document',
 			} )
 		);
 		fireEvent.click(
 			screen.getByRole( 'menuitem', {
-				name: 'Blank row',
+				name: 'Blank document',
 			} )
 		);
 
@@ -332,7 +332,7 @@ describe( 'DataViewNewRowButton templates', () => {
 
 		fireEvent.click(
 			screen.getByRole( 'button', {
-				name: 'Choose how to create a row',
+				name: 'Choose how to create a document',
 			} )
 		);
 		fireEvent.click(
