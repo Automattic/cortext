@@ -229,9 +229,7 @@ async function startParentToolbarOverlapFlashLog( page ) {
 				)
 			).filter( ( toolbar ) => isVisible( toolbar, window ) );
 			const menus = Array.from(
-				iframeDocument.querySelectorAll(
-					'[role="menu"][data-open]'
-				)
+				iframeDocument.querySelectorAll( '[role="menu"][data-open]' )
 			).filter( ( menu ) =>
 				isVisible( menu, iframeDocument.defaultView )
 			);
@@ -932,7 +930,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'hides the parent toolbar only when it overlaps a DataViews menu in the iframe', async ( {
+	test( 'hides the parent toolbar only when it overlaps a field menu in the iframe', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -940,7 +938,7 @@ test.describe( 'Collection view block', () => {
 		const fixture = {};
 
 		try {
-			await page.setViewportSize( { width: 1440, height: 1200 } );
+			await page.setViewportSize( { width: 1100, height: 1200 } );
 			Object.assign(
 				fixture,
 				await createCollectionFixture( requestUtils )
@@ -982,18 +980,42 @@ test.describe( 'Collection view block', () => {
 			const parentToolbar = page.locator(
 				'.cortext-canvas__block-canvas .block-editor-block-contextual-toolbar'
 			);
-			const titleHeader = dataViews
-				.first()
-				.getByRole( 'columnheader', { name: /Title/ } );
-			const titleDragHandle = titleHeader.locator(
-				'.cortext-column-drag-handle'
-			);
-			const openMenu = canvas
+			const selectDataViewBlock = ( blockIndex ) =>
+				page.evaluate( ( index ) => {
+					const dataViewBlocks = window.wp.data
+						.select( 'core/block-editor' )
+						.getBlocks()
+						.filter(
+							( block ) => block.name === 'cortext/data-view'
+						);
+					if ( dataViewBlocks.length !== 2 ) {
+						throw new Error(
+							'Expected exactly two DataView blocks.'
+						);
+					}
+					window.wp.data
+						.dispatch( 'core/block-editor' )
+						.selectBlock( dataViewBlocks[ index ].clientId );
+				}, blockIndex );
+			// Cortext's field menus render inside the editor iframe, where the
+			// parent toolbar can cover them. DataViews menus render in the
+			// parent document's overlay slot, above the toolbar.
+			const fieldMenu = canvas
 				.locator( '[role="menu"][data-open]' )
 				.first();
+			const dataViewsMenu = page
+				.locator(
+					'[data-wp-compat-overlay-slot] [role="menu"][data-open]'
+				)
+				.first();
+			const upperAuthorTrigger = dataViews
+				.first()
+				.getByRole( 'columnheader', { name: /Author/ } )
+				.locator( '.cortext-column-header-trigger' );
 
-			// Start with no selection. This real click selects the block and opens
-			// its native menu, matching the reported path.
+			// Select the lower block, then open the upper field menu with a
+			// synthetic click so the selection stays put. The lower block's
+			// toolbar overlaps the menu, matching the screenshot.
 			await page.evaluate( () => {
 				window.wp.data
 					.dispatch( 'core/block-editor' )
@@ -1001,53 +1023,67 @@ test.describe( 'Collection view block', () => {
 			} );
 			await expect( parentToolbar ).toBeHidden();
 			await startParentToolbarOverlapFlashLog( page );
-			await titleDragHandle.click();
-			await expect( openMenu ).toBeVisible();
-			await expect( parentToolbar ).toHaveCount( 1 );
-			expect(
-				await toolbarMenuGeometry( parentToolbar, openMenu )
-			).toMatchObject( { overlaps: false } );
+			await selectDataViewBlock( 1 );
 			await expect( parentToolbar ).toBeVisible();
-
-			// Keep the menu open and select the lower block. Its toolbar now overlaps
-			// the upper menu, matching the screenshot.
-			await page.evaluate( () => {
-				const dataViewBlocks = window.wp.data
-					.select( 'core/block-editor' )
-					.getBlocks()
-					.filter( ( block ) => block.name === 'cortext/data-view' );
-				if ( dataViewBlocks.length !== 2 ) {
-					throw new Error( 'Expected exactly two DataView blocks.' );
-				}
-				window.wp.data
-					.dispatch( 'core/block-editor' )
-					.selectBlock( dataViewBlocks[ 1 ].clientId );
-			} );
-			await expect( openMenu ).toBeVisible();
+			await upperAuthorTrigger.dispatchEvent( 'click' );
+			await expect( fieldMenu ).toBeVisible();
 			await expect( parentToolbar ).toHaveCount( 1 );
 			expect(
-				await toolbarMenuGeometry( parentToolbar, openMenu )
+				await toolbarMenuGeometry( parentToolbar, fieldMenu )
 			).toMatchObject( { overlaps: true } );
 			await expect( parentToolbar ).toBeHidden();
 			expect( await stopParentToolbarOverlapFlashLog( page ) ).toEqual(
 				[]
 			);
 
-			await openMenu.press( 'Escape' );
-			await expect( openMenu ).toHaveCount( 0 );
+			await fieldMenu.press( 'Escape' );
+			await expect( fieldMenu ).toHaveCount( 0 );
 			await expect( parentToolbar ).toBeVisible();
+
+			// The same overlap with a DataViews menu keeps the toolbar, because
+			// the menu paints above it.
+			await dataViews
+				.first()
+				.getByRole( 'columnheader', { name: /Title/ } )
+				.locator( '.cortext-column-drag-handle' )
+				.click();
+			await expect( dataViewsMenu ).toBeVisible();
+			await selectDataViewBlock( 1 );
+			await expect( dataViewsMenu ).toBeVisible();
+			const dataViewsMenuGeometry = await toolbarMenuGeometry(
+				parentToolbar,
+				dataViewsMenu
+			);
+			expect( dataViewsMenuGeometry ).toMatchObject( { overlaps: true } );
+			await expect( parentToolbar ).toBeVisible();
+			expect(
+				await page.evaluate( ( { menuBox, toolbarBox } ) => {
+					const left = Math.max( menuBox.x, toolbarBox.x );
+					const right = Math.min(
+						menuBox.x + menuBox.width,
+						toolbarBox.x + toolbarBox.width
+					);
+					const top = Math.max( menuBox.y, toolbarBox.y );
+					const bottom = Math.min(
+						menuBox.y + menuBox.height,
+						toolbarBox.y + toolbarBox.height
+					);
+					return Boolean(
+						document
+							.elementFromPoint(
+								( left + right ) / 2,
+								( top + bottom ) / 2
+							)
+							?.closest( '[role="menu"]' )
+					);
+				}, dataViewsMenuGeometry )
+			).toBe( true );
+			await dataViewsMenu.press( 'Escape' );
+			await expect( dataViewsMenu ).toHaveCount( 0 );
 
 			// Select the upper block and open the lower custom menu. They are far
 			// enough apart that the toolbar should stay visible.
-			await page.evaluate( () => {
-				const dataViewBlocks = window.wp.data
-					.select( 'core/block-editor' )
-					.getBlocks()
-					.filter( ( block ) => block.name === 'cortext/data-view' );
-				window.wp.data
-					.dispatch( 'core/block-editor' )
-					.selectBlock( dataViewBlocks[ 0 ].clientId );
-			} );
+			await selectDataViewBlock( 0 );
 			await expect( parentToolbar ).toBeVisible();
 
 			const authorTrigger = dataViews
@@ -1058,17 +1094,17 @@ test.describe( 'Collection view block', () => {
 			// Use a synthetic click so the upper block stays selected.
 			await authorTrigger.dispatchEvent( 'click' );
 
-			await expect( openMenu ).toBeVisible();
+			await expect( fieldMenu ).toBeVisible();
 			await expect(
-				openMenu.getByRole( 'menuitem', { name: 'Rename' } )
+				fieldMenu.getByRole( 'menuitem', { name: 'Rename' } )
 			).toBeVisible();
 			expect(
-				await toolbarMenuGeometry( parentToolbar, openMenu )
+				await toolbarMenuGeometry( parentToolbar, fieldMenu )
 			).toMatchObject( { overlaps: false } );
 			await expect( parentToolbar ).toBeVisible();
 
-			await openMenu.press( 'Escape' );
-			await expect( openMenu ).toHaveCount( 0 );
+			await fieldMenu.press( 'Escape' );
+			await expect( fieldMenu ).toHaveCount( 0 );
 			await expect( parentToolbar ).toBeVisible();
 		} finally {
 			await page.evaluate( () => {
@@ -2852,10 +2888,13 @@ test.describe( 'Collection view block', () => {
 			await tableRow
 				.getByRole( 'button', { name: 'Actions' } )
 				.click( { force: true } );
-			const actionsMenu = canvas
-				.locator( '[role="menu"][data-open]' )
+			// DataViews menus render in the parent document's overlay slot.
+			const actionsMenu = page
+				.locator(
+					'[data-wp-compat-overlay-slot] [role="menu"][data-open]'
+				)
 				.first();
-			const trashMenuItem = canvas.getByRole( 'menuitem', {
+			const trashMenuItem = actionsMenu.getByRole( 'menuitem', {
 				name: 'Trash',
 			} );
 			await expect( actionsMenu ).toBeVisible();
@@ -2965,7 +3004,12 @@ test.describe( 'Collection view block', () => {
 						`/wp-json/cortext/v1/documents/${ fixture.entry.id }/duplicate`
 					)
 			);
-			await canvas.getByRole( 'menuitem', { name: 'Duplicate' } ).click();
+			await page
+				.locator(
+					'[data-wp-compat-overlay-slot] [role="menu"][data-open]'
+				)
+				.getByRole( 'menuitem', { name: 'Duplicate' } )
+				.click();
 			const duplicateResponse = await duplicateResponsePromise;
 			expect( duplicateResponse.ok() ).toBe( true );
 			const duplicateEnvelope = await duplicateResponse.json();
@@ -3553,18 +3597,17 @@ test.describe( 'Collection view block', () => {
 				const selector = element.querySelector(
 					'.dataviews-pagination__page-select'
 				);
-				const [ pageLabel, currentPage, totalLabel ] =
-					selector.children;
-				const buttons = element.querySelector( ':scope > :last-child' );
-				const select = element.querySelector(
-					'.components-select-control__input'
+				const pageLabel = selector.firstElementChild;
+				const totalLabel = selector.lastElementChild;
+				const currentPage = selector.querySelector(
+					'.dataviews-pagination__page-select-trigger'
 				);
-				const container = element.querySelector(
-					'.components-input-control__container'
+				const buttons = element.querySelector(
+					'.dataviews-pagination__page-navigation'
 				);
-				const suffix = element.querySelector(
-					'.components-input-control__suffix'
-				);
+				const container = currentPage;
+				const select = currentPage.querySelector( '[role="combobox"]' );
+				const suffix = select.querySelector( 'svg' );
 				const lineCount = ( node ) => {
 					const range = node.ownerDocument.createRange();
 					range.selectNodeContents( node );
