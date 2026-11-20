@@ -1043,6 +1043,11 @@ tr:has(.cortext-title-cell--is-opening)
 	color: $gray-700;
 }
 
+.cortext-rollup-invalid {
+	color: $gray-700;
+	font-style: italic;
+}
+
 .cortext-data-view-shell {
 	position: relative;
 	display: flex;

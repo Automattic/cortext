@@ -50,6 +50,7 @@ final class DocumentDuplicator {
 		'rollup_target_date_format',
 		'rollup_target_related_collection_id',
 		'rollup_target_relation_multiple',
+		'rollup_invalid',
 	);
 
 	public function __construct( private Documents $documents ) {}

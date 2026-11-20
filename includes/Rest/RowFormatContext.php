@@ -34,7 +34,7 @@ final class RowFormatContext {
 	/**
 	 * Rollup field ID => rollup config.
 	 *
-	 * @var array<int, array{relation_field_id: int, target_field_id: int, aggregator: string}>
+	 * @var array<int, array{relation_field_id: int, target_field_id: int, aggregator: string, invalid: bool}>
 	 */
 	public array $rollup_field_meta = array();
 }

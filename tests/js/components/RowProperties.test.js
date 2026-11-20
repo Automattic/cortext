@@ -812,6 +812,33 @@ describe( 'RowProperties', () => {
 		expect( score ).toHaveValue( '42' );
 	} );
 
+	it( 'explains a flagged rollup instead of showing it as empty', () => {
+		useSelect.mockReturnValue( {
+			title: 'Current title',
+			meta: {},
+			hydratedMeta: { 'field-7': null },
+		} );
+
+		render(
+			<RowProperties
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Total',
+						cortextFieldType: 'rollup',
+						cortextRecordId: 7,
+						cortextRollupInvalid: true,
+						editable: false,
+					},
+				] }
+				row={ {} }
+			/>
+		);
+
+		expect( screen.getByText( 'Target field changed type' ) ).toBeVisible();
+		expect( screen.queryByText( 'Empty' ) ).toBeNull();
+	} );
+
 	it( 'shows rich number displays until the value is edited', () => {
 		useSelect.mockReturnValue( {
 			title: 'Current title',

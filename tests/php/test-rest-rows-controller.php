@@ -728,6 +728,46 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 22.0, (float) get_post_meta( $row_id, $key, true ) );
 	}
 
+	public function test_query_rows_renders_a_flagged_rollup_empty(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$source = $this->create_collection_fixture( 'rollupsource', 'text' );
+		$target = $this->create_collection_fixture( 'rolluptarget', 'number' );
+
+		$relation_id = $this->add_field_to_collection(
+			$source['collection_id'],
+			'relation',
+			array(
+				'related_collection_id' => (string) $target['collection_id'],
+				'relation_multiple'     => '1',
+			)
+		);
+		$rollup_id   = $this->add_field_to_collection(
+			$source['collection_id'],
+			'rollup',
+			array(
+				'rollup_relation_field_id' => (string) $relation_id,
+				'rollup_target_field_id'   => (string) $target['field_id'],
+				'rollup_aggregator'        => 'sum',
+				'rollup_target_type'       => 'number',
+			)
+		);
+
+		$row_id = $this->create_row_for_collection( $source['collection_id'], 'Project A' );
+		foreach ( array( '10', '20' ) as $amount ) {
+			$target_row_id = $this->create_row_for_collection( $target['collection_id'], "Invoice {$amount}" );
+			update_post_meta( $target_row_id, "field-{$target['field_id']}", $amount );
+			add_post_meta( $row_id, "field-{$relation_id}", (string) $target_row_id );
+		}
+
+		$data = $this->query_rows( array( 'trait' => $source['collection_id'] ) )->get_data();
+		$this->assertSame( 30.0, (float) $data['rows'][0]['meta'][ "field-{$rollup_id}" ] );
+
+		update_post_meta( $rollup_id, 'rollup_invalid', '1' );
+
+		$data = $this->query_rows( array( 'trait' => $source['collection_id'] ) )->get_data();
+		$this->assertNull( $data['rows'][0]['meta'][ "field-{$rollup_id}" ] );
+	}
+
 	public function test_recomputing_collection_formulas_includes_archived_rows(): void {
 		( new ArchiveCascade() )->register_status();
 
