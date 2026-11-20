@@ -85,22 +85,13 @@ test.describe( 'Templates', () => {
 
 			const field = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collectionId }/fields`,
 				data: {
 					title: `Status ${ suffix }`,
-					status: 'private',
-					meta: { type: 'text' },
+					type: 'text',
 				},
 			} );
 			fixture.fieldId = field.id;
-
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collectionId }`,
-				data: {
-					meta: { cortext_fields: [ String( fixture.fieldId ) ] },
-				},
-			} );
 
 			const rowTemplateResponse = await requestUtils.rest( {
 				method: 'POST',
