@@ -161,8 +161,7 @@ export default function TraitControl( {
 			onChange?.();
 		} catch ( saveError ) {
 			setError(
-				saveError?.message ??
-					__( 'Could not update traits.', 'cortext' )
+				saveError?.message ?? __( "Couldn't update traits.", 'cortext' )
 			);
 		} finally {
 			releaseWriteLock?.();

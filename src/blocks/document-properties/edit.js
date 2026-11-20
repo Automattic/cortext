@@ -626,7 +626,7 @@ export default function Edit() {
 						] }
 					>
 						{ __(
-							'Could not load the collections for this item.',
+							"Couldn't load the collections for this item.",
 							'cortext'
 						) }
 					</Notice>

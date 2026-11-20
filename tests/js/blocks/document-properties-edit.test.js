@@ -562,7 +562,7 @@ describe( 'document-properties Customize properties mode', () => {
 		render( <Edit /> );
 
 		expect( screen.getByRole( 'alert' ) ).toHaveTextContent(
-			'Could not load the collections for this item.'
+			"Couldn't load the collections for this item."
 		);
 		fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
 		expect( refresh ).toHaveBeenCalled();
@@ -1360,7 +1360,7 @@ describe( 'document-properties Customize properties mode', () => {
 
 		expect( screen.queryByTestId( 'row-properties' ) ).toBeNull();
 		expect( screen.getByRole( 'alert' ) ).toHaveTextContent(
-			'Could not load the collections for this item.'
+			"Couldn't load the collections for this item."
 		);
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
