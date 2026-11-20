@@ -181,7 +181,7 @@ export function DocumentPeekProvider( { children } ) {
 					setPendingTransition( transition );
 					setSaveError(
 						__(
-							'Could not save changes. Retry or discard your edits to continue.',
+							"Couldn't save changes. Retry or discard your edits to continue.",
 							'cortext'
 						)
 					);

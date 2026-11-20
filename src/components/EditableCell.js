@@ -946,7 +946,7 @@ export default function EditableCell( {
 			closeEditor();
 			return true;
 		} catch ( err ) {
-			setError( err?.message ?? __( 'Could not save.', 'cortext' ) );
+			setError( err?.message ?? __( "Couldn't save.", 'cortext' ) );
 			setIsSaving( false );
 			return false;
 		}

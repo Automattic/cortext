@@ -304,7 +304,7 @@ export default function Sidebar( {
 			} catch ( err ) {
 				setFavoritesError(
 					err?.message ??
-						__( 'Could not reorder favorites.', 'cortext' )
+						__( "Couldn't reorder favorites.", 'cortext' )
 				);
 			}
 		},
@@ -524,7 +524,7 @@ export default function Sidebar( {
 			createAndOpenWith(
 				create,
 				input,
-				__( 'Could not create a document.', 'cortext' )
+				__( "Couldn't create a document.", 'cortext' )
 			),
 		[ create, createAndOpenWith ]
 	);
@@ -853,7 +853,7 @@ export default function Sidebar( {
 												role="alert"
 											>
 												{ __(
-													'Could not load these documents.',
+													"Couldn't load these documents.",
 													'cortext'
 												) }
 											</p>

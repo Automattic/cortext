@@ -323,7 +323,7 @@ describe( 'document archive lifecycle', () => {
 		);
 		expect( ctx.onAfterArchive ).not.toHaveBeenCalled();
 		expect( ctx.createErrorNotice ).toHaveBeenCalledWith(
-			'Could not save changes. Archive was canceled.',
+			"Couldn't save changes. Archive was canceled.",
 			{
 				id: 'cortext-document-archive-save-error',
 				type: 'snackbar',
@@ -613,7 +613,7 @@ describe( 'document archive lifecycle', () => {
 			lifecycleFocusIntent
 		);
 		expect( ctx.createErrorNotice ).toHaveBeenCalledWith(
-			'Could not save changes. Move to Trash was canceled.',
+			"Couldn't save changes. Move to Trash was canceled.",
 			{
 				id: 'cortext-document-trash-save-error',
 				type: 'snackbar',

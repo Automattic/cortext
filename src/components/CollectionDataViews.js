@@ -1090,7 +1090,7 @@ export default function CollectionDataViews( {
 				setRowActionError(
 					freezeError?.message ??
 						__(
-							'Could not change the lock on this document.',
+							"Couldn't change the lock on this document.",
 							'cortext'
 						)
 				);
@@ -1128,7 +1128,7 @@ export default function CollectionDataViews( {
 			} catch ( apiError ) {
 				setRowActionError(
 					apiError?.message ??
-						__( 'Could not duplicate this document.', 'cortext' )
+						__( "Couldn't duplicate this document.", 'cortext' )
 				);
 			}
 		},
@@ -1310,12 +1310,12 @@ export default function CollectionDataViews( {
 				let deleteErrorMessage;
 				if ( nextRows.length === 1 ) {
 					deleteErrorMessage = __(
-						'Could not move document to Trash.',
+						"Couldn't move document to Trash.",
 						'cortext'
 					);
 				} else if ( failedRows.length === nextRows.length ) {
 					deleteErrorMessage = __(
-						'Could not move selected documents to Trash.',
+						"Couldn't move selected documents to Trash.",
 						'cortext'
 					);
 				} else {
@@ -1463,12 +1463,12 @@ export default function CollectionDataViews( {
 				let archiveErrorMessage;
 				if ( nextRows.length === 1 ) {
 					archiveErrorMessage = __(
-						'Could not archive this document.',
+						"Couldn't archive this document.",
 						'cortext'
 					);
 				} else if ( failedRows.length === nextRows.length ) {
 					archiveErrorMessage = __(
-						'Could not archive selected documents.',
+						"Couldn't archive selected documents.",
 						'cortext'
 					);
 				} else {
@@ -2008,7 +2008,7 @@ export default function CollectionDataViews( {
 		return (
 			<DataViewStateShell status="error">
 				{ error ?? (
-					<p>{ __( 'Could not load documents.', 'cortext' ) }</p>
+					<p>{ __( "Couldn't load documents.", 'cortext' ) }</p>
 				) }
 			</DataViewStateShell>
 		);

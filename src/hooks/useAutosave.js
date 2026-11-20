@@ -383,7 +383,7 @@ export default function useAutosave( options = {} ) {
 			// around until the user closes it or the save recovers.
 			if ( ! errorNoticeShownRef.current ) {
 				createErrorNotice(
-					__( 'Could not save your changes.', 'cortext' ),
+					__( "Couldn't save your changes.", 'cortext' ),
 					{
 						id: AUTOSAVE_ERROR_NOTICE_ID,
 						type: 'snackbar',

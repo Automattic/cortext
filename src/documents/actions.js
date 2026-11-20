@@ -153,7 +153,7 @@ export function undoAction( ctx, run, noticeId ) {
 			onClick: () =>
 				run().catch( ( error ) =>
 					ctx.createErrorNotice?.(
-						error?.message ?? __( 'Could not undo.', 'cortext' ),
+						error?.message ?? __( "Couldn't undo.", 'cortext' ),
 						{ id: noticeId, type: 'snackbar' }
 					)
 				),
@@ -298,12 +298,12 @@ export function archivedMessage( nestedCount = 0 ) {
 }
 
 export function archiveSaveFailureMessage() {
-	return __( 'Could not save changes. Archive was canceled.', 'cortext' );
+	return __( "Couldn't save changes. Archive was canceled.", 'cortext' );
 }
 
 export function trashSaveFailureMessage() {
 	return __(
-		'Could not save changes. Move to Trash was canceled.',
+		"Couldn't save changes. Move to Trash was canceled.",
 		'cortext'
 	);
 }
@@ -622,7 +622,7 @@ async function setDocumentFrozen( record, ctx, frozen ) {
 	} );
 	if ( response === false ) {
 		ctx.createErrorNotice?.(
-			__( 'Could not save changes. Lock was canceled.', 'cortext' ),
+			__( "Couldn't save changes. Lock was canceled.", 'cortext' ),
 			{ id: FREEZE_NOTICE_ID, type: 'snackbar' }
 		);
 		return null;

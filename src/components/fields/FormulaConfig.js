@@ -515,7 +515,7 @@ export default function FormulaConfig( {
 		} catch ( apiError ) {
 			onError?.(
 				apiError?.message ||
-					__( 'Could not save the formula.', 'cortext' )
+					__( "Couldn't save the formula.", 'cortext' )
 			);
 		}
 	};

@@ -255,7 +255,7 @@ async function moveParagraphAfterTitle( page, content ) {
 				getParagraphText( candidate ) === paragraphContent
 		);
 		if ( ! block || titleIndex === -1 ) {
-			throw new Error( 'Could not move paragraph after title.' );
+			throw new Error( "Couldn't move paragraph after title." );
 		}
 		window.wp.data
 			.dispatch( 'core/block-editor' )

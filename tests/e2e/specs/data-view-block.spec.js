@@ -182,7 +182,7 @@ async function startParentToolbarOverlapFlashLog( page ) {
 		);
 		const iframeDocument = iframe?.contentDocument;
 		if ( ! canvasRoot || ! iframeDocument?.body ) {
-			throw new Error( 'Could not instrument the editor canvas.' );
+			throw new Error( "Couldn't instrument the editor canvas." );
 		}
 
 		let stopped = false;
@@ -359,7 +359,7 @@ async function selectParentDataViewBlock( page ) {
 			.getBlocks()
 			.find( ( block ) => block.name === 'cortext/data-view' );
 		if ( ! dataViewBlock ) {
-			throw new Error( 'Could not find the DataView block.' );
+			throw new Error( "Couldn't find the DataView block." );
 		}
 		window.wp.data
 			.dispatch( 'core/block-editor' )
@@ -374,7 +374,7 @@ async function getParentDataViewAttributes( page ) {
 			.getBlocks()
 			.find( ( block ) => block.name === 'cortext/data-view' );
 		if ( ! dataViewBlock ) {
-			throw new Error( 'Could not find the DataView block.' );
+			throw new Error( "Couldn't find the DataView block." );
 		}
 		return JSON.parse( JSON.stringify( dataViewBlock.attributes ) );
 	} );
@@ -4263,9 +4263,7 @@ test.describe( 'Collection view block', () => {
 				await getParentDataViewAttributes( page );
 			expect( afterSideAttributes ).toEqual( beforeAttributes );
 
-			await detail
-				.getByRole( 'button', { name: 'Center peek' } )
-				.click();
+			await detail.getByRole( 'button', { name: 'Center peek' } ).click();
 			const modalDetail = page.locator(
 				'.components-modal__frame.cortext-row-detail-modal'
 			);
@@ -4716,9 +4714,7 @@ test.describe( 'Collection view block', () => {
 			await expect(
 				detail.getByRole( 'button', { name: 'Change layout' } )
 			).toHaveCount( 0 );
-			await detail
-				.getByRole( 'button', { name: 'Center peek' } )
-				.click();
+			await detail.getByRole( 'button', { name: 'Center peek' } ).click();
 			const modalDetail = page.locator(
 				'.components-modal__frame.cortext-row-detail-modal'
 			);

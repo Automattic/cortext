@@ -274,7 +274,7 @@ export default function Edit() {
 				setOptimisticEntries( previousOptimisticEntries );
 				setSaveError(
 					error?.message ??
-						__( 'Could not save the field layout.', 'cortext' )
+						__( "Couldn't save the field layout.", 'cortext' )
 				);
 			}
 		},

@@ -695,7 +695,7 @@ export default function Edit( {
 					}
 					error={
 						<Notice status="error" isDismissible={ false }>
-							{ __( 'Could not load documents.', 'cortext' ) }
+							{ __( "Couldn't load documents.", 'cortext' ) }
 						</Notice>
 					}
 				/>

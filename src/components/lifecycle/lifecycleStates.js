@@ -52,7 +52,7 @@ export const TRASH = {
 		title: __( 'Trash', 'cortext' ),
 		listLabel: __( 'Documents in Trash', 'cortext' ),
 		searchLabel: __( 'Search Trash', 'cortext' ),
-		loadError: __( 'Could not load Trash.', 'cortext' ),
+		loadError: __( "Couldn't load Trash.", 'cortext' ),
 		emptyList: __( 'Trash is empty.', 'cortext' ),
 		primaryShortcut: __( 'restore', 'cortext' ),
 		secondaryShortcut: __( 'delete', 'cortext' ),
@@ -65,8 +65,8 @@ export const TRASH = {
 				  )
 				: __( 'Restore', 'cortext' ),
 		secondaryLabel: __( 'Delete permanently', 'cortext' ),
-		restoreError: __( 'Could not restore this document.', 'cortext' ),
-		secondaryError: __( 'Could not delete this document.', 'cortext' ),
+		restoreError: __( "Couldn't restore this document.", 'cortext' ),
+		secondaryError: __( "Couldn't delete this document.", 'cortext' ),
 		noticeTitle: __( 'This document is in Trash.', 'cortext' ),
 		emptyTitle: __( 'Nothing in Trash', 'cortext' ),
 		emptyBody: __(
@@ -100,15 +100,15 @@ export const ARCHIVED = {
 		title: __( 'Archived', 'cortext' ),
 		listLabel: __( 'Archived documents', 'cortext' ),
 		searchLabel: __( 'Search Archived', 'cortext' ),
-		loadError: __( 'Could not load archived documents.', 'cortext' ),
+		loadError: __( "Couldn't load archived documents.", 'cortext' ),
 		emptyList: __( 'No archived documents.', 'cortext' ),
 		primaryShortcut: __( 'unarchive', 'cortext' ),
 		secondaryShortcut: __( 'trash', 'cortext' ),
 		restoreLabel: () => __( 'Unarchive', 'cortext' ),
 		secondaryLabel: __( 'Move to Trash', 'cortext' ),
-		restoreError: __( 'Could not unarchive this document.', 'cortext' ),
+		restoreError: __( "Couldn't unarchive this document.", 'cortext' ),
 		secondaryError: __(
-			'Could not move this document to Trash.',
+			"Couldn't move this document to Trash.",
 			'cortext'
 		),
 		noticeTitle: __(

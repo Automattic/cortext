@@ -101,7 +101,7 @@ export default function ExperimentsPane() {
 					canManage: false,
 					experiments: [],
 					isLoading: false,
-					error: __( 'Could not load experiments.', 'cortext' ),
+					error: __( "Couldn't load experiments.", 'cortext' ),
 				} );
 			} );
 		return () => {
@@ -182,7 +182,7 @@ export default function ExperimentsPane() {
 						} ) );
 					}
 					createErrorNotice(
-						__( 'Could not save that change.', 'cortext' ),
+						__( "Couldn't save that change.", 'cortext' ),
 						{
 							id: 'cortext-experiments-update-failed',
 							type: 'snackbar',

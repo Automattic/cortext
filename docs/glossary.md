@@ -19,7 +19,7 @@ The words Cortext uses in its interface, and how to write them. Check here befor
 - **Tone.** Friendly and a little playful. When two words are equally clear, pick the warmer one: "Side peek", not "Side panel"; "Center peek", not "Center modal". Clarity still wins over cuteness.
 - **Name what people do, not how it is built.** "Side peek" says what you are doing; "side panel", "pop-up", and "modal" describe the widget. The same goes for "drawer", "popover", and "toggle".
 - **Sentence case** for every label, button, menu item, and title: "Add to favorites", not "Add To Favorites". WordPress admin post type labels follow core's own casing.
-- **Errors** start with "Could not", then say what failed: "Could not save the formula." Do not use "We couldn't" or "Cortext could not", or blame the user. Contractions are fine elsewhere ("This can't be undone.").
+- **Errors** start with "Couldn't", then say what failed: "Couldn't save the formula." Do not use "We couldn't" or "Cortext could not", or blame the user. Use contractions in the rest of the copy too ("This can't be undone.").
 - **Next step.** When the user can fix the problem, say how and use the term from the table: "Unarchive this collection before changing its fields."
 - **Quotes.** Put curly quotes around names the user typed, like “%s”. Keep straight quotes in formula examples and in REST errors about field IDs or operators.
 - **Ellipsis.** Use the single character `…`. Add it to menu items that open another step ("Change type…", "Empty Trash…") and to progress states ("Saving…").

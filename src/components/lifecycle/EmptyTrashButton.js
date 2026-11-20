@@ -44,7 +44,7 @@ export default function EmptyTrashButton( { count } ) {
 			);
 		} catch ( error ) {
 			createErrorNotice(
-				error?.message ?? __( 'Could not empty Trash.', 'cortext' ),
+				error?.message ?? __( "Couldn't empty Trash.", 'cortext' ),
 				{ id: 'cortext-trash-emptied', type: 'snackbar' }
 			);
 		} finally {

@@ -96,7 +96,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	const showCascadePublishError = useCallback( () => {
 		createErrorNotice(
 			__(
-				'Could not publish the collections this document references. The document was not published.',
+				"Couldn't publish the collections this document references. The document was not published.",
 				'cortext'
 			),
 			{
@@ -108,7 +108,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	const showArchivedReferenceError = useCallback( () => {
 		createErrorNotice(
 			__(
-				'Could not publish this document because it references an archived collection. Unarchive the collection first.',
+				"Couldn't publish this document because it references an archived collection. Unarchive the collection first.",
 				'cortext'
 			),
 			{
@@ -249,7 +249,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 					{ error && (
 						<p>
 							{ __(
-								'Could not check for public dependent documents.',
+								"Couldn't check for public dependent documents.",
 								'cortext'
 							) }
 						</p>

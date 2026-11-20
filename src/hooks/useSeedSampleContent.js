@@ -32,7 +32,7 @@ export default function useSeedSampleContent() {
 			window.location.reload();
 		} catch ( err ) {
 			setError(
-				err?.message || __( 'Could not add demo content.', 'cortext' )
+				err?.message || __( "Couldn't add demo content.", 'cortext' )
 			);
 			setIsSeeding( false );
 		}

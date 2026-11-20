@@ -247,7 +247,7 @@ function withoutKey( object, key ) {
 }
 
 function saveErrorMessage( error ) {
-	return error?.message || __( 'Could not save this value.', 'cortext' );
+	return error?.message || __( "Couldn't save this value.", 'cortext' );
 }
 
 function shouldDebouncePropertySave( field ) {

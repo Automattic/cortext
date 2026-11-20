@@ -452,7 +452,7 @@ export default function EditOptionsPopover( {
 			{ update.error ? (
 				<Notice status="error" isDismissible={ false }>
 					{ update.error?.message ||
-						__( 'Could not save options.', 'cortext' ) }
+						__( "Couldn't save options.", 'cortext' ) }
 				</Notice>
 			) : null }
 			<div

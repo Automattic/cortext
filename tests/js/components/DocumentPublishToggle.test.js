@@ -232,7 +232,7 @@ describe( 'DocumentPublishToggle', () => {
 
 		await waitFor( () =>
 			expect( noticesDispatch.createErrorNotice ).toHaveBeenCalledWith(
-				'Could not publish this document because it references an archived collection. Unarchive the collection first.',
+				"Couldn't publish this document because it references an archived collection. Unarchive the collection first.",
 				{
 					id: 'cortext-document-publish-error',
 					type: 'snackbar',
@@ -276,7 +276,7 @@ describe( 'DocumentPublishToggle', () => {
 			},
 		];
 		coreResolve.getEntityRecord.mockRejectedValue(
-			new Error( 'Could not load collection' )
+			new Error( "Couldn't load collection" )
 		);
 
 		render( <DocumentPublishToggle postId={ 7 } /> );

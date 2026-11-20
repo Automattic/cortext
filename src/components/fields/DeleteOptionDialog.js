@@ -51,7 +51,7 @@ export default function DeleteOptionDialog( {
 				if ( ! cancelled ) {
 					setError(
 						__(
-							'Could not check whether documents use this option.',
+							"Couldn't check whether documents use this option.",
 							'cortext'
 						)
 					);

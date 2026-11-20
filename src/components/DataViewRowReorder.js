@@ -1780,7 +1780,7 @@ export default function DataViewRowReorder( {
 					} );
 				}
 				createErrorNotice(
-					__( 'Could not move the document.', 'cortext' ),
+					__( "Couldn't move the document.", 'cortext' ),
 					{
 						id: ROW_REORDER_NOTICE_ID,
 						type: 'snackbar',
