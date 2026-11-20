@@ -4,6 +4,8 @@ Cortext is in beta. The product surface is moving, so small pull requests are mu
 
 Start with [Getting started](docs/getting-started.md) for setup, local development, and test commands.
 
+When you add or change interface text, follow the [Glossary](docs/glossary.md).
+
 ## Branches
 
 Use a short, self-explanatory branch name. Prefixes like `add/`, `fix/`, or `docs/` are fine, but clarity matters more than strict naming.
