@@ -36,7 +36,7 @@ import DataViewNewRowButton from './DataViewNewRowButton';
 import DataViewRowReorder from './DataViewRowReorder';
 import {
 	useDocumentPeekActions,
-	useDocumentPeekState,
+	useOpenDocumentId,
 } from './DocumentPeekProvider';
 import { CurrentViewModeProvider } from './CurrentViewModeContext';
 import { RowMutationContext } from './EditableCell';
@@ -769,8 +769,7 @@ export default function CollectionDataViews( {
 	const savedRowDetailMode = getRowDetailMode( view );
 	const postType = collectionId ? 'crtxt_document' : null;
 	const { openDocument, closeDocument } = useDocumentPeekActions();
-	const { peek } = useDocumentPeekState();
-	const openRowId = peek?.docId ?? null;
+	const openRowId = useOpenDocumentId();
 
 	// Keep the table's row context with the peek. The host uses it for
 	// next/previous, refresh, and writing mode changes back to this view. Refs

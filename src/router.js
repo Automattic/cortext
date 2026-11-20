@@ -15,7 +15,7 @@ import CommandPalette from './components/CommandPalette';
 import BetaNoticeModal from './components/BetaNoticeModal';
 import { DocumentPeekProvider } from './components/DocumentPeekProvider';
 import DocumentPeekHost from './components/DocumentPeekHost';
-import { RowDetailSidebarSlot } from './components/DocumentPeekLayer';
+import { DocumentPeekLayer } from './components/DocumentPeekLayer';
 import { SurfaceFocusProvider } from './components/SurfaceFocusContext';
 import { ActiveEditorProvider } from './components/ActiveEditorContext';
 import useSidebarLayout from './hooks/useSidebarLayout';
@@ -97,7 +97,7 @@ function RootLayout() {
 												history={ router.history }
 											/>
 										</main>
-										<RowDetailSidebarSlot />
+										<DocumentPeekLayer />
 									</div>
 									<CommandPalette canvasRef={ canvasRef } />
 									{ betaNotice.isOpen && (

@@ -4176,10 +4176,16 @@ test.describe( 'Collection view block', () => {
 			expect( afterSideAttributes ).toEqual( beforeAttributes );
 
 			await detail.getByRole( 'button', { name: 'Center peek' } ).click();
-			const modalDetail = page.locator(
-				'.components-modal__frame.cortext-row-detail-modal'
-			);
+			const modalDetail = page.locator( '.cortext-row-detail--modal' );
 			await expect( modalDetail ).toBeVisible();
+			// The chosen mode is saved to the view once the panel settles.
+			await expect
+				.poll(
+					async () =>
+						( await getParentDataViewAttributes( page ) ).view
+							?.rowDetailMode
+				)
+				.toBe( 'modal' );
 			await selectParentDataViewBlock( page );
 			const beforeModalAttributes =
 				await getParentDataViewAttributes( page );
@@ -4609,9 +4615,7 @@ test.describe( 'Collection view block', () => {
 				detail.getByRole( 'button', { name: 'Change layout' } )
 			).toHaveCount( 0 );
 			await detail.getByRole( 'button', { name: 'Center peek' } ).click();
-			const modalDetail = page.locator(
-				'.components-modal__frame.cortext-row-detail-modal'
-			);
+			const modalDetail = page.locator( '.cortext-row-detail--modal' );
 			await expect( modalDetail ).toBeVisible();
 			await expect(
 				modalDetail.getByRole( 'button', { name: 'Center peek' } )

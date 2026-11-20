@@ -23,6 +23,7 @@ import {
 	ActiveEditorProvider,
 	useActiveEditor,
 } from '../../../src/components/ActiveEditorContext';
+import { withViewTransition } from '../../../src/hooks/viewTransition';
 
 function wrapper( { children } ) {
 	return (
@@ -228,7 +229,96 @@ describe( 'DocumentPeekProvider', () => {
 			to: '/$',
 			params: { _splat: 'ada-lovelace-12' },
 		} );
+	} );
+
+	it( 'saves a pending mode before opening full screen', async () => {
+		const onModeChange = jest.fn();
+		const { result } = renderHook( useBoth, { wrapper } );
+
+		await act( async () => {
+			result.current.actions.openDocument( {
+				id: 12,
+				slug: 'ada-lovelace',
+				preferredMode: 'side',
+				source: { onModeChange },
+			} );
+		} );
+		await act( async () => {
+			await result.current.actions.requestMode( 'modal' );
+		} );
+		// The save waits for the resize to finish.
+		expect( onModeChange ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			await result.current.actions.requestMode( 'full' );
+		} );
+
+		expect( onModeChange ).toHaveBeenCalledWith( 'modal' );
+	} );
+
+	it( 'keeps a peek opened full screen up until the route swaps the page in', async () => {
+		const { result } = renderHook( useBoth, { wrapper } );
+
+		await act( async () => {
+			result.current.actions.openDocument( {
+				id: 12,
+				slug: 'ada-lovelace',
+				postType: 'crtxt_people',
+				preferredMode: 'modal',
+			} );
+		} );
+		await act( async () => {
+			await result.current.actions.requestMode( 'full' );
+		} );
+
+		expect( result.current.state.peek ).toMatchObject( {
+			docId: 12,
+			isExiting: true,
+		} );
+		expect( document.documentElement.dataset.cortextPeekToFull ).toBe(
+			'leaving'
+		);
+
+		// The route's swap runs through withViewTransition, which closes the
+		// peek in the same update.
+		const swapPage = jest.fn();
+		act( () => {
+			withViewTransition( swapPage );
+		} );
+
+		expect( swapPage ).toHaveBeenCalled();
 		expect( result.current.state.peek ).toBe( null );
+		await act( async () => {} );
+		expect(
+			document.documentElement.dataset.cortextPeekToFull
+		).toBeUndefined();
+	} );
+
+	it( 'closes a peek opened full screen when the route never swaps', async () => {
+		jest.useFakeTimers();
+		try {
+			const { result } = renderHook( useBoth, { wrapper } );
+
+			await act( async () => {
+				result.current.actions.openDocument( {
+					id: 12,
+					slug: 'ada-lovelace',
+					preferredMode: 'side',
+				} );
+			} );
+			await act( async () => {
+				await result.current.actions.requestMode( 'full' );
+			} );
+			expect( result.current.state.peek ).not.toBe( null );
+
+			await act( async () => {
+				jest.advanceTimersByTime( 2000 );
+			} );
+
+			expect( result.current.state.peek ).toBe( null );
+		} finally {
+			jest.useRealTimers();
+		}
 	} );
 
 	it( 'returns safe no-ops when actions are used outside the provider', () => {
