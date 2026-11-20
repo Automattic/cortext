@@ -117,9 +117,21 @@ async function canvasHasFocusWithin( page, selector ) {
 		return editorCanvas( page )
 			.locator( selector )
 			.first()
-			.evaluate( ( target ) =>
-				target.contains( target.ownerDocument.activeElement )
-			);
+			.evaluate( ( target ) => {
+				const { activeElement, defaultView } = target.ownerDocument;
+				if ( target.contains( activeElement ) ) {
+					return true;
+				}
+				// Rich text blocks share one editable root, so the caret can sit
+				// in the block while the root keeps focus.
+				const anchor = defaultView.getSelection()?.anchorNode;
+				return Boolean(
+					activeElement?.isContentEditable &&
+						anchor &&
+						activeElement.contains( target ) &&
+						target.contains( anchor )
+				);
+			} );
 	} catch ( error ) {
 		if (
 			/Frame was detached|Execution context was destroyed/.test(
