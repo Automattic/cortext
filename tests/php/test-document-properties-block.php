@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for seeding the properties block on rows entering Trash or Archived.
+ * Tests for seeding the title and properties blocks on every new document.
  *
  * @package Cortext
  */
@@ -71,162 +71,135 @@ final class Test_Document_Properties_Block extends BaseTestCase {
 		parent::tear_down();
 	}
 
-	public function test_archiving_a_row_adds_properties_after_title(): void {
-		$row_id = $this->create_row( $this->create_collection() );
-
-		$this->archive_cascade->archive( $row_id );
-
-		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $row_id ) );
-		$this->assertHeaderIsTitleThenProperties( $row_id );
+	public function test_new_documents_get_title_then_properties(): void {
+		$this->assertHeaderIsTitleThenProperties( $this->create_page() );
+		$this->assertHeaderIsTitleThenProperties( $this->create_collection() );
+		$this->assertHeaderIsTitleThenProperties( $this->create_row( $this->create_collection() ) );
 	}
 
-	public function test_trashing_a_row_adds_properties_after_title(): void {
-		$row_id = $this->create_row( $this->create_collection() );
-
-		wp_trash_post( $row_id );
-
-		$this->assertSame( 'trash', get_post_status( $row_id ) );
-		$this->assertHeaderIsTitleThenProperties( $row_id );
-	}
-
-	public function test_body_blocks_stay_after_the_inserted_properties(): void {
-		$body   = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
-		$row_id = $this->create_row( $this->create_collection(), $body );
-
-		$this->archive_cascade->archive( $row_id );
+	public function test_body_blocks_stay_after_the_header(): void {
+		$body    = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
+		$page_id = $this->create_page( $body );
 
 		$this->assertSame(
 			DocumentIdentity::header_blocks_markup() . DocumentIdentity::properties_block_markup() . $body,
-			get_post_field( 'post_content', $row_id, 'raw' )
+			get_post_field( 'post_content', $page_id, 'raw' )
 		);
 	}
 
 	public function test_content_around_the_title_is_kept_byte_for_byte(): void {
 		$this->act_as_unfiltered_html_user();
-		$title  = '<!-- wp:core/post-title {"level":1,"lock":{"move":true,"remove":true}} /-->';
-		$body   = "\n\n" . '<!-- wp:group {"style":{},"ratio":1.0,"note":"a\\/b<c"} --><div class="wp-block-group"></div><!-- /wp:group -->';
-		$row_id = $this->create_row( $this->create_collection() );
-		$this->set_raw_content( $row_id, $title . $body );
+		$title = '<!-- wp:core/post-title {"level":1,"lock":{"move":true,"remove":true}} /-->';
+		$body  = "\n\n" . '<!-- wp:group {"style":{},"ratio":1.0,"note":"a\\/b<c"} --><div class="wp-block-group"></div><!-- /wp:group -->';
 
-		wp_trash_post( $row_id );
+		$page_id = $this->create_page( $title . $body );
 
 		$this->assertSame(
 			$title . DocumentIdentity::properties_block_markup() . $body,
-			get_post_field( 'post_content', $row_id, 'raw' )
+			get_post_field( 'post_content', $page_id, 'raw' )
 		);
 	}
 
 	public function test_properties_go_after_a_title_with_a_closing_comment(): void {
 		$this->act_as_unfiltered_html_user();
-		$title  = '<!-- wp:post-title {"level":1} --><!-- /wp:post-title -->';
-		$body   = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
-		$row_id = $this->create_row( $this->create_collection() );
-		$this->set_raw_content( $row_id, $title . $body );
+		$title = '<!-- wp:post-title {"level":1} --><!-- /wp:post-title -->';
+		$body  = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
 
-		$this->archive_cascade->archive( $row_id );
+		$page_id = $this->create_page( $title . $body );
 
 		$this->assertSame(
 			$title . DocumentIdentity::properties_block_markup() . $body,
-			get_post_field( 'post_content', $row_id, 'raw' )
+			get_post_field( 'post_content', $page_id, 'raw' )
 		);
 	}
 
-	public function test_archiving_a_collection_adds_properties_to_cascaded_rows(): void {
-		$collection_id = $this->create_collection();
-		$row_ids       = array( $this->create_row( $collection_id ), $this->create_row( $collection_id ) );
-
-		$this->archive_cascade->archive( $collection_id );
-
-		foreach ( $row_ids as $row_id ) {
-			$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $row_id ) );
-			$this->assertHeaderIsTitleThenProperties( $row_id );
-		}
-	}
-
-	public function test_trashing_a_collection_adds_properties_to_cascaded_rows(): void {
-		$collection_id = $this->create_collection();
-		$row_ids       = array( $this->create_row( $collection_id ), $this->create_row( $collection_id ) );
-
-		wp_trash_post( $collection_id );
-
-		foreach ( $row_ids as $row_id ) {
-			$this->assertSame( 'trash', get_post_status( $row_id ) );
-			$this->assertHeaderIsTitleThenProperties( $row_id );
-		}
-	}
-
-	public function test_row_that_already_has_properties_is_left_untouched(): void {
-		$content      = DocumentIdentity::header_blocks_markup()
+	public function test_content_that_already_has_both_blocks_is_left_untouched(): void {
+		$content = DocumentIdentity::header_blocks_markup()
 			. '<!-- wp:cortext/document-properties {"lock":{"move":true,"remove":true}} /-->'
 			. "\n\n" . '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
-		$archived_row = $this->create_row( $this->create_collection(), $content );
-		$trashed_row  = $this->create_row( $this->create_collection(), $content );
 
-		$this->archive_cascade->archive( $archived_row );
-		wp_trash_post( $trashed_row );
-
-		$this->assertSame( $content, get_post_field( 'post_content', $archived_row, 'raw' ) );
-		$this->assertSame( $content, get_post_field( 'post_content', $trashed_row, 'raw' ) );
+		$this->assertSame( $content, get_post_field( 'post_content', $this->create_page( $content ), 'raw' ) );
 	}
 
-	public function test_pages_and_collections_are_left_untouched(): void {
-		$archived_page       = $this->create_page();
-		$trashed_page        = $this->create_page();
-		$archived_collection = $this->create_collection();
-		$trashed_collection  = $this->create_collection();
-		$before              = array();
-		foreach ( array( $archived_page, $trashed_page, $archived_collection, $trashed_collection ) as $id ) {
-			$before[ $id ] = get_post_field( 'post_content', $id, 'raw' );
-		}
+	public function test_content_with_properties_but_no_title_gets_the_title_first(): void {
+		$content = DocumentIdentity::properties_block_markup() . '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
 
-		$this->archive_cascade->archive( $archived_page );
-		$this->archive_cascade->archive( $archived_collection );
-		wp_trash_post( $trashed_page );
-		wp_trash_post( $trashed_collection );
-
-		foreach ( $before as $id => $content ) {
-			$this->assertSame( $content, get_post_field( 'post_content', $id, 'raw' ) );
-		}
+		$this->assertSame(
+			DocumentIdentity::header_blocks_markup() . $content,
+			get_post_field( 'post_content', $this->create_page( $content ), 'raw' )
+		);
 	}
 
-	public function test_restoring_does_not_change_content(): void {
-		$archived_row = $this->create_row( $this->create_collection() );
-		$trashed_row  = $this->create_row( $this->create_collection() );
-		$this->archive_cascade->archive( $archived_row );
-		wp_trash_post( $trashed_row );
-		$archived_content = get_post_field( 'post_content', $archived_row, 'raw' );
-		$trashed_content  = get_post_field( 'post_content', $trashed_row, 'raw' );
+	public function test_updates_are_left_untouched(): void {
+		$page_id = $this->create_page();
+		$body    = '<!-- wp:paragraph --><p>Rewritten</p><!-- /wp:paragraph -->';
 
-		$this->archive_cascade->unarchive( $archived_row );
-		wp_untrash_post( $trashed_row );
+		wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $page_id,
+					'post_content' => $body,
+				)
+			)
+		);
 
-		$this->assertSame( 'publish', get_post_status( $archived_row ) );
-		$this->assertNotSame( 'trash', get_post_status( $trashed_row ) );
-		$this->assertSame( $archived_content, get_post_field( 'post_content', $archived_row, 'raw' ) );
-		$this->assertSame( $trashed_content, get_post_field( 'post_content', $trashed_row, 'raw' ) );
+		$this->assertSame( $body, get_post_field( 'post_content', $page_id, 'raw' ) );
 	}
 
-	public function test_row_in_collection_without_fields_still_gets_properties(): void {
-		$collection_id = $this->create_collection( false );
-		$this->assertSame( array(), Document::collection_field_ids( $collection_id ) );
-		$row_id = $this->create_row( $collection_id );
+	public function test_joining_and_leaving_collections_never_rewrites_the_content(): void {
+		$first   = $this->create_collection();
+		$second  = $this->create_collection();
+		$page_id = $this->create_page();
+		$before  = get_post_field( 'post_content', $page_id, 'raw' );
+		$updates = 0;
+		$count   = static function () use ( &$updates ): void {
+			++$updates;
+		};
+		add_action( 'pre_post_update', $count );
 
-		$this->archive_cascade->archive( $row_id );
+		$this->join( $page_id, $first );
+		$this->join( $page_id, $second, true );
+		wp_set_object_terms( $page_id, array(), TraitTaxonomy::TAXONOMY, false );
 
+		remove_action( 'pre_post_update', $count );
+		$this->assertSame( 0, $updates );
+		$this->assertSame( $before, get_post_field( 'post_content', $page_id, 'raw' ) );
+	}
+
+	public function test_saving_a_new_row_writes_properties_in_one_save(): void {
+		$collection_id = $this->create_collection();
+		$updates       = 0;
+		$count_updates = static function () use ( &$updates ): void {
+			++$updates;
+		};
+		add_action( 'pre_post_update', $count_updates );
+
+		$row_id = ( new Documents() )->save(
+			array(
+				'title' => 'Imported row',
+				'trait' => $collection_id,
+			)
+		);
+
+		remove_action( 'pre_post_update', $count_updates );
+		$this->assertIsInt( $row_id );
+		$this->assertSame( 0, $updates );
 		$this->assertHeaderIsTitleThenProperties( $row_id );
 	}
 
-	public function test_row_without_title_gets_title_and_properties(): void {
-		$body   = '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
-		$row_id = $this->create_row( $this->create_collection() );
-		$this->set_raw_content( $row_id, $body );
+	public function test_archiving_and_trashing_leave_the_content_alone(): void {
+		$archived_row = $this->create_row( $this->create_collection() );
+		$trashed_row  = $this->create_row( $this->create_collection() );
+		$archived     = get_post_field( 'post_content', $archived_row, 'raw' );
+		$trashed      = get_post_field( 'post_content', $trashed_row, 'raw' );
 
-		wp_trash_post( $row_id );
+		$this->archive_cascade->archive( $archived_row );
+		wp_trash_post( $trashed_row );
 
-		$this->assertSame(
-			DocumentIdentity::header_blocks_markup() . DocumentIdentity::properties_block_markup() . $body,
-			get_post_field( 'post_content', $row_id, 'raw' )
-		);
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $archived_row ) );
+		$this->assertSame( 'trash', get_post_status( $trashed_row ) );
+		$this->assertSame( $archived, get_post_field( 'post_content', $archived_row, 'raw' ) );
+		$this->assertSame( $trashed, get_post_field( 'post_content', $trashed_row, 'raw' ) );
 	}
 
 	/**
@@ -278,25 +251,16 @@ final class Test_Document_Properties_Block extends BaseTestCase {
 		);
 	}
 
-	/**
-	 * Replaces stored content without running the insert filters.
-	 *
-	 * @param int    $post_id Post ID.
-	 * @param string $content Raw block content.
-	 */
-	private function set_raw_content( int $post_id, string $content ): void {
-		Posts::init()->posts[ $post_id ]->post_content = $content;
-		clean_post_cache( $post_id );
-	}
-
-	private function create_page(): int {
-		$id = (int) wp_insert_post(
-			array(
-				'post_type'   => Document::POST_TYPE,
-				'post_status' => 'publish',
-				'post_title'  => 'Page ' . wp_generate_uuid4(),
-			)
+	private function create_page( ?string $content = null ): int {
+		$postarr = array(
+			'post_type'   => Document::POST_TYPE,
+			'post_status' => 'publish',
+			'post_title'  => 'Page ' . wp_generate_uuid4(),
 		);
+		if ( null !== $content ) {
+			$postarr['post_content'] = $content;
+		}
+		$id = (int) wp_insert_post( wp_slash( $postarr ) );
 		$this->assertGreaterThan( 0, $id );
 		return $id;
 	}
@@ -342,10 +306,14 @@ final class Test_Document_Properties_Block extends BaseTestCase {
 		$row_id = (int) wp_insert_post( wp_slash( $postarr ) );
 		$this->assertGreaterThan( 0, $row_id );
 
-		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
-		$this->assertGreaterThan( 0, $term_id );
-		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, false );
+		$this->join( $row_id, $collection_id );
 
 		return $row_id;
+	}
+
+	private function join( int $document_id, int $collection_id, bool $append = false ): void {
+		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
+		$this->assertGreaterThan( 0, $term_id );
+		wp_set_object_terms( $document_id, array( $term_id ), TraitTaxonomy::TAXONOMY, $append );
 	}
 }

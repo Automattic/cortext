@@ -2,6 +2,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import {
 	BlockControls,
 	InspectorControls,
+	store as blockEditorStore,
 	useBlockProps,
 } from '@wordpress/block-editor';
 import {
@@ -109,7 +110,7 @@ function reorderDetailLayoutEntries( entries, activeField, overField ) {
 // Row documents show collection properties between the title and body. Canvas
 // and RowEditor provide the fields and fallback row record; pages and rows
 // without fields return null.
-export default function Edit() {
+export default function Edit( { clientId, isSelected } ) {
 	const ctx = useDocumentPropertiesContext();
 	const {
 		collectionId = null,
@@ -379,7 +380,26 @@ export default function Edit() {
 	const showEmptyProperties =
 		! isEditingLayout && visiblePropertyFields.length === 0;
 
-	if ( ! ctx || isResolving || layoutPropertyFields.length === 0 ) {
+	// tech-debt.md#td-gutenberg-header-boundary: every document carries this
+	// block, and with nothing to show it has no element to focus. Gutenberg
+	// still selects it as the block before the first body block, for example
+	// after removing that block or on Backspace at its start, so hand the
+	// selection to the block before it, the title.
+	const rendersNothing =
+		! ctx || isResolving || layoutPropertyFields.length === 0;
+	const previousClientId = useSelect(
+		( select ) =>
+			select( blockEditorStore ).getPreviousBlockClientId( clientId ),
+		[ clientId ]
+	);
+	const { selectBlock } = useDispatch( blockEditorStore );
+	useLayoutEffect( () => {
+		if ( isSelected && rendersNothing && previousClientId ) {
+			selectBlock( previousClientId, -1 );
+		}
+	}, [ isSelected, previousClientId, rendersNothing, selectBlock ] );
+
+	if ( rendersNothing ) {
 		return null;
 	}
 

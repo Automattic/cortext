@@ -5,6 +5,8 @@ let mockCanEdit;
 let mockIsSaving;
 let mockSaveEntityRecord;
 let mockRowPropertiesProps;
+let mockPreviousClientId;
+let mockSelectBlock;
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	__esModule: true,
@@ -41,11 +43,15 @@ jest.mock( '@wordpress/core-data', () => ( {
 
 jest.mock( '@wordpress/data', () => ( {
 	__esModule: true,
-	useDispatch: () => ( { saveEntityRecord: mockSaveEntityRecord } ),
+	useDispatch: () => ( {
+		saveEntityRecord: mockSaveEntityRecord,
+		selectBlock: mockSelectBlock,
+	} ),
 	useSelect: ( callback ) =>
 		callback( () => ( {
 			canUser: () => mockCanEdit,
 			isSavingEntityRecord: () => mockIsSaving,
+			getPreviousBlockClientId: () => mockPreviousClientId,
 		} ) ),
 } ) );
 
@@ -156,6 +162,8 @@ beforeEach( () => {
 	mockIsSaving = false;
 	mockSaveEntityRecord = jest.fn().mockResolvedValue( {} );
 	mockRowPropertiesProps = null;
+	mockPreviousClientId = 'title-block';
+	mockSelectBlock = jest.fn();
 	mockContext = {
 		collectionId: 77,
 		rowId: 123,
@@ -701,5 +709,33 @@ describe( 'document-properties Customize properties mode', () => {
 		expect( mockRowPropertiesProps ).toEqual(
 			expect.objectContaining( { isLayoutEditing: true } )
 		);
+	} );
+} );
+
+describe( 'document-properties selection', () => {
+	it( 'hands the selection to the previous block when it shows nothing', () => {
+		mockContext = { ...mockContext, fields: [], allFields: [] };
+
+		const { container } = render(
+			<Edit clientId="properties-block" isSelected />
+		);
+
+		expect( container ).toBeEmptyDOMElement();
+		expect( mockSelectBlock ).toHaveBeenCalledWith( 'title-block', -1 );
+	} );
+
+	it( 'keeps the selection when it shows properties', () => {
+		render( <Edit clientId="properties-block" isSelected /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect( mockSelectBlock ).not.toHaveBeenCalled();
+	} );
+
+	it( 'leaves the selection alone while another block is selected', () => {
+		mockContext = { ...mockContext, fields: [], allFields: [] };
+
+		render( <Edit clientId="properties-block" isSelected={ false } /> );
+
+		expect( mockSelectBlock ).not.toHaveBeenCalled();
 	} );
 } );
