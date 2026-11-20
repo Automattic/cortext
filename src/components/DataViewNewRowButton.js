@@ -74,7 +74,7 @@ export default function DataViewNewRowButton( {
 			onCreated( created );
 		} catch ( err ) {
 			setError(
-				err?.message ?? __( 'Could not create a document.', 'cortext' )
+				err?.message ?? __( "Couldn't create a document.", 'cortext' )
 			);
 		} finally {
 			setIsCreating( false );

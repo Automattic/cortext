@@ -44,7 +44,7 @@ export default function EmptyTrashButton( { count } ) {
 			);
 		} catch ( error ) {
 			createErrorNotice(
-				error?.message ?? __( 'Could not empty Trash.', 'cortext' ),
+				error?.message ?? __( "Couldn't empty Trash.", 'cortext' ),
 				{ id: 'cortext-trash-emptied', type: 'snackbar' }
 			);
 		} finally {
@@ -69,10 +69,10 @@ export default function EmptyTrashButton( { count } ) {
 					confirmButtonText={ __( 'Empty Trash', 'cortext' ) }
 				>
 					{ sprintf(
-						/* translators: %d: number of items in Trash */
+						/* translators: %d: number of documents in Trash */
 						_n(
-							"Delete %d item in Trash permanently? This can't be undone.",
-							"Delete all %d items in Trash permanently? This can't be undone.",
+							"Delete %d document in Trash permanently? This can't be undone.",
+							"Delete all %d documents in Trash permanently? This can't be undone.",
 							count,
 							'cortext'
 						),

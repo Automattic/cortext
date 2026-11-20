@@ -10,7 +10,7 @@ import { fieldTypeLabel } from './fieldTypes';
 
 // Labels are localized for display, while reference names remain stable parts
 // of the formula DSL.
-const BUILT_IN_FIELD_DESCRIPTION = __( 'Built-in field', 'cortext' );
+const BUILT_IN_FIELD_DESCRIPTION = __( 'Built-in property', 'cortext' );
 const SYSTEM_FIELDS = [
 	{
 		description: BUILT_IN_FIELD_DESCRIPTION,
@@ -46,7 +46,7 @@ const SYSTEM_FIELDS = [
 
 const FORMULA_TYPE_LABELS = {
 	alias: __( 'Alias', 'cortext' ),
-	field: __( 'Field', 'cortext' ),
+	field: __( 'Property', 'cortext' ),
 	'same type': __( 'Same type', 'cortext' ),
 };
 
@@ -82,22 +82,22 @@ const FUNCTIONS = [
 
 const FUNCTION_COMPLETIONS = [
 	{
-		label: 'field',
-		signature: 'field("Name")',
-		insertText: 'field("")',
-		caretOffset: 'field("'.length,
-		type: 'field',
-		description: __( 'Use a value from this row.', 'cortext' ),
-	},
-	{
 		label: 'prop',
 		signature: 'prop("Name")',
 		insertText: 'prop("")',
 		caretOffset: 'prop("'.length,
+		type: 'field',
+		description: __( 'Use a value from this document.', 'cortext' ),
+	},
+	{
+		label: 'field',
+		signature: 'field("Name")',
+		insertText: 'field("")',
+		caretOffset: 'field("'.length,
 		type: 'alias',
 		description: __(
-			/* translators: field() is a canonical formula function name and must remain in English. */
-			'Works the same as field().',
+			/* translators: prop() is a canonical formula function name and must remain in English. */
+			'Works the same as prop().',
 			'cortext'
 		),
 	},
@@ -515,7 +515,7 @@ export default function FormulaConfig( {
 		} catch ( apiError ) {
 			onError?.(
 				apiError?.message ||
-					__( "We couldn't save the formula.", 'cortext' )
+					__( "Couldn't save the formula.", 'cortext' )
 			);
 		}
 	};
@@ -641,7 +641,7 @@ export default function FormulaConfig( {
 								top: event.currentTarget.scrollTop,
 							} )
 						}
-						placeholder={ 'field("Price") + field("Tax")' }
+						placeholder={ 'prop("Price") + prop("Tax")' }
 						rows={ 5 }
 						disabled={ isBusy }
 						spellCheck="false"
@@ -696,9 +696,9 @@ export default function FormulaConfig( {
 				<div className="cortext-formula-config__reference">
 					<div>
 						<span className="cortext-formula-config__reference-label">
-							{ __( 'Fields', 'cortext' ) }
+							{ __( 'Properties', 'cortext' ) }
 						</span>
-						<code>{ 'field("Name")' }</code>
+						<code>{ 'prop("Name")' }</code>
 					</div>
 					<div>
 						<span className="cortext-formula-config__reference-label">
@@ -717,7 +717,7 @@ export default function FormulaConfig( {
 							{ __( 'Example', 'cortext' ) }
 						</span>
 						<code>
-							{ 'dateBetween(now(), field("Created"), "days")' }
+							{ 'dateBetween(now(), prop("Created"), "days")' }
 						</code>
 					</div>
 				</div>
@@ -756,30 +756,30 @@ function FormulaReference() {
 					) }
 				</span>
 			</div>
-			<FormulaReferenceSection title={ __( 'Fields', 'cortext' ) }>
-				<FormulaReferenceRow
-					code={ 'field("Price")' }
-					text={ __( 'Use a value from this row.', 'cortext' ) }
-				/>
+			<FormulaReferenceSection title={ __( 'Properties', 'cortext' ) }>
 				<FormulaReferenceRow
 					code={ 'prop("Price")' }
+					text={ __( 'Use a value from this document.', 'cortext' ) }
+				/>
+				<FormulaReferenceRow
+					code={ 'field("Price")' }
 					text={ __(
-						/* translators: field() is a canonical formula function name and must remain in English. */
-						'Works the same as field().',
+						/* translators: prop() is a canonical formula function name and must remain in English. */
+						'Works the same as prop().',
 						'cortext'
 					) }
 				/>
 				<FormulaReferenceRow
-					code={ 'field("Title")' }
+					code={ 'prop("Title")' }
 					text={ __(
-						/* translators: Title, Created, and Last edited are canonical formula field names and must remain in English. */
-						'Built-in fields: Title, Created, Last edited.',
+						/* translators: Title, Created, and Last edited are canonical formula property names and must remain in English. */
+						'Built-in properties: Title, Created, Last edited.',
 						'cortext'
 					) }
 				/>
 				<p>
 					{ __(
-						'Use single-value fields, formulas, and built-in fields. Multi-select, relation, and rollup fields are not available in v0.',
+						"Use single-value properties, formulas, and built-in properties. Multi-select, relation, and rollup properties aren't available in v0.",
 						'cortext'
 					) }
 				</p>

@@ -539,7 +539,7 @@ describe( 'PublicDataView', () => {
 		);
 
 		expect( screen.getByRole( 'status' ) ).toHaveTextContent(
-			"We couldn't load this collection view."
+			"Couldn't load this collection view."
 		);
 		expect( console ).toHaveErrored();
 	} );

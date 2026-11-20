@@ -357,7 +357,7 @@ final class NotionController {
 		if ( '' === $key ) {
 			return new WP_Error(
 				'cortext_notion_missing_key',
-				__( 'Missing Notion API key.', 'cortext' ),
+				__( 'Missing Notion connection token.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}

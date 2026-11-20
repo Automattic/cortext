@@ -153,7 +153,7 @@ export function undoAction( ctx, run, noticeId ) {
 			onClick: () =>
 				run().catch( ( error ) =>
 					ctx.createErrorNotice?.(
-						error?.message ?? __( 'Could not undo.', 'cortext' ),
+						error?.message ?? __( "Couldn't undo.", 'cortext' ),
 						{ id: noticeId, type: 'snackbar' }
 					)
 				),
@@ -216,10 +216,7 @@ export function restoreDocuments( records, ctx ) {
 		failureMessage: ( failed, total ) =>
 			sprintf(
 				/* translators: 1: number of documents that could not be restored, 2: number of documents in the batch */
-				__(
-					'%1$d of %2$d documents could not be restored.',
-					'cortext'
-				),
+				__( "%1$d of %2$d documents couldn't be restored.", 'cortext' ),
 				failed,
 				total
 			),
@@ -245,7 +242,7 @@ export function unarchiveDocuments( records, ctx ) {
 			sprintf(
 				/* translators: 1: number of documents that could not be unarchived, 2: number of documents in the batch */
 				__(
-					'%1$d of %2$d documents could not be unarchived.',
+					"%1$d of %2$d documents couldn't be unarchived.",
 					'cortext'
 				),
 				failed,
@@ -298,12 +295,12 @@ export function archivedMessage( nestedCount = 0 ) {
 }
 
 export function archiveSaveFailureMessage() {
-	return __( 'Could not save changes. Archive was canceled.', 'cortext' );
+	return __( "Couldn't save changes. Archive was canceled.", 'cortext' );
 }
 
 export function trashSaveFailureMessage() {
 	return __(
-		'Could not save changes. Move to Trash was canceled.',
+		"Couldn't save changes. Move to Trash was canceled.",
 		'cortext'
 	);
 }
@@ -404,8 +401,8 @@ export async function duplicateDocument( record, ctx ) {
 			sprintf(
 				/* translators: %d: number of fields skipped while duplicating a collection. */
 				_n(
-					'%d field was not copied to the new collection. Add it again if you need it.',
-					'%d fields were not copied to the new collection. Add them again if you need them.',
+					"%d property wasn't copied to the new collection. Add it again if you need it.",
+					"%d properties weren't copied to the new collection. Add them again if you need them.",
 					skipped.length,
 					'cortext'
 				),
@@ -481,7 +478,7 @@ export async function trashDocument( record, ctx ) {
 		ctx,
 		collectCascadeIds( record, deleted?.cascade_deleted ),
 		__(
-			'Document moved to Trash, but Favorites could not be updated.',
+			"Document moved to Trash, but Favorites couldn't be updated.",
 			'cortext'
 		)
 	);
@@ -622,7 +619,7 @@ async function setDocumentFrozen( record, ctx, frozen ) {
 	} );
 	if ( response === false ) {
 		ctx.createErrorNotice?.(
-			__( 'Could not save changes. Lock was canceled.', 'cortext' ),
+			__( "Couldn't save changes. Lock was canceled.", 'cortext' ),
 			{ id: FREEZE_NOTICE_ID, type: 'snackbar' }
 		);
 		return null;

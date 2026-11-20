@@ -445,7 +445,7 @@ final class FieldsController {
 		if ( '' === $title ) {
 			return new WP_Error(
 				'cortext_field_title_required',
-				__( 'Field name is required.', 'cortext' ),
+				__( 'Property name is required.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -487,7 +487,7 @@ final class FieldsController {
 		if ( 'formula' !== (string) get_post_meta( $field_id, 'type', true ) ) {
 			return new WP_Error(
 				'cortext_field_type_unsupported',
-				__( 'This field is not a formula.', 'cortext' ),
+				__( 'This property isn\'t a formula.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -496,7 +496,7 @@ final class FieldsController {
 		if ( $collection_id < 1 ) {
 			return new WP_Error(
 				'cortext_field_collection_missing',
-				__( 'We couldn\'t find this field\'s collection.', 'cortext' ),
+				__( 'Couldn\'t find this property\'s collection.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -640,7 +640,7 @@ final class FieldsController {
 		if ( ! $this->type_supports_options( $type ) ) {
 			return new WP_Error(
 				'cortext_field_type_unsupported',
-				__( 'This field type does not support options.', 'cortext' ),
+				__( 'This property type doesn\'t support options.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -733,7 +733,7 @@ final class FieldsController {
 		if ( ! FieldTypeConverter::supports( $source_type, $target_type ) ) {
 			return new WP_Error(
 				'cortext_field_conversion_unsupported',
-				__( 'This type change is not supported.', 'cortext' ),
+				__( 'This type change isn\'t supported.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -804,7 +804,7 @@ final class FieldsController {
 			if ( $trait_term_id < 1 ) {
 				return new WP_Error(
 					'cortext_field_collection_missing',
-					__( 'We couldn\'t find this field\'s collection.', 'cortext' ),
+					__( 'Couldn\'t find this property\'s collection.', 'cortext' ),
 					array( 'status' => 400 )
 				);
 			}
@@ -924,7 +924,7 @@ final class FieldsController {
 		if ( $is_archived ) {
 			return new WP_Error(
 				'cortext_collection_archived',
-				__( 'Restore this collection from Archive before changing its fields.', 'cortext' ),
+				__( 'Unarchive this collection before changing its properties.', 'cortext' ),
 				array(
 					'status'        => 409,
 					'collection_id' => $collection_id,
@@ -935,7 +935,7 @@ final class FieldsController {
 		if ( Documents::STATUS_TRASH === $collection->post_status ) {
 			return new WP_Error(
 				'cortext_collection_in_trash',
-				__( 'Move this collection out of Trash before changing its fields.', 'cortext' ),
+				__( 'Restore this collection from Trash before changing its properties.', 'cortext' ),
 				array(
 					'status'        => 409,
 					'collection_id' => $collection_id,
@@ -946,7 +946,7 @@ final class FieldsController {
 		if ( DocumentFreeze::is_frozen( $collection_id ) ) {
 			return new WP_Error(
 				'cortext_collection_frozen',
-				__( 'Unlock this collection before changing its fields.', 'cortext' ),
+				__( 'Unlock this collection before changing its properties.', 'cortext' ),
 				array(
 					'status'        => 409,
 					'collection_id' => $collection_id,
@@ -1366,7 +1366,7 @@ final class FieldsController {
 					'cortext_formula_dependent_invalid',
 					sprintf(
 						/* translators: 1: dependent formula field title, 2: formula error message. */
-						__( 'Changing this would break "%1$s": %2$s', 'cortext' ),
+						__( 'Changing this would break “%1$s”: %2$s', 'cortext' ),
 						$title,
 						$compiled->get_error_message()
 					),

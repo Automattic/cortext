@@ -274,7 +274,7 @@ export default function Edit() {
 				setOptimisticEntries( previousOptimisticEntries );
 				setSaveError(
 					error?.message ??
-						__( 'Could not save the property layout.', 'cortext' )
+						__( "Couldn't save the property layout.", 'cortext' )
 				);
 			}
 		},
@@ -426,7 +426,7 @@ export default function Edit() {
 		// title property from the count.
 		const visibleFieldCount = visiblePropertyFields.length;
 		const label = sprintf(
-			/* translators: %d: number of collapsed properties. */
+			/* translators: %d: number of collapsed fields. */
 			_n(
 				'%d property collapsed',
 				'%d properties collapsed',

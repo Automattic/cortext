@@ -182,7 +182,7 @@ async function startParentToolbarOverlapFlashLog( page ) {
 		);
 		const iframeDocument = iframe?.contentDocument;
 		if ( ! canvasRoot || ! iframeDocument?.body ) {
-			throw new Error( 'Could not instrument the editor canvas.' );
+			throw new Error( "Couldn't instrument the editor canvas." );
 		}
 
 		let stopped = false;
@@ -359,7 +359,7 @@ async function selectParentDataViewBlock( page ) {
 			.getBlocks()
 			.find( ( block ) => block.name === 'cortext/data-view' );
 		if ( ! dataViewBlock ) {
-			throw new Error( 'Could not find the DataView block.' );
+			throw new Error( "Couldn't find the DataView block." );
 		}
 		window.wp.data
 			.dispatch( 'core/block-editor' )
@@ -374,7 +374,7 @@ async function getParentDataViewAttributes( page ) {
 			.getBlocks()
 			.find( ( block ) => block.name === 'cortext/data-view' );
 		if ( ! dataViewBlock ) {
-			throw new Error( 'Could not find the DataView block.' );
+			throw new Error( "Couldn't find the DataView block." );
 		}
 		return JSON.parse( JSON.stringify( dataViewBlock.attributes ) );
 	} );
@@ -404,7 +404,7 @@ async function expectRowToolbarIsolated( page, detail, blockText ) {
 		page.getByRole( 'button', { name: 'Change collection' } )
 	).toHaveCount( 0 );
 	await expect(
-		page.getByRole( 'button', { name: 'Add field', exact: true } )
+		page.getByRole( 'button', { name: 'Add property', exact: true } )
 	).toHaveCount( 0 );
 	await expect(
 		page.getByRole( 'button', { name: 'View settings' } )
@@ -4175,9 +4175,7 @@ test.describe( 'Collection view block', () => {
 				await getParentDataViewAttributes( page );
 			expect( afterSideAttributes ).toEqual( beforeAttributes );
 
-			await detail
-				.getByRole( 'button', { name: 'Center modal' } )
-				.click();
+			await detail.getByRole( 'button', { name: 'Center peek' } ).click();
 			const modalDetail = page.locator(
 				'.components-modal__frame.cortext-row-detail-modal'
 			);
@@ -4365,7 +4363,7 @@ test.describe( 'Collection view block', () => {
 				'The Left Hand of Darkness'
 			);
 			const authorLabelButton = detailCanvas.getByRole( 'button', {
-				name: 'Configure Author field',
+				name: 'Configure Author property',
 			} );
 			await expect( authorLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await authorLabelButton.click();
@@ -4376,7 +4374,7 @@ test.describe( 'Collection view block', () => {
 			).toBeVisible();
 			await page.keyboard.press( 'Escape' );
 			const yearLabelButton = detailCanvas.getByRole( 'button', {
-				name: 'Configure Year field',
+				name: 'Configure Year property',
 			} );
 			await expect( yearLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await yearLabelButton.click();
@@ -4446,7 +4444,7 @@ test.describe( 'Collection view block', () => {
 				.filter( { hasText: 'Tags' } );
 			await expect( tagsLabel ).toBeVisible();
 			const tagsLabelButton = detailCanvas.getByRole( 'button', {
-				name: 'Configure Tags field',
+				name: 'Configure Tags property',
 			} );
 			await expect( tagsLabelButton ).toHaveCSS( 'cursor', 'pointer' );
 			await tagsLabelButton.click();
@@ -4602,32 +4600,30 @@ test.describe( 'Collection view block', () => {
 			await yearProperty.pressSequentially( '2026' );
 
 			await expect(
-				detail.getByRole( 'button', { name: 'Center modal' } )
+				detail.getByRole( 'button', { name: 'Center peek' } )
 			).toBeVisible();
 			await expect(
-				detail.getByRole( 'button', { name: 'Full view' } )
+				detail.getByRole( 'button', { name: 'Full screen' } )
 			).toBeVisible();
 			await expect(
 				detail.getByRole( 'button', { name: 'Change layout' } )
 			).toHaveCount( 0 );
-			await detail
-				.getByRole( 'button', { name: 'Center modal' } )
-				.click();
+			await detail.getByRole( 'button', { name: 'Center peek' } ).click();
 			const modalDetail = page.locator(
 				'.components-modal__frame.cortext-row-detail-modal'
 			);
 			await expect( modalDetail ).toBeVisible();
 			await expect(
-				modalDetail.getByRole( 'button', { name: 'Center modal' } )
+				modalDetail.getByRole( 'button', { name: 'Center peek' } )
 			).toHaveCount( 0 );
 			await expect(
 				modalDetail.getByRole( 'button', { name: 'Side peek' } )
 			).toBeVisible();
 			await expect(
-				modalDetail.getByRole( 'button', { name: 'Full view' } )
+				modalDetail.getByRole( 'button', { name: 'Full screen' } )
 			).toBeVisible();
 			await modalDetail
-				.getByRole( 'button', { name: 'Full view' } )
+				.getByRole( 'button', { name: 'Full screen' } )
 				.click();
 			await expect( detail ).toBeHidden();
 			await expect(
@@ -6157,7 +6153,7 @@ test.describe( 'Collection view block', () => {
 			const ghostAdd = canvas
 				.locator( 'th' )
 				.last()
-				.getByRole( 'button', { name: 'Add field' } );
+				.getByRole( 'button', { name: 'Add property' } );
 			await ghostAdd.click();
 			const popover = page.locator(
 				'.cortext-data-view-toolbar-popover'
@@ -6852,7 +6848,7 @@ test.describe( 'Collection view block', () => {
 			} );
 
 			await page
-				.getByRole( 'button', { name: 'Add field', exact: true } )
+				.getByRole( 'button', { name: 'Add property', exact: true } )
 				.first()
 				.click();
 			const popover = page.locator(
@@ -6888,7 +6884,7 @@ test.describe( 'Collection view block', () => {
 			await openColumnDropdown( notesHeader, 'Notes' );
 			await columnMenuItem( 'Rename' ).click();
 
-			const renameInput = canvas.getByLabel( 'Field name' );
+			const renameInput = canvas.getByLabel( 'Property name' );
 			await renameInput.fill( 'Description' );
 			await renameInput.press( 'Enter' );
 
@@ -6943,7 +6939,7 @@ test.describe( 'Collection view block', () => {
 			const ghostAdd = canvas
 				.locator( 'th' )
 				.last()
-				.getByRole( 'button', { name: 'Add field' } );
+				.getByRole( 'button', { name: 'Add property' } );
 			await ghostAdd.click();
 			const ghostPopover = page.locator(
 				'.cortext-data-view-toolbar-popover'

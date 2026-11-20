@@ -5,7 +5,7 @@ import { humanTimeDiff } from '@wordpress/date';
 
 import { buildBreadcrumb, optionalTitleText } from './useLifecycleList';
 import { documentTitle } from '../../documents';
-import { definesTrait, hasTrait } from '../../documents/capabilities';
+import { definesTrait } from '../../documents/capabilities';
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
@@ -14,16 +14,12 @@ export function typeFilters() {
 		{ value: 'all', label: __( 'All', 'cortext' ) },
 		{ value: 'documents', label: __( 'Documents', 'cortext' ) },
 		{ value: 'collections', label: __( 'Collections', 'cortext' ) },
-		{ value: 'rows', label: __( 'Rows', 'cortext' ) },
 	];
 }
 
 function typeFilterValue( record ) {
 	if ( definesTrait( record ) ) {
 		return 'collections';
-	}
-	if ( hasTrait( record ) ) {
-		return 'rows';
 	}
 	return 'documents';
 }

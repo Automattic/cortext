@@ -415,7 +415,7 @@ export default function DocumentRow( {
 												createErrorNotice(
 													error?.message ??
 														__(
-															'Could not change the lock on this document.',
+															"Couldn't change the lock on this document.",
 															'cortext'
 														),
 													{
@@ -448,7 +448,7 @@ export default function DocumentRow( {
 													createErrorNotice(
 														error?.message ??
 															__(
-																'Could not archive this document.',
+																"Couldn't archive this document.",
 																'cortext'
 															),
 														{
@@ -554,7 +554,7 @@ export default function DocumentRow( {
 									role="alert"
 								>
 									{ __(
-										"We couldn't load these documents.",
+										"Couldn't load these documents.",
 										'cortext'
 									) }
 								</p>

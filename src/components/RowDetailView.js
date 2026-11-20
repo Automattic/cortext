@@ -148,7 +148,7 @@ function DetailShell( {
 } ) {
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
-		_n( '%d field', '%d fields', fields.length, 'cortext' ),
+		_n( '%d property', '%d properties', fields.length, 'cortext' ),
 		fields.length
 	);
 

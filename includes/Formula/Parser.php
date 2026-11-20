@@ -128,7 +128,7 @@ final class Parser {
 				'cortext_formula_unknown_identifier',
 				sprintf(
 					/* translators: %s: unknown formula identifier. */
-					__( 'We don\'t recognize %s in formulas.', 'cortext' ),
+					__( 'Unknown name: %s', 'cortext' ),
 					$name
 				)
 			);

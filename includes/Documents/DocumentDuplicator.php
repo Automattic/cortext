@@ -79,7 +79,7 @@ final class DocumentDuplicator {
 		) {
 			return new WP_Error(
 				'cortext_duplicate_archived_container',
-				__( 'Restore the archived parent or collection before making a copy.', 'cortext' ),
+				__( 'Unarchive the parent or collection before making a copy.', 'cortext' ),
 				array( 'status' => 409 )
 			);
 		}
@@ -129,7 +129,7 @@ final class DocumentDuplicator {
 		if ( ! $document instanceof WP_Post ) {
 			return new WP_Error(
 				'cortext_duplicate_failed',
-				__( 'Document could not be created.', 'cortext' ),
+				__( 'Couldn\'t create the document.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}

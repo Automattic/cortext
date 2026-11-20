@@ -49,7 +49,9 @@ describe( 'SidebarFavorites helpers', () => {
 		renderFavorites();
 
 		expect(
-			screen.getByText( 'Star from the title menu to pin it here.' )
+			screen.getByText(
+				'Use “Add to favorites” on any document to keep it here.'
+			)
 		).toBeInTheDocument();
 	} );
 
@@ -359,7 +361,9 @@ describe( 'SidebarFavorites helpers', () => {
 		const { container, rerender } = renderFavorites();
 
 		expect(
-			screen.getByText( 'Star from the title menu to pin it here.' )
+			screen.getByText(
+				'Use “Add to favorites” on any document to keep it here.'
+			)
 		).toBeInTheDocument();
 
 		rerender(
@@ -377,7 +381,9 @@ describe( 'SidebarFavorites helpers', () => {
 		);
 
 		expect(
-			screen.getByText( 'Star from the title menu to pin it here.' )
+			screen.getByText(
+				'Use “Add to favorites” on any document to keep it here.'
+			)
 		).toBeInTheDocument();
 		expect(
 			container.querySelector( '.cortext-sidebar__loading' )

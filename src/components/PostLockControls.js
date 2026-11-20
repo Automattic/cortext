@@ -84,7 +84,7 @@ export function PostLockModal( {
 							: sprintf(
 									/* translators: %s: user display name */
 									__(
-										'%s is editing this document right now. To make changes, take over from them.',
+										'%s is editing this document now. To make changes, take over from them.',
 										'cortext'
 									),
 									userName

@@ -33,7 +33,7 @@ export default function ArchivedTrashConfirmDialog( {
 			{ sprintf(
 				/* translators: %s: document title */
 				__(
-					'Move “%s” to Trash? Nested documents will also move to Trash. Items in Trash are permanently deleted after 30 days.',
+					'Move “%s” to Trash? Nested documents will also move to Trash. Documents in Trash are permanently deleted after 30 days.',
 					'cortext'
 				),
 				title

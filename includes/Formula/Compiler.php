@@ -163,7 +163,7 @@ final class Compiler {
 			'call' => $this->resolve_call( $node, $field_map, $self_field_id, $previous_refs ),
 			default => throw new FormulaParseError(
 				'cortext_formula_invalid_ast',
-				__( 'We couldn\'t read this formula.', 'cortext' )
+				__( 'Couldn\'t read this formula.', 'cortext' )
 			),
 		};
 	}
@@ -290,7 +290,7 @@ final class Compiler {
 			throw new FormulaParseError(
 				'cortext_formula_invalid_prop',
 				/* translators: field() and prop() are canonical formula function names and must remain in English. */
-				__( 'Use a quoted field name, like field("Price"). prop("Price") works too.', 'cortext' )
+				__( 'Use a quoted property name, like prop("Price"). field("Price") works too.', 'cortext' )
 			);
 		}
 
@@ -339,7 +339,7 @@ final class Compiler {
 				'cortext_formula_unknown_prop',
 				sprintf(
 					/* translators: %s: referenced field name. */
-					__( 'No field named %s was found.', 'cortext' ),
+					__( 'No property named %s was found.', 'cortext' ),
 					$name
 				)
 			);
@@ -350,7 +350,7 @@ final class Compiler {
 				'cortext_formula_ambiguous_prop',
 				sprintf(
 					/* translators: %s: referenced field name. */
-					__( 'More than one field is named %s. Rename one or use a unique field.', 'cortext' ),
+					__( 'More than one property is named %s. Rename one or use a unique property.', 'cortext' ),
 					$name
 				)
 			);
@@ -361,13 +361,13 @@ final class Compiler {
 		if ( $field_id === $self_field_id ) {
 			throw new FormulaParseError(
 				'cortext_formula_self_reference',
-				__( 'A formula cannot use itself.', 'cortext' )
+				__( 'A formula can\'t use itself.', 'cortext' )
 			);
 		}
 		if ( $field['multiple'] || in_array( $field['type'], array( 'relation', 'rollup' ), true ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_unsupported_target_type',
-				__( 'For now, formulas can only use single-value fields. Multi-select, relation, and rollup fields are not available yet.', 'cortext' )
+				__( 'For now, formulas can only use single-value properties. Multi-select, relation, and rollup properties aren\'t available yet.', 'cortext' )
 			);
 		}
 

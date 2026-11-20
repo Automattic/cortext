@@ -261,7 +261,7 @@ function withoutKey( object, key ) {
 }
 
 function saveErrorMessage( error ) {
-	return error?.message || __( 'Could not save property.', 'cortext' );
+	return error?.message || __( "Couldn't save this value.", 'cortext' );
 }
 
 function shouldDebouncePropertySave( field ) {
@@ -726,7 +726,7 @@ function PropertyLabel( {
 
 	const configureLabel = sprintf(
 		/* translators: %s: Field label. */
-		__( 'Configure %s field', 'cortext' ),
+		__( 'Configure %s property', 'cortext' ),
 		field.label
 	);
 
@@ -964,8 +964,8 @@ function RowProperty( {
 						icon={ isVisibleInLayout ? seen : unseen }
 						label={
 							isVisibleInLayout
-								? __( 'Hide property', 'cortext' )
-								: __( 'Show property', 'cortext' )
+								? __( 'Hide in documents', 'cortext' )
+								: __( 'Show in documents', 'cortext' )
 						}
 						isPressed={ isVisibleInLayout }
 						size="small"
@@ -1655,7 +1655,7 @@ export default function RowProperties( {
 		activeLayoutOverId === HIDDEN_PROPERTIES_DROP_TARGET;
 	const fieldCountLabel = sprintf(
 		/* translators: %d: Number of row fields. */
-		_n( '%d field', '%d fields', propertyFields.length, 'cortext' ),
+		_n( '%d property', '%d properties', propertyFields.length, 'cortext' ),
 		propertyFields.length
 	);
 	const renderProperty = ( field ) =>

@@ -628,7 +628,7 @@ describe( 'document-properties Customize properties mode', () => {
 
 	it( 'rolls back direct row drag reorder when saving fails', async () => {
 		mockSaveEntityRecord.mockRejectedValueOnce(
-			new Error( 'Could not update layout.' )
+			new Error( "Couldn't update layout." )
 		);
 		render( <Edit /> );
 
@@ -642,7 +642,7 @@ describe( 'document-properties Customize properties mode', () => {
 			'CreatedAuthor'
 		);
 		expect( await screen.findByRole( 'alert' ) ).toHaveTextContent(
-			'Could not update layout.'
+			"Couldn't update layout."
 		);
 		expect( screen.getByTestId( 'row-properties' ) ).toHaveTextContent(
 			'AuthorCreated'

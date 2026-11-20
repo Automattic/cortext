@@ -298,7 +298,7 @@ export function useFavoriteToggle( { onError } = {} ) {
 			} catch ( err ) {
 				onError?.(
 					err?.message ??
-						__( 'Could not update favorites.', 'cortext' )
+						__( "Couldn't update favorites.", 'cortext' )
 				);
 			}
 		},

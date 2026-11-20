@@ -44,7 +44,7 @@ export const DATA_VIEW_VARIATIONS = [
 	},
 	{
 		name: 'cortext-collection-linked',
-		title: __( 'Linked collection view', 'cortext' ),
+		title: __( 'Existing collection', 'cortext' ),
 		description: __( 'Show an existing collection here.', 'cortext' ),
 		keywords: [
 			__( 'collection', 'cortext' ),

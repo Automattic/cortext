@@ -103,7 +103,7 @@ jest.mock( '../../../src/components/RowDetailView', () => ( {
 	ROW_DETAIL_MODE_ICONS: { side: null, modal: null, full: null },
 	ROW_DETAIL_MODE_LABELS: {
 		side: 'Side peek',
-		modal: 'Center modal',
+		modal: 'Center peek',
 		full: 'Full page',
 	},
 } ) );
@@ -755,7 +755,7 @@ describe( 'CollectionDataViews archive actions', () => {
 		expect( apiFetch ).not.toHaveBeenCalled();
 		expect(
 			await findAllByText(
-				'Could not save changes. Archive was canceled.'
+				"Couldn't save changes. Archive was canceled."
 			)
 		).not.toHaveLength( 0 );
 	} );
@@ -858,7 +858,7 @@ describe( 'CollectionDataViews archive actions', () => {
 		expect( apiFetch ).not.toHaveBeenCalled();
 		expect(
 			await findAllByText(
-				'Could not save changes. Archive was canceled.'
+				"Couldn't save changes. Archive was canceled."
 			)
 		).not.toHaveLength( 0 );
 	} );
@@ -895,7 +895,7 @@ describe( 'CollectionDataViews archive actions', () => {
 		expect( apiFetch ).not.toHaveBeenCalled();
 		expect(
 			await findAllByText(
-				'Could not save changes. Archive was canceled.'
+				"Couldn't save changes. Archive was canceled."
 			)
 		).not.toHaveLength( 0 );
 	} );
@@ -1182,7 +1182,7 @@ describe( 'CollectionDataViews archive actions', () => {
 		expect( mockUnlockEditors ).toHaveBeenCalledTimes( 1 );
 		expect(
 			await findAllByText(
-				'Could not save changes. Move to Trash was canceled.'
+				"Couldn't save changes. Move to Trash was canceled."
 			)
 		).not.toHaveLength( 0 );
 	} );
