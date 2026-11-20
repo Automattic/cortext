@@ -161,19 +161,6 @@ function buildRender(
 	);
 }
 
-// Shown in place of a value on a rollup the server flagged: its aggregator
-// no longer fits the field it reads, so the server stops computing it.
-// Without this the rollup just reads as empty.
-export function rollupInvalidLabel() {
-	return __( 'Target field changed type', 'cortext' );
-}
-
-function RollupInvalidHint() {
-	return (
-		<span className="cortext-rollup-invalid">{ rollupInvalidLabel() }</span>
-	);
-}
-
 function HeaderLabel( { children } ) {
 	return <span className="cortext-column-header-label">{ children }</span>;
 }
@@ -480,8 +467,9 @@ export function mapField( field ) {
 		}
 	}
 	const relation = fieldRelationConfig( field, type, rollupTargetType );
+	// The reason the server flagged this rollup, or '' when it computes.
 	const rollupInvalid =
-		type === 'rollup' && parseBooleanMeta( field.meta?.rollup_invalid );
+		type === 'rollup' ? String( field.meta?.rollup_invalid ?? '' ) : '';
 	const capabilities = field.cortext_capabilities ?? {};
 	const operators = Array.isArray( capabilities.operators )
 		? capabilities.operators
@@ -524,17 +512,15 @@ export function mapField( field ) {
 			</HeaderLabel>
 		),
 		getValue: ( { item } ) => fieldValue( item, id ),
-		render: rollupInvalid
-			? RollupInvalidHint
-			: buildRender(
-					id,
-					type,
-					label,
-					elements,
-					format,
-					relation,
-					formulaResultType
-			  ),
+		render: buildRender(
+			id,
+			type,
+			label,
+			elements,
+			format,
+			relation,
+			formulaResultType
+		),
 		editable: EDITABLE_TYPES.has( type ),
 		enableGlobalSearch: SEARCHABLE_TYPES.has( queryType ),
 		cortextFieldType: type,

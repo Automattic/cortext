@@ -65,6 +65,7 @@ export default function RollupConfig( {
 	initialRelationFieldId = '',
 	initialTargetFieldId = '',
 	initialAggregator = 'count',
+	isEditing = false,
 	fallbackTitle = '',
 	isBusy = false,
 	errorMessage = '',
@@ -131,11 +132,23 @@ export default function RollupConfig( {
 		],
 		[ targetFields ]
 	);
-	const aggregatorOptions = useMemo(
-		() =>
-			rollupAggregatorOptionsForTarget( selectedTargetField?.meta?.type ),
-		[ selectedTargetField ]
-	);
+	const aggregatorOptions = useMemo( () => {
+		const options = rollupAggregatorOptionsForTarget(
+			selectedTargetField?.meta?.type
+		);
+		// While the target loads, keep a saved number or date calculation in
+		// the list so the select shows it instead of the first option.
+		if (
+			! selectedTargetField &&
+			! options.some( ( option ) => option.value === aggregator )
+		) {
+			options.push( {
+				value: aggregator,
+				label: rollupAggregatorLabel( aggregator ),
+			} );
+		}
+		return options;
+	}, [ aggregator, selectedTargetField ] );
 	const targetRequired = aggregator !== 'count';
 	const relationOptions = [
 		{ value: '', label: __( 'Choose relation…', 'cortext' ) },
@@ -181,8 +194,10 @@ export default function RollupConfig( {
 		}
 	}, [ relationFields, relationFieldId ] );
 
+	// When adding a rollup, a single compatible target is the obvious pick. An
+	// existing rollup keeps what it saved, including a count with no target.
 	useEffect( () => {
-		if ( targetFieldId ) {
+		if ( isEditing || targetFieldId ) {
 			return;
 		}
 		const compatibleTargets = targetOptions.slice( 1 );
@@ -190,10 +205,12 @@ export default function RollupConfig( {
 			setTargetFieldId( compatibleTargets[ 0 ].value );
 			setAggregator( 'show_original' );
 		}
-	}, [ targetFieldId, targetOptions ] );
+	}, [ isEditing, targetFieldId, targetOptions ] );
 
+	// Until the target field loads, only the generic calculations are known, so
+	// a saved number or date calculation would look invalid and get replaced.
 	useEffect( () => {
-		if ( ! targetFieldId ) {
+		if ( ! selectedTargetField ) {
 			return;
 		}
 		if (
@@ -203,7 +220,7 @@ export default function RollupConfig( {
 		) {
 			setAggregator( 'show_original' );
 		}
-	}, [ aggregator, aggregatorOptions, targetFieldId ] );
+	}, [ aggregator, aggregatorOptions, selectedTargetField ] );
 
 	const submit = async () => {
 		if (

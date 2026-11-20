@@ -1046,6 +1046,26 @@ tr:has(.cortext-title-cell--is-opening)
 .cortext-rollup-invalid {
 	color: $gray-700;
 	font-style: italic;
+
+	&--action {
+		padding: 0;
+		border: 0;
+		border-radius: $radius-small;
+		background: none;
+		font: inherit;
+		font-style: italic;
+		text-align: inherit;
+		cursor: pointer;
+
+		&:hover {
+			text-decoration: underline;
+		}
+
+		&:focus-visible {
+			outline: none;
+			box-shadow: 0 0 0 var(--wp-admin-border-width-focus) var(--wp-admin-theme-color);
+		}
+	}
 }
 
 .cortext-data-view-shell {

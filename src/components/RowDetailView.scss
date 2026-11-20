@@ -1044,7 +1044,8 @@
 		white-space: normal;
 	}
 
-	&__empty-value {
+	&__empty-value,
+	&__readonly .cortext-rollup-invalid {
 		color: var(--cortext-row-detail-muted);
 	}
 
