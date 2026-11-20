@@ -1519,7 +1519,6 @@ export default function CollectionDataViews( {
 				id: `open-in-${ mode }`,
 				label: ROW_DETAIL_MODE_OPEN_LABELS[ mode ],
 				icon: ROW_DETAIL_MODE_ICONS[ mode ],
-				context: 'single',
 				callback: ( items ) => openRowInMode( items?.[ 0 ], mode ),
 			} );
 		}
@@ -1527,14 +1526,12 @@ export default function CollectionDataViews( {
 			id: 'duplicate-row',
 			label: __( 'Duplicate', 'cortext' ),
 			icon: copy,
-			context: 'single',
 			callback: ( items ) => duplicateRow( items?.[ 0 ] ),
 		} );
 		actions.push( {
 			id: 'add-row-to-favorites',
 			label: __( 'Add to favorites', 'cortext' ),
 			icon: starEmpty,
-			context: 'single',
 			disabled: areFavoriteActionsDisabled,
 			isEligible: ( item ) => ! isRowFavorite( item ),
 			callback: ( items ) => toggleRowFavorite( items?.[ 0 ] ),
@@ -1543,7 +1540,6 @@ export default function CollectionDataViews( {
 			id: 'remove-row-from-favorites',
 			label: __( 'Remove from favorites', 'cortext' ),
 			icon: starFilled,
-			context: 'single',
 			disabled: areFavoriteActionsDisabled,
 			isEligible: ( item ) => isRowFavorite( item ),
 			callback: ( items ) => toggleRowFavorite( items?.[ 0 ] ),
@@ -1552,7 +1548,6 @@ export default function CollectionDataViews( {
 			id: 'lock-row',
 			label: __( 'Lock', 'cortext' ),
 			icon: lock,
-			context: 'single',
 			isEligible: ( item ) => ! item?.cortext_frozen,
 			callback: ( items ) => toggleRowFreeze( items?.[ 0 ] ),
 		} );
@@ -1560,7 +1555,6 @@ export default function CollectionDataViews( {
 			id: 'unlock-row',
 			label: __( 'Unlock', 'cortext' ),
 			icon: unlock,
-			context: 'single',
 			isEligible: ( item ) => Boolean( item?.cortext_frozen ),
 			callback: ( items ) => toggleRowFreeze( items?.[ 0 ] ),
 		} );
@@ -1569,7 +1563,6 @@ export default function CollectionDataViews( {
 			label: __( 'Archive', 'cortext' ),
 			icon: archiveIcon,
 			supportsBulk: true,
-			context: 'single',
 			callback: ( items ) =>
 				requestArchiveRows( items, {
 					clearSelectionOnSuccess: ( items?.length ?? 0 ) > 1,
@@ -1581,7 +1574,6 @@ export default function CollectionDataViews( {
 			icon: trash,
 			isDestructive: true,
 			supportsBulk: true,
-			context: 'single',
 			callback: ( items ) =>
 				requestDeleteRows( items, {
 					clearSelectionOnSuccess: ( items?.length ?? 0 ) > 1,
