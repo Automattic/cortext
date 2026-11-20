@@ -956,10 +956,10 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 	const propertiesContextStable = ! (
 		propertiesCtx?.isSchemaResolving ?? propertiesCtx?.isResolving
 	);
-	const hasSchema =
-		propertiesContextStable &&
-		Array.isArray( propertiesCtx?.fields ) &&
-		propertiesCtx.fields.length > 0;
+	// Every row carries the properties block, even when its collection has no
+	// fields yet; the block renders nothing then.
+	const isRow =
+		propertiesContextStable && Boolean( propertiesCtx?.collectionId );
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const {
@@ -970,7 +970,6 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasTitle,
 		hasProperties,
 		hasOwner,
-		propertiesClientId,
 		headerEndIndex,
 		bodyBlockBeforeTitleId,
 		shouldHideHeaderInsertionPoint,
@@ -1072,18 +1071,14 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 					} );
 				}
 			} );
-			const propertiesBlock = blocks.find(
-				( block ) => block.name === DOCUMENT_PROPERTIES_BLOCK
-			);
 			return {
 				coverIndex: names.indexOf( DOCUMENT_COVER_BLOCK ),
 				titleIndex: currentTitleIndex,
 				hasCover: names.includes( DOCUMENT_COVER_BLOCK ),
 				hasIcon: names.includes( DOCUMENT_ICON_BLOCK ),
 				hasTitle: names.includes( POST_TITLE_BLOCK ),
-				hasProperties: !! propertiesBlock,
+				hasProperties: names.includes( DOCUMENT_PROPERTIES_BLOCK ),
 				hasOwner: ownerBlockName ? !! ownerBlock : true,
-				propertiesClientId: propertiesBlock?.clientId ?? null,
 				headerEndIndex: currentHeaderEndIndex,
 				bodyBlockBeforeTitleId: currentBodyBlockBeforeTitleId,
 				shouldSeedEmptyBodyBlock:
@@ -1196,32 +1191,15 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 			}
 			updateBlockAttributes( clientId, { lock } );
 		} );
-
-		// Keep the properties block only on rows whose collection has fields.
-		// If schema disappears, remove the block so post_content does not keep
-		// an empty marker. Skip this while the provider is switching rows.
-		if (
-			propertiesContextStable &&
-			hasProperties &&
-			! hasSchema &&
-			propertiesClientId
-		) {
-			updateBlockAttributes( propertiesClientId, { lock: {} } );
-			removeBlock( propertiesClientId, false );
-		}
 	}, [
 		duplicateHeaderIds,
 		collectionBodyClientIds,
-		hasProperties,
-		hasSchema,
 		hasOwner,
 		hasTitle,
 		isLocked,
 		isReadOnlyDocument,
 		lockedCollectionBodyClientIds,
 		ownerBlockName,
-		propertiesClientId,
-		propertiesContextStable,
 		postId,
 		postType,
 		protectedLockRepairs,
@@ -1254,7 +1232,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 			( featuredId > 0 && ! hasCover ) ||
 			( iconMeta && ! hasIcon ) ||
 			! hasTitle ||
-			( hasSchema && ! hasProperties )
+			( isRow && ! hasProperties )
 		) {
 			return;
 		}
@@ -1272,7 +1250,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasCover,
 		hasIcon,
 		hasProperties,
-		hasSchema,
+		isRow,
 		hasTitle,
 		iconMeta,
 		insertBlocks,
@@ -1304,7 +1282,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		const needsCover = featuredId > 0 && ! hasCover;
 		const needsIcon = iconMeta && ! hasIcon;
 		const needsTitle = ! hasTitle;
-		const needsProperties = hasSchema && ! hasProperties;
+		const needsProperties = isRow && ! hasProperties;
 		const needsOwner = !! ownerBlockName && ! hasOwner;
 		if (
 			! needsCover &&
@@ -1402,7 +1380,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasIcon,
 		hasOwner,
 		hasProperties,
-		hasSchema,
+		isRow,
 		hasTitle,
 		iconMeta,
 		insertBlocks,
@@ -1427,7 +1405,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 			( featuredId > 0 && ! hasCover ) ||
 			( iconMeta && ! hasIcon ) ||
 			! hasTitle ||
-			( hasSchema && ! hasProperties )
+			( isRow && ! hasProperties )
 		) {
 			return;
 		}
@@ -1449,7 +1427,7 @@ function EnsureHeaderBlocks( { isLocked = false, postId, postType } ) {
 		hasCover,
 		hasIcon,
 		hasProperties,
-		hasSchema,
+		isRow,
 		hasTitle,
 		headerEndIndex,
 		iconMeta,
@@ -1947,9 +1925,7 @@ function CanvasReadyEffect( {
 	const propertiesCtx = useDocumentPropertiesContext();
 	const isPropertiesResolving = Boolean( propertiesCtx?.isResolving );
 	const needsProperties =
-		! isPropertiesResolving &&
-		Array.isArray( propertiesCtx?.fields ) &&
-		propertiesCtx.fields.length > 0;
+		! isPropertiesResolving && Boolean( propertiesCtx?.collectionId );
 	const record = useDocumentRecord( postType, postId );
 	const ownerBlockName = getCanvasOwnerBlockNameForRecord( record );
 	const needsOwner = Boolean( ownerBlockName );

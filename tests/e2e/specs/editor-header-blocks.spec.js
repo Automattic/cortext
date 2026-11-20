@@ -575,6 +575,213 @@ test.describe( 'editor header blocks', () => {
 		}
 	} );
 
+	test( 'moves Backspace at the start of the body to the end of the title', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let createdPage;
+		try {
+			createdPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'E2E Backspace Page',
+					status: 'private',
+					content: bodyMarkup(),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ createdPage.id }`
+			);
+			await waitForEditorPost( page, createdPage.id );
+			const canvas = page.frameLocator( 'iframe[name="editor-canvas"]' );
+			const firstParagraph = canvas.getByText( BODY_A, { exact: true } );
+			// The editor can still move focus while it settles after load.
+			await expect( async () => {
+				await firstParagraph.click();
+				await expect( firstParagraph ).toBeFocused( { timeout: 500 } );
+			} ).toPass();
+			await page.keyboard.press( 'Home' );
+
+			await page.keyboard.press( 'Backspace' );
+
+			await expect
+				.poll( () =>
+					page.evaluate( () => {
+						const store =
+							window.wp.data.select( 'core/block-editor' );
+						return {
+							selected: store.getSelectedBlock()?.name ?? null,
+							blocks: store
+								.getBlocks()
+								.map( ( block ) => block.name ),
+						};
+					} )
+				)
+				.toEqual( {
+					selected: POST_TITLE_BLOCK,
+					blocks: [
+						POST_TITLE_BLOCK,
+						DOCUMENT_PROPERTIES_BLOCK,
+						'core/paragraph',
+						'core/paragraph',
+					],
+				} );
+			await expect
+				.poll( () =>
+					page
+						.locator( 'iframe[name="editor-canvas"]' )
+						.evaluate( ( iframe ) => {
+							const selection =
+								iframe.contentWindow.getSelection();
+							const title = iframe.contentDocument.activeElement;
+							return {
+								inTitle: Boolean(
+									title?.closest?.( '.wp-block-post-title' )
+								),
+								atEnd:
+									selection.isCollapsed &&
+									selection.anchorOffset ===
+										( selection.anchorNode?.textContent
+											?.length ?? -1 ),
+							};
+						} )
+				)
+				.toEqual( { inTitle: true, atEnd: true } );
+			await expect( firstParagraph ).toHaveText( BODY_A );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+		}
+	} );
+
+	test( 'moves the selection to the title when the first body block is removed', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let createdPage;
+		const readEditor = () =>
+			page.evaluate( () => {
+				const store = window.wp.data.select( 'core/block-editor' );
+				return {
+					selected: store.getSelectedBlock()?.name ?? null,
+					blocks: store.getBlocks().map( ( block ) => block.name ),
+				};
+			} );
+		const isFocusInTitle = () =>
+			page
+				.locator( 'iframe[name="editor-canvas"]' )
+				.evaluate( ( iframe ) =>
+					Boolean(
+						iframe.contentDocument.activeElement?.closest?.(
+							'.wp-block-post-title'
+						)
+					)
+				);
+		const canvas = page.frameLocator( 'iframe[name="editor-canvas"]' );
+		const caretAtFirstBodyBlock = async () => {
+			const clientId = await page.evaluate( ( headerBlockNames ) => {
+				const store = window.wp.data.select( 'core/block-editor' );
+				const body = store
+					.getBlocks()
+					.find(
+						( block ) => ! headerBlockNames.includes( block.name )
+					);
+				window.wp.data
+					.dispatch( 'core/block-editor' )
+					.selectBlock( body.clientId, 0 );
+				return body.clientId;
+			}, HEADER_BLOCK_NAMES );
+			await expect(
+				canvas.locator( `[data-block="${ clientId }"]` )
+			).toBeFocused();
+		};
+		try {
+			createdPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'E2E Removed First Block Page',
+					status: 'private',
+					content: [
+						'<!-- wp:separator --><hr class="wp-block-separator has-alpha-channel-opacity"/><!-- /wp:separator -->',
+						'<!-- wp:heading {"level":3} --><h3 class="wp-block-heading"></h3><!-- /wp:heading -->',
+						paragraphMarkup( '' ),
+						paragraphMarkup( BODY_B ),
+					].join( '\n\n' ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ createdPage.id }`
+			);
+			await waitForEditorPost( page, createdPage.id );
+			await expect(
+				canvas.getByText( BODY_B, { exact: true } )
+			).toBeVisible();
+
+			// A block removed as a whole.
+			const separator = canvas.locator( 'hr.wp-block-separator' );
+			// The editor can still move focus while it settles after load.
+			await expect( async () => {
+				await separator.click();
+				await expect( separator ).toBeFocused( { timeout: 500 } );
+			} ).toPass();
+			await page.keyboard.press( 'Delete' );
+			await expect.poll( readEditor ).toEqual( {
+				selected: POST_TITLE_BLOCK,
+				blocks: [
+					POST_TITLE_BLOCK,
+					DOCUMENT_PROPERTIES_BLOCK,
+					'core/heading',
+					'core/paragraph',
+					'core/paragraph',
+				],
+			} );
+			await expect.poll( isFocusInTitle ).toBe( true );
+
+			// An empty block that only differs from its defaults outside its
+			// content, here the heading level.
+			await caretAtFirstBodyBlock();
+			await page.keyboard.press( 'Backspace' );
+			await expect.poll( readEditor ).toEqual( {
+				selected: POST_TITLE_BLOCK,
+				blocks: [
+					POST_TITLE_BLOCK,
+					DOCUMENT_PROPERTIES_BLOCK,
+					'core/paragraph',
+					'core/paragraph',
+				],
+			} );
+			await expect.poll( isFocusInTitle ).toBe( true );
+
+			// An empty paragraph.
+			await caretAtFirstBodyBlock();
+			await page.keyboard.press( 'Backspace' );
+			await expect.poll( readEditor ).toEqual( {
+				selected: POST_TITLE_BLOCK,
+				blocks: [
+					POST_TITLE_BLOCK,
+					DOCUMENT_PROPERTIES_BLOCK,
+					'core/paragraph',
+				],
+			} );
+			await expect.poll( isFocusInTitle ).toBe( true );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+		}
+	} );
+
 	test( 'keeps page content when its record loads before the editor blocks register', async ( {
 		admin,
 		page,

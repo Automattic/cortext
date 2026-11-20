@@ -2,8 +2,7 @@
 /**
  * Per-document icon (emoji or uploaded image) for any post type that opts into
  * the `cortext-document` capability, plus the server-seeded header blocks:
- * the locked title on create and the row properties block before a row
- * becomes read-only.
+ * every document is created with the locked title and properties blocks.
  *
  * `Document::register_post_type()` calls `register_for_post_type()` right after
  * `register_post_type()` so the `crtxt_document` type opts in. The helper stays
@@ -19,9 +18,7 @@ namespace Cortext\PostType;
 
 defined( 'ABSPATH' ) || exit;
 
-use Cortext\Documents;
 use Cortext\Editor\DocumentPropertiesBlock;
-use WP_Post;
 
 final class DocumentIdentity {
 
@@ -47,13 +44,11 @@ final class DocumentIdentity {
 	public const META_KEY = 'cortext_document_icon';
 
 	public function register(): void {
-		// Add the locked title block on create so the first editor render
-		// already has it.
+		// Add the locked title and properties blocks on create so the first
+		// editor render already has them. Every document carries the
+		// properties block, so joining or leaving a collection never has to
+		// rewrite the content; outside a collection it renders nothing.
 		add_filter( 'wp_insert_post_data', array( $this, 'prepend_header_blocks' ), 10, 2 );
-		// The editor adds the properties block when a row is first opened,
-		// but not while it is read-only. Add it when the row becomes read-only
-		// so its field values still show.
-		add_filter( 'wp_insert_post_data', array( $this, 'add_properties_block_before_read_only' ), 10, 2 );
 	}
 
 	/**
@@ -129,47 +124,21 @@ final class DocumentIdentity {
 	}
 
 	/**
-	 * Adds the properties block to a row as it moves into Trash or Archived.
+	 * Adds the properties block right after the title, leaving the rest of the
+	 * content as stored. Content without a title gets both. Writers that skip
+	 * `wp_insert_post` or replace a document's content build it with this.
 	 *
-	 * The editor skips header repair on trashed and locked documents, so a row
-	 * that was never opened would otherwise show no field values there. The block goes
-	 * right after the title, leaving the rest of the content as stored; a row
-	 * without a title gets both.
-	 *
-	 * @param array $data    Slashed post data about to be saved.
-	 * @param array $postarr Original input passed to wp_insert_post.
+	 * @param string $content Unslashed post content.
 	 */
-	public function add_properties_block_before_read_only( array $data, array $postarr ): array {
-		$read_only = array( Documents::STATUS_TRASH, Documents::STATUS_ARCHIVED );
-		$post_id   = (int) ( $postarr['ID'] ?? 0 );
-		if ( $post_id < 1 || ! in_array( $data['post_status'] ?? '', $read_only, true ) ) {
-			return $data;
-		}
-
-		$post = get_post( $post_id );
-		if (
-			! $post instanceof WP_Post
-			|| in_array( $post->post_status, $read_only, true )
-			|| Documents::KIND_ROW !== Documents::kind_for_document( $post )
-		) {
-			return $data;
-		}
-
-		$content = wp_unslash( (string) ( $data['post_content'] ?? '' ) );
+	public static function with_properties_block( string $content ): string {
 		if ( has_block( DocumentPropertiesBlock::BLOCK_NAME, $content ) ) {
-			return $data;
+			return $content;
 		}
-
 		$title_end = self::title_block_end( $content );
 		if ( null === $title_end ) {
-			$content = self::header_blocks_markup() . self::properties_block_markup() . $content;
-		} else {
-			$content = substr( $content, 0, $title_end ) . self::properties_block_markup() . substr( $content, $title_end );
+			return self::header_blocks_markup() . self::properties_block_markup() . $content;
 		}
-
-		$data['post_content'] = wp_slash( $content );
-
-		return $data;
+		return substr( $content, 0, $title_end ) . self::properties_block_markup() . substr( $content, $title_end );
 	}
 
 	/**
@@ -197,8 +166,9 @@ final class DocumentIdentity {
 	}
 
 	/**
-	 * Adds the locked title block to new Cortext documents unless the content
-	 * already has one. Updates return unchanged.
+	 * Adds the locked title and properties blocks to new Cortext documents,
+	 * keeping whichever of them the content already has. Updates return
+	 * unchanged.
 	 *
 	 * @param array $data    Slashed post data about to be inserted.
 	 * @param array $postarr Original input passed to wp_insert_post.
@@ -209,22 +179,19 @@ final class DocumentIdentity {
 			return $data;
 		}
 
-		// Only prepend the title on create; updates always carry an `ID`.
+		// Only seed on create; updates always carry an `ID`.
 		if ( ! empty( $postarr['ID'] ) ) {
 			return $data;
 		}
 
-		$content = (string) ( $data['post_content'] ?? '' );
-		// Already has the title marker? Leave it alone; the seeder
-		// may have added it first, and other paths might too.
-		if (
-			str_contains( $content, '<!-- wp:post-title' ) ||
-			str_contains( $content, '<!-- wp:core/post-title' )
-		) {
-			return $data;
+		$content = wp_unslash( (string) ( $data['post_content'] ?? '' ) );
+		$next    = self::with_properties_block( $content );
+		if ( null === self::title_block_end( $next ) ) {
+			$next = self::header_blocks_markup() . $next;
 		}
-
-		$data['post_content'] = wp_slash( self::header_blocks_markup() ) . $content;
+		if ( $next !== $content ) {
+			$data['post_content'] = wp_slash( $next );
+		}
 
 		return $data;
 	}
