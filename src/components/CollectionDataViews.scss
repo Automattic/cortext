@@ -642,7 +642,7 @@ tr:has(.cortext-title-cell--is-opening)
 // into two shades. A pointer-focused Open button is not an edit, so it leaves
 // the row background alone; the title editor and keyboard focus still tint.
 .cortext-title-cell:focus-within:has(
-.cortext-title-cell__open:focus:not(:focus-visible)
+	.cortext-title-cell__open:focus:not(:focus-visible)
 ) {
 	background: transparent;
 }
