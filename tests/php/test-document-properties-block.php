@@ -20,7 +20,7 @@ use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WorDBless\Posts;
 
-final class Test_Row_Read_Only_Properties extends BaseTestCase {
+final class Test_Document_Properties_Block extends BaseTestCase {
 
 	use InMemoryPostsQuery;
 	use InMemoryTermStore;
