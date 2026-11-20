@@ -69,6 +69,7 @@
 		"@wordpress/blocks": "^15.26.0",
 		"@wordpress/commands": "^1.53.0",
 		"@wordpress/components": "^39.0.0",
+		"@wordpress/compose": "^8.6.0",
 		"@wordpress/core-data": "^7.53.0",
 		"@wordpress/data": "^10.53.0",
 		"@wordpress/dataviews": "^18.0.0",

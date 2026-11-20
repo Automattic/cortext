@@ -9,6 +9,7 @@ function prefersReducedMotion() {
 }
 
 let activeTransition = null;
+const joinedUpdates = new Set();
 const HOLD_OLD_CANVAS_MODE = 'hold-old-canvas';
 const REVEAL_OLD_CANVAS_MODE = 'reveal-old-canvas';
 
@@ -32,11 +33,26 @@ function canUseViewTransitions() {
 	return supportsViewTransitions() && ! prefersReducedMotion();
 }
 
+// Queue an update to run inside whichever view transition starts next, so a
+// surface outside the transition's owner can leave in the same frame. Returns
+// a function that drops the update if it hasn't run yet.
+export function joinNextViewTransition( update ) {
+	joinedUpdates.add( update );
+	return () => joinedUpdates.delete( update );
+}
+
+function runJoinedUpdates() {
+	const updates = [ ...joinedUpdates ];
+	joinedUpdates.clear();
+	updates.forEach( ( update ) => update() );
+}
+
 // Run the update inside the browser's View Transition snapshot window.
 // Without the API, or when reduced motion is on, this is just a normal update.
 // Callers can pass a mode when a swap needs its own CSS.
 export function withViewTransition( updater, options = {} ) {
 	if ( ! canUseViewTransitions() ) {
+		runJoinedUpdates();
 		updater();
 		return;
 	}
@@ -52,6 +68,7 @@ export function withViewTransition( updater, options = {} ) {
 		tx = document.startViewTransition( () => {
 			try {
 				flushSync( () => {
+					runJoinedUpdates();
 					updaterResult = updater();
 				} );
 			} finally {

@@ -96,7 +96,7 @@ jest.mock( '../../../src/components/DocumentPeekProvider', () => ( {
 		openDocument: mockOpenDocument,
 		closeDocument: mockCloseDocument,
 	} ) ),
-	useDocumentPeekState: jest.fn( () => ( { peek: null } ) ),
+	useOpenDocumentId: jest.fn( () => null ),
 } ) );
 
 jest.mock( '../../../src/components/RowDetailView', () => ( {
@@ -162,7 +162,7 @@ import { filterFavoritesByDeletedIds } from '../../../src/documents';
 import apiFetch from '@wordpress/api-fetch';
 import {
 	useDocumentPeekActions,
-	useDocumentPeekState,
+	useOpenDocumentId,
 } from '../../../src/components/DocumentPeekProvider';
 
 const tableView = {
@@ -587,7 +587,7 @@ describe( 'CollectionDataViews archive actions', () => {
 			openDocument: mockOpenDocument,
 			closeDocument: mockCloseDocument,
 		} );
-		useDocumentPeekState.mockReturnValue( { peek: null } );
+		useOpenDocumentId.mockReturnValue( null );
 		mockFlushActiveEditor.mockReset();
 		mockFlushActiveEditor.mockImplementation( flushRegisteredSaves );
 		mockLockEditors.mockClear();
@@ -681,9 +681,7 @@ describe( 'CollectionDataViews archive actions', () => {
 			paginationInfo: { totalItems: 1, totalPages: 1 },
 		} );
 		useCollectionRows.mockReturnValue( rowsState );
-		useDocumentPeekState.mockReturnValue( {
-			peek: { docId: 1, mode: 'side' },
-		} );
+		useOpenDocumentId.mockReturnValue( 1 );
 		mockCloseDocument.mockReturnValue( close.promise );
 		apiFetch.mockResolvedValue( {
 			archived: [ 1 ],
@@ -732,9 +730,7 @@ describe( 'CollectionDataViews archive actions', () => {
 				paginationInfo: { totalItems: 1, totalPages: 1 },
 			} )
 		);
-		useDocumentPeekState.mockReturnValue( {
-			peek: { docId: 1, mode: 'modal' },
-		} );
+		useOpenDocumentId.mockReturnValue( 1 );
 		mockCloseDocument.mockResolvedValue( false );
 
 		const { findAllByText } = render(
@@ -871,9 +867,7 @@ describe( 'CollectionDataViews archive actions', () => {
 				paginationInfo: { totalItems: 1, totalPages: 1 },
 			} )
 		);
-		useDocumentPeekState.mockReturnValue( {
-			peek: { docId: 1, mode: 'side' },
-		} );
+		useOpenDocumentId.mockReturnValue( 1 );
 		mockFlushActiveEditor.mockResolvedValueOnce( false );
 
 		const { findAllByText } = render(

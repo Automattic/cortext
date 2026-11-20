@@ -125,6 +125,81 @@
 	mix-blend-mode: normal;
 }
 
+// Opening a peek full screen: the old snapshot names the peek, the new one
+// names the workspace, so the panel grows into the page. The collection under
+// the peek leaves as the old `cortext-canvas` layer.
+:root[data-cortext-peek-to-full="leaving"] {
+
+	.cortext-row-detail-sidebar-shell {
+		pointer-events: none;
+		view-transition-name: cortext-row-detail-surface;
+	}
+
+	.cortext-row-detail-overlay {
+		view-transition-name: cortext-row-detail-overlay;
+	}
+}
+
+:root[data-cortext-peek-to-full="entering"] {
+
+	.cortext-workspace {
+		view-transition-name: cortext-row-detail-surface;
+	}
+
+	.cortext-row-detail-sidebar-shell--closing {
+		visibility: hidden;
+		view-transition-name: none;
+	}
+}
+
+::view-transition-group(cortext-row-detail-surface) {
+	z-index: 4;
+	border-radius: 6px;
+	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+	animation-duration: 280ms;
+	animation-timing-function: cubic-bezier(0.6, 0, 0.4, 1);
+}
+
+::view-transition-image-pair(cortext-row-detail-surface) {
+	overflow: clip;
+	border-radius: inherit;
+	background: $white;
+}
+
+::view-transition-old(cortext-row-detail-surface),
+::view-transition-new(cortext-row-detail-surface) {
+	width: auto;
+	height: auto;
+	mix-blend-mode: normal;
+}
+
+// Opening full screen holds the peek until the page has painted, so the
+// panel doesn't open onto an empty frame.
+:root[data-cortext-view-transition="hold-old-canvas"]::view-transition-old(cortext-row-detail-surface),
+:root[data-cortext-view-transition="reveal-old-canvas"]::view-transition-old(cortext-row-detail-surface) {
+	z-index: 2;
+}
+
+:root[data-cortext-view-transition="hold-old-canvas"]::view-transition-new(cortext-row-detail-surface),
+:root[data-cortext-view-transition="reveal-old-canvas"]::view-transition-new(cortext-row-detail-surface) {
+	z-index: 1;
+	animation: none;
+	opacity: 1;
+}
+
+:root[data-cortext-view-transition="hold-old-canvas"]::view-transition-old(cortext-row-detail-surface) {
+	animation: cortext-hold-old-canvas 30s step-end both;
+}
+
+:root[data-cortext-view-transition="reveal-old-canvas"]::view-transition-old(cortext-row-detail-surface) {
+	animation: cortext-reveal-old-canvas 180ms ease-out both;
+}
+
+::view-transition-group(cortext-row-detail-overlay) {
+	z-index: 3;
+	animation-duration: 280ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
 
 	::view-transition-group(cortext-canvas),

@@ -1,14 +1,10 @@
 @use "@wordpress/base-styles/colors" as *;
 @use "@wordpress/base-styles/variables" as *;
 
-.cortext-row-detail,
-.cortext-row-detail-modal {
-	font-size: 13px;
-	line-height: 1.4;
-}
-
 .cortext-row-detail {
 	z-index: 2;
+	font-size: 13px;
+	line-height: 1.4;
 	min-width: 0;
 	min-height: 0;
 	background: $white;
@@ -1425,8 +1421,8 @@
 .cortext-row-detail-sidebar-shell {
 	position: absolute;
 	z-index: 2;
-	inset-block: 0;
-	inset-inline-end: 0;
+	top: 0;
+	right: 0;
 	flex: 0 0 var(--cortext-row-detail-sidebar-width, 560px);
 	width: var(--cortext-row-detail-sidebar-width, 560px);
 	height: 100%;
@@ -1443,9 +1439,64 @@
 		cortext-row-detail-sidebar-open 300ms
 		cubic-bezier(0.6, 0, 0.4, 1) both;
 
+	// Side and center peeks share this shell. Switching modes animates its
+	// box, so the editor inside reflows as the panel moves.
+	transition:
+		top 280ms cubic-bezier(0.6, 0, 0.4, 1),
+		right 280ms cubic-bezier(0.6, 0, 0.4, 1),
+		width 280ms cubic-bezier(0.6, 0, 0.4, 1),
+		height 280ms cubic-bezier(0.6, 0, 0.4, 1),
+		max-width 280ms cubic-bezier(0.6, 0, 0.4, 1),
+		border-radius 280ms ease,
+		box-shadow 280ms ease,
+		z-index 0s linear 280ms;
+
+	&--center {
+		--cortext-row-detail-center-width: min(960px, calc(100% - 48px));
+		--cortext-row-detail-center-height: min(820px, calc(100% - 48px));
+
+		z-index: 20;
+		top: calc((100% - var(--cortext-row-detail-center-height)) / 2);
+		right: calc((100% - var(--cortext-row-detail-center-width)) / 2);
+		width: var(--cortext-row-detail-center-width);
+		height: var(--cortext-row-detail-center-height);
+		max-width: 100%;
+		border-left-color: transparent;
+		border-radius: 6px;
+		box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+		transition-delay: 0s;
+
+		.cortext-row-detail__header {
+			gap: $grid-unit-15;
+			padding:
+				$grid-unit-20 var(--cortext-row-detail-field-inset)
+				$grid-unit-15;
+		}
+	}
+
+	&--opened-center {
+		animation-name: cortext-row-detail-center-open;
+		animation-duration: 200ms;
+	}
+
+	// After the open animations above, so a peek that opened as center still
+	// slides out when it closes as a side peek.
 	&--closing {
 		pointer-events: none;
 		animation-name: cortext-row-detail-sidebar-close;
+	}
+
+	&--center#{&}--closing {
+		animation-name: cortext-row-detail-center-close;
+		animation-duration: 200ms;
+	}
+
+	&__focus-sentinel {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
 	}
 
 	&__resize-handle {
@@ -1492,6 +1543,47 @@
 	}
 }
 
+.cortext-row-detail-overlay {
+	position: absolute;
+	z-index: 19;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.35);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 280ms ease;
+
+	&.is-visible {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+@keyframes cortext-row-detail-center-open {
+
+	from {
+		opacity: 0;
+		transform: scale(0.97);
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes cortext-row-detail-center-close {
+
+	from {
+		opacity: 1;
+		transform: none;
+	}
+
+	to {
+		opacity: 0;
+		transform: scale(0.97);
+	}
+}
+
 body.cortext-row-detail-sidebar-resizing {
 	cursor: col-resize;
 	user-select: none;
@@ -1528,42 +1620,10 @@ body.cortext-row-detail-sidebar-resizing {
 		animation: none;
 	}
 
-	.cortext-row-detail-sidebar-shell {
+	.cortext-row-detail-sidebar-shell,
+	.cortext-row-detail-overlay {
+		transition: none;
 		animation: none;
 	}
 }
 
-.cortext-row-detail-modal {
-	width: min(960px, calc(100vw - 48px));
-	height: min(820px, calc(100vh - 48px));
-	border-radius: 6px;
-	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
-	overflow: hidden;
-
-	&--closing {
-		pointer-events: none;
-	}
-
-	.components-modal__content {
-		display: flex;
-		flex-direction: column;
-		height: 100%;
-		min-height: 0;
-		margin-top: 0;
-		padding: 0;
-
-		> div {
-			display: flex;
-			flex: 1 1 auto;
-			flex-direction: column;
-			min-height: 0;
-		}
-	}
-
-	.cortext-row-detail__header {
-		gap: $grid-unit-15;
-		padding:
-			$grid-unit-20 var(--cortext-row-detail-field-inset)
-			$grid-unit-15;
-	}
-}
