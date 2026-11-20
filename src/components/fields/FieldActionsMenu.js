@@ -506,7 +506,7 @@ export default function FieldActionsMenu( {
 				>
 					<p>
 						{ __(
-							'Delete this field? Existing values for this field will be removed from every entry.',
+							'Delete this field? Existing values for this field will be removed from every document.',
 							'cortext'
 						) }
 					</p>
