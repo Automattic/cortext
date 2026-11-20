@@ -972,6 +972,154 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_core_rest_cannot_repoint_a_relation_target(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-guard' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-guard' );
+		$other_collection_id  = $this->create_collection_with_slug( 'Clients', 'clients-guard' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $relation_id );
+		$request->set_param( 'meta', array( 'related_collection_id' => $other_collection_id ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'rest_cannot_update', $response->get_data()['code'] );
+		$this->assertSame(
+			$target_collection_id,
+			(int) get_post_meta( $relation_id, 'related_collection_id', true )
+		);
+	}
+
+	public function test_core_rest_cannot_change_relation_cardinality(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-card' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-card' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+				'relation_multiple'     => true,
+			)
+		)->get_data()['id'];
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $relation_id );
+		$request->set_param( 'meta', array( 'relation_multiple' => false ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( '1', get_post_meta( $relation_id, 'relation_multiple', true ) );
+	}
+
+	public function test_core_rest_cannot_change_a_rollup_aggregator(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-agg' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-agg' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$amount_id   = (int) $this->create_field(
+			$target_collection_id,
+			array(
+				'title' => 'Amount',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		$rollup_id   = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                    => 'Total',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation_id,
+				'rollup_target_field_id'   => $amount_id,
+				'rollup_aggregator'        => 'sum',
+			)
+		)->get_data()['id'];
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $rollup_id );
+		$request->set_param( 'meta', array( 'rollup_aggregator' => 'avg' ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'sum', get_post_meta( $rollup_id, 'rollup_aggregator', true ) );
+	}
+
+	public function test_core_rest_cannot_retype_a_relation_and_orphan_its_reverse(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-retype' );
+		$target_collection_id = $this->create_collection_with_slug( 'Invoices', 'invoices-retype' );
+
+		$relation_id = (int) $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		)->get_data()['id'];
+		$reverse_id  = (int) get_post_meta( $relation_id, 'relation_reverse_field_id', true );
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $relation_id );
+		$request->set_param( 'meta', array( 'type' => 'text' ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'relation', get_post_meta( $relation_id, 'type', true ) );
+		$this->assertSame( 'relation', get_post_meta( $reverse_id, 'type', true ) );
+		$this->assertSame( $relation_id, (int) get_post_meta( $reverse_id, 'relation_reverse_field_id', true ) );
+	}
+
+	public function test_core_rest_cannot_swap_select_options_without_migrating_rows(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-swap' );
+
+		$field_id = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title'   => 'Status',
+				'type'    => 'select',
+				'options' => array(
+					array(
+						'value' => 'todo',
+						'label' => 'To do',
+					),
+				),
+			)
+		)->get_data()['id'];
+
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/crtxt_fields/' . $field_id );
+		$request->set_param( 'meta', array( 'options' => '[{"value":"gone","label":"Gone"}]' ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame(
+			array( 'todo' ),
+			array_column( json_decode( (string) get_post_meta( $field_id, 'options', true ), true ), 'value' )
+		);
+	}
+
 	public function test_converting_a_target_field_refreshes_the_rollup_snapshot(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$source_collection_id = $this->create_collection_with_slug( 'Projects', 'projects-snap' );
