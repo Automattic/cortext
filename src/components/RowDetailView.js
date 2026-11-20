@@ -170,8 +170,8 @@ function DetailShell( {
 							icon={ arePropertiesVisible ? unseen : seen }
 							label={
 								arePropertiesVisible
-									? __( 'Collapse properties', 'cortext' )
-									: __( 'Expand properties', 'cortext' )
+									? __( 'Collapse fields', 'cortext' )
+									: __( 'Expand fields', 'cortext' )
 							}
 							onClick={ () =>
 								setArePropertiesVisible(
@@ -185,7 +185,7 @@ function DetailShell( {
 							label={
 								isPropertiesLayoutEditing
 									? __( 'Done customizing', 'cortext' )
-									: __( 'Customize properties', 'cortext' )
+									: __( 'Customize fields', 'cortext' )
 							}
 							isPressed={ isPropertiesLayoutEditing }
 							onClick={ onRequestLayoutEdit }

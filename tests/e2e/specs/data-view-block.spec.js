@@ -4666,7 +4666,7 @@ test.describe( 'Collection view block', () => {
 				name: 'Detail tools',
 			} );
 			await rowDetailToolbar
-				.getByRole( 'button', { name: 'Collapse properties' } )
+				.getByRole( 'button', { name: 'Collapse fields' } )
 				.click();
 			await expect( detailTitle ).toBeVisible();
 			await expect( propertiesSlot ).toHaveClass(
@@ -4674,11 +4674,11 @@ test.describe( 'Collection view block', () => {
 			);
 			await expect(
 				rowDetailToolbar.getByRole( 'button', {
-					name: 'Expand properties',
+					name: 'Expand fields',
 				} )
 			).toBeVisible();
 			await rowDetailToolbar
-				.getByRole( 'button', { name: 'Expand properties' } )
+				.getByRole( 'button', { name: 'Expand fields' } )
 				.click();
 			await expect( propertiesSlot ).toBeVisible();
 			await expect( propertiesSlot ).not.toHaveClass(

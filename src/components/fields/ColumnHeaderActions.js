@@ -384,7 +384,7 @@ function FieldActions( {
 					} }
 				>
 					<Menu.ItemLabel>
-						{ __( 'Hide column', 'cortext' ) }
+						{ __( 'Hide in view', 'cortext' ) }
 					</Menu.ItemLabel>
 				</Menu.Item>
 			</Menu.Group>

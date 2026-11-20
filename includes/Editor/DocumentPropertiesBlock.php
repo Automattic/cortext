@@ -29,7 +29,7 @@ final class DocumentPropertiesBlock {
 			self::BLOCK_NAME,
 			array(
 				'api_version'     => 3,
-				'title'           => __( 'Document properties', 'cortext' ),
+				'title'           => __( 'Document fields', 'cortext' ),
 				'category'        => 'widgets',
 				'icon'            => 'list-view',
 				'uses_context'    => array( 'postId', 'postType' ),

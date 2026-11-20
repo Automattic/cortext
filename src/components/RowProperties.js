@@ -120,17 +120,14 @@ function EmptyHiddenPropertiesDropZone( { placeholderHeight } ) {
 				/>
 			) : null }
 			<div className="cortext-row-detail__property-hidden-separator">
-				<span>{ __( 'Hidden properties', 'cortext' ) }</span>
+				<span>{ __( 'Hidden fields', 'cortext' ) }</span>
 			</div>
 			<div
 				className={
 					'cortext-row-detail__property-hidden-dropzone' +
 					( isOver ? ' is-over' : '' )
 				}
-				aria-label={ __(
-					'Drop properties here to hide them',
-					'cortext'
-				) }
+				aria-label={ __( 'Drop fields here to hide them', 'cortext' ) }
 			/>
 		</div>
 	);
@@ -227,7 +224,7 @@ function HiddenPropertiesSeparator() {
 			style={ style }
 			className="cortext-row-detail__property-hidden-separator"
 		>
-			<span>{ __( 'Hidden properties', 'cortext' ) }</span>
+			<span>{ __( 'Hidden fields', 'cortext' ) }</span>
 		</div>
 	);
 }
@@ -250,7 +247,7 @@ function withoutKey( object, key ) {
 }
 
 function saveErrorMessage( error ) {
-	return error?.message || __( 'Could not save property.', 'cortext' );
+	return error?.message || __( 'Could not save this value.', 'cortext' );
 }
 
 function shouldDebouncePropertySave( field ) {
@@ -916,7 +913,7 @@ function RowProperty( {
 					{ canReorderLayout ? (
 						<Button
 							className="cortext-row-detail__property-layout-chip"
-							aria-label={ __( 'Reorder property', 'cortext' ) }
+							aria-label={ __( 'Reorder field', 'cortext' ) }
 							icon={ dragHandle }
 							size="small"
 							variant="tertiary"
@@ -952,8 +949,8 @@ function RowProperty( {
 						icon={ isVisibleInLayout ? seen : unseen }
 						label={
 							isVisibleInLayout
-								? __( 'Hide property', 'cortext' )
-								: __( 'Show property', 'cortext' )
+								? __( 'Hide in documents', 'cortext' )
+								: __( 'Show in documents', 'cortext' )
 						}
 						isPressed={ isVisibleInLayout }
 						size="small"

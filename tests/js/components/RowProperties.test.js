@@ -312,7 +312,7 @@ describe( 'RowProperties', () => {
 		);
 
 		expect(
-			screen.getAllByRole( 'button', { name: 'Reorder property' } )
+			screen.getAllByRole( 'button', { name: 'Reorder field' } )
 		).toHaveLength( 2 );
 		expect( screen.getByTestId( 'dnd-context' ) ).toBeInTheDocument();
 
@@ -352,7 +352,7 @@ describe( 'RowProperties', () => {
 		);
 
 		const handle = screen.getAllByRole( 'button', {
-			name: 'Reorder property',
+			name: 'Reorder field',
 		} )[ 0 ];
 		handle.focus();
 		expect( handle ).toHaveFocus();
@@ -1141,7 +1141,7 @@ describe( 'RowProperties', () => {
 			/>
 		);
 
-		expect( screen.getByText( 'Hidden properties' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Hidden fields' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Status' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Archived' ) ).toBeInTheDocument();
 	} );
@@ -1172,10 +1172,10 @@ describe( 'RowProperties', () => {
 		);
 
 		const separator = screen
-			.getByText( 'Hidden properties' )
+			.getByText( 'Hidden fields' )
 			.closest( '.cortext-row-detail__property-hidden-separator' );
 		const dropzone = screen.getByLabelText(
-			'Drop properties here to hide them'
+			'Drop fields here to hide them'
 		);
 		const wrapper = dropzone.closest(
 			'.cortext-row-detail__property-hidden-dropzone-wrap'
@@ -1222,7 +1222,7 @@ describe( 'RowProperties', () => {
 		);
 
 		expect(
-			screen.getByLabelText( 'Drop properties here to hide them' )
+			screen.getByLabelText( 'Drop fields here to hide them' )
 		).toHaveClass( 'is-over' );
 	} );
 
@@ -1256,7 +1256,7 @@ describe( 'RowProperties', () => {
 			'field-8',
 		] );
 		expect(
-			screen.getByLabelText( 'Drop properties here to hide them' )
+			screen.getByLabelText( 'Drop fields here to hide them' )
 		).toBeInTheDocument();
 	} );
 
@@ -1461,10 +1461,10 @@ describe( 'RowProperties', () => {
 			'.cortext-row-detail__property-hidden-placeholder'
 		);
 		const wrapper = screen
-			.getByLabelText( 'Drop properties here to hide them' )
+			.getByLabelText( 'Drop fields here to hide them' )
 			.closest( '.cortext-row-detail__property-hidden-dropzone-wrap' );
 		const separator = screen
-			.getByText( 'Hidden properties' )
+			.getByText( 'Hidden fields' )
 			.closest( '.cortext-row-detail__property-hidden-separator' );
 		expect( placeholder ).toHaveStyle( { height: '48px' } );
 		expect( wrapper ).toContainElement( placeholder );

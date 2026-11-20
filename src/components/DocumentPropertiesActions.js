@@ -36,7 +36,7 @@ export default function DocumentPropertiesActions() {
 		return null;
 	}
 	return (
-		<PanelBody title={ __( 'Properties', 'cortext' ) }>
+		<PanelBody title={ __( 'Fields', 'cortext' ) }>
 			<div className="cortext-document-properties-actions">
 				{ onToggleVisible && hasFields && (
 					<Button
@@ -78,7 +78,7 @@ export default function DocumentPropertiesActions() {
 								aria-expanded={ isOpen }
 								__next40pxDefaultSize
 							>
-								{ __( 'Add property', 'cortext' ) }
+								{ __( 'Add field', 'cortext' ) }
 							</Button>
 						) }
 						renderContent={ ( { onClose } ) => (
