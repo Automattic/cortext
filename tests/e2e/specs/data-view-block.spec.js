@@ -1534,7 +1534,7 @@ test.describe( 'Collection view block', () => {
 
 			await alphaCard.hover();
 			const alphaCheckbox = alphaCard.locator(
-				'> .dataviews-selection-checkbox input'
+				'> .dataviews-selection-checkbox'
 			);
 			await expect( alphaCheckbox ).toBeVisible();
 			await alphaCheckbox.check();
@@ -1545,7 +1545,7 @@ test.describe( 'Collection view block', () => {
 
 			await betaCard.hover();
 			const betaCheckbox = betaCard.locator(
-				'> .dataviews-selection-checkbox input'
+				'> .dataviews-selection-checkbox'
 			);
 			await expect( betaCheckbox ).toBeVisible();
 			await betaCheckbox.check();
@@ -1657,7 +1657,7 @@ test.describe( 'Collection view block', () => {
 				const selectionControls = [
 					tableView
 						.locator(
-							'thead .dataviews-view-table-selection-checkbox'
+							'thead .dataviews-view-table__checkbox-column [role="checkbox"]'
 						)
 						.first(),
 					tableView
@@ -1676,13 +1676,11 @@ test.describe( 'Collection view block', () => {
 						'pointer-events',
 						'auto'
 					);
-					await expect( control.locator( 'input' ) ).toBeVisible();
+					await expect( control ).toBeVisible();
 				}
 
-				const tableRowCheckbox =
-					selectionControls[ 1 ].locator( 'input' );
-				const gridCardCheckbox =
-					selectionControls[ 2 ].locator( 'input' );
+				const tableRowCheckbox = selectionControls[ 1 ];
+				const gridCardCheckbox = selectionControls[ 2 ];
 				await tableRowCheckbox.check();
 				await gridCardCheckbox.check();
 				await expect( tableRowCheckbox ).toBeChecked();
@@ -3651,16 +3649,12 @@ test.describe( 'Collection view block', () => {
 			);
 
 			await alphaRow.hover();
-			await alphaRow
-				.locator( '.dataviews-selection-checkbox input' )
-				.check();
+			await alphaRow.locator( '.dataviews-selection-checkbox' ).check();
 			await expect(
 				canvas.getByText( '1 document selected' )
 			).toBeVisible();
 			await betaRow.hover();
-			await betaRow
-				.locator( '.dataviews-selection-checkbox input' )
-				.check();
+			await betaRow.locator( '.dataviews-selection-checkbox' ).check();
 			await expect(
 				canvas.getByText( '2 documents selected' )
 			).toBeVisible();

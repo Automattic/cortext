@@ -166,7 +166,7 @@ th.dataviews-view-table__checkbox-column {
 .cortext-data-view
 .dataviews-view-table
 thead
-th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-checkbox {
+th.dataviews-view-table__checkbox-column [role="checkbox"] {
 	margin-left: 10px;
 	margin-inline-start: 10px;
 }
@@ -183,7 +183,7 @@ thead > tr > th.dataviews-view-table__checkbox-column {
 :is(
 	thead
 	th.dataviews-view-table__checkbox-column
-	> .dataviews-view-table-selection-checkbox,
+	[role="checkbox"],
 	tbody
 	td.dataviews-view-table__checkbox-column
 	.dataviews-selection-checkbox
@@ -198,7 +198,7 @@ thead > tr > th.dataviews-view-table__checkbox-column {
 :is(
 	thead
 	th.dataviews-view-table__checkbox-column:focus-within
-	> .dataviews-view-table-selection-checkbox,
+	[role="checkbox"],
 	tbody
 	tr:is(:hover, .is-hovered, :focus-within, .is-selected)
 	td.dataviews-view-table__checkbox-column
@@ -207,7 +207,7 @@ thead > tr > th.dataviews-view-table__checkbox-column {
 .cortext-data-view
 .dataviews-view-table:has(tbody tr.is-selected)
 thead
-th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-checkbox {
+th.dataviews-view-table__checkbox-column [role="checkbox"] {
 	opacity: 1;
 	pointer-events: auto;
 }
@@ -221,7 +221,7 @@ th.dataviews-view-table__checkbox-column > .dataviews-view-table-selection-check
 	:is(
 		thead
 		th.dataviews-view-table__checkbox-column
-		> .dataviews-view-table-selection-checkbox,
+		[role="checkbox"],
 		tbody
 		td.dataviews-view-table__checkbox-column
 		.dataviews-selection-checkbox

@@ -138,6 +138,18 @@ const ROW_SAVE_REFRESH_DELAY_MS = 400;
 const EMPTY_DATA_VIEW_SELECTION = [];
 const LIST_ROW_EMPTY_CLICK_TARGET_SELECTOR = '.dataviews-view-list__item';
 const ignoreDataViewsSelectionChange = () => {};
+const SELECT_ALL_CHECKBOX_SELECTOR =
+	'.dataviews-view-table-selection-checkbox, thead .dataviews-view-table__checkbox-column';
+
+// DataViews checkboxes come from `@wordpress/ui`, which forwards each click to
+// a hidden native input placed next to the visible control. Read that second
+// click as a click on the control so it keeps the selection intent.
+function getSelectionClickTarget( target ) {
+	if ( target.matches( 'input[type="checkbox"][aria-hidden="true"]' ) ) {
+		return target.previousElementSibling ?? target;
+	}
+	return target;
+}
 
 export default function CollectionDataViews( {
 	collectionId,
@@ -492,17 +504,15 @@ export default function CollectionDataViews( {
 				return;
 			}
 			selectionInteractionRef.current = null;
-			const target = event.target;
-			if ( ! target?.closest ) {
+			if ( ! event.target?.closest ) {
 				return;
 			}
+			const target = getSelectionClickTarget( event.target );
 			if ( target.closest( '.dataviews-footer' ) ) {
 				return;
 			}
 
-			if (
-				target.closest( '.dataviews-view-table-selection-checkbox' )
-			) {
+			if ( target.closest( SELECT_ALL_CHECKBOX_SELECTOR ) ) {
 				selectionInteractionRef.current = { type: 'merge' };
 				return;
 			}
