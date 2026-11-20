@@ -58,10 +58,7 @@ const TEMPLATE_EDITOR_CSS = `
 const TEMPLATE_EXTRA_STYLES = [ { css: TEMPLATE_EDITOR_CSS } ];
 
 function TemplateAutosaveBridge( { onApi, onSaved } ) {
-	const { flushNow, status } = useAutosave( {
-		debounceMs: 0,
-		minSaveIntervalMs: 0,
-	} );
+	const { flushNow, status } = useAutosave();
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 
