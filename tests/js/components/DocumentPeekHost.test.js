@@ -29,7 +29,7 @@ jest.mock( '../../../src/hooks/useCollectionFields', () => () => ( {
 	detailLayoutEntries: [],
 } ) );
 
-jest.mock( '../../../src/components/RowDetailSidebarSlot', () => ( {
+jest.mock( '../../../src/components/DocumentPeekLayer', () => ( {
 	RowDetailSidebar: {
 		Fill: ( { children } ) => (
 			<div data-testid="row-detail-sidebar">{ children }</div>

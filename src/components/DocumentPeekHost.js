@@ -9,7 +9,7 @@ import {
 import { useParams } from '@tanstack/react-router';
 
 import RowDetailView from './RowDetailView';
-import { RowDetailSidebar } from './RowDetailSidebarSlot';
+import { RowDetailSidebar } from './DocumentPeekLayer';
 import { CurrentViewModeProvider } from './CurrentViewModeContext';
 import {
 	useDocumentPeekActions,
