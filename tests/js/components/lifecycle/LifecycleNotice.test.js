@@ -285,13 +285,13 @@ describe( 'LifecycleNotice as Archived', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'unarchives to where it was', async () => {
+	it( 'unarchives with its own label', async () => {
 		mockActions.unarchive.mockResolvedValue( { post: { id: 7 } } );
 		const onRestored = renderNotice( jest.fn(), ARCHIVED );
 
 		await act( async () => {
 			fireEvent.click(
-				screen.getByRole( 'button', { name: 'Restore to Reading' } )
+				screen.getByRole( 'button', { name: 'Unarchive' } )
 			);
 		} );
 

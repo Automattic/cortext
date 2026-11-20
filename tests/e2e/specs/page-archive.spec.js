@@ -180,7 +180,7 @@ test.describe( 'Archived view', () => {
 			await expect( banner ).toContainText(
 				'1 nested document comes back with it'
 			);
-			await banner.getByRole( 'button', { name: 'Restore' } ).click();
+			await banner.getByRole( 'button', { name: 'Unarchive' } ).click();
 			await expect( parentItem ).toHaveCount( 0 );
 
 			// The archived collection opens with its archived rows.

@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { box as archiveIcon, trash as trashIcon } from '@wordpress/icons';
 
 import ArchivedTrashConfirmDialog from './ArchivedTrashConfirmDialog';
@@ -56,6 +56,14 @@ export const TRASH = {
 		emptyList: __( 'Trash is empty.', 'cortext' ),
 		primaryShortcut: __( 'restore', 'cortext' ),
 		secondaryShortcut: __( 'delete', 'cortext' ),
+		restoreLabel: ( parentTitle ) =>
+			parentTitle
+				? sprintf(
+						/* translators: %s: title of the page or collection the document is restored into */
+						__( 'Restore to %s', 'cortext' ),
+						parentTitle
+				  )
+				: __( 'Restore', 'cortext' ),
 		secondaryLabel: __( 'Delete permanently', 'cortext' ),
 		restoreError: __( 'Could not restore this document.', 'cortext' ),
 		secondaryError: __( 'Could not delete this document.', 'cortext' ),
@@ -94,10 +102,11 @@ export const ARCHIVED = {
 		searchLabel: __( 'Search Archived', 'cortext' ),
 		loadError: __( 'Could not load archived documents.', 'cortext' ),
 		emptyList: __( 'No archived documents.', 'cortext' ),
-		primaryShortcut: __( 'restore', 'cortext' ),
+		primaryShortcut: __( 'unarchive', 'cortext' ),
 		secondaryShortcut: __( 'trash', 'cortext' ),
+		restoreLabel: () => __( 'Unarchive', 'cortext' ),
 		secondaryLabel: __( 'Move to Trash', 'cortext' ),
-		restoreError: __( 'Could not restore this document.', 'cortext' ),
+		restoreError: __( 'Could not unarchive this document.', 'cortext' ),
 		secondaryError: __(
 			'Could not move this document to Trash.',
 			'cortext'
