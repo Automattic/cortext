@@ -418,7 +418,7 @@ final class DocumentsController {
 		if ( 'trash' !== $post->post_status ) {
 			return new WP_Error(
 				'cortext_document_not_trashed',
-				__( 'Document is not in trash.', 'cortext' ),
+				__( 'Document is not in Trash.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -477,7 +477,7 @@ final class DocumentsController {
 		if ( 'trash' !== $post->post_status ) {
 			return new WP_Error(
 				'cortext_document_not_trashed',
-				__( 'Document is not in trash.', 'cortext' ),
+				__( 'Document is not in Trash.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}

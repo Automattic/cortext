@@ -158,7 +158,7 @@ describe( 'LifecycleNotice as Trash', () => {
 		renderNotice();
 
 		expect(
-			screen.getByText( 'This document is in the Trash.' )
+			screen.getByText( 'This document is in Trash.' )
 		).toBeInTheDocument();
 		expect(
 			screen.getByText(

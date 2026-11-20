@@ -65,7 +65,7 @@ final class DocumentWriteGuard {
 		if ( Documents::STATUS_TRASH === $post->post_status ) {
 			return new WP_Error(
 				'cortext_document_in_trash',
-				__( 'Move this document out of Trash before editing it.', 'cortext' ),
+				__( 'Restore this document from Trash before editing it.', 'cortext' ),
 				array( 'status' => 409 )
 			);
 		}

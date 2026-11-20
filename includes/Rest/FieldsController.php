@@ -880,7 +880,7 @@ final class FieldsController {
 		if ( $is_archived ) {
 			return new WP_Error(
 				'cortext_collection_archived',
-				__( 'Restore this collection from Archive before changing its fields.', 'cortext' ),
+				__( 'Unarchive this collection before changing its fields.', 'cortext' ),
 				array(
 					'status'        => 409,
 					'collection_id' => $collection_id,
@@ -891,7 +891,7 @@ final class FieldsController {
 		if ( Documents::STATUS_TRASH === $collection->post_status ) {
 			return new WP_Error(
 				'cortext_collection_in_trash',
-				__( 'Move this collection out of Trash before changing its fields.', 'cortext' ),
+				__( 'Restore this collection from Trash before changing its fields.', 'cortext' ),
 				array(
 					'status'        => 409,
 					'collection_id' => $collection_id,

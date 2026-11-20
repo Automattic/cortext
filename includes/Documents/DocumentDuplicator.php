@@ -78,7 +78,7 @@ final class DocumentDuplicator {
 		) {
 			return new WP_Error(
 				'cortext_duplicate_archived_container',
-				__( 'Restore the archived parent or collection before making a copy.', 'cortext' ),
+				__( 'Unarchive the parent or collection before making a copy.', 'cortext' ),
 				array( 'status' => 409 )
 			);
 		}

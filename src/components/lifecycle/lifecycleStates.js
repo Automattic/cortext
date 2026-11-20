@@ -59,7 +59,7 @@ export const TRASH = {
 		secondaryLabel: __( 'Delete permanently', 'cortext' ),
 		restoreError: __( 'Could not restore this document.', 'cortext' ),
 		secondaryError: __( 'Could not delete this document.', 'cortext' ),
-		noticeTitle: __( 'This document is in the Trash.', 'cortext' ),
+		noticeTitle: __( 'This document is in Trash.', 'cortext' ),
 		emptyTitle: __( 'Nothing in Trash', 'cortext' ),
 		emptyBody: __(
 			'Documents you move to Trash show up here with where they came from. They stay for 30 days, then they are deleted for good.',

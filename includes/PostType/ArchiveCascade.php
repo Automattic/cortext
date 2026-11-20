@@ -806,7 +806,7 @@ final class ArchiveCascade {
 			if ( ! isset( $ignored[ $container_id ] ) && $is_archived ) {
 				return new WP_Error(
 					'cortext_document_archived_container',
-					__( 'Restore this document\'s parent or collection from Archive first.', 'cortext' ),
+					__( 'Unarchive this document\'s parent or collection first.', 'cortext' ),
 					array(
 						'status'       => 409,
 						'container_id' => $container_id,
