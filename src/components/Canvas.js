@@ -25,16 +25,21 @@ import {
 // CSS bundle, off the initial CSS path.
 import './Canvas.scss';
 
-// Registers core + Cortext blocks before any editor renders. Shared with
-// RowEditor so opening a row peek first (without a document open) still
-// gets the blocks registered.
 import { getEditorSettings } from './initEditor';
+import { useEditorsLocked } from './ActiveEditorContext';
 import useAutosave from '../hooks/useAutosave';
 import useDelayedFlag from '../hooks/useDelayedFlag';
+import useMediaQuery from '../hooks/useMediaQuery';
 import usePostLock from '../hooks/usePostLock';
 import { withViewTransition } from '../hooks/viewTransition';
 import { notifyBacklinksChanged } from '../hooks/backlinksInvalidation';
 import { definesTrait } from '../documents/capabilities';
+import {
+	READ_ONLY_ARCHIVED,
+	READ_ONLY_FROZEN,
+	READ_ONLY_TRASHED,
+	getReadOnlyState,
+} from '../documents/readOnly';
 import { POST_TYPE } from './page-queries';
 import CortextInserterSidebar from './CortextInserterSidebar';
 import CortextLinkSuggestions from './CortextLinkSuggestions';
@@ -90,6 +95,8 @@ function InserterToggle( { disabled = false } ) {
 
 function DocumentActions( {
 	disabled = false,
+	isRetired = false,
+	isReadOnlyDocument = false,
 	canInsertBlocks = true,
 	isActive,
 	postId,
@@ -121,15 +128,21 @@ function DocumentActions( {
 	return (
 		<TopBarActionsFill>
 			<div className="cortext-document-actions">
-				{ canInsertBlocks ? (
+				{ /* Adding blocks, publishing, and the properties layout don't
+				apply to a trashed or archived document, so only Settings stays.
+				A locked document keeps Publish to show whether it's public, but
+				can't take new blocks or a new properties layout. */ }
+				{ canInsertBlocks && ! isReadOnlyDocument ? (
 					<InserterToggle disabled={ disabled } />
 				) : null }
-				{ topBarActions }
-				<DocumentPublishToggle
-					postId={ postId }
-					disabled={ disabled }
-				/>
-				{ hasProperties ? (
+				{ ! isRetired && topBarActions }
+				{ ! isRetired && (
+					<DocumentPublishToggle
+						postId={ postId }
+						disabled={ disabled }
+					/>
+				) }
+				{ hasProperties && ! isRetired ? (
 					<>
 						<Button
 							className="cortext-document-actions__fields"
@@ -144,19 +157,24 @@ function DocumentActions( {
 							disabled={ disabled }
 							onClick={ onTogglePropertiesVisible }
 						/>
-						<Button
-							className="cortext-document-actions__fields"
-							icon={ pencil }
-							size="compact"
-							label={
-								isPropertiesLayoutEditing
-									? __( 'Done customizing', 'cortext' )
-									: __( 'Customize properties', 'cortext' )
-							}
-							isPressed={ isPropertiesLayoutEditing }
-							disabled={ disabled }
-							onClick={ onEditPropertiesLayout }
-						/>
+						{ ! isReadOnlyDocument && (
+							<Button
+								className="cortext-document-actions__fields"
+								icon={ pencil }
+								size="compact"
+								label={
+									isPropertiesLayoutEditing
+										? __( 'Done customizing', 'cortext' )
+										: __(
+												'Customize properties',
+												'cortext'
+										  )
+								}
+								isPressed={ isPropertiesLayoutEditing }
+								disabled={ disabled }
+								onClick={ onEditPropertiesLayout }
+							/>
+						) }
 					</>
 				) : null }
 				<Button
@@ -212,42 +230,6 @@ function VisualCanvas( {
 
 const SECONDARY_SIDEBAR_ANIMATION_DURATION_SECONDS = 0.25;
 const SECONDARY_SIDEBAR_FALLBACK_WIDTH = 350;
-
-function useMediaQuery( query ) {
-	const readMatch = () =>
-		typeof window !== 'undefined' &&
-		typeof window.matchMedia === 'function' &&
-		window.matchMedia( query ).matches;
-	const [ matches, setMatches ] = useState( readMatch );
-
-	useEffect( () => {
-		if (
-			typeof window === 'undefined' ||
-			typeof window.matchMedia !== 'function'
-		) {
-			return undefined;
-		}
-
-		const mediaQuery = window.matchMedia( query );
-		const update = () => setMatches( mediaQuery.matches );
-		update();
-		if ( typeof mediaQuery.addEventListener === 'function' ) {
-			mediaQuery.addEventListener( 'change', update );
-		} else {
-			mediaQuery.addListener?.( update );
-		}
-
-		return () => {
-			if ( typeof mediaQuery.removeEventListener === 'function' ) {
-				mediaQuery.removeEventListener( 'change', update );
-			} else {
-				mediaQuery.removeListener?.( update );
-			}
-		};
-	}, [ query ] );
-
-	return matches;
-}
 
 // tech-debt.md#td-canvas-interface-skeleton-clone: The WordPress runtime did
 // not expose InterfaceSkeleton, so Cortext carries the shell animation locally.
@@ -382,7 +364,7 @@ function documentKey( postType, postId ) {
 	return `${ postType }:${ postId }`;
 }
 
-function CanvasEditor( {
+export function CanvasEditor( {
 	post,
 	postType,
 	collectionId,
@@ -406,6 +388,10 @@ function CanvasEditor( {
 	recentTarget,
 } ) {
 	const isCollection = definesTrait( post );
+	const readOnlyState = getReadOnlyState( post );
+	const isTrashed = readOnlyState === READ_ONLY_TRASHED;
+	const isArchived = readOnlyState === READ_ONLY_ARCHIVED;
+	const isLifecycleReadOnly = readOnlyState !== null;
 	const hasTrait =
 		Array.isArray( post?.crtxt_trait ) && post.crtxt_trait.length > 0;
 	const autosaveRecentTarget =
@@ -414,29 +400,39 @@ function CanvasEditor( {
 	const { status, lastSavedAt, flushNow, isDirty, isSaving } = useAutosave( {
 		recentTarget: autosaveRecentTarget,
 	} );
-	const isTrashed = useSelect(
-		( select ) =>
-			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
-			'trash',
-		[]
-	);
 	const postLock = usePostLock( {
 		postId: post.id,
 		postType: post.type ?? postType,
-		// WordPress rejects lock acquisition for trashed posts. Disable the lock
-		// as soon as the status becomes `trash`; the restore notice handles the
-		// read-only state from there.
-		enabled: isActive && ! isTrashed,
+		// The lock endpoint rejects trashed, archived and frozen posts. Disable
+		// the lock as soon as one of those applies; the restore notices and
+		// the Locked badge handle the read-only state from there.
+		enabled: isActive && ! isLifecycleReadOnly,
 	} );
-	const isReadOnly = postLock.isReadOnly || isTrashed;
+	const isEditorsLocked = useEditorsLocked();
+	const isReadOnly =
+		isLifecycleReadOnly || postLock.isReadOnly || isEditorsLocked;
+	// A frozen document can still be unlocked, archived or trashed, and a
+	// frozen collection's rows stay editable: EditorBody freezes only its
+	// header, schema and views.
+	const isFrozen = readOnlyState === READ_ONLY_FROZEN;
+	const isFrozenEditorBusy = postLock.isReadOnly || isEditorsLocked;
+	const isCanvasLocked =
+		isFrozen && isCollection ? isFrozenEditorBusy : isReadOnly;
+	const areActionsLocked = isFrozen ? isFrozenEditorBusy : isReadOnly;
 	const { resetPost, setIsInserterOpened } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 	const lastNotifiedBacklinkSaveRef = useRef( null );
 
+	const editorPostType = post.type ?? postType;
 	useEffect( () => {
-		onApi?.( { flushNow, discard } );
+		onApi?.( {
+			flushNow,
+			discard,
+			postId: post.id,
+			postType: editorPostType,
+		} );
 		return () => onApi?.( null );
-	}, [ discard, flushNow, onApi ] );
+	}, [ discard, editorPostType, flushNow, onApi, post.id ] );
 
 	useEffect( () => {
 		if (
@@ -500,13 +496,19 @@ function CanvasEditor( {
 		[]
 	);
 
-	// A collection's data view owns the whole body. Clear the editor flag too,
-	// or the inserter will pop open again when the user returns to a page.
+	// A collection's data view owns the whole body. Lifecycle-hidden documents
+	// are read only, so close the inserter there too before it can dispatch a
+	// block edit outside EditorBody's Disabled wrapper.
 	useEffect( () => {
-		if ( isCollection && isInserterOpened ) {
+		if ( ( isCollection || isLifecycleReadOnly ) && isInserterOpened ) {
 			setIsInserterOpened( false );
 		}
-	}, [ isCollection, isInserterOpened, setIsInserterOpened ] );
+	}, [
+		isCollection,
+		isInserterOpened,
+		isLifecycleReadOnly,
+		setIsInserterOpened,
+	] );
 
 	const hasProperties = Array.isArray( fields ) && fields.length > 0;
 	const [ arePropertiesVisible, setArePropertiesVisible ] = useState( true );
@@ -547,6 +549,8 @@ function CanvasEditor( {
 			<CortextMentions />
 			<DocumentActions
 				disabled={ isReadOnly }
+				isRetired={ isTrashed || isArchived }
+				isReadOnlyDocument={ isLifecycleReadOnly }
 				canInsertBlocks={ ! isCollection }
 				isActive={ isActive }
 				postId={ post.id }
@@ -558,12 +562,20 @@ function CanvasEditor( {
 				onTogglePropertiesVisible={ togglePropertiesVisible }
 			/>
 			<CanvasInterfaceSkeleton
-				className="cortext-canvas"
+				className={ [
+					'cortext-canvas',
+					isTrashed && 'is-trashed',
+					isArchived && 'is-archived',
+				]
+					.filter( Boolean )
+					.join( ' ' ) }
 				content={
 					<>
 						{ notice }
 						<PostLockFailureNotice
-							error={ postLock.error }
+							error={
+								isLifecycleReadOnly ? null : postLock.error
+							}
 							isRetrying={ postLock.isAcquiring }
 							onRetry={ postLock.retry }
 						/>
@@ -573,8 +585,9 @@ function CanvasEditor( {
 							isEditorSurfaceDisplayed={
 								isEditorSurfaceDisplayed
 							}
-							isLocked={ isReadOnly }
+							isLocked={ isCanvasLocked }
 							isSurfaceFocusPending={
+								! isLifecycleReadOnly &&
 								postLock.isReadOnly &&
 								! postLock.isFailed &&
 								! postLock.isLocked
@@ -589,14 +602,14 @@ function CanvasEditor( {
 					</>
 				}
 				secondarySidebar={
-					! isCollection && isInserterOpened ? (
+					! isCollection && ! isReadOnly && isInserterOpened ? (
 						<CortextInserterSidebar />
 					) : null
 				}
 				sidebar={ <InspectorSidebarSlot /> }
 			/>
 			<PostLockModal
-				isOpen={ postLock.isLocked }
+				isOpen={ ! isLifecycleReadOnly && postLock.isLocked }
 				isTakeover={ postLock.isTakeover }
 				isTakingOver={ postLock.isTakingOver }
 				onTakeOver={ postLock.takeOver }
@@ -604,6 +617,7 @@ function CanvasEditor( {
 			/>
 			<DocumentInspectorSidebar
 				isLocked={ isReadOnly }
+				areActionsLocked={ areActionsLocked }
 				postId={ post.id }
 				postType={ postType }
 			/>

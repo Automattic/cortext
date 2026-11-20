@@ -1,6 +1,22 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 
-import { definesTrait } from './capabilities';
+import { definesTrait, hasTrait } from './capabilities';
+
+/**
+ * Kind of document, as shown to people: a page, a collection, or one of a
+ * collection's items.
+ *
+ * @param {Object} record Document record.
+ */
+export function documentTypeLabel( record ) {
+	if ( definesTrait( record ) ) {
+		return __( 'Collection', 'cortext' );
+	}
+	if ( hasTrait( record ) ) {
+		return __( 'Collection item', 'cortext' );
+	}
+	return __( 'Page', 'cortext' );
+}
 
 /**
  * Label for descendants that will be restored or deleted with a trash root.
@@ -17,8 +33,9 @@ export function nestedDocumentCountLabel( counts ) {
 }
 
 /**
- * Confirmation copy for permanent delete. Documents that contain rows take
- * those rows down with them, so the dialog asks the user to type the title.
+ * Confirmation copy for permanent delete. Collections take their rows down with
+ * them and other documents their nested documents, so in both cases the dialog
+ * asks the user to type the title.
  *
  * @param {Object} record Document being deleted.
  * @param {Object} counts Cascade counts `{ total }`.
@@ -56,5 +73,6 @@ export function permanentDeleteDocumentConfirmation( record, counts ) {
 			),
 			total
 		),
+		requireTypeToConfirm: true,
 	};
 }

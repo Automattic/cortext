@@ -35,6 +35,7 @@ import Chip from './Chip';
 import OptionMenu from './OptionMenu';
 import { isOptionColorName, pickNextOptionColor } from './optionPalette';
 import DeleteOptionDialog from './DeleteOptionDialog';
+import { useIsSchemaFrozen } from '../collectionFieldsContextObject';
 import {
 	useFlushFieldRecord,
 	useUpdateFieldOptions,
@@ -73,6 +74,7 @@ function uniqueValue( base, taken ) {
 
 function SortableOptionRow( {
 	option,
+	isLocked,
 	isMenuOpen,
 	isSelected,
 	onPick,
@@ -83,7 +85,7 @@ function SortableOptionRow( {
 	onDelete,
 } ) {
 	const { attributes, listeners, setNodeRef, transform, transition } =
-		useSortable( { id: option.value } );
+		useSortable( { id: option.value, disabled: isLocked } );
 	const moreRef = useRef( null );
 	const style = {
 		transform: transformToString( transform ),
@@ -103,15 +105,17 @@ function SortableOptionRow( {
 				( isSelected ? ' is-selected' : '' )
 			}
 		>
-			<button
-				type="button"
-				className="cortext-edit-options-popover__handle"
-				aria-label={ __( 'Reorder option', 'cortext' ) }
-				{ ...attributes }
-				{ ...listeners }
-			>
-				<Icon icon={ dragHandle } size={ 18 } />
-			</button>
+			{ ! isLocked && (
+				<button
+					type="button"
+					className="cortext-edit-options-popover__handle"
+					aria-label={ __( 'Reorder option', 'cortext' ) }
+					{ ...attributes }
+					{ ...listeners }
+				>
+					<Icon icon={ dragHandle } size={ 18 } />
+				</button>
+			) }
 			{ isPickable ? (
 				<button
 					type="button"
@@ -126,17 +130,19 @@ function SortableOptionRow( {
 					<Chip label={ option.label } color={ displayColor } />
 				</span>
 			) }
-			<Button
-				ref={ moreRef }
-				icon={ moreHorizontal }
-				size="small"
-				className="cortext-edit-options-popover__more"
-				label={ __( 'Edit option', 'cortext' ) }
-				onClick={ onToggleMenu }
-				aria-haspopup="menu"
-				aria-expanded={ isMenuOpen }
-			/>
-			{ isMenuOpen ? (
+			{ ! isLocked && (
+				<Button
+					ref={ moreRef }
+					icon={ moreHorizontal }
+					size="small"
+					className="cortext-edit-options-popover__more"
+					label={ __( 'Edit option', 'cortext' ) }
+					onClick={ onToggleMenu }
+					aria-haspopup="menu"
+					aria-expanded={ isMenuOpen }
+				/>
+			) }
+			{ isMenuOpen && ! isLocked ? (
 				<Popover
 					anchor={ moreRef.current }
 					placement="right-start"
@@ -386,7 +392,8 @@ export default function EditOptionsPopover( {
 			),
 		[ options, lowerSearch ]
 	);
-	const canCreate = trimmedSearch && ! exactMatch;
+	const isSchemaFrozen = useIsSchemaFrozen();
+	const canCreate = trimmedSearch && ! exactMatch && ! isSchemaFrozen;
 	const previewColor = useMemo(
 		() => ( canCreate ? pickNextOptionColor( options ) : null ),
 		[ canCreate, options ]
@@ -528,6 +535,7 @@ export default function EditOptionsPopover( {
 								<SortableOptionRow
 									key={ option.value }
 									option={ option }
+									isLocked={ isSchemaFrozen }
 									isSelected={ selectedValues.has(
 										option.value
 									) }

@@ -17,16 +17,13 @@ import {
 	Notice,
 	PanelBody,
 	Placeholder,
-	SearchControl,
 	SelectControl,
-	Spinner,
 	TextControl,
 	ToolbarButton,
 } from '@wordpress/components';
-import { useEntityRecords } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
-import { useCallback, useState } from '@wordpress/element';
+import { useCallback, useEffect, useState } from '@wordpress/element';
 import { store as interfaceStore } from '@wordpress/interface';
 import { cog, link, plus, replace, table } from '@wordpress/icons';
 
@@ -36,13 +33,11 @@ import CanvasOwnerInspector, {
 import { useCanvasReadySignals } from '../../components/CanvasReadyContext';
 import CollectionDataViews from '../../components/CollectionDataViews';
 import AddFieldPopover from '../../components/fields/AddFieldPopover';
+import CollectionPicker from './CollectionPicker';
 import { useEditorSurface } from '../../components/EditorSurfaceContext';
-import {
-	DOCUMENT_POST_TYPE,
-	FULL_PAGE_COLLECTION_QUERY,
-} from '../../collections';
 import { useCreateCollectionDocument } from '../../documents';
 import { toDataViewId } from '../../hooks/fieldIds';
+import { useIsDocumentFrozen } from '../../documents/readOnlyStore';
 import {
 	CollectionFieldsProvider,
 	useCollectionFieldsContext,
@@ -51,12 +46,10 @@ import { GHOST_FIELD_ID } from '../../components/dataViewColumns';
 import {
 	DEFAULT_ROW_DETAIL_MODE,
 	ROW_DETAIL_MODES,
-} from '../../components/rowDetailUtils';
-import { DEFAULT_GRID_PREVIEW_SIZE } from '../../components/dataViewAdapter';
-import {
 	ROW_DETAIL_MODE_ICONS,
 	ROW_DETAIL_MODE_LABELS,
-} from '../../components/RowDetailView';
+} from '../../components/rowDetailUtils';
+import { DEFAULT_GRID_PREVIEW_SIZE } from '../../components/dataViewAdapter';
 
 const DENSITY_OPTIONS = [
 	{ value: 'compact', label: __( 'Compact', 'cortext' ) },
@@ -106,75 +99,6 @@ function createDefaultView() {
 		},
 		rowDetailMode: 'side',
 	};
-}
-
-function CollectionPicker( { selectedId = '', onSelect } ) {
-	// Every document that defines a schema (has `cortext_fields` meta).
-	const { records, isResolving, hasResolved } = useEntityRecords(
-		'postType',
-		DOCUMENT_POST_TYPE,
-		FULL_PAGE_COLLECTION_QUERY
-	);
-	const [ query, setQuery ] = useState( '' );
-
-	const hasCollections = Boolean( records?.length );
-
-	if ( isResolving && ! hasCollections ) {
-		return <Spinner />;
-	}
-
-	if ( hasResolved && ! hasCollections ) {
-		return (
-			<p className="cortext-data-view-picker__empty">
-				{ __( 'No collections yet.', 'cortext' ) }
-			</p>
-		);
-	}
-
-	const collectionTitle = ( collection ) =>
-		collection.title?.rendered ||
-		collection.title?.raw ||
-		`#${ collection.id }`;
-	const needle = query.trim().toLowerCase();
-	const matches = needle
-		? ( records ?? [] ).filter( ( collection ) =>
-				collectionTitle( collection ).toLowerCase().includes( needle )
-		  )
-		: records ?? [];
-
-	return (
-		<div className="cortext-collection-chooser">
-			<SearchControl
-				__nextHasNoMarginBottom
-				className="cortext-collection-chooser__search"
-				value={ query }
-				onChange={ setQuery }
-				placeholder={ __( 'Search collections', 'cortext' ) }
-			/>
-			{ matches.length === 0 ? (
-				<p className="cortext-data-view-picker__empty">
-					{ __( 'No collections match your search.', 'cortext' ) }
-				</p>
-			) : (
-				matches.map( ( collection ) => {
-					const isSelected =
-						selectedId && Number( selectedId ) === collection.id;
-
-					return (
-						<Button
-							key={ collection.id }
-							className="cortext-collection-chooser__item"
-							variant={ isSelected ? 'secondary' : 'tertiary' }
-							isPressed={ isSelected }
-							onClick={ () => onSelect( collection.id ) }
-						>
-							{ collectionTitle( collection ) }
-						</Button>
-					);
-				} )
-			) }
-		</div>
-	);
 }
 
 function CollectionCreator( { onCreate } ) {
@@ -247,7 +171,8 @@ function CollectionToolbarControl( {
 	onSelect,
 	onFieldCreated,
 } ) {
-	const { collection, isResolving } = useCollectionFieldsContext();
+	const { collection, isResolving, isSchemaFrozen } =
+		useCollectionFieldsContext();
 	const { hasBlockInspector } = useEditorSurface();
 	const { enableComplementaryArea } = useDispatch( interfaceStore );
 
@@ -280,7 +205,7 @@ function CollectionToolbarControl( {
 					) }
 				/>
 			) }
-			{ isCollectionValid && (
+			{ isCollectionValid && ! isSchemaFrozen && (
 				<Dropdown
 					contentClassName="cortext-data-view-toolbar-popover"
 					popoverProps={ { placement: 'bottom-start' } }
@@ -340,6 +265,7 @@ function CollectionInspectorControls( {
 		fields: availableFields,
 		collection,
 		isResolving,
+		isSchemaFrozen,
 	} = useCollectionFieldsContext();
 	const isCollectionValid = ! isResolving && collectionId && collection;
 	const visibleFieldIds = view?.fields ?? [];
@@ -451,32 +377,34 @@ function CollectionInspectorControls( {
 			>
 				{ isCollectionValid && (
 					<>
-						<Dropdown
-							contentClassName="cortext-data-view-toolbar-popover"
-							popoverProps={ { placement: 'left-start' } }
-							renderToggle={ ( { isOpen, onToggle } ) => (
-								<Button
-									variant="secondary"
-									icon={ plus }
-									onClick={ onToggle }
-									aria-expanded={ isOpen }
-									__next40pxDefaultSize
-								>
-									{ __( 'Add field', 'cortext' ) }
-								</Button>
-							) }
-							renderContent={ ( { onClose } ) => (
-								<div className="cortext-data-view-toolbar-popover__content">
-									<AddFieldPopover
-										collectionId={ collectionId }
-										onCreate={ ( created ) => {
-											onFieldCreated?.( created );
-											onClose();
-										} }
-									/>
-								</div>
-							) }
-						/>
+						{ ! isSchemaFrozen && (
+							<Dropdown
+								contentClassName="cortext-data-view-toolbar-popover"
+								popoverProps={ { placement: 'left-start' } }
+								renderToggle={ ( { isOpen, onToggle } ) => (
+									<Button
+										variant="secondary"
+										icon={ plus }
+										onClick={ onToggle }
+										aria-expanded={ isOpen }
+										__next40pxDefaultSize
+									>
+										{ __( 'Add field', 'cortext' ) }
+									</Button>
+								) }
+								renderContent={ ( { onClose } ) => (
+									<div className="cortext-data-view-toolbar-popover__content">
+										<AddFieldPopover
+											collectionId={ collectionId }
+											onCreate={ ( created ) => {
+												onFieldCreated?.( created );
+												onClose();
+											} }
+										/>
+									</div>
+								) }
+							/>
+						) }
 						{ orderedFields.length > 0 && (
 							<ul className="cortext-data-view-field-visibility">
 								{ orderedFields.map( ( field ) => (
@@ -614,10 +542,23 @@ export default function Edit( {
 		className: isOwner ? 'is-document-owner' : undefined,
 	} );
 	const [ revealFieldId, setRevealFieldId ] = useState( null );
+	// A frozen collection keeps its saved views. Changes made on its own
+	// canvas apply for this session only and are never written back.
+	const isViewFrozen = useIsDocumentFrozen( isOwner ? collectionId : null );
+	const [ sessionView, setSessionView ] = useState( null );
+	useEffect( () => {
+		if ( ! isViewFrozen ) {
+			setSessionView( null );
+		}
+	}, [ isViewFrozen ] );
+	const activeView = ( isViewFrozen && sessionView ) || view;
 
 	const setView = useCallback(
-		( next ) => setAttributes( { view: next } ),
-		[ setAttributes ]
+		( next ) =>
+			isViewFrozen
+				? setSessionView( next )
+				: setAttributes( { view: next } ),
+		[ isViewFrozen, setAttributes ]
 	);
 
 	const setAlign = useCallback(
@@ -720,7 +661,7 @@ export default function Edit( {
 				/>
 				<CollectionInspectorControls
 					collectionId={ collectionId }
-					view={ view }
+					view={ activeView }
 					align={ align }
 					isOwner={ isOwner }
 					onSelect={ onSelectCollection }
@@ -730,7 +671,7 @@ export default function Edit( {
 				/>
 				<CollectionDataViews
 					collectionId={ collectionId }
-					view={ view }
+					view={ activeView }
 					onChangeView={ setView }
 					onReady={ isOwner ? onCollectionReady : undefined }
 					surfaceFocusRequest={ isOwner ? surfaceFocusRequest : null }

@@ -19,11 +19,13 @@ namespace Cortext\Rest;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeConverter;
 use Cortext\FieldValues\FieldValueReadQuery;
 use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentFreeze;
 use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
@@ -329,7 +331,7 @@ final class RowsController {
 			FormulaMaterializer::recompute_collection( $collection_id );
 		}
 
-		$row_statuses = $this->row_statuses_for_request();
+		$row_statuses = $this->row_statuses_for_request( $collection_id );
 
 		if ( 'ids' === $shape ) {
 			$ids_result = ( new FieldValueReadQuery() )->query_row_ids(
@@ -1133,10 +1135,21 @@ final class RowsController {
 		return null;
 	}
 
-	private function row_statuses_for_request(): array {
+	private function row_statuses_for_request( int $collection_id ): array {
 		// Rows default to private; public visibility is controlled by the
 		// published collection/page gate, not each row's internal status.
-		return array( 'draft', 'private', 'publish' );
+		$statuses = array( 'draft', 'private', 'publish' );
+		// A collection in Trash took its rows with it. Opening the collection
+		// from Trash still shows them, read-only like the rest of it.
+		if ( Documents::STATUS_TRASH === get_post_status( $collection_id ) ) {
+			$statuses[] = Documents::STATUS_TRASH;
+		}
+		// An archived collection took its rows with it. Opening the collection
+		// from Archived still shows them, read-only like the rest of it.
+		if ( Documents::STATUS_ARCHIVED === get_post_status( $collection_id ) ) {
+			$statuses[] = Documents::STATUS_ARCHIVED;
+		}
+		return $statuses;
 	}
 
 	/**
@@ -1220,12 +1233,13 @@ final class RowsController {
 	}
 
 	/**
-	 * Formats resolved references for a relation field.
+	 * Formats resolved references for a relation field. Each reference carries
+	 * the target's post status, so clients can mark archived targets.
 	 *
 	 * @param int                   $row_id   Row post ID.
 	 * @param int                   $field_id Relation field post ID.
 	 * @param RowFormatContext|null $ctx      Formatting context for rows responses.
-	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int}>
+	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int,status:string}>
 	 */
 	private function format_relation_value( int $row_id, int $field_id, ?RowFormatContext $ctx = null ): array {
 		$relation_meta        = $this->relation_field_meta_for( $field_id, $ctx );
@@ -1251,6 +1265,7 @@ final class RowsController {
 					'rendered' => $target->post_title,
 				),
 				'collectionId' => $target_collection_id,
+				'status'       => $target->post_status,
 			);
 		}
 
@@ -1861,6 +1876,7 @@ final class RowsController {
 				'rendered' => $post->post_title,
 			),
 			'status'         => $post->post_status,
+			'cortext_frozen' => DocumentFreeze::details( (int) $post->ID ),
 			'created_at'     => $this->format_gmt_date( $post->post_date_gmt ),
 			'modified_at'    => $this->format_gmt_date( $post->post_modified_gmt ),
 			'created_by'     => $this->display_name_for( $created_by_id ),

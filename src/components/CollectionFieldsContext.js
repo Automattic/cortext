@@ -1,7 +1,8 @@
-import { createContext, useContext, useMemo } from '@wordpress/element';
+import { useContext, useMemo } from '@wordpress/element';
 
 import useCollectionFields from '../hooks/useCollectionFields';
 import { toRecordId } from '../hooks/fieldIds';
+import CollectionFieldsContext from './collectionFieldsContextObject';
 
 // Field menus read from this context. The collection's field list is already
 // loaded, and `useEntityRecord` would start a separate per-id core-data request.
@@ -10,8 +11,6 @@ import { toRecordId } from '../hooks/fieldIds';
 // Keep one field-schema read per collection. `useCollectionFields` latches the
 // last good field list, so sharing it here keeps the toolbar, inspector, table,
 // and field menus in sync after field changes.
-const CollectionFieldsContext = createContext( null );
-
 function fieldsByRecordIdFor( fields ) {
 	const entries = ( fields ?? [] )
 		.map( ( field ) => [
@@ -49,6 +48,9 @@ export function CollectionFieldsProvider( { collectionId, children } ) {
 			detailLayoutEntries,
 			fieldsByRecordId,
 			collection,
+			// A frozen collection keeps its schema: field menus hide the
+			// actions that would change it.
+			isSchemaFrozen: Boolean( collection?.cortext_frozen ),
 			slug,
 			isResolving,
 			fieldsResolved,

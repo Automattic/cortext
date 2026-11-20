@@ -1,6 +1,7 @@
 import apiFetch from '@wordpress/api-fetch';
 import { Notice } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews/wp';
+import { useDispatch } from '@wordpress/data';
 import {
 	useCallback,
 	useEffect,
@@ -10,7 +11,15 @@ import {
 	useState,
 } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { copy, starEmpty, starFilled, trash } from '@wordpress/icons';
+import {
+	box as archiveIcon,
+	copy,
+	lock,
+	starEmpty,
+	starFilled,
+	trash,
+	unlock,
+} from '@wordpress/icons';
 
 import './CollectionDataViews.scss';
 import './CollectionDataViews.grid.scss';
@@ -53,7 +62,6 @@ import { nextViewAfterRowCreated } from './dataViewCreation';
 import { filterSortAndPaginateWithGroups } from './groupedFilters';
 import TableCalculationsFooter from './TableCalculationsFooter';
 import ColumnHeaderActions from './fields/ColumnHeaderActions';
-import { ROW_DETAIL_MODE_ICONS, ROW_DETAIL_MODE_LABELS } from './RowDetailView';
 import {
 	GHOST_FIELD_ID,
 	MANUAL_SORT_ID,
@@ -69,7 +77,13 @@ import {
 } from './dataViewItemLookup';
 import { scrollToEndQuickly } from './dataViewScroll';
 import { saveRowDocumentField } from './rowDocumentMutations';
-import { getRowDetailMode, withRowDetailMode } from './rowDetailUtils';
+import { useActiveEditor } from './ActiveEditorContext';
+import {
+	ROW_DETAIL_MODE_ICONS,
+	ROW_DETAIL_MODE_LABELS,
+	getRowDetailMode,
+	withRowDetailMode,
+} from './rowDetailUtils';
 import {
 	applyVisibleSelectionChange,
 	mergeVisibleSelection,
@@ -85,17 +99,40 @@ import { toDataViewId, toRecordId } from '../hooks/fieldIds';
 import useCollectionRows from '../hooks/useCollectionRows';
 import { useRecents } from '../hooks/useRecents';
 import { filterFavoritesByDeletedIds, useFavoriteToggle } from '../documents';
+import {
+	archiveSaveFailureMessage,
+	archivedMessage,
+	freezeDocument,
+	movedToTrashMessage,
+	restoreDocuments,
+	runWithEditorsLocked,
+	syncLifecycleEntityRecords,
+	trashSaveFailureMessage,
+	unarchiveDocuments,
+	undoAction,
+	unfreezeDocument,
+} from '../documents/actions';
+import { duplicateDocumentRecord } from '../documents/mutations';
+import {
+	afterDocumentTrash,
+	applyInvalidationPack,
+} from '../documents/invalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
+import { notifyDocumentArchiveChanged } from '../hooks/documentArchiveInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import {
 	getCollectionSurfaceFocusTarget,
 	isCollectionTrulyEmpty,
 	isSurfaceFocusOriginCurrent,
 } from './collectionSurfaceFocus';
 
-const BULK_DELETE_CONCURRENCY = 4;
+const BULK_LIFECYCLE_CONCURRENCY = 4;
+// Cell saves patch their row from the save response, then the page is read
+// again once edits pause, so totals, order, formulas and other rows catch up.
+const ROW_SAVE_REFRESH_DELAY_MS = 400;
 // tech-debt.md#td-dataviews-list-row-hooks: DataViews ties list focus to its own selection. Cortext
 // uses blank-row clicks and keyboard activation to open the row instead.
 const EMPTY_DATA_VIEW_SELECTION = [];
@@ -120,6 +157,10 @@ export default function CollectionDataViews( {
 } ) {
 	const { fields, collection, isResolving, fieldsResolved } =
 		useCollectionFieldsContext();
+	const { invalidateResolution, receiveEntityRecords, saveEntityRecord } =
+		useDispatch( 'core' );
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch( 'core/notices' );
 	const { touchRecent } = useRecents();
 	// Field IDs from the last schema sync. We use this to auto-show fields
 	// the user just created. `null` on first run means the saved view should
@@ -188,6 +229,7 @@ export default function CollectionDataViews( {
 		error: rowError,
 		refresh,
 		mutateRows,
+		patchRow,
 		queryMode,
 	} = useCollectionRows(
 		isResolving ? null : collectionId,
@@ -566,22 +608,86 @@ export default function CollectionDataViews( {
 		[ dataFiltered, editableVisibleFields ]
 	);
 
+	// Inline field saves still in flight, registered with the active editor so
+	// every archive or trash waits for them instead of racing them to the
+	// server, including one started from the sidebar on this collection.
+	const pendingRowFieldSaves = useRef( new Set() );
+	const {
+		flushActiveEditor,
+		lockEditors,
+		registerPendingSaves,
+		waitForOpenDocuments,
+	} = useActiveEditor();
+	useEffect(
+		() =>
+			registerPendingSaves( async () => {
+				const results = await Promise.allSettled( [
+					...pendingRowFieldSaves.current,
+				] );
+				return results.every(
+					( result ) => result.status === 'fulfilled'
+				);
+			} ),
+		[ registerPendingSaves ]
+	);
+	const rowSaveRefreshTimer = useRef( null );
+	const scheduleRowSaveRefresh = useCallback( () => {
+		clearTimeout( rowSaveRefreshTimer.current );
+		rowSaveRefreshTimer.current = setTimeout( () => {
+			rowSaveRefreshTimer.current = null;
+			// The last save to settle schedules the refresh again.
+			if ( pendingRowFieldSaves.current.size > 0 ) {
+				return;
+			}
+			refresh();
+			notifyCollectionRowsChanged( collectionId );
+		}, ROW_SAVE_REFRESH_DELAY_MS );
+	}, [ collectionId, refresh ] );
+	useEffect(
+		() => () => {
+			// Other views of this collection still need the refresh this one
+			// was holding back.
+			if ( rowSaveRefreshTimer.current ) {
+				clearTimeout( rowSaveRefreshTimer.current );
+				rowSaveRefreshTimer.current = null;
+				notifyCollectionRowsChanged( collectionId );
+			}
+		},
+		[ collectionId ]
+	);
 	const saveRowField = useCallback(
 		async ( rowId, fieldId, value ) => {
 			if ( ! collectionId || ! rowId ) {
 				return null;
 			}
-			const updated = await saveRowDocumentField( rowId, fieldId, value );
+			const save = saveRowDocumentField(
+				saveEntityRecord,
+				rowId,
+				fieldId,
+				value
+			);
+			pendingRowFieldSaves.current.add( save );
+			const settleSave = () => {
+				pendingRowFieldSaves.current.delete( save );
+				scheduleRowSaveRefresh();
+			};
+			save.then( settleSave, settleSave );
+			const updated = await save;
+			patchRow( updated );
 			touchRecent( {
 				kind: 'row',
 				id: updated?.id ?? rowId,
 				collectionId,
 			} );
-			refresh();
-			notifyCollectionRowsChanged( collectionId );
 			return updated;
 		},
-		[ collectionId, refresh, touchRecent ]
+		[
+			collectionId,
+			patchRow,
+			saveEntityRecord,
+			scheduleRowSaveRefresh,
+			touchRecent,
+		]
 	);
 
 	let dataViewLayoutType = 'table';
@@ -629,8 +735,7 @@ export default function CollectionDataViews( {
 			// sorts make that guess unsafe; refresh in place instead.
 			//
 			// tech-debt.md#td-rows-not-in-core-data: lastPage arithmetic is optimistic against
-			// possibly stale paginationInfo. With rows in core-data this
-			// becomes a useEffect on totalPages.
+			// possibly stale paginationInfo.
 			const nextView = nextViewAfterRowCreated(
 				view,
 				activePaginationInfo
@@ -962,6 +1067,45 @@ export default function CollectionDataViews( {
 		]
 	);
 
+	const toggleRowFreeze = useCallback(
+		async ( item ) => {
+			if ( ! item?.id ) {
+				return;
+			}
+			try {
+				await ( item.cortext_frozen
+					? unfreezeDocument
+					: freezeDocument )(
+					{ id: item.id },
+					{
+						createErrorNotice,
+						createSuccessNotice,
+						flushActiveEditor,
+						invalidateResolution,
+						lockEditors,
+						receiveEntityRecords,
+					}
+				);
+			} catch ( freezeError ) {
+				setRowActionError(
+					freezeError?.message ??
+						__(
+							'Could not change the lock on this document.',
+							'cortext'
+						)
+				);
+			}
+		},
+		[
+			createErrorNotice,
+			createSuccessNotice,
+			flushActiveEditor,
+			invalidateResolution,
+			lockEditors,
+			receiveEntityRecords,
+		]
+	);
+
 	const duplicateRow = useCallback(
 		async ( row ) => {
 			if ( ! collectionId || ! row?.id ) {
@@ -969,10 +1113,10 @@ export default function CollectionDataViews( {
 			}
 			setRowActionError( null );
 			try {
-				const created = await apiFetch( {
-					path: `/cortext/v1/documents/${ row.id }/duplicate`,
-					method: 'POST',
-				} );
+				const created = await duplicateDocumentRecord(
+					row,
+					receiveEntityRecords
+				);
 				if ( created?.id ) {
 					touchRecent( {
 						kind: 'row',
@@ -988,10 +1132,10 @@ export default function CollectionDataViews( {
 				);
 			}
 		},
-		[ collectionId, refresh, touchRecent ]
+		[ collectionId, receiveEntityRecords, refresh, touchRecent ]
 	);
 
-	const forgetDeletedRows = useCallback(
+	const forgetLifecycleRows = useCallback(
 		( deletedIds, options = {} ) => {
 			if ( options.clearSelection ) {
 				clearSelection();
@@ -1017,6 +1161,32 @@ export default function CollectionDataViews( {
 		[ clearSelection ]
 	);
 
+	// Stores the new status of each changed row and waits for any open editor
+	// on a cascaded document to reload, so none unlocks on its old status.
+	const syncSettledLifecycleRecords = useCallback(
+		async ( settledRequests, cascadeKey ) => {
+			const results = await settledRequests;
+			const cascadeIds = [];
+			results.forEach( ( result ) => {
+				if ( result.status === 'fulfilled' ) {
+					syncLifecycleEntityRecords(
+						result.value,
+						{ invalidateResolution, receiveEntityRecords },
+						cascadeKey
+					);
+					cascadeIds.push(
+						...( result.value?.[ cascadeKey ] ?? [] )
+					);
+				}
+			} );
+			if ( cascadeIds.length > 0 ) {
+				await waitForOpenDocuments( cascadeIds );
+			}
+			return results;
+		},
+		[ invalidateResolution, receiveEntityRecords, waitForOpenDocuments ]
+	);
+
 	const requestDeleteRows = useCallback(
 		async ( rows, options = {} ) => {
 			const nextRows = ( rows ?? [] ).filter( ( row ) => row?.id );
@@ -1025,22 +1195,45 @@ export default function CollectionDataViews( {
 			}
 
 			setRowActionError( null );
-			const results = await allSettledWithConcurrency(
-				nextRows,
-				BULK_DELETE_CONCURRENCY,
-				( row ) =>
-					apiFetch( {
-						path: `/wp/v2/crtxt_documents/${ row.id }`,
-						method: 'DELETE',
-					} )
-			);
+			let results = false;
+			try {
+				results = await runWithEditorsLocked(
+					{ flushActiveEditor, lockEditors },
+					() =>
+						syncSettledLifecycleRecords(
+							allSettledWithConcurrency(
+								nextRows,
+								BULK_LIFECYCLE_CONCURRENCY,
+								( row ) =>
+									apiFetch( {
+										path: `/wp/v2/crtxt_documents/${ row.id }`,
+										method: 'DELETE',
+									} )
+							),
+							'cascade_deleted'
+						)
+				);
+			} catch {}
+			if ( results === false ) {
+				setRowActionError( trashSaveFailureMessage() );
+				return;
+			}
 
 			const deletedIds = [];
 			const failedRows = [];
 			results.forEach( ( result, index ) => {
 				const row = nextRows[ index ];
 				if ( result.status === 'fulfilled' ) {
-					deletedIds.push( normalizeRowId( row.id ) );
+					const response = result.value;
+					const cascadeIds = new Set( [
+						row.id,
+						...( Array.isArray( response?.cascade_deleted )
+							? response.cascade_deleted
+							: [] ),
+					] );
+					cascadeIds.forEach( ( id ) =>
+						deletedIds.push( normalizeRowId( id ) )
+					);
 				} else {
 					failedRows.push( row );
 				}
@@ -1048,27 +1241,69 @@ export default function CollectionDataViews( {
 
 			if ( deletedIds.length > 0 ) {
 				const deleted = new Set( deletedIds );
+				const deletedDocumentIds = new Set(
+					deletedIds.map( Number ).filter( ( id ) => id > 0 )
+				);
 				if ( openRowId && deleted.has( normalizeRowId( openRowId ) ) ) {
 					closeDocument();
 				}
-				forgetDeletedRows( deletedIds, {
+				forgetLifecycleRows( deletedIds, {
 					clearSelection:
 						failedRows.length === 0 &&
 						( options.clearSelectionOnSuccess ??
 							nextRows.length > 1 ),
 				} );
 				refresh();
+				applyInvalidationPack(
+					invalidateResolution,
+					afterDocumentTrash
+				);
+				notifySidebarTreeChanged();
 				notifyDocumentTrashChanged();
+				notifyDocumentArchiveChanged( { action: 'trash' } );
 				notifyCollectionRowsChanged();
 				// Prune favorites for the documents we just trashed. The server cleans
 				// stale entries on the next read, but doing it here keeps the next
 				// favorites PUT from sending these document ids back.
 				setFavorites( ( current ) =>
-					filterFavoritesByDeletedIds( current, { row: deleted } )
+					filterFavoritesByDeletedIds( current, deletedDocumentIds )
 				).catch( () => {
 					// Keep this quiet. The next favorites read asks the server to
 					// prune stale documents anyway.
 				} );
+
+				const trashedRows = nextRows.filter(
+					( row ) => ! failedRows.includes( row )
+				);
+				const noticeCtx = {
+					createErrorNotice,
+					createSuccessNotice,
+					invalidateResolution,
+					receiveEntityRecords,
+				};
+				createSuccessNotice(
+					trashedRows.length === 1
+						? movedToTrashMessage( deletedIds.length - 1 )
+						: sprintf(
+								/* translators: %d: number of documents moved to Trash */
+								_n(
+									'%d document moved to Trash.',
+									'%d documents moved to Trash.',
+									trashedRows.length,
+									'cortext'
+								),
+								trashedRows.length
+						  ),
+					{
+						id: 'cortext-document-trash-success',
+						type: 'snackbar',
+						actions: undoAction(
+							noticeCtx,
+							() => restoreDocuments( trashedRows, noticeCtx ),
+							'cortext-document-trash-success'
+						),
+					}
+				);
 			}
 
 			if ( failedRows.length > 0 ) {
@@ -1100,13 +1335,176 @@ export default function CollectionDataViews( {
 		},
 		[
 			closeDocument,
-			forgetDeletedRows,
+			createErrorNotice,
+			createSuccessNotice,
+			flushActiveEditor,
+			forgetLifecycleRows,
+			invalidateResolution,
+			lockEditors,
 			openRowId,
 			postType,
+			receiveEntityRecords,
 			refresh,
 			setFavorites,
+			syncSettledLifecycleRecords,
 		]
 	);
+
+	const requestArchiveRows = useCallback(
+		async ( rows, options = {} ) => {
+			const nextRows = ( rows ?? [] ).filter( ( row ) => row?.id );
+			if ( nextRows.length === 0 || ! postType ) {
+				return;
+			}
+
+			setRowActionError( null );
+			const closesOpenRow =
+				openRowId &&
+				nextRows.some(
+					( row ) =>
+						normalizeRowId( row.id ) === normalizeRowId( openRowId )
+				);
+			let results = false;
+			try {
+				results = await runWithEditorsLocked(
+					{ flushActiveEditor, lockEditors },
+					async () => {
+						if ( closesOpenRow && ! ( await closeDocument() ) ) {
+							return false;
+						}
+						return syncSettledLifecycleRecords(
+							allSettledWithConcurrency(
+								nextRows,
+								BULK_LIFECYCLE_CONCURRENCY,
+								( row ) =>
+									apiFetch( {
+										path: `/cortext/v1/documents/${ row.id }/archive`,
+										method: 'POST',
+									} )
+							),
+							'archived'
+						);
+					}
+				);
+			} catch {}
+			if ( results === false ) {
+				setRowActionError( archiveSaveFailureMessage() );
+				return;
+			}
+
+			const archivedIds = [];
+			const failedRows = [];
+			results.forEach( ( result, index ) => {
+				const row = nextRows[ index ];
+				if ( result.status === 'fulfilled' ) {
+					const response = result.value;
+					const cascadeIds = Array.isArray( response?.archived )
+						? response.archived
+						: [ row.id ];
+					cascadeIds.forEach( ( id ) =>
+						archivedIds.push( normalizeRowId( id ) )
+					);
+				} else {
+					failedRows.push( row );
+				}
+			} );
+
+			if ( archivedIds.length > 0 ) {
+				forgetLifecycleRows( archivedIds, {
+					clearSelection:
+						failedRows.length === 0 &&
+						( options.clearSelectionOnSuccess ??
+							nextRows.length > 1 ),
+				} );
+				refresh();
+				applyInvalidationPack(
+					invalidateResolution,
+					afterDocumentTrash
+				);
+				notifySidebarTreeChanged();
+				notifyDocumentArchiveChanged( { action: 'archive' } );
+				notifyCollectionRowsChanged();
+
+				const archivedRows = nextRows.filter(
+					( row ) => ! failedRows.includes( row )
+				);
+				const noticeCtx = {
+					createErrorNotice,
+					createSuccessNotice,
+					invalidateResolution,
+					receiveEntityRecords,
+				};
+				createSuccessNotice(
+					archivedRows.length === 1
+						? archivedMessage( archivedIds.length - 1 )
+						: sprintf(
+								/* translators: %d: number of documents archived */
+								_n(
+									'%d document archived.',
+									'%d documents archived.',
+									archivedRows.length,
+									'cortext'
+								),
+								archivedRows.length
+						  ),
+					{
+						id: 'cortext-document-archive-success',
+						type: 'snackbar',
+						actions: undoAction(
+							noticeCtx,
+							() => unarchiveDocuments( archivedRows, noticeCtx ),
+							'cortext-document-archive-success'
+						),
+					}
+				);
+			}
+
+			if ( failedRows.length > 0 ) {
+				let archiveErrorMessage;
+				if ( nextRows.length === 1 ) {
+					archiveErrorMessage = __(
+						'Could not archive this document.',
+						'cortext'
+					);
+				} else if ( failedRows.length === nextRows.length ) {
+					archiveErrorMessage = __(
+						'Could not archive selected documents.',
+						'cortext'
+					);
+				} else {
+					archiveErrorMessage = sprintf(
+						/* translators: %d: number of documents that could not be archived */
+						_n(
+							'%d document could not be archived.',
+							'%d documents could not be archived.',
+							failedRows.length,
+							'cortext'
+						),
+						failedRows.length
+					);
+				}
+				setRowActionError( archiveErrorMessage );
+			}
+		},
+		[
+			closeDocument,
+			createErrorNotice,
+			createSuccessNotice,
+			flushActiveEditor,
+			forgetLifecycleRows,
+			invalidateResolution,
+			lockEditors,
+			openRowId,
+			postType,
+			receiveEntityRecords,
+			refresh,
+			syncSettledLifecycleRecords,
+		]
+	);
+
+	const requestArchiveSelectedRows = useCallback( () => {
+		requestArchiveRows( selectedRows, { clearSelectionOnSuccess: true } );
+	}, [ requestArchiveRows, selectedRows ] );
 
 	const requestDeleteSelectedRows = useCallback( () => {
 		requestDeleteRows( selectedRows, { clearSelectionOnSuccess: true } );
@@ -1155,6 +1553,33 @@ export default function CollectionDataViews( {
 			callback: ( items ) => toggleRowFavorite( items?.[ 0 ] ),
 		} );
 		actions.push( {
+			id: 'lock-row',
+			label: __( 'Lock', 'cortext' ),
+			icon: lock,
+			context: 'single',
+			isEligible: ( item ) => ! item?.cortext_frozen,
+			callback: ( items ) => toggleRowFreeze( items?.[ 0 ] ),
+		} );
+		actions.push( {
+			id: 'unlock-row',
+			label: __( 'Unlock', 'cortext' ),
+			icon: unlock,
+			context: 'single',
+			isEligible: ( item ) => Boolean( item?.cortext_frozen ),
+			callback: ( items ) => toggleRowFreeze( items?.[ 0 ] ),
+		} );
+		actions.push( {
+			id: 'archive-row',
+			label: __( 'Archive', 'cortext' ),
+			icon: archiveIcon,
+			supportsBulk: true,
+			context: 'single',
+			callback: ( items ) =>
+				requestArchiveRows( items, {
+					clearSelectionOnSuccess: ( items?.length ?? 0 ) > 1,
+				} ),
+		} );
+		actions.push( {
 			id: 'delete-row',
 			label: __( 'Trash', 'cortext' ),
 			icon: trash,
@@ -1172,8 +1597,10 @@ export default function CollectionDataViews( {
 		duplicateRow,
 		isRowFavorite,
 		openRowInMode,
+		requestArchiveRows,
 		requestDeleteRows,
 		toggleRowFavorite,
+		toggleRowFreeze,
 	] );
 
 	const dataViewActions = rowActions;
@@ -1601,6 +2028,7 @@ export default function CollectionDataViews( {
 				className="dataviews-bulk-actions-footer__container cortext-table-calculations__bulk-actions"
 				selectedIds={ selectedRowIds }
 				visibleIds={ visibleRowIds }
+				onArchiveSelected={ requestArchiveSelectedRows }
 				onClearSelection={ clearSelection }
 				onDeleteSelected={ requestDeleteSelectedRows }
 				onToggleVisibleSelection={ toggleVisibleRows }
@@ -1613,6 +2041,7 @@ export default function CollectionDataViews( {
 			visibleIds={ visibleRowIds }
 			totalItems={ activePaginationInfo?.totalItems ?? 0 }
 			totalPages={ activePaginationInfo?.totalPages ?? 0 }
+			onArchiveSelected={ requestArchiveSelectedRows }
 			onClearSelection={ clearSelection }
 			onDeleteSelected={ requestDeleteSelectedRows }
 			onToggleVisibleSelection={ toggleVisibleRows }

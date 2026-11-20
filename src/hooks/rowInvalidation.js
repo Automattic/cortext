@@ -1,7 +1,8 @@
 import { useEffect } from '@wordpress/element';
 
-// tech-debt.md#td-rows-not-in-core-data: rows do not have a core-data store yet. Use this small
-// event until row caching and dependent refreshes live there.
+// tech-debt.md#td-rows-not-in-core-data: collection views read rows outside core-data, so
+// row changes in this tab reach them through this small event. A per-collection
+// "collection changed" signal from the server would replace it.
 export const COLLECTION_ROWS_CHANGED_EVENT = 'cortext:collection-rows-changed';
 
 function normalizeCollectionId( collectionId ) {

@@ -1,0 +1,262 @@
+@use "@wordpress/base-styles/variables" as *;
+
+// Lifecycle views are workspace chrome, not document content, so they follow
+// the shell tokens and switch with the light and dark themes.
+.cortext-lifecycle {
+	--wp-components-color-background: var(--cortext-shell-surface);
+	--wp-components-color-foreground: var(--cortext-text);
+	--wp-components-color-accent: var(--cortext-accent);
+
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	background: var(--cortext-canvas-frame-surface);
+	color: var(--cortext-text);
+
+	// Lines the title up with the Back button above it.
+	// As tall as the header action, so views with and without one (Trash,
+	// Archived, an empty Trash) line up.
+	&__header {
+		min-height: $button-size-small;
+		padding-inline: $grid-unit-20 $grid-unit-10;
+	}
+
+	&__count {
+		margin-inline-start: $grid-unit-05;
+		font-weight: 400;
+	}
+
+	// Sidebar section actions are muted until hovered; this one deletes for
+	// good, so it turns red when it is about to be used.
+	&__empty-button.components-button {
+
+		&:focus-visible,
+		&:hover:not(:disabled) {
+			color: var(--cortext-danger);
+		}
+	}
+
+	&__filters {
+		flex: 0 0 auto;
+		display: flex;
+		flex-direction: column;
+		gap: $grid-unit-10;
+		padding: $grid-unit-05 $grid-unit-15 $grid-unit-10;
+	}
+
+	&__type-filters {
+		display: flex;
+		flex-wrap: wrap;
+		gap: $grid-unit-05;
+	}
+
+	// Sized so the four filters fit on one line at the sidebar's default width.
+	&__type-filter.components-button {
+		height: 24px;
+		padding: 0 7px;
+		font-size: 11px;
+		border-radius: 999px;
+		box-shadow: inset 0 0 0 $border-width var(--cortext-chrome-border);
+		color: var(--cortext-text-muted);
+
+		&.is-pressed {
+			background: var(--cortext-button-primary-surface);
+			color: var(--cortext-button-primary-text);
+			box-shadow: none;
+		}
+	}
+
+	&__list-scroll {
+		position: relative;
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+		padding: 0 $grid-unit-10 $grid-unit-20;
+	}
+
+	&__items {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		outline: none;
+
+		&:focus-visible {
+			box-shadow: 0 0 0 var(--wp-admin-border-width-focus) var(--cortext-accent);
+			border-radius: $radius-small;
+		}
+	}
+
+	&__item {
+		display: flex;
+		align-items: flex-start;
+		gap: $grid-unit-10;
+		padding: $grid-unit-10;
+		border-radius: 6px;
+		cursor: pointer;
+
+		&:hover {
+			background: var(--cortext-state-hover);
+		}
+
+		&[aria-selected="true"] {
+			background: var(--cortext-state-selected);
+			box-shadow: inset 0 1px 0 var(--cortext-state-selected-highlight);
+		}
+	}
+
+	&__item-icon {
+		flex: 0 0 auto;
+		display: inline-flex;
+		margin-top: 2px;
+	}
+
+	&__item-text {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+
+	&__item-title {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 13px;
+		color: var(--cortext-text-strong);
+
+		> span:first-child {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+	}
+
+	&__item[aria-selected="true"] &__item-title {
+		font-weight: 600;
+	}
+
+	&__item-error {
+		font-size: 11px;
+		color: var(--cortext-danger);
+	}
+
+	&__item-meta {
+		display: flex;
+		min-width: 0;
+		font-size: 11px;
+		color: var(--cortext-text-muted);
+		white-space: nowrap;
+	}
+
+	// Right-to-left flow puts the ellipsis at the start, so a long path keeps
+	// its closest parent; `bdi` keeps the titles themselves left-to-right.
+	&__item-path {
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		direction: rtl;
+		text-align: left;
+	}
+
+	&__item-details {
+		flex: 0 0 auto;
+	}
+
+	&__badge {
+		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		height: 16px;
+		padding: 0 6px;
+		border-radius: 999px;
+		background: var(--cortext-state-hover-strong);
+		color: var(--cortext-text-muted);
+		font-size: 10px;
+		font-weight: 600;
+	}
+
+	&__message {
+		padding: $grid-unit-30 $grid-unit-10;
+		color: var(--cortext-text-muted);
+		font-size: 12px;
+		text-align: center;
+	}
+
+	&__shortcuts {
+		flex: 0 0 auto;
+		display: flex;
+		gap: $grid-unit-15;
+		margin: 0;
+		padding: $grid-unit-10 $grid-unit-15;
+		border-top: $border-width solid var(--cortext-chrome-border);
+		font-size: 11px;
+		color: var(--cortext-text-muted);
+
+		kbd {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			min-width: 18px;
+			height: 16px;
+			padding: 0 $grid-unit-05;
+			border: $border-width solid var(--cortext-chrome-border);
+			border-radius: 3px;
+			font-family: inherit;
+			font-size: 10px;
+		}
+	}
+
+	&__empty {
+		flex: 1 1 auto;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: $grid-unit-10;
+		padding: $grid-unit-30;
+		text-align: center;
+
+		h2 {
+			margin: 0;
+			font-size: 15px;
+			font-weight: 600;
+			color: var(--cortext-text-strong);
+		}
+
+		p {
+			max-width: 44ch;
+			margin: 0;
+			font-size: 13px;
+			line-height: 20px;
+			color: var(--cortext-text-muted);
+		}
+	}
+
+	&__empty-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 44px;
+		height: 44px;
+		border-radius: 50%;
+		background: var(--cortext-state-hover);
+		color: var(--cortext-text-muted);
+	}
+}
+
+// The Trash or Archived list while it takes over the sidebar. WordPress
+// controls read these for their colors, so the search field follows the
+// theme.
+.cortext-sidebar__lifecycle {
+	--wp-components-color-background: var(--cortext-control-surface);
+	--wp-components-color-foreground: var(--cortext-text);
+	--wp-components-color-gray-700: var(--cortext-text-muted);
+
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}

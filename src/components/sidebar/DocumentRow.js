@@ -6,18 +6,24 @@ import {
 	MenuItem,
 	TextControl,
 } from '@wordpress/components';
+import { useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import {
+	box as archiveIcon,
 	chevronRight,
 	home as homeIcon,
+	lock,
 	moreVertical,
 	plus,
 	starEmpty,
 	starFilled,
+	unlock,
 } from '@wordpress/icons';
+import { store as noticesStore } from '@wordpress/notices';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 import { collectionIcon } from '../cortextIcons';
+import FrozenBadge from '../FrozenBadge';
 import { useDocumentActions, useDocumentRecord } from '../../documents';
 import { useSurfaceFocusIntent } from '../SurfaceFocusContext';
 
@@ -89,7 +95,10 @@ export default function DocumentRow( {
 } ) {
 	const { requestFromActivation } = useSurfaceFocusIntent();
 	const { title, icon, features } = useDocumentRecord( record );
-	const { rename, duplicate, trash } = useDocumentActions();
+	const { rename, duplicate, archive, trash, freeze, unfreeze } =
+		useDocumentActions();
+	const isFrozen = Boolean( record.cortext_frozen );
+	const { createErrorNotice } = useDispatch( noticesStore );
 
 	const recordId = record.id;
 	const hasLoadedChildren = features.hierarchy && childNodes.length > 0;
@@ -211,7 +220,10 @@ export default function DocumentRow( {
 	}
 
 	return (
-		<li className="cortext-sidebar__node">
+		<li
+			className="cortext-sidebar__node"
+			data-cortext-document-id={ recordId }
+		>
 			<div
 				className="cortext-sidebar__row-wrapper"
 				style={ { '--cortext-depth': depth } }
@@ -297,6 +309,8 @@ export default function DocumentRow( {
 							{ title }
 						</Button>
 					) }
+
+					<FrozenBadge frozen={ record.cortext_frozen } />
 
 					{ features.canCreateChild && (
 						<Button
@@ -437,12 +451,38 @@ export default function DocumentRow( {
 									</MenuItem>
 									<MenuItem
 										icon="edit"
+										disabled={ isFrozen }
 										onClick={ () => {
 											startRename();
 											onClose();
 										} }
 									>
 										{ __( 'Rename', 'cortext' ) }
+									</MenuItem>
+									<MenuItem
+										icon={ isFrozen ? unlock : lock }
+										onClick={ () => {
+											( isFrozen ? unfreeze : freeze )(
+												record
+											).catch( ( error ) =>
+												createErrorNotice(
+													error?.message ??
+														__(
+															'Could not change the lock on this document.',
+															'cortext'
+														),
+													{
+														id: 'cortext-document-freeze',
+														type: 'snackbar',
+													}
+												)
+											);
+											onClose();
+										} }
+									>
+										{ isFrozen
+											? __( 'Unlock', 'cortext' )
+											: __( 'Lock', 'cortext' ) }
 									</MenuItem>
 									<MenuItem
 										icon="admin-page"
@@ -452,6 +492,28 @@ export default function DocumentRow( {
 										} }
 									>
 										{ __( 'Duplicate', 'cortext' ) }
+									</MenuItem>
+									<MenuItem
+										icon={ archiveIcon }
+										onClick={ () => {
+											archive( record ).catch(
+												( error ) =>
+													createErrorNotice(
+														error?.message ??
+															__(
+																'Could not archive this document.',
+																'cortext'
+															),
+														{
+															id: 'cortext-document-archive-error',
+															type: 'snackbar',
+														}
+													)
+											);
+											onClose();
+										} }
+									>
+										{ __( 'Archive', 'cortext' ) }
 									</MenuItem>
 									<MenuItem
 										icon="trash"

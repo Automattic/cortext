@@ -114,6 +114,25 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		$this->assertNotContains( $unrelated, $ids );
 	}
 
+	public function test_search_leaves_out_archived_and_trashed_documents(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$live     = $this->create_page( array( 'post_title' => 'Roadmap live' ) );
+		$archived = $this->create_page(
+			array(
+				'post_status' => Documents::STATUS_ARCHIVED,
+				'post_title'  => 'Roadmap archived',
+			)
+		);
+		$trashed  = $this->create_page( array( 'post_title' => 'Roadmap trashed' ) );
+		wp_trash_post( $trashed );
+
+		$ids = array_column( $this->query( array( 'search' => 'roadmap' ) )->get_data()['documents'], 'id' );
+
+		$this->assertContains( $live, $ids );
+		$this->assertNotContains( $archived, $ids );
+		$this->assertNotContains( $trashed, $ids );
+	}
+
 	public function test_status_trash_lists_pages_and_rows_with_trash_metadata(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 

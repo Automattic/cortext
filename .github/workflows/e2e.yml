@@ -48,11 +48,15 @@ jobs:
                   fi
 
     playwright:
-        name: Playwright
+        name: Playwright (shard ${{ matrix.shard }}/4)
         runs-on: ubuntu-latest
         needs: changes
         if: needs.changes.outputs.e2e_changed == 'true'
         timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                shard: [1, 2, 3, 4]
         steps:
             - uses: actions/checkout@v7.0.1
 
@@ -81,21 +85,57 @@ jobs:
 
             - run: pnpm install --frozen-lockfile
 
-            - run: pnpm exec playwright install --with-deps chromium
+            # Installing apt packages restarts systemd, DNS and networking on the
+            # runner, which breaks Docker and git clones that are mid-flight. Get
+            # it done before wp-env starts.
+            - run: pnpm exec playwright install-deps chromium
+
+            # wp-env spends most of its time building Docker images, so start it
+            # in the background and let the browser download and build run
+            # meanwhile. The process outlives this step; "Wait for wp-env" joins it.
+            - name: Start wp-env in the background
+              run: |
+                  ( set +e; pnpm run env:start; echo $? > /tmp/env.status ) > /tmp/env.log 2>&1 < /dev/null &
+                  echo $! > /tmp/env.pid
+
+            - run: pnpm exec playwright install chromium
 
             - run: pnpm run build
 
-            - run: pnpm run env:start
+            - name: Wait for wp-env
+              run: |
+                  tail -n +1 -f --pid="$(cat /tmp/env.pid)" /tmp/env.log
+                  exit "$(cat /tmp/env.status)"
 
-            - run: pnpm run test:e2e
+            - run: pnpm run test:e2e --shard=${{ matrix.shard }}/4
               env:
                   WP_BASE_URL: http://localhost:8888
+                  # Chromium is installed above; skip wp-scripts' download of every browser.
+                  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
             - if: failure()
               uses: actions/upload-artifact@v7
               with:
-                  name: playwright-artifacts
+                  name: playwright-artifacts-${{ matrix.shard }}
                   path: |
                       artifacts/
                       playwright-report/
                   retention-days: 7
+
+    # Required status check on main. Shard jobs get matrix names, so this job
+    # reports one result under the stable name.
+    playwright-result:
+        name: Playwright
+        runs-on: ubuntu-latest
+        needs: [changes, playwright]
+        if: always()
+        steps:
+            - run: |
+                  if [ "${{ needs.changes.result }}" != "success" ]; then
+                    echo "Path detection: ${{ needs.changes.result }}"
+                    exit 1
+                  fi
+                  case "${{ needs.playwright.result }}" in
+                    success|skipped) exit 0 ;;
+                    *) echo "Playwright shards: ${{ needs.playwright.result }}"; exit 1 ;;
+                  esac

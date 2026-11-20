@@ -8,6 +8,7 @@ import {
 	useMemo,
 	useCallback,
 	useEffect,
+	useRef,
 } from '@wordpress/element';
 import { useParams } from '@tanstack/react-router';
 import {
@@ -26,7 +27,6 @@ import {
 	page,
 	plus,
 	search,
-	trash as trashIcon,
 	wordpress,
 } from '@wordpress/icons';
 
@@ -75,7 +75,9 @@ import SidebarRecents from './SidebarRecents';
 import SidebarSection from './SidebarSection';
 import SidebarSettingsNav from './SidebarSettingsNav';
 import { SidebarListSkeleton } from './Skeleton';
-import SidebarTrash, { computeSidebarTrashRoots } from './SidebarTrash';
+import computeCascadeRoots from './computeCascadeRoots';
+import LifecycleSidebar from './lifecycle/LifecycleSidebar';
+import { ARCHIVED, TRASH } from './lifecycle/lifecycleStates';
 import ThemeToggle from './ThemeToggle';
 import {
 	computeDocumentUri,
@@ -90,6 +92,7 @@ import useDelayedFlag, {
 } from '../hooks/useDelayedFlag';
 import { useFavorites } from '../hooks/useFavorites';
 import useSidebarSections from '../hooks/useSidebarSections';
+import useArchivedDocuments from '../hooks/useArchivedDocuments';
 import useTrashedDocuments from '../hooks/useTrashedDocuments';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import {
@@ -119,6 +122,7 @@ import {
 	isWordPressAffordancesEnabled,
 } from '../settings';
 import { useSurfaceFocusIntent } from './SurfaceFocusContext';
+import useLifecycleTabFocusIntent from './useLifecycleTabFocusIntent';
 
 const TemplateEditorModal = lazy( () =>
 	import( /* webpackChunkName: "editor" */ './TemplateEditorModal' )
@@ -139,6 +143,16 @@ export default function Sidebar( {
 			FULL_PAGE_COLLECTION_QUERY
 		);
 	const trashedDocumentsState = useTrashedDocuments();
+	const archivedDocumentsState = useArchivedDocuments();
+	const archivedDocumentIds = useMemo(
+		() =>
+			new Set(
+				( archivedDocumentsState.documents ?? [] )
+					.map( ( document ) => Number( document.id ) )
+					.filter( Boolean )
+			),
+		[ archivedDocumentsState.documents ]
+	);
 	const params = useParams( { strict: false } );
 	const routeUri = params._splat ?? '';
 	const { prefix: routePrefix, tail: routeTail } = useMemo(
@@ -222,12 +236,27 @@ export default function Sidebar( {
 	} );
 	const instantiateTemplate = useInstantiateTemplate();
 
+	// Trash and Archived take over the sidebar like Settings does.
+	const lifecycleState =
+		[ TRASH, ARCHIVED ].find( ( state ) => state.isUri( routeUri ) ) ??
+		null;
+	let sidebarMode = 'main';
+	if ( isSettingsMode ) {
+		sidebarMode = 'settings';
+	} else if ( lifecycleState ) {
+		sidebarMode = lifecycleState.name;
+	}
+	const lifecycleSelectedId = lifecycleState
+		? Number( parseSplatUri( routeUri ).tail ) || null
+		: null;
+
 	const [ favoritesError, setFavoritesError ] = useState( null );
 	const [ duplicateNotice, setDuplicateNotice ] = useState( null );
-	const [ templateNotice, setTemplateNotice ] = useState( null );
+	const [ createError, setCreateError ] = useState( null );
 	const [ isCreatingTemplate, setIsCreatingTemplate ] = useState( false );
 	const [ editingTemplateId, setEditingTemplateId ] = useState( null );
 	const [ settingsReturnUri, setSettingsReturnUri ] = useState( null );
+	const [ lifecycleReturnUri, setLifecycleReturnUri ] = useState( null );
 	const {
 		isFavorite,
 		toggle: toggleFavorite,
@@ -256,14 +285,39 @@ export default function Sidebar( {
 		}
 		navigate( { to: '/' } );
 	}, [ navigate, settingsReturnUri ] );
-	const toggleTrashPanel = useCallback( () => {
-		if ( collapsed ) {
-			setIsTrashPanelOpen( true );
-			onToggleCollapsed?.();
+	// Back returns to where the first lifecycle view was opened from, even
+	// after switching from Trash to Archived or the other way around.
+	const openLifecycle = useCallback(
+		( state ) => {
+			if ( lifecycleState === state ) {
+				return;
+			}
+			if ( collapsed ) {
+				onToggleCollapsed?.();
+			}
+			if ( ! lifecycleState ) {
+				setLifecycleReturnUri( isSettingsMode ? null : routeUri );
+			}
+			navigate( { to: '/$', params: { _splat: state.uri() } } );
+		},
+		[
+			collapsed,
+			isSettingsMode,
+			lifecycleState,
+			navigate,
+			onToggleCollapsed,
+			routeUri,
+		]
+	);
+	const closeLifecycle = useCallback( () => {
+		const returnUri = lifecycleReturnUri;
+		setLifecycleReturnUri( null );
+		if ( returnUri ) {
+			navigate( { to: '/$', params: { _splat: returnUri } } );
 			return;
 		}
-		setIsTrashPanelOpen( ( current ) => ! current );
-	}, [ collapsed, onToggleCollapsed ] );
+		navigate( { to: '/' } );
+	}, [ lifecycleReturnUri, navigate ] );
 
 	const reorderFavorites = useCallback(
 		async ( next ) => {
@@ -314,38 +368,70 @@ export default function Sidebar( {
 		} );
 
 	const [ autoRenameId, setAutoRenameId ] = useState( null );
-	const [ isTrashPanelOpen, setIsTrashPanelOpen ] = useState( false );
-	const trashCount = useMemo( () => {
-		if ( Array.isArray( trashedDocumentsState.documents ) ) {
-			return computeSidebarTrashRoots( trashedDocumentsState.documents )
-				.roots.length;
-		}
-		return trashedDocumentsState.total;
-	}, [ trashedDocumentsState.documents, trashedDocumentsState.total ] );
-	let trashButtonLabel = __( 'Open Trash', 'cortext' );
-	if ( isTrashPanelOpen ) {
-		trashButtonLabel = __( 'Close Trash', 'cortext' );
-	} else if ( trashCount > 0 ) {
-		trashButtonLabel = sprintf(
-			/* translators: %d: number of trashed pages and rows */
-			_n(
-				'Open Trash, %d item',
-				'Open Trash, %d items',
-				trashCount,
-				'cortext'
-			),
-			trashCount
-		);
+	const archivedFooterRef = useRef( null );
+	const trashFooterRef = useRef( null );
+	const {
+		capture: captureLifecycleFocusIntent,
+		consume: consumeLifecycleFocusIntent,
+		cancel: cancelLifecycleFocusIntent,
+	} = useLifecycleTabFocusIntent();
+	// A document trashed or archived from the keyboard leaves the tree, so
+	// focus lands on the footer button of the view it went to instead of
+	// falling back to the page.
+	const focusFooterAfter = useCallback(
+		( footerRef, focusIntent ) => {
+			if ( consumeLifecycleFocusIntent( focusIntent ) ) {
+				footerRef.current?.focus();
+			}
+		},
+		[ consumeLifecycleFocusIntent ]
+	);
+	const documentsStateByName = {
+		[ TRASH.name ]: trashedDocumentsState,
+		[ ARCHIVED.name ]: archivedDocumentsState,
+	};
+	const archivedCount = useLifecycleRootCount(
+		ARCHIVED,
+		archivedDocumentsState
+	);
+	const trashCount = useLifecycleRootCount( TRASH, trashedDocumentsState );
+	const archivedButtonLabel =
+		archivedCount > 0
+			? sprintf(
+					/* translators: %d: number of archived items */
+					_n(
+						'Archived, %d item',
+						'Archived, %d items',
+						archivedCount,
+						'cortext'
+					),
+					archivedCount
+			  )
+			: __( 'Archived', 'cortext' );
+	const trashButtonLabel =
+		trashCount > 0
+			? sprintf(
+					/* translators: %d: number of items in Trash */
+					_n(
+						'Trash, %d item',
+						'Trash, %d items',
+						trashCount,
+						'cortext'
+					),
+					trashCount
+			  )
+			: __( 'Trash', 'cortext' );
+
+	// Escape leaves Settings, Trash or Archived, the views that take over the
+	// sidebar.
+	let closeOverlayMode = null;
+	if ( isSettingsMode ) {
+		closeOverlayMode = closeSettings;
+	} else if ( lifecycleState ) {
+		closeOverlayMode = closeLifecycle;
 	}
-
 	useEffect( () => {
-		if ( collapsed ) {
-			setIsTrashPanelOpen( false );
-		}
-	}, [ collapsed ] );
-
-	useEffect( () => {
-		if ( ! isSettingsMode ) {
+		if ( ! closeOverlayMode ) {
 			return;
 		}
 
@@ -364,14 +450,14 @@ export default function Sidebar( {
 				return;
 			}
 
-			closeSettings();
+			closeOverlayMode();
 		};
 
 		window.addEventListener( 'keydown', handleKeyDown );
 		return () => {
 			window.removeEventListener( 'keydown', handleKeyDown );
 		};
-	}, [ closeSettings, isSettingsMode ] );
+	}, [ closeOverlayMode ] );
 
 	// --- Per-row selection helpers --------------------------------------
 
@@ -398,8 +484,8 @@ export default function Sidebar( {
 		[ home ]
 	);
 
-	// Wire callbacks that `useDocumentActions` needs (rename, trash, duplicate)
-	// from DocumentRow / SidebarTrash. Create goes through `useCreateDocument`
+	// Wire callbacks that `useDocumentActions` needs from document rows and
+	// lifecycle views. Create goes through `useCreateDocument`
 	// at the top of Sidebar and bypasses the provider.
 	const documentsHandlers = useMemo(
 		() => ( {
@@ -407,11 +493,23 @@ export default function Sidebar( {
 			expand,
 			onSelect,
 			onAutoRename: ( target ) => setAutoRenameId( target?.id ?? null ),
-			onAfterTrash: () => setIsTrashPanelOpen( true ),
+			captureLifecycleFocusIntent,
+			cancelLifecycleFocusIntent,
+			onAfterTrash: ( { lifecycleFocusIntent } = {} ) =>
+				focusFooterAfter( trashFooterRef, lifecycleFocusIntent ),
+			onAfterArchive: ( { lifecycleFocusIntent } = {} ) =>
+				focusFooterAfter( archivedFooterRef, lifecycleFocusIntent ),
 			onDuplicateNotice: setDuplicateNotice,
 			onFavoritesError: setFavoritesError,
 		} ),
-		[ selectedCollectionId, expand, onSelect ]
+		[
+			selectedCollectionId,
+			expand,
+			onSelect,
+			captureLifecycleFocusIntent,
+			cancelLifecycleFocusIntent,
+			focusFooterAfter,
+		]
 	);
 
 	const create = useCreateDocument();
@@ -431,42 +529,52 @@ export default function Sidebar( {
 		},
 		[ navigate ]
 	);
-	const createAndOpen = useCallback(
-		async ( input ) => {
-			const created = await create( input );
-			refreshBranch( created?.parent ?? input?.parent ?? ROOT_PARENT_ID );
-			return openAfterCreate( created );
+	const createAndOpenWith = useCallback(
+		async ( createFn, input, fallbackMessage ) => {
+			setCreateError( null );
+			try {
+				const created = await createFn( input );
+				refreshBranch(
+					created?.parent ?? input?.parent ?? ROOT_PARENT_ID
+				);
+				return openAfterCreate( created );
+			} catch ( error ) {
+				setCreateError( error?.message ?? fallbackMessage );
+				return null;
+			}
 		},
-		[ create, openAfterCreate, refreshBranch ]
+		[ openAfterCreate, refreshBranch ]
+	);
+	const createAndOpen = useCallback(
+		( input ) =>
+			createAndOpenWith(
+				create,
+				input,
+				__( 'Could not create a document.', 'cortext' )
+			),
+		[ create, createAndOpenWith ]
 	);
 	const createFromTemplateAndOpen = useCallback(
-		async ( template, input = {} ) => {
+		( template, input = {} ) => {
 			if ( ! template?.id ) {
 				return createAndOpen( input );
 			}
-			setTemplateNotice( null );
-			let created;
-			try {
-				created = await instantiateTemplate( template.id, input );
-			} catch ( error ) {
-				setTemplateNotice(
-					error?.message ??
-						__( "Couldn't create the document.", 'cortext' )
-				);
-				return null;
-			}
-			refreshBranch( created?.parent ?? input?.parent ?? ROOT_PARENT_ID );
-			return openAfterCreate( created );
+			return createAndOpenWith(
+				( nextInput ) => instantiateTemplate( template.id, nextInput ),
+				input,
+				__( 'Could not create a document.', 'cortext' )
+			);
 		},
-		[ createAndOpen, instantiateTemplate, openAfterCreate, refreshBranch ]
+		[ createAndOpen, createAndOpenWith, instantiateTemplate ]
 	);
 	const createCollectionAndOpen = useCallback(
-		async ( input ) => {
-			const created = await createCollection( input );
-			refreshBranch( created?.parent ?? input?.parent ?? ROOT_PARENT_ID );
-			return openAfterCreate( created );
-		},
-		[ createCollection, openAfterCreate, refreshBranch ]
+		( input ) =>
+			createAndOpenWith(
+				createCollection,
+				input,
+				__( 'Collection could not be created.', 'cortext' )
+			),
+		[ createCollection, createAndOpenWith ]
 	);
 	const createRootPage = useCallback(
 		() => createAndOpen( {} ),
@@ -486,7 +594,7 @@ export default function Sidebar( {
 	);
 	const createPageTemplate = useCallback( async () => {
 		setIsCreatingTemplate( true );
-		setTemplateNotice( null );
+		setCreateError( null );
 		try {
 			const template = await createTemplate( {
 				kind: TEMPLATE_KIND_PAGE,
@@ -497,7 +605,7 @@ export default function Sidebar( {
 				setEditingTemplateId( template.id );
 			}
 		} catch ( error ) {
-			setTemplateNotice(
+			setCreateError(
 				error?.message ??
 					__( "Couldn't create the template.", 'cortext' )
 			);
@@ -580,14 +688,11 @@ export default function Sidebar( {
 					onClick={ onToggleCollapsed }
 				/>
 			</div>
-			<div
-				className="cortext-sidebar__views"
-				data-settings={ isSettingsMode ? 'true' : 'false' }
-			>
+			<div className="cortext-sidebar__views" data-mode={ sidebarMode }>
 				<div
 					className="cortext-sidebar__view cortext-sidebar__view--main"
-					aria-hidden={ isSettingsMode }
-					{ ...( isSettingsMode ? { inert: '' } : {} ) }
+					aria-hidden={ sidebarMode !== 'main' }
+					{ ...( sidebarMode !== 'main' ? { inert: '' } : {} ) }
 				>
 					<div
 						className="cortext-sidebar__quick-actions"
@@ -639,6 +744,16 @@ export default function Sidebar( {
 										{ favoritesError }
 									</Notice>
 								) : null }
+								{ createError ? (
+									<Notice
+										status="error"
+										onRemove={ () =>
+											setCreateError( null )
+										}
+									>
+										{ createError }
+									</Notice>
+								) : null }
 								{ duplicateNotice ? (
 									<Notice
 										status="warning"
@@ -647,16 +762,6 @@ export default function Sidebar( {
 										}
 									>
 										{ duplicateNotice }
-									</Notice>
-								) : null }
-								{ templatesEnabled && templateNotice ? (
-									<Notice
-										status="error"
-										onRemove={ () =>
-											setTemplateNotice( null )
-										}
-									>
-										{ templateNotice }
 									</Notice>
 								) : null }
 								<SidebarSection
@@ -669,7 +774,11 @@ export default function Sidebar( {
 										toggleSection( 'recents' )
 									}
 								>
-									<SidebarRecents />
+									<SidebarRecents
+										hiddenDocumentIds={
+											archivedDocumentIds
+										}
+									/>
 								</SidebarSection>
 
 								<SidebarSection
@@ -684,6 +793,9 @@ export default function Sidebar( {
 								>
 									<SidebarFavorites
 										favorites={ favorites }
+										hiddenDocumentIds={
+											archivedDocumentIds
+										}
 										pages={ pages }
 										collections={ collections ?? [] }
 										isResolving={ isResolvingFavorites }
@@ -964,54 +1076,43 @@ export default function Sidebar( {
 									</DragOverlay>
 								</DndContext>
 							</div>
-							{ isTrashPanelOpen && (
-								<section
-									id="cortext-sidebar-trash-panel"
-									className="cortext-sidebar__trash-panel"
-									aria-label={ __( 'Trash', 'cortext' ) }
-								>
-									<div className="cortext-sidebar__trash-panel-header">
-										<h2 className="cortext-sidebar__section-title">
-											{ __( 'Trash', 'cortext' ) }
-										</h2>
-									</div>
-									<SidebarTrash
-										activePages={ pages }
-										selectedId={ selectedId }
-										selectedCollectionId={
-											selectedCollectionId
-										}
-										onSelect={ onSelect }
-										trashedDocumentsState={
-											trashedDocumentsState
-										}
-									/>
-								</section>
-							) }
 						</DocumentsProvider>
 					) }
 					<div className="cortext-sidebar__footer">
 						<div className="cortext-sidebar__footer-group cortext-sidebar__footer-group--navigation">
-							<Button
-								className="cortext-sidebar__footer-button cortext-sidebar__trash-footer"
-								label={ trashButtonLabel }
-								aria-expanded={
-									! collapsed && isTrashPanelOpen
-								}
-								aria-controls="cortext-sidebar-trash-panel"
-								isPressed={ ! collapsed && isTrashPanelOpen }
-								onClick={ toggleTrashPanel }
-							>
-								<Icon icon={ trashIcon } size={ 20 } />
-								{ trashCount > 0 && (
-									<span
-										className="cortext-sidebar__footer-count"
-										aria-hidden="true"
-									>
-										{ trashCount > 99 ? '99+' : trashCount }
-									</span>
-								) }
-							</Button>
+							{ [
+								{
+									state: ARCHIVED,
+									ref: archivedFooterRef,
+									className:
+										'cortext-sidebar__archive-footer',
+									label: archivedButtonLabel,
+								},
+								{
+									state: TRASH,
+									ref: trashFooterRef,
+									className: 'cortext-sidebar__trash-footer',
+									label: trashButtonLabel,
+								},
+							].map( ( footer ) => (
+								<Button
+									key={ footer.state.name }
+									ref={ footer.ref }
+									className={ `cortext-sidebar__footer-button ${ footer.className }` }
+									label={ footer.label }
+									isPressed={
+										lifecycleState === footer.state
+									}
+									onClick={ () =>
+										openLifecycle( footer.state )
+									}
+								>
+									<Icon
+										icon={ footer.state.icon }
+										size={ 20 }
+									/>
+								</Button>
+							) ) }
 						</div>
 						<div className="cortext-sidebar__footer-spacer" />
 						<div
@@ -1051,6 +1152,23 @@ export default function Sidebar( {
 						onBack={ closeSettings }
 					/>
 				</div>
+				<div
+					className="cortext-sidebar__view cortext-sidebar__view--lifecycle"
+					aria-hidden={ ! lifecycleState }
+					{ ...( lifecycleState ? {} : { inert: '' } ) }
+				>
+					{ lifecycleState && (
+						<LifecycleSidebar
+							state={ lifecycleState }
+							collapsed={ collapsed }
+							onBack={ closeLifecycle }
+							documentsState={
+								documentsStateByName[ lifecycleState.name ]
+							}
+							selectedId={ lifecycleSelectedId }
+						/>
+					) }
+				</div>
 			</div>
 			{ ! collapsed && (
 				<SidebarResizeHandle
@@ -1069,5 +1187,19 @@ export default function Sidebar( {
 				</Suspense>
 			) : null }
 		</aside>
+	);
+}
+
+// How many items a lifecycle view lists: its cascade roots, or the server's
+// total before the documents load.
+function useLifecycleRootCount( state, documentsState ) {
+	const { documents, total } = documentsState;
+	return useMemo(
+		() =>
+			Array.isArray( documents )
+				? computeCascadeRoots( documents, state.markerKeys ).roots
+						.length
+				: total,
+		[ documents, state.markerKeys, total ]
 	);
 }

@@ -37,6 +37,11 @@ jest.mock( '@wordpress/editor', () => ( {
 	store: {},
 } ) );
 
+jest.mock( '@wordpress/notices', () => ( {
+	__esModule: true,
+	store: {},
+} ) );
+
 jest.mock( '@wordpress/blocks', () => ( {
 	__esModule: true,
 	createBlock: () => null,
@@ -97,6 +102,28 @@ describe( 'isEditorPostReadyForHeaderRepair', () => {
 		expect( isEditorPostReadyForHeaderRepair( null, 42 ) ).toBe( false );
 		expect( isEditorPostReadyForHeaderRepair( 41, 42 ) ).toBe( false );
 		expect( isEditorPostReadyForHeaderRepair( '42', 42 ) ).toBe( true );
+	} );
+
+	it( 'waits until the block list has been synced into the block editor', () => {
+		expect(
+			isEditorPostReadyForHeaderRepair( 42, 42, {
+				storeBlockCount: 0,
+				editorBlockCount: 2,
+			} )
+		).toBe( false );
+		expect(
+			isEditorPostReadyForHeaderRepair( 42, 42, {
+				storeBlockCount: 2,
+				editorBlockCount: 2,
+			} )
+		).toBe( true );
+		// A document that is really empty still gets its header.
+		expect(
+			isEditorPostReadyForHeaderRepair( 42, 42, {
+				storeBlockCount: 0,
+				editorBlockCount: 0,
+			} )
+		).toBe( true );
 	} );
 } );
 
@@ -454,6 +481,38 @@ describe( 'areCanvasReadyRequirementsMet', () => {
 			areCanvasReadyRequirementsMet( {
 				hasTitle: true,
 				isPropertiesResolving: true,
+			} )
+		).toBe( false );
+	} );
+
+	it( 'does not wait for missing header blocks when the header cannot be repaired', () => {
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: true,
+				needsCover: true,
+				needsIcon: true,
+				needsProperties: true,
+				needsOwner: true,
+				canRepairHeader: false,
+			} )
+		).toBe( true );
+	} );
+
+	it( 'still waits for the title and for owner content that is present', () => {
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: false,
+				canRepairHeader: false,
+			} )
+		).toBe( false );
+
+		expect(
+			areCanvasReadyRequirementsMet( {
+				hasTitle: true,
+				needsOwner: true,
+				hasOwner: true,
+				isOwnerContentReady: false,
+				canRepairHeader: false,
 			} )
 		).toBe( false );
 	} );

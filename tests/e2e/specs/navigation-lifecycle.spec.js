@@ -320,12 +320,13 @@ async function resetViewTransitionProbe( page ) {
 }
 
 async function expectRouteViewTransition( page, label, expectedMode = '' ) {
-	const supportsViewTransitions = await page.evaluate( () =>
-		Boolean( window.__cortextViewTransitionOriginal )
-	);
-	if ( ! supportsViewTransitions ) {
-		return;
-	}
+	// Chromium supports view transitions; a missing probe means the
+	// transition checks below would be skipped.
+	expect(
+		await page.evaluate( () =>
+			Boolean( window.__cortextViewTransitionOriginal )
+		)
+	).toBe( true );
 
 	await expect
 		.poll(
@@ -961,6 +962,13 @@ test.describe( 'Navigation lifecycle', () => {
 			releaseCollection();
 			await rowsRequest;
 			await expect( pagePane ).toHaveAttribute( 'data-active', 'true' );
+			// While rows are held, the current page stays on screen, either
+			// live or as the held view transition snapshot.
+			expect(
+				( await canvasContainsAnyTitle( page, [
+					SECOND_PAGE_TITLE,
+				] ) ) || ( await isOldCanvasSnapshotVisible( page ) )
+			).toBe( true );
 
 			// Full-page collections now render inside the BlockCanvas iframe,
 			// so the data-view is never directly under the workspace pane.

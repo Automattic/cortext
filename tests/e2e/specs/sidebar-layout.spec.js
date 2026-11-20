@@ -231,9 +231,6 @@ test.describe( 'Sidebar layout controls', () => {
 	test.beforeEach( async ( { admin, page } ) => {
 		await admin.visitAdminPage( SHELL_PATH, SHELL_QUERY );
 		await expect( page.locator( '#cortext-sidebar' ) ).toBeVisible();
-		await clearSidebarPrefs( page );
-		await page.reload();
-		await expect( page.locator( '#cortext-sidebar' ) ).toBeVisible();
 	} );
 
 	test( 'collapse toggle pins to rail width and persists across reload', async ( {

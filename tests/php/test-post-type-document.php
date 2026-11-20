@@ -15,7 +15,6 @@ use Cortext\PostType\Field;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
-use WP_REST_Response;
 
 final class Test_Post_Type_Document extends BaseTestCase {
 
@@ -173,9 +172,29 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$callback      = $fields['cortext_defines_trait']['get_callback'];
 		$collection_id = $this->create_collection();
 		$page_id       = $this->create_document();
+		$row_id        = $this->create_document();
+		wp_set_object_terms( $row_id, array( TraitTaxonomy::term_id_for_trait( $collection_id ) ), TraitTaxonomy::TAXONOMY );
 
 		$this->assertTrue( $callback( array( 'id' => $collection_id ) ) );
 		$this->assertFalse( $callback( array( 'id' => $page_id ) ) );
+		$this->assertFalse( $callback( array( 'id' => $row_id ) ) );
+	}
+
+	public function test_defines_trait_rest_field_follows_mirror_term_changes_in_the_same_request(): void {
+		( new Document() )->register_rest_fields();
+		$callback = $GLOBALS['wp_rest_additional_fields'][ Document::POST_TYPE ]['cortext_defines_trait']['get_callback'];
+
+		$collection_id = $this->create_collection();
+		$page_id       = $this->create_document();
+		$this->assertTrue( $callback( array( 'id' => $collection_id ) ) );
+		$this->assertFalse( $callback( array( 'id' => $page_id ) ) );
+
+		( new TraitTaxonomy() )->ensure_mirror_term( $page_id );
+		$this->assertTrue( $callback( array( 'id' => $page_id ) ), 'A term created mid-request is seen on the next read.' );
+
+		wp_delete_term( TraitTaxonomy::term_id_for_trait( $collection_id ), TraitTaxonomy::TAXONOMY );
+		$this->assertFalse( $callback( array( 'id' => $collection_id ) ), 'A term deleted mid-request is seen on the next read.' );
+		$this->assertTrue( $callback( array( 'id' => $page_id ) ) );
 	}
 
 	public function test_tree_children_rest_field_marks_parents_with_visible_children(): void {
@@ -798,80 +817,38 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( array(), $request->get_param( 'meta' ) );
 	}
 
-	public function test_limit_field_meta_to_collection_keeps_only_the_rows_collection_fields(): void {
+	public function test_rest_field_meta_keys_lists_only_the_rows_collection_fields(): void {
 		$collection_id = $this->create_collection();
 		$own_field_id  = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
-		$foreign_field = $this->create_field( 'text' );
+		$this->create_field( 'text' );
 
 		$row_id  = $this->create_document( array( 'post_title' => 'Row' ) );
 		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
 		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY );
 
-		$response = new WP_REST_Response(
-			array(
-				'meta' => array(
-					'field-' . $own_field_id  => 'kept',
-					'field-' . $foreign_field => 'dropped',
-					'cortext_fields'          => array(),
-				),
-			)
-		);
-
-		$meta = ( new Document() )
-			->limit_field_meta_to_collection( $response, get_post( $row_id ) )
-			->get_data()['meta'];
-
-		$this->assertArrayHasKey( 'field-' . $own_field_id, $meta );
-		$this->assertArrayNotHasKey( 'field-' . $foreign_field, $meta );
-		$this->assertArrayHasKey( 'cortext_fields', $meta );
+		$this->assertSame( array( 'field-' . $own_field_id ), Document::rest_field_meta_keys( get_post( $row_id ) ) );
 	}
 
-	public function test_limit_field_meta_to_collection_drops_rollup_meta(): void {
+	public function test_rest_field_meta_keys_skips_rollup_and_formula_fields(): void {
 		$collection_id = $this->create_collection();
 		$own_field_id  = (int) get_post_meta( $collection_id, 'cortext_fields', false )[0];
-		$rollup_field  = $this->create_field( 'rollup' );
-		add_post_meta( $collection_id, 'cortext_fields', (string) $rollup_field );
+		add_post_meta( $collection_id, 'cortext_fields', (string) $this->create_field( 'rollup' ) );
+		add_post_meta( $collection_id, 'cortext_fields', (string) $this->create_field( 'formula' ) );
 
 		$row_id  = $this->create_document( array( 'post_title' => 'Row' ) );
 		$term_id = TraitTaxonomy::term_id_for_trait( $collection_id );
 		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY );
 
-		$response = new WP_REST_Response(
-			array(
-				'meta' => array(
-					'field-' . $own_field_id => 'kept',
-					'field-' . $rollup_field => '',
-				),
-			)
-		);
-
-		$meta = ( new Document() )
-			->limit_field_meta_to_collection( $response, get_post( $row_id ) )
-			->get_data()['meta'];
-
-		$this->assertArrayHasKey( 'field-' . $own_field_id, $meta );
-		$this->assertArrayNotHasKey( 'field-' . $rollup_field, $meta );
+		$this->assertSame( array( 'field-' . $own_field_id ), Document::rest_field_meta_keys( get_post( $row_id ) ) );
 	}
 
-	public function test_limit_field_meta_to_collection_drops_all_field_meta_on_a_page(): void {
-		$field_id = $this->create_field( 'text' );
-		$page_id  = $this->create_document( array( 'post_title' => 'Page' ) );
+	public function test_rest_field_meta_keys_is_empty_for_pages_and_collections(): void {
+		$this->create_field( 'text' );
+		$page_id       = $this->create_document( array( 'post_title' => 'Page' ) );
+		$collection_id = $this->create_collection();
 
-		$response = new WP_REST_Response(
-			array(
-				'meta' => array(
-					'field-' . $field_id => 'x',
-					'cortext_fields'     => array(),
-				),
-			)
-		);
-
-		$meta = ( new Document() )
-			->limit_field_meta_to_collection( $response, get_post( $page_id ) )
-			->get_data()['meta'];
-
-		$this->assertArrayNotHasKey( 'field-' . $field_id, $meta );
-		$this->assertArrayHasKey( 'cortext_fields', $meta );
+		$this->assertSame( array(), Document::rest_field_meta_keys( get_post( $page_id ) ) );
+		$this->assertSame( array(), Document::rest_field_meta_keys( get_post( $collection_id ) ) );
 	}
 
 	public function test_apply_trait_filters_adds_not_exists_tax_query_for_no_trait(): void {

@@ -4,7 +4,7 @@ Tags: knowledge-base, collections, custom-post-types, block-editor, publishing
 Requires at least: 7.1
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.2.0
+Stable tag: 0.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -74,6 +74,44 @@ Notion's Terms of Service (https://www.notion.so/28ffdd083dc3473e9c2da6ec011b58a
 1. The Cortext workspace showing a seeded Library page with a catalog table and detail panel.
 
 == Changelog ==
+
+= 0.3.0 =
+Enhancements:
+
+**Shell**
+
+* Archiving documents: Add server support (no UI yet). ([#425](https://github.com/Automattic/cortext/pull/425))
+
+**Desktop**
+
+* Desktop: Build the bundled PHP runtime on Windows. ([#408](https://github.com/Automattic/cortext/pull/408))
+
+**Other**
+
+* Upgrade support to WordPress 7.1. ([#447](https://github.com/Automattic/cortext/pull/447))
+* I18n: Prepare Cortext for WordPress.org translations. ([#448](https://github.com/Automattic/cortext/pull/448))
+
+Bug fixes:
+
+**Canvas**
+
+* Keep the block toolbar from covering DataViews menus. ([#418](https://github.com/Automattic/cortext/pull/418))
+
+**Collections**
+
+* Overlapping nested menus in the editor. ([#416](https://github.com/Automattic/cortext/pull/416))
+* Trim the document properties inset to fit the drag handle. ([#417](https://github.com/Automattic/cortext/pull/417))
+* Fix Collection pagination styles. ([#429](https://github.com/Automattic/cortext/pull/429))
+
+**Shell**
+
+* Keep sidebar document titles and icons in sync. ([#449](https://github.com/Automattic/cortext/pull/449))
+
+**Other**
+
+* A11y: Move focus into documents opened from the sidebar. ([#419](https://github.com/Automattic/cortext/pull/419))
+* Keep archived content read-only. ([#430](https://github.com/Automattic/cortext/pull/430))
+* Keep mention icons when moving the caret. ([#431](https://github.com/Automattic/cortext/pull/431))
 
 = 0.2.0 =
 Enhancements:

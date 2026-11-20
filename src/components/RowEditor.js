@@ -12,12 +12,9 @@ import { SlotFillProvider } from '@wordpress/components';
 import useAutosave from '../hooks/useAutosave';
 import usePostLock from '../hooks/usePostLock';
 import { notifyBacklinksChanged } from '../hooks/backlinksInvalidation';
-// Registers core + Cortext blocks before any editor renders. Living here
-// (rather than at a static import in RowDetailView) keeps the Cortext
-// block sources and the registerCoreBlocks call site off the initial
-// bundle. The module is idempotent, so Canvas's copy of this import is
-// a no-op when RowEditor mounts second, or vice versa.
+import { getReadOnlyState } from '../documents/readOnly';
 import { getEditorSettings } from './initEditor';
+import { useEditorsLocked } from './ActiveEditorContext';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import { EditorSurfaceProvider } from './EditorSurfaceContext';
 import EditorBody from './EditorBody';
@@ -57,6 +54,8 @@ function RowAutosaveBridge( {
 	isActive = true,
 	onApi,
 	onSaved,
+	postId,
+	postType,
 	recentTarget,
 } ) {
 	const { status, lastSavedAt, flushNow, isDirty, isSaving } = useAutosave( {
@@ -80,9 +79,17 @@ function RowAutosaveBridge( {
 		if ( ! isActive ) {
 			return undefined;
 		}
-		onApi?.( { flushNow, discard, hasPendingEdits } );
+		onApi?.( { flushNow, discard, hasPendingEdits, postId, postType } );
 		return () => onApi?.( null );
-	}, [ discard, flushNow, hasPendingEdits, isActive, onApi ] );
+	}, [
+		discard,
+		flushNow,
+		hasPendingEdits,
+		isActive,
+		onApi,
+		postId,
+		postType,
+	] );
 
 	useEffect( () => {
 		if (
@@ -125,16 +132,23 @@ function DetailPaneContent( {
 	rowId,
 	shouldAcquirePostLock,
 } ) {
+	const isLifecycleReadOnly = getReadOnlyState( row ) !== null;
 	const postLock = usePostLock( {
 		postId: row?.id ?? rowId,
 		postType,
-		enabled: shouldAcquirePostLock,
+		enabled: shouldAcquirePostLock && ! isLifecycleReadOnly,
 	} );
+	const isEditorsLocked = useEditorsLocked();
+	const isReadOnly =
+		isLifecycleReadOnly || postLock.isReadOnly || isEditorsLocked;
 	const [ isEditorReady, setIsEditorReady ] = useState( false );
 	const notifiedReadyKeyRef = useRef( null );
 	const handleReady = useCallback( () => setIsEditorReady( true ), [] );
 	const isPostLockSettled =
-		! postLock.isReadOnly || postLock.isFailed || postLock.isLocked;
+		isLifecycleReadOnly ||
+		! postLock.isReadOnly ||
+		postLock.isFailed ||
+		postLock.isLocked;
 
 	useEffect( () => {
 		setIsEditorReady( false );
@@ -169,13 +183,13 @@ function DetailPaneContent( {
 			onToggleVisible={ onTogglePropertiesVisible }
 		>
 			<PostLockFailureNotice
-				error={ postLock.error }
+				error={ isLifecycleReadOnly ? null : postLock.error }
 				isRetrying={ postLock.isAcquiring }
 				onRetry={ postLock.retry }
 			/>
 			<EditorBody
 				isActive={ isActive && ! isHidden }
-				isLocked={ postLock.isReadOnly }
+				isLocked={ isReadOnly }
 				postId={ row?.id }
 				postType={ postType }
 				extraStyles={ ROW_DETAIL_EXTRA_STYLES }
@@ -183,7 +197,7 @@ function DetailPaneContent( {
 				onRestored={ onRestored }
 			/>
 			<PostLockModal
-				isOpen={ postLock.isLocked }
+				isOpen={ ! isLifecycleReadOnly && postLock.isLocked }
 				isTakeover={ postLock.isTakeover }
 				isTakingOver={ postLock.isTakingOver }
 				onTakeOver={ postLock.takeOver }
@@ -198,6 +212,8 @@ function DetailPaneContent( {
 				isActive={ isActive }
 				onApi={ onApi }
 				onSaved={ onSaved }
+				postId={ row?.id ?? rowId }
+				postType={ postType }
 				recentTarget={
 					rowId && collectionId ? { id: rowId, collectionId } : null
 				}

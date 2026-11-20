@@ -11,7 +11,8 @@
  */
 
 import { Button, CheckboxControl } from '@wordpress/components';
-import { useSelect } from '@wordpress/data';
+import { store as coreStore } from '@wordpress/core-data';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import {
 	Fragment,
@@ -58,7 +59,9 @@ import MultiselectEdit from './MultiselectEdit';
 import { toRecordId } from '../hooks/fieldIds';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import useRelationTargetStatuses from '../hooks/useRelationTargetStatuses';
 import { saveRowDocumentField } from './rowDocumentMutations';
+import { useActiveEditor } from './ActiveEditorContext';
 import {
 	isRowDetailFieldEditable,
 	isValidNumberDraft,
@@ -70,6 +73,7 @@ import {
 	valueForField,
 } from './rowDetailUtils';
 import RelationEditor from './relations/RelationEditor';
+import { withRelationTargetStatuses } from './relations/relationUtils';
 
 export const HIDDEN_PROPERTIES_DROP_TARGET =
 	'cortext-row-properties-hidden-drop-target';
@@ -1036,6 +1040,7 @@ export default function RowProperties( {
 		updateFieldFormat,
 		refreshRows,
 	} = useContext( RowMutationContext );
+	const { saveEntityRecord } = useDispatch( coreStore );
 	const [ localOptionOverrides, setLocalOptionOverrides ] = useState( {} );
 	const [ localFormatOverrides, setLocalFormatOverrides ] = useState( {} );
 	const [ activeLayoutFieldId, setActiveLayoutFieldId ] = useState( null );
@@ -1051,6 +1056,8 @@ export default function RowProperties( {
 	const propertiesRef = useRef( null );
 	const isMountedRef = useRef( true );
 	const pendingSavesRef = useRef( new Map() );
+	const inFlightSavesRef = useRef( new Set() );
+	const { registerPendingSaves } = useActiveEditor();
 	const saveTimersRef = useRef( new Map() );
 	const fieldSaveVersionsRef = useRef( new Map() );
 	const handleFieldOptionsSaved = useCallback(
@@ -1076,12 +1083,9 @@ export default function RowProperties( {
 		},
 		[ updateFieldFormat ]
 	);
-	// Field edits save as minimal REST patches (see `rowDocumentMutations`)
-	// while the panel still reads from `editorStore`, so this hand-rolled
-	// optimistic layer bridges the two: `local*` holds the in-flight edit and
-	// `committed*` holds a saved value until the live `row` catches up. Rows in
-	// core-data (tech-debt.md#td-rows-not-in-core-data) would let
-	// `saveEntityRecord` do this and delete the block.
+	// Row writes use core-data, but this panel still reads from `editorStore`
+	// and the REST row. Keep in-flight (`local*`) and saved (`committed*`) values
+	// here until row reads move too.
 	const [ committedMeta, setCommittedMeta ] = useState( {} );
 	const [ committedHydratedMeta, setCommittedHydratedMeta ] = useState( {} );
 	const [ committedTitle, setCommittedTitle ] = useState( undefined );
@@ -1090,6 +1094,7 @@ export default function RowProperties( {
 	const [ fieldErrors, setFieldErrors ] = useState( {} );
 	const sourceRowId = providedRowId ?? row?.id;
 	const rowId = sourceRowId;
+	const relationTargetStatuses = useRelationTargetStatuses( rowId );
 	const sensors = useSensors(
 		useSensor( PointerSensor, { activationConstraint: { distance: 4 } } ),
 		useSensor( KeyboardSensor, {
@@ -1184,9 +1189,21 @@ export default function RowProperties( {
 		( nextRowId, fieldId, value ) =>
 			saveRowField
 				? saveRowField( nextRowId, fieldId, value )
-				: saveRowDocumentField( nextRowId, fieldId, value ),
-		[ saveRowField ]
+				: saveRowDocumentField(
+						saveEntityRecord,
+						nextRowId,
+						fieldId,
+						value
+				  ),
+		[ saveEntityRecord, saveRowField ]
 	);
+
+	const trackFieldSave = useCallback( ( save ) => {
+		inFlightSavesRef.current.add( save );
+		const forget = () => inFlightSavesRef.current.delete( save );
+		save.then( forget, forget );
+		return save;
+	}, [] );
 
 	const flushQueuedFieldSave = useCallback(
 		async ( fieldId, { rethrow = false } = {} ) => {
@@ -1199,10 +1216,8 @@ export default function RowProperties( {
 			clearSaveTimer( fieldId );
 
 			try {
-				const updated = await persistFieldValue(
-					entry.rowId,
-					fieldId,
-					entry.value
+				const updated = await trackFieldSave(
+					persistFieldValue( entry.rowId, fieldId, entry.value )
 				);
 				if ( ! isMountedRef.current ) {
 					return updated;
@@ -1246,6 +1261,7 @@ export default function RowProperties( {
 			collectionId,
 			persistFieldValue,
 			refreshRows,
+			trackFieldSave,
 		]
 	);
 
@@ -1295,12 +1311,11 @@ export default function RowProperties( {
 			saveTimersRef.current.forEach( ( timer ) => clearTimeout( timer ) );
 			saveTimersRef.current.clear();
 
+			let didSaveAll = true;
 			for ( const [ fieldId, entry ] of entries ) {
 				try {
-					const updated = await persistFieldValue(
-						entry.rowId,
-						fieldId,
-						entry.value
+					const updated = await trackFieldSave(
+						persistFieldValue( entry.rowId, fieldId, entry.value )
 					);
 					if ( preserveState && isMountedRef.current ) {
 						const isLatestSave =
@@ -1319,6 +1334,7 @@ export default function RowProperties( {
 						}
 					}
 				} catch ( error ) {
+					didSaveAll = false;
 					if (
 						preserveState &&
 						isMountedRef.current &&
@@ -1332,6 +1348,7 @@ export default function RowProperties( {
 					}
 				}
 			}
+			return didSaveAll;
 		},
 		[
 			applyCommittedFieldValue,
@@ -1339,7 +1356,25 @@ export default function RowProperties( {
 			collectionId,
 			persistFieldValue,
 			refreshRows,
+			trackFieldSave,
 		]
+	);
+
+	// Saves queued or in flight when an action like Archive asks the editor
+	// to flush. Resolves false if any of them fails, so the action can stop.
+	useEffect(
+		() =>
+			registerPendingSaves( async () => {
+				const didFlushQueued = await flushAllPendingSaves();
+				const results = await Promise.allSettled( [
+					...inFlightSavesRef.current,
+				] );
+				return (
+					didFlushQueued &&
+					results.every( ( result ) => result.status === 'fulfilled' )
+				);
+			} ),
+		[ flushAllPendingSaves, registerPendingSaves ]
 	);
 
 	useEffect( () => {
@@ -1458,11 +1493,14 @@ export default function RowProperties( {
 				...committedMeta,
 				...localMeta,
 			},
-			hydratedMeta: {
-				...( storeHydratedMeta ?? {} ),
-				...fallbackHydratedMeta,
-				...committedHydratedMeta,
-			},
+			hydratedMeta: withRelationTargetStatuses(
+				{
+					...( storeHydratedMeta ?? {} ),
+					...fallbackHydratedMeta,
+					...committedHydratedMeta,
+				},
+				relationTargetStatuses
+			),
 			editContext: { collectionId, rowId },
 		};
 	}, [
@@ -1474,6 +1512,7 @@ export default function RowProperties( {
 		localMeta,
 		localTitle,
 		meta,
+		relationTargetStatuses,
 		row,
 		rowId,
 		title,

@@ -1,4 +1,3 @@
-import apiFetch from '@wordpress/api-fetch';
 import {
 	Button,
 	Dropdown,
@@ -25,6 +24,7 @@ import {
 	useTemplates,
 } from '../templates';
 import { isExperimentEnabled } from '../settings';
+import { useCreateRowDocument } from './rowDocumentCreation';
 
 const TemplateEditorModal = lazy( () =>
 	import( /* webpackChunkName: "editor" */ './TemplateEditorModal' )
@@ -78,6 +78,7 @@ export default function DataViewNewRowButton( {
 		collectionId,
 		enabled: templatesEnabled,
 	} );
+	const createRowDocument = useCreateRowDocument();
 
 	const prefillableFieldIds = useMemo(
 		() =>
@@ -105,18 +106,7 @@ export default function DataViewNewRowButton( {
 					? await instantiateTemplate( template.id, {
 							field_values: meta,
 					  } )
-					: await apiFetch( {
-							path: '/wp/v2/crtxt_documents',
-							method: 'POST',
-							data: {
-								status: 'private',
-								title: '',
-								cortext_trait: collectionId,
-								...( Object.keys( meta ).length
-									? { meta }
-									: {} ),
-							},
-					  } );
+					: await createRowDocument( { collectionId, meta } );
 				onCreated( created );
 			} catch ( err ) {
 				setError(
@@ -126,7 +116,13 @@ export default function DataViewNewRowButton( {
 				setIsCreating( false );
 			}
 		},
-		[ collectionId, view, prefillableFieldIds, onCreated ]
+		[
+			collectionId,
+			view,
+			prefillableFieldIds,
+			onCreated,
+			createRowDocument,
+		]
 	);
 
 	const createRowTemplate = useCallback( async () => {

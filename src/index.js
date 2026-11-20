@@ -1,6 +1,7 @@
 import { createRoot } from '@wordpress/element';
 
 import './index.scss';
+import './components/registerBlocks';
 
 import { router, RouterProvider } from './router';
 

@@ -14,6 +14,10 @@ const LAST_ROOT_TITLE = `${ ROOT_PREFIX } 100`;
 const FIRST_CHILD_TITLE = `${ CHILD_PREFIX } 001`;
 const LAST_CHILD_TITLE = `${ CHILD_PREFIX } 101`;
 
+function numberedTitle( prefix, number ) {
+	return `${ prefix } ${ String( number ).padStart( 3, '0' ) }`;
+}
+
 async function createDocument( requestUtils, title, args = {} ) {
 	return requestUtils.rest( {
 		method: 'POST',
@@ -71,12 +75,16 @@ async function loadMoreUntilVisible( target, loadMoreButton, maxClicks = 10 ) {
 				if ( await target.isVisible().catch( () => false ) ) {
 					return true;
 				}
+				// The button goes away once the last page loads. Without a
+				// short timeout, evaluate waits for it to come back and the
+				// poll never rechecks the target.
 				return loadMoreButton
 					.evaluate(
 						( button, previousCount ) =>
 							( button.closest( 'ul' )?.children.length ?? 0 ) >
 							previousCount,
-						itemCount
+						itemCount,
+						{ timeout: 500 }
 					)
 					.catch( () => false );
 			} )
@@ -98,26 +106,25 @@ test.describe( 'Sidebar lazy tree', () => {
 		} );
 		createdIds.push( parent.id );
 
-		for ( let i = 1; i <= 100; i++ ) {
-			const root = await createDocument(
-				requestUtils,
-				`${ ROOT_PREFIX } ${ String( i ).padStart( 3, '0' ) }`,
-				{ menu_order: -1000 + i }
-			);
-			createdIds.push( root.id );
-		}
-
-		for ( let i = 1; i <= 101; i++ ) {
-			const child = await createDocument(
-				requestUtils,
-				`${ CHILD_PREFIX } ${ String( i ).padStart( 3, '0' ) }`,
-				{
-					parent: parent.id,
-					menu_order: -1000 + i,
-				}
-			);
-			createdIds.push( child.id );
-		}
+		const documents = [
+			...Array.from( { length: 100 }, ( _, index ) => ( {
+				title: numberedTitle( ROOT_PREFIX, index + 1 ),
+				menu_order: -1000 + index + 1,
+			} ) ),
+			...Array.from( { length: 101 }, ( _, index ) => ( {
+				title: numberedTitle( CHILD_PREFIX, index + 1 ),
+				parent: parent.id,
+				menu_order: -1000 + index + 1,
+			} ) ),
+		];
+		const responses = await requestUtils.batchRest(
+			documents.map( ( body ) => ( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				body: { status: 'private', ...body },
+			} ) )
+		);
+		createdIds.push( ...responses.map( ( { body } ) => body.id ) );
 
 		await requestUtils.rest( {
 			method: 'PUT',
@@ -132,16 +139,31 @@ test.describe( 'Sidebar lazy tree', () => {
 			path: '/cortext/v1/sidebar-tree-preferences',
 			data: { expanded: [] },
 		} );
-		for ( const id of [ ...createdIds ].reverse() ) {
-			await deleteIfCreated( requestUtils, id );
+		// The parent goes last, after its children are gone.
+		const [ parentId, ...documentIds ] = createdIds;
+		try {
+			await requestUtils.batchRest(
+				documentIds.map( ( id ) => ( {
+					method: 'DELETE',
+					path: `/wp/v2/crtxt_documents/${ id }?force=true`,
+				} ) )
+			);
+		} catch {
+			// Best-effort cleanup; some records may already be gone.
 		}
+		await deleteIfCreated( requestUtils, parentId );
 	} );
 
 	test( 'paginates root and child branches, then restores the open branch', async ( {
 		admin,
 		page,
 	} ) => {
-		await admin.visitAdminPage( SHELL_PATH, SHELL_QUERY );
+		// Open the parent so its children only show once the branch is
+		// expanded; an open child would reveal them on its own.
+		await admin.visitAdminPage(
+			SHELL_PATH,
+			`${ SHELL_QUERY }&p=/${ parent.id }`
+		);
 		await expect( page.locator( '#cortext-sidebar' ) ).toBeVisible();
 
 		await expect(
@@ -160,6 +182,9 @@ test.describe( 'Sidebar lazy tree', () => {
 				.getByRole( 'button', { name: 'Show more' } )
 		);
 
+		await expect(
+			page.getByRole( 'button', { name: FIRST_CHILD_TITLE, exact: true } )
+		).toHaveCount( 0 );
 		await expandSidebarNode( page, PARENT_TITLE );
 
 		await expect(

@@ -9,6 +9,7 @@ import apiFetch from '@wordpress/api-fetch';
 import useCollectionRows, {
 	buildQueryArgs,
 	buildQueryPlan,
+	recordToRow,
 } from '../../../src/hooks/useCollectionRows';
 import { notifyCollectionRowsChanged } from '../../../src/hooks/rowInvalidation';
 
@@ -907,6 +908,130 @@ describe( 'useCollectionRows', () => {
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
 		expect( lastRequestPath() ).toContain( 'trait=7' );
+	} );
+
+	it( 'shapes a saved REST record like a rows row', () => {
+		const record = {
+			id: 5,
+			title: { raw: 'Raw & title', rendered: 'Raw &amp; title' },
+			status: 'private',
+			created_at: '2026-01-01T00:00:00Z',
+			modified_at: '2026-01-02T00:00:00Z',
+			created_by: 'Ana',
+			modified_by: 'Bo',
+			featured_media: 0,
+			cover: null,
+			content: { raw: '<p>Body</p>' },
+			meta: { 'field-10': 'stored', 'field-30': '[1]' },
+			cortext_hydrated_meta: {
+				'field-30': [ { id: 1, title: 'Linked' } ],
+				'field-40': 3,
+			},
+		};
+
+		expect( recordToRow( record ) ).toEqual( {
+			id: 5,
+			title: { raw: 'Raw & title', rendered: 'Raw & title' },
+			status: 'private',
+			created_at: '2026-01-01T00:00:00Z',
+			modified_at: '2026-01-02T00:00:00Z',
+			created_by: 'Ana',
+			modified_by: 'Bo',
+			featured_media: 0,
+			cover: null,
+			meta: {
+				'field-10': 'stored',
+				'field-30': [ { id: 1, title: 'Linked' } ],
+				'field-40': 3,
+			},
+		} );
+	} );
+
+	it( 'patches a row from a saved record', async () => {
+		apiFetch.mockResolvedValue( {
+			rows: [
+				{ id: 1, title: { raw: 'One' }, meta: { 'field-10': 'a' } },
+				{ id: 2, title: { raw: 'Two' }, meta: { 'field-10': 'b' } },
+			],
+			total: 2,
+			totalPages: 1,
+		} );
+		const view = { type: 'table', filters: [], page: 1, perPage: 25 };
+		const { result } = renderHook( () =>
+			useCollectionRows( 7, view, baseFields )
+		);
+		await waitFor( () =>
+			expect( result.current.hasResolved ).toBe( true )
+		);
+		const untouched = result.current.data[ 1 ];
+
+		act( () => {
+			result.current.patchRow( {
+				id: 1,
+				title: { raw: 'One' },
+				meta: { 'field-10': 'saved' },
+			} );
+		} );
+
+		expect( result.current.data[ 0 ].meta[ 'field-10' ] ).toBe( 'saved' );
+		expect( result.current.data[ 1 ] ).toBe( untouched );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'keeps a patched row over a read that started before the save returned', async () => {
+		const staleRead = {
+			rows: [
+				{ id: 1, title: { raw: 'One' }, meta: { 'field-10': 'a' } },
+			],
+			total: 1,
+			totalPages: 1,
+		};
+		let resolveRead;
+		apiFetch.mockResolvedValueOnce( staleRead );
+		const view = { type: 'table', filters: [], page: 1, perPage: 25 };
+		const { result } = renderHook( () =>
+			useCollectionRows( 7, view, baseFields )
+		);
+		await waitFor( () =>
+			expect( result.current.hasResolved ).toBe( true )
+		);
+
+		apiFetch.mockReturnValueOnce(
+			new Promise( ( resolve ) => {
+				resolveRead = resolve;
+			} )
+		);
+		act( () => {
+			result.current.refresh();
+		} );
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+		act( () => {
+			result.current.patchRow( {
+				id: 1,
+				title: { raw: 'One' },
+				meta: { 'field-10': 'saved' },
+			} );
+		} );
+		await act( async () => {
+			resolveRead( staleRead );
+		} );
+		expect( result.current.data[ 0 ].meta[ 'field-10' ] ).toBe( 'saved' );
+
+		// A read that starts after the save trusts the server again.
+		apiFetch.mockResolvedValueOnce( {
+			...staleRead,
+			rows: [
+				{ id: 1, title: { raw: 'One' }, meta: { 'field-10': 'later' } },
+			],
+		} );
+		act( () => {
+			result.current.refresh();
+		} );
+		await waitFor( () =>
+			expect( result.current.data[ 0 ].meta[ 'field-10' ] ).toBe(
+				'later'
+			)
+		);
 	} );
 
 	it( 'serializes visible fields in a stable order', () => {

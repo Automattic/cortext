@@ -145,7 +145,7 @@ test.describe( 'Workspace home', () => {
 			await waitForEditorPost( page, homePage.id );
 			await expect
 				.poll( () => appPath( page ) )
-				.toContain( String( homePage.id ) );
+				.toMatch( new RegExp( `[/-]${ homePage.id }$` ) );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
@@ -269,7 +269,7 @@ test.describe( 'Workspace home', () => {
 			await waitForEditorPost( page, fallback.id );
 			await expect
 				.poll( () => appPath( page ) )
-				.toContain( String( fallback.id ) );
+				.toMatch( new RegExp( `[/-]${ fallback.id }$` ) );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,

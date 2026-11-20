@@ -68,6 +68,15 @@ const editorSelectors = {
 		}
 		return undefined;
 	},
+	getCurrentPostAttribute: ( name ) => {
+		if ( name === 'status' ) {
+			return storeState.postStatus;
+		}
+		if ( name === 'cortext_frozen' ) {
+			return storeState.frozen ?? null;
+		}
+		return undefined;
+	},
 };
 const coreDataSelectors = {
 	getReferenceByDistinctEdits: () => editsReference,
@@ -90,6 +99,17 @@ function setStoreState( state ) {
 
 function simulateEdit() {
 	editsReference = {};
+}
+
+function simulateFailedEditorSave( rerender, state = {} ) {
+	act( () => {
+		setStoreState( { ...state, isSaving: true, didFail: false } );
+		rerender();
+	} );
+	act( () => {
+		setStoreState( { ...state, isSaving: false, didFail: true } );
+		rerender();
+	} );
 }
 
 beforeEach( () => {
@@ -376,6 +396,38 @@ describe( 'useAutosave: debounce', () => {
 		expect( savePost ).not.toHaveBeenCalled();
 	} );
 
+	it( 'does not autosave a locked document', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( {
+			isDirty: true,
+			frozen: { frozen_at: '2026-11-19T10:00:00+00:00' },
+		} );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not autosave an archived document', () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( {
+			isDirty: true,
+			postStatus: 'crtxt_archived',
+		} );
+
+		renderHook( () => useAutosave() );
+
+		act( () => {
+			jest.advanceTimersByTime( 5000 );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
 	it( 'does not retry the same failed edits until they change', () => {
 		const savePost = jest.fn();
 		useDispatch.mockReturnValue( {
@@ -384,9 +436,10 @@ describe( 'useAutosave: debounce', () => {
 			createErrorNotice: jest.fn(),
 			createSuccessNotice: jest.fn(),
 		} );
-		setStoreState( { isDirty: true, didFail: true } );
+		setStoreState( { isDirty: true } );
 
-		renderHook( () => useAutosave() );
+		const { rerender } = renderHook( () => useAutosave() );
+		simulateFailedEditorSave( rerender, { isDirty: true } );
 
 		act( () => {
 			jest.advanceTimersByTime( 5000 );
@@ -405,9 +458,10 @@ describe( 'useAutosave: debounce', () => {
 			createErrorNotice: jest.fn(),
 			createSuccessNotice: jest.fn(),
 		} );
-		setStoreState( { isDirty: true, didFail: true } );
+		setStoreState( { isDirty: true } );
 
-		const { result } = renderHook( () => useAutosave() );
+		const { result, rerender } = renderHook( () => useAutosave() );
+		simulateFailedEditorSave( rerender, { isDirty: true } );
 
 		await act( async () => {
 			await expect( result.current.flushNow() ).resolves.toBe( true );
@@ -444,9 +498,10 @@ describe( 'useAutosave: debounce', () => {
 			createErrorNotice: jest.fn(),
 			createSuccessNotice: jest.fn(),
 		} );
-		setStoreState( { isDirty: true, didFail: true } );
+		setStoreState( { isDirty: true } );
 
 		const { rerender } = renderHook( () => useAutosave() );
+		simulateFailedEditorSave( rerender, { isDirty: true } );
 
 		act( () => {
 			jest.advanceTimersByTime( 5000 );
@@ -592,10 +647,27 @@ describe( 'useAutosave: flush triggers', () => {
 		expect( savePost ).not.toHaveBeenCalled();
 	} );
 
-	it( 'prompts before unload when failed saves leave edits unsaved', () => {
-		setStoreState( { isDirty: true, didFail: true } );
+	it( 'does not flush an archived document', async () => {
+		const savePost = jest.fn();
+		useDispatch.mockReturnValue( { savePost } );
+		setStoreState( {
+			isDirty: true,
+			postStatus: 'crtxt_archived',
+		} );
 
-		renderHook( () => useAutosave() );
+		const { result } = renderHook( () => useAutosave() );
+
+		await act( async () => {
+			await expect( result.current.flushNow() ).resolves.toBe( true );
+		} );
+		expect( savePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'prompts before unload when failed saves leave edits unsaved', () => {
+		setStoreState( { isDirty: true } );
+
+		const { rerender } = renderHook( () => useAutosave() );
+		simulateFailedEditorSave( rerender, { isDirty: true } );
 
 		const event = new Event( 'beforeunload', { cancelable: true } );
 		act( () => {
@@ -1122,17 +1194,51 @@ describe( 'useAutosave: status', () => {
 	} );
 
 	it( 'reports error after a failed save', () => {
-		setStoreState( { didFail: true } );
+		setStoreState( {} );
 
-		const { result } = renderHook( () => useAutosave() );
+		const { result, rerender } = renderHook( () => useAutosave() );
+		simulateFailedEditorSave( rerender );
 
 		expect( result.current.status ).toBe( 'error' );
 	} );
 
+	it( 'ignores a row mutation failure without blocking pending editor edits', () => {
+		const savePost = jest.fn();
+		const createErrorNotice = jest.fn();
+		useDispatch.mockReturnValue( {
+			savePost,
+			editPost: jest.fn(),
+			createErrorNotice,
+			createSuccessNotice: jest.fn(),
+		} );
+		setStoreState( { isDirty: true } );
+
+		const { result, rerender } = renderHook( () =>
+			useAutosave( { debounceMs: 0, minSaveIntervalMs: 0 } )
+		);
+
+		// A direct core-data save updates the shared error selector, but it
+		// does not run through the editor store's saving state.
+		act( () => {
+			setStoreState( { isDirty: true, didFail: true } );
+			rerender();
+		} );
+
+		expect( result.current.status ).toBe( 'idle' );
+		expect( createErrorNotice ).not.toHaveBeenCalled();
+
+		act( () => {
+			jest.advanceTimersByTime( 0 );
+		} );
+
+		expect( savePost ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	it( 'recovers to saved when a later save succeeds', () => {
-		setStoreState( { didFail: true } );
+		setStoreState( {} );
 
 		const { result, rerender } = renderHook( () => useAutosave() );
+		simulateFailedEditorSave( rerender );
 		expect( result.current.status ).toBe( 'error' );
 
 		act( () => {
@@ -1155,9 +1261,10 @@ describe( 'useAutosave: status', () => {
 			createErrorNotice,
 			createSuccessNotice: jest.fn(),
 		} );
-		setStoreState( { didFail: true } );
+		setStoreState( {} );
 
-		renderHook( () => useAutosave() );
+		const { rerender } = renderHook( () => useAutosave() );
+		simulateFailedEditorSave( rerender );
 
 		expect( createErrorNotice ).toHaveBeenCalledWith(
 			expect.any( String ),
@@ -1177,9 +1284,10 @@ describe( 'useAutosave: status', () => {
 			createErrorNotice,
 			createSuccessNotice: jest.fn(),
 		} );
-		setStoreState( { didFail: true } );
+		setStoreState( {} );
 
 		const { rerender } = renderHook( () => useAutosave() );
+		simulateFailedEditorSave( rerender );
 		expect( createErrorNotice ).toHaveBeenCalledTimes( 1 );
 
 		// A background retry starts and fails again. Without the latch, the
@@ -1204,9 +1312,10 @@ describe( 'useAutosave: status', () => {
 			createErrorNotice: jest.fn(),
 			createSuccessNotice,
 		} );
-		setStoreState( { didFail: true } );
+		setStoreState( {} );
 
 		const { rerender } = renderHook( () => useAutosave() );
+		simulateFailedEditorSave( rerender );
 
 		act( () => {
 			setStoreState( { isSaving: true, didFail: false } );
@@ -1252,9 +1361,10 @@ describe( 'useAutosave: status', () => {
 	} );
 
 	it( 'resets status when the current post id changes', () => {
-		setStoreState( { didFail: true, currentPostId: 1 } );
+		setStoreState( { currentPostId: 1 } );
 
 		const { result, rerender } = renderHook( () => useAutosave() );
+		simulateFailedEditorSave( rerender, { currentPostId: 1 } );
 		expect( result.current.status ).toBe( 'error' );
 
 		act( () => {

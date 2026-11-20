@@ -1,7 +1,7 @@
 import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import { useCallback, useState } from '@wordpress/element';
-import { globe, lock } from '@wordpress/icons';
+import { globe } from '@wordpress/icons';
 
 import './PublishToggle.scss';
 
@@ -52,7 +52,7 @@ export default function PublishToggle( {
 	return (
 		<div className="cortext-publish-toggle">
 			<Button
-				icon={ isPublic ? globe : lock }
+				icon={ globe }
 				onClick={ handleClick }
 				disabled={ isSaving || disabled }
 				variant="tertiary"

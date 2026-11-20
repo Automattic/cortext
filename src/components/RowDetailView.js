@@ -14,12 +14,9 @@ import {
 	chevronDown,
 	chevronUp,
 	closeSmall,
-	drawerRight,
-	fullscreen,
 	pencil,
 	pin,
 	seen,
-	square,
 	unseen,
 } from '@wordpress/icons';
 
@@ -38,7 +35,11 @@ import './RowDetailView.scss';
 const RowEditor = lazy( () =>
 	import( /* webpackChunkName: "editor" */ './RowEditor' )
 );
-import { getRowDetailMode } from './rowDetailUtils';
+import {
+	ROW_DETAIL_MODE_ICONS,
+	ROW_DETAIL_MODE_LABELS,
+	getRowDetailMode,
+} from './rowDetailUtils';
 
 // Solid version of @wordpress/icons `pin` (which only ships outlined), so the
 // pressed state reads as filled.
@@ -58,17 +59,6 @@ const pinFilled = (
 	</svg>
 );
 
-export const ROW_DETAIL_MODE_ICONS = {
-	side: drawerRight,
-	modal: square,
-	full: fullscreen,
-};
-
-export const ROW_DETAIL_MODE_LABELS = {
-	side: __( 'Side peek', 'cortext' ),
-	modal: __( 'Center modal', 'cortext' ),
-	full: __( 'Full view', 'cortext' ),
-};
 const ROW_DETAIL_MODAL_CLOSE_MS = 240;
 const ROW_DETAIL_SWITCH_MS = 180;
 const ROW_DETAIL_SWITCH_FALLBACK_MS = ROW_DETAIL_SWITCH_MS + 100;

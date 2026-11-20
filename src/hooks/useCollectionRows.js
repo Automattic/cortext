@@ -5,8 +5,9 @@ import apiFetch from '@wordpress/api-fetch';
 import { sanitizeCalculations } from '../components/tableCalculations';
 import { useCollectionRowsInvalidation } from './rowInvalidation';
 
-// tech-debt.md#td-rows-not-in-core-data: rows live outside core-data, so this hook manages
-// its own fetch state and exposes a manual refresh() handle.
+// tech-debt.md#td-rows-not-in-core-data: collection views read rows from
+// `/cortext/v1/rows`, outside core-data, so this hook manages its own fetch
+// state, exposes a manual refresh() handle, and patches rows from saves.
 
 const CLIENT_PER_PAGE = 100;
 const CLIENT_PAGE_FETCH_CONCURRENCY = 4;
@@ -455,6 +456,40 @@ function totalPagesNumber( value ) {
 	return Number.isFinite( number ) && number >= 1 ? Math.floor( number ) : 1;
 }
 
+// Shapes a `crtxt_document` REST record like a `/cortext/v1/rows` row, so a
+// save response can stand in for the row until the next page read.
+export function recordToRow( record ) {
+	return {
+		id: record.id,
+		title: { raw: record.title?.raw, rendered: record.title?.raw },
+		status: record.status,
+		created_at: record.created_at,
+		modified_at: record.modified_at,
+		created_by: record.created_by,
+		modified_by: record.modified_by,
+		featured_media: record.featured_media,
+		cover: record.cover,
+		meta: {
+			...( record.meta ?? {} ),
+			...( record.cortext_hydrated_meta ?? {} ),
+		},
+	};
+}
+
+// Saved rows win over reads that started before the save returned: those
+// reads may still hold the old value.
+function withRowsPatchedSince( rows, patches, since ) {
+	if ( ! patches.some( ( patch ) => patch.seq > since ) ) {
+		return rows;
+	}
+	return rows.map( ( row ) => {
+		const patch = patches.find(
+			( entry ) => entry.seq > since && entry.row.id === row.id
+		);
+		return patch ? { ...row, ...patch.row } : row;
+	} );
+}
+
 async function fetchRowsPage( args ) {
 	return apiFetch( {
 		path: addQueryArgs( '/cortext/v1/rows', args ),
@@ -482,6 +517,8 @@ export default function useCollectionRows(
 	stateRef.current = state;
 	const requestIdRef = useRef( 0 );
 	const querySnapshotRef = useRef( null );
+	const patchSeqRef = useRef( 0 );
+	const patchesRef = useRef( [] );
 	const queryPlan = collectionId
 		? buildQueryPlan( collectionId, view, fields, options )
 		: null;
@@ -493,7 +530,8 @@ export default function useCollectionRows(
 		: null;
 
 	// tech-debt.md#td-rows-not-in-core-data: collection queries bypass core-data,
-	// so callers bump this counter after saving a document with apiFetch.
+	// so callers bump this counter when other rows or computed values may have
+	// changed.
 	const refresh = useCallback( () => {
 		setRefreshKey( ( key ) => key + 1 );
 	}, [] );
@@ -510,6 +548,30 @@ export default function useCollectionRows(
 				return prev;
 			}
 			return { ...prev, data: nextData };
+		} );
+	}, [] );
+
+	// Replaces a row with the record a save returned, so the view shows the
+	// new value without waiting for a page read.
+	const patchRow = useCallback( ( record ) => {
+		const row = recordToRow( record );
+		const seq = ++patchSeqRef.current;
+		patchesRef.current = [
+			...patchesRef.current.filter(
+				( patch ) => patch.row.id !== row.id
+			),
+			{ seq, row },
+		];
+		setState( ( prev ) => {
+			if ( ! prev.data.some( ( item ) => item.id === row.id ) ) {
+				return prev;
+			}
+			return {
+				...prev,
+				data: prev.data.map( ( item ) =>
+					item.id === row.id ? { ...item, ...row } : item
+				),
+			};
 		} );
 	}, [] );
 
@@ -558,6 +620,7 @@ export default function useCollectionRows(
 		}
 
 		const requestId = ++requestIdRef.current;
+		const patchSeqAtStart = patchSeqRef.current;
 
 		setState( ( prev ) => ( {
 			...prev,
@@ -624,8 +687,16 @@ export default function useCollectionRows(
 					body = { ...firstPage, rows };
 				}
 
+				const patches = patchesRef.current;
+				patchesRef.current = patches.filter(
+					( patch ) => patch.seq > patchSeqAtStart
+				);
 				setState( {
-					data: Array.isArray( body.rows ) ? body.rows : [],
+					data: withRowsPatchedSince(
+						Array.isArray( body.rows ) ? body.rows : [],
+						patches,
+						patchSeqAtStart
+					),
 					collection: body.collection ?? null,
 					calculations:
 						body.calculations &&
@@ -667,6 +738,7 @@ export default function useCollectionRows(
 		...state,
 		refresh,
 		mutateRows,
+		patchRow,
 		queryMode: queryPlan?.mode ?? 'client',
 	};
 }

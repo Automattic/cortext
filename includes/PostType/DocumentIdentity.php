@@ -1,7 +1,9 @@
 <?php
 /**
  * Per-document icon (emoji or uploaded image) for any post type that opts into
- * the `cortext-document` capability.
+ * the `cortext-document` capability, plus the server-seeded header blocks:
+ * the locked title on create and the row properties block before a row
+ * becomes read-only.
  *
  * `Document::register_post_type()` calls `register_for_post_type()` right after
  * `register_post_type()` so the `crtxt_document` type opts in. The helper stays
@@ -17,7 +19,19 @@ namespace Cortext\PostType;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
+use Cortext\Editor\DocumentPropertiesBlock;
+use WP_Post;
+
 final class DocumentIdentity {
+
+	/**
+	 * Lock shared by the header blocks so they cannot be moved or removed.
+	 */
+	private const HEADER_LOCK = array(
+		'move'   => true,
+		'remove' => true,
+	);
 
 	/**
 	 * Stored as a JSON string. Three shapes:
@@ -36,6 +50,10 @@ final class DocumentIdentity {
 		// Add the locked title block on create so the first editor render
 		// already has it.
 		add_filter( 'wp_insert_post_data', array( $this, 'prepend_header_blocks' ), 10, 2 );
+		// The editor adds the properties block when a row is first opened,
+		// but not while it is read-only. Add it when the row becomes read-only
+		// so its field values still show.
+		add_filter( 'wp_insert_post_data', array( $this, 'add_properties_block_before_read_only' ), 10, 2 );
 	}
 
 	/**
@@ -78,10 +96,7 @@ final class DocumentIdentity {
 		$attrs = array(
 			// Render the title as the page <h1>; the block defaults to <h2>.
 			'level' => 1,
-			'lock'  => array(
-				'move'   => true,
-				'remove' => true,
-			),
+			'lock'  => self::HEADER_LOCK,
 		);
 
 		$blocks = array(
@@ -95,6 +110,90 @@ final class DocumentIdentity {
 		);
 
 		return serialize_blocks( $blocks );
+	}
+
+	/**
+	 * Returns the locked `cortext/document-properties` block markup that sits
+	 * right after the title on rows.
+	 */
+	public static function properties_block_markup(): string {
+		return serialize_block(
+			array(
+				'blockName'    => DocumentPropertiesBlock::BLOCK_NAME,
+				'attrs'        => array( 'lock' => self::HEADER_LOCK ),
+				'innerBlocks'  => array(),
+				'innerHTML'    => '',
+				'innerContent' => array(),
+			)
+		);
+	}
+
+	/**
+	 * Adds the properties block to a row as it moves into Trash or Archived.
+	 *
+	 * The editor skips header repair on trashed and locked documents, so a row
+	 * that was never opened would otherwise show no field values there. The block goes
+	 * right after the title, leaving the rest of the content as stored; a row
+	 * without a title gets both.
+	 *
+	 * @param array $data    Slashed post data about to be saved.
+	 * @param array $postarr Original input passed to wp_insert_post.
+	 */
+	public function add_properties_block_before_read_only( array $data, array $postarr ): array {
+		$read_only = array( Documents::STATUS_TRASH, Documents::STATUS_ARCHIVED );
+		$post_id   = (int) ( $postarr['ID'] ?? 0 );
+		if ( $post_id < 1 || ! in_array( $data['post_status'] ?? '', $read_only, true ) ) {
+			return $data;
+		}
+
+		$post = get_post( $post_id );
+		if (
+			! $post instanceof WP_Post
+			|| in_array( $post->post_status, $read_only, true )
+			|| Documents::KIND_ROW !== Documents::kind_for_document( $post )
+		) {
+			return $data;
+		}
+
+		$content = wp_unslash( (string) ( $data['post_content'] ?? '' ) );
+		if ( has_block( DocumentPropertiesBlock::BLOCK_NAME, $content ) ) {
+			return $data;
+		}
+
+		$title_end = self::title_block_end( $content );
+		if ( null === $title_end ) {
+			$content = self::header_blocks_markup() . self::properties_block_markup() . $content;
+		} else {
+			$content = substr( $content, 0, $title_end ) . self::properties_block_markup() . substr( $content, $title_end );
+		}
+
+		$data['post_content'] = wp_slash( $content );
+
+		return $data;
+	}
+
+	/**
+	 * Byte offset right after the first `core/post-title` block in serialized
+	 * content, or null when there is none. Splicing at this offset leaves the
+	 * rest of the content byte for byte as stored.
+	 *
+	 * The serializer escapes `--` inside block attributes, so the first `-->`
+	 * after the opener always closes the block comment.
+	 *
+	 * @param string $content Unslashed post content.
+	 */
+	private static function title_block_end( string $content ): ?int {
+		if ( ! preg_match( '#<!--\s+wp:(?:core/)?post-title(?=[\s/]).*?(/)?-->#s', $content, $opener, PREG_OFFSET_CAPTURE ) ) {
+			return null;
+		}
+		$opener_end = $opener[0][1] + strlen( $opener[0][0] );
+		if ( ! empty( $opener[1][0] ) ) {
+			return $opener_end;
+		}
+		if ( ! preg_match( '#<!--\s+/wp:(?:core/)?post-title\s+-->#', $content, $closer, PREG_OFFSET_CAPTURE, $opener_end ) ) {
+			return null;
+		}
+		return $closer[0][1] + strlen( $closer[0][0] );
 	}
 
 	/**

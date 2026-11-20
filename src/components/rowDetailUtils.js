@@ -1,5 +1,22 @@
+import { __ } from '@wordpress/i18n';
+import { drawerRight, fullscreen, square } from '@wordpress/icons';
+
 export const ROW_DETAIL_MODES = [ 'side', 'modal', 'full' ];
 export const DEFAULT_ROW_DETAIL_MODE = 'side';
+
+// Kept here, away from RowDetailView, because modules inside the editor
+// chunk's import cycle read them while loading.
+export const ROW_DETAIL_MODE_ICONS = {
+	side: drawerRight,
+	modal: square,
+	full: fullscreen,
+};
+
+export const ROW_DETAIL_MODE_LABELS = {
+	side: __( 'Side peek', 'cortext' ),
+	modal: __( 'Center modal', 'cortext' ),
+	full: __( 'Full view', 'cortext' ),
+};
 
 export function normalizeRowDetailMode( mode ) {
 	return ROW_DETAIL_MODES.includes( mode ) ? mode : DEFAULT_ROW_DETAIL_MODE;

@@ -13,6 +13,7 @@ defined( 'ABSPATH' ) || exit;
 
 use Cortext\Admin\Screen;
 use Cortext\Block\DataView;
+use Cortext\Compat\IndexedDefaultMetadata;
 use Cortext\Editor\DocumentCoverBlock;
 use Cortext\Editor\DocumentIconBlock;
 use Cortext\Editor\DocumentPropertiesBlock;
@@ -25,7 +26,9 @@ use Cortext\Frontend\Template;
 use Cortext\Media\CortextMedia;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentFreeze;
 use Cortext\PostType\DocumentIdentity;
+use Cortext\PostType\DocumentWriteGuard;
 use Cortext\PostType\Field;
 use Cortext\PostType\Template as TemplatePostType;
 use Cortext\PostType\TrashCascade;
@@ -62,6 +65,7 @@ final class Plugin {
 	public function boot(): void {
 		add_filter( 'cortext_experiments', array( $this, 'register_experiments' ) );
 
+		( new IndexedDefaultMetadata() )->register();
 		( new Screen() )->register();
 		( new Document() )->register();
 		( new DocumentIdentity() )->register();
@@ -70,6 +74,9 @@ final class Plugin {
 		( new Field() )->register();
 		( new TemplatePostType() )->register();
 		( new FieldValueIndex() )->register();
+
+		( new DocumentWriteGuard() )->register();
+		( new DocumentFreeze() )->register();
 
 		$archive_cascade = new ArchiveCascade();
 		$archive_cascade->register();

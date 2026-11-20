@@ -26,6 +26,10 @@ import {
 } from './page-queries';
 import { computeDocumentUri } from '../router/useResolveEntity';
 import { definesTrait, hasTrait } from '../documents/capabilities';
+import { documentTypeLabel } from '../documents/labels';
+import useDelayedFlag, {
+	SKELETON_MIN_VISIBLE_MS,
+} from '../hooks/useDelayedFlag';
 
 const DEFAULT_LAYOUTS = {
 	table: { layout: { density: 'compact' } },
@@ -66,16 +70,6 @@ function documentTypeValue( record ) {
 	return TYPE_PAGE;
 }
 
-function documentTypeLabel( record ) {
-	if ( definesTrait( record ) ) {
-		return __( 'Collection', 'cortext' );
-	}
-	if ( hasTrait( record ) ) {
-		return __( 'Collection item', 'cortext' );
-	}
-	return __( 'Page', 'cortext' );
-}
-
 function buildItems( documents ) {
 	const untitled = __( '(untitled)', 'cortext' );
 	return ( documents ?? [] ).map( ( document ) => ( {
@@ -98,15 +92,22 @@ function formatModified( value ) {
 	return dateI18n( format, value );
 }
 
-export default function PublishedDocumentsPane() {
+export default function PublishedDocumentsPane( { isActive } ) {
 	const [ view, setView ] = useState( DEFAULT_VIEW );
 	const navigate = useNavigate();
 
-	const { records: documents, isResolving: isLoading } = useEntityRecords(
+	// The pane stays mounted on every route, and this list carries each
+	// published collection item with its computed fields. Query it only while
+	// the pane is showing, so page saves elsewhere don't refetch it.
+	const { records: documents, hasResolved } = useEntityRecords(
 		'postType',
 		DOCUMENT_POST_TYPE,
-		PUBLISHED_DOCUMENTS_QUERY
+		PUBLISHED_DOCUMENTS_QUERY,
+		{ enabled: isActive }
 	);
+	// `isResolving` is still false on the render that starts the request, which
+	// would show the empty message before the spinner.
+	const isLoading = ! hasResolved;
 
 	const openItem = useCallback(
 		( item ) => {
@@ -197,22 +198,26 @@ export default function PublishedDocumentsPane() {
 		[ openItem ]
 	);
 
+	const isAwaitingFirstLoad = isLoading && items.length === 0;
+	// Gated on `isActive` so the hidden pane doesn't raise the flag early and
+	// show the spinner the moment the pane opens.
+	const showSpinner = useDelayedFlag(
+		isActive && isAwaitingFirstLoad,
+		120,
+		SKELETON_MIN_VISIBLE_MS
+	);
+
 	const { data: filteredItems, paginationInfo } = useMemo(
 		() => filterSortAndPaginate( items, view, fields ),
 		[ items, view, fields ]
 	);
 
-	if ( isLoading && items.length === 0 ) {
-		return (
-			<VStack className="cortext-published-pane" spacing={ 5 }>
-				<Heading level={ 2 }>{ __( 'Published', 'cortext' ) }</Heading>
-				<Spinner />
-			</VStack>
-		);
-	}
-
 	return (
-		<VStack className="cortext-published-pane" spacing={ 5 }>
+		<VStack
+			className="cortext-published-pane"
+			spacing={ 5 }
+			justify="flex-start"
+		>
 			<VStack spacing={ 1 }>
 				<Heading level={ 2 }>{ __( 'Published', 'cortext' ) }</Heading>
 				<Text
@@ -222,21 +227,25 @@ export default function PublishedDocumentsPane() {
 					{ __( 'Public on the web.', 'cortext' ) }
 				</Text>
 			</VStack>
-			<DataViews
-				data={ filteredItems }
-				fields={ fields }
-				view={ view }
-				onChangeView={ setView }
-				paginationInfo={ paginationInfo }
-				defaultLayouts={ DEFAULT_LAYOUTS }
-				getItemId={ ( item ) => item.key }
-				isLoading={ isLoading }
-				empty={
-					<Text variant="muted">
-						{ __( 'Nothing is public yet.', 'cortext' ) }
-					</Text>
-				}
-			/>
+			{ isAwaitingFirstLoad || showSpinner ? (
+				showSpinner && <Spinner />
+			) : (
+				<DataViews
+					data={ filteredItems }
+					fields={ fields }
+					view={ view }
+					onChangeView={ setView }
+					paginationInfo={ paginationInfo }
+					defaultLayouts={ DEFAULT_LAYOUTS }
+					getItemId={ ( item ) => item.key }
+					isLoading={ isLoading }
+					empty={
+						<Text variant="muted">
+							{ __( 'Nothing is public yet.', 'cortext' ) }
+						</Text>
+					}
+				/>
+			) }
 		</VStack>
 	);
 }

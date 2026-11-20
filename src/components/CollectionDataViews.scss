@@ -764,6 +764,17 @@ tr:has(.cortext-title-cell--is-opening)
 	white-space: nowrap;
 }
 
+// Archived targets keep their chip but drop the fill and switch to a dashed
+// outline, so the state does not rely on color alone. The archive icon and
+// the "Archived" label carry the rest.
+.cortext-relation-ref--archived,
+.cortext-relation-edit__toggle-ref--archived,
+.cortext-relation-edit__selected-pill--archived {
+	border: 1px dashed $gray-600;
+	background: transparent;
+	color: $gray-700;
+}
+
 .cortext-relation-edit-popover .components-popover__content {
 	padding: $grid-unit-05;
 }

@@ -165,6 +165,96 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		);
 	}
 
+	public function test_trashed_collection_still_lists_its_trashed_rows(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$fixture = $this->create_collection_fixture( 'trashed-rows' );
+		$row_id  = $this->create_row_fixture( $fixture['collection_id'], 'Trashed row', 'private' );
+		wp_update_post(
+			array(
+				'ID'          => $row_id,
+				'post_status' => 'trash',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'          => $fixture['collection_id'],
+				'post_status' => 'trash',
+			)
+		);
+
+		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $response->get_data()['total'] );
+		$this->assertSame( 'Trashed row', $response->get_data()['rows'][0]['title']['raw'] );
+	}
+
+	public function test_active_collection_leaves_trashed_rows_out(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$fixture = $this->create_collection_fixture( 'active-with-trashed-row' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Kept row', 'private' );
+		$trashed = $this->create_row_fixture( $fixture['collection_id'], 'Trashed row', 'private' );
+		wp_update_post(
+			array(
+				'ID'          => $trashed,
+				'post_status' => 'trash',
+			)
+		);
+
+		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
+
+		$this->assertSame( 1, $response->get_data()['total'] );
+		$this->assertSame( 'Kept row', $response->get_data()['rows'][0]['title']['raw'] );
+	}
+
+	public function test_archived_collection_still_lists_its_archived_rows(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		( new ArchiveCascade() )->register_status();
+
+		$fixture = $this->create_collection_fixture( 'archived-rows' );
+		$row_id  = $this->create_row_fixture( $fixture['collection_id'], 'Archived row', 'private' );
+		wp_update_post(
+			array(
+				'ID'          => $row_id,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'          => $fixture['collection_id'],
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $response->get_data()['total'] );
+		$this->assertSame( 'Archived row', $response->get_data()['rows'][0]['title']['raw'] );
+	}
+
+	public function test_active_collection_leaves_archived_rows_out(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		( new ArchiveCascade() )->register_status();
+
+		$fixture = $this->create_collection_fixture( 'active-with-archived-row' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Kept row', 'private' );
+		$archived = $this->create_row_fixture( $fixture['collection_id'], 'Archived row', 'private' );
+		wp_update_post(
+			array(
+				'ID'          => $archived,
+				'post_status' => Documents::STATUS_ARCHIVED,
+			)
+		);
+
+		$response = $this->query_rows( array( 'trait' => $fixture['collection_id'] ) );
+
+		$this->assertSame( 1, $response->get_data()['total'] );
+		$this->assertSame( 'Kept row', $response->get_data()['rows'][0]['title']['raw'] );
+	}
+
 	public function test_view_context_rejects_unpublished_collection(): void {
 		wp_set_current_user( 0 );
 
@@ -609,6 +699,35 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 20.0, (float) get_post_meta( $row_id, "field-{$formula_id}", true ) );
 	}
 
+	public function test_recompute_row_only_writes_changed_formula_values(): void {
+		$fixture    = $this->create_collection_fixture( 'formula-unchanged', 'number' );
+		$row_id     = $this->create_row_for_collection( $fixture['collection_id'], 'Invoice A' );
+		$formula_id = $this->create_formula_field( $fixture['collection_id'], 'Total', 'field("Score") * 2' );
+		$key        = "field-{$formula_id}";
+
+		update_post_meta( $row_id, "field-{$fixture['field_id']}", '10' );
+		// MySQL hands meta back as strings, while the formula computes `20.0`.
+		update_post_meta( $row_id, $key, '20' );
+
+		$writes = 0;
+		$count  = static function ( $meta_id, $object_id, $meta_key ) use ( &$writes, $key ): void {
+			if ( $key === $meta_key ) {
+				++$writes;
+			}
+		};
+		add_action( 'updated_post_meta', $count, 10, 3 );
+
+		FormulaMaterializer::recompute_row( $fixture['collection_id'], $row_id );
+		$this->assertSame( 0, $writes );
+
+		update_post_meta( $row_id, "field-{$fixture['field_id']}", '11' );
+		FormulaMaterializer::recompute_row( $fixture['collection_id'], $row_id );
+		remove_action( 'updated_post_meta', $count, 10 );
+
+		$this->assertSame( 1, $writes );
+		$this->assertSame( 22.0, (float) get_post_meta( $row_id, $key, true ) );
+	}
+
 	public function test_recomputing_collection_formulas_includes_archived_rows(): void {
 		( new ArchiveCascade() )->register_status();
 
@@ -779,6 +898,120 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		);
 
 		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
+	}
+
+	public function test_relation_refs_carry_target_status_and_skip_trashed_targets(): void {
+		( new ArchiveCascade() )->register_status();
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->create_relation_rollup_fixture( 'relstatus' );
+
+		( new ArchiveCascade() )->archive( $fixture['archived_target_id'] );
+		wp_trash_post( $fixture['trashed_target_id'] );
+
+		$refs = $this->relation_refs_for_source_row( $fixture );
+
+		$this->assertSame(
+			array(
+				$fixture['active_target_id']   => 'private',
+				$fixture['archived_target_id'] => Documents::STATUS_ARCHIVED,
+			),
+			array_column( $refs, 'status', 'id' )
+		);
+	}
+
+	public function test_archiving_a_relation_target_keeps_rollup_values(): void {
+		( new ArchiveCascade() )->register_status();
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->create_relation_rollup_fixture( 'relrollup' );
+
+		$before = $this->rollup_values_for_source_row( $fixture );
+		( new ArchiveCascade() )->archive( $fixture['archived_target_id'] );
+		$after = $this->rollup_values_for_source_row( $fixture );
+
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $fixture['archived_target_id'] ) );
+		$this->assertSame( array( 3, 60.0 ), $before );
+		$this->assertSame( $before, $after );
+	}
+
+	/**
+	 * Builds a source collection whose row relates to three target rows, plus
+	 * count and sum rollups over that relation.
+	 *
+	 * @param string $slug Collection slug prefix.
+	 * @return array<string,int>
+	 */
+	private function create_relation_rollup_fixture( string $slug ): array {
+		$target      = $this->create_collection_fixture( "{$slug}-target", 'number' );
+		$source      = $this->create_collection_fixture( "{$slug}-source", 'text' );
+		$relation_id = $this->add_field_to_collection(
+			$source['collection_id'],
+			'relation',
+			array(
+				'related_collection_id' => (string) $target['collection_id'],
+				'relation_multiple'     => '1',
+			)
+		);
+		$count_id    = $this->add_field_to_collection(
+			$source['collection_id'],
+			'rollup',
+			array(
+				'rollup_relation_field_id' => (string) $relation_id,
+				'rollup_aggregator'        => 'count',
+			)
+		);
+		$sum_id      = $this->add_field_to_collection(
+			$source['collection_id'],
+			'rollup',
+			array(
+				'rollup_relation_field_id' => (string) $relation_id,
+				'rollup_target_field_id'   => (string) $target['field_id'],
+				'rollup_aggregator'        => 'sum',
+			)
+		);
+
+		$score_key   = "field-{$target['field_id']}";
+		$active_id   = $this->create_row_fixture( $target['collection_id'], 'Active', 'private', array( $score_key => '10' ) );
+		$archived_id = $this->create_row_fixture( $target['collection_id'], 'Archived', 'private', array( $score_key => '20' ) );
+		$trashed_id  = $this->create_row_fixture( $target['collection_id'], 'Trashed', 'private', array( $score_key => '30' ) );
+		$source_row  = $this->create_row_fixture( $source['collection_id'], 'Source', 'private' );
+		foreach ( array( $active_id, $archived_id, $trashed_id ) as $target_id ) {
+			add_post_meta( $source_row, "field-{$relation_id}", (string) $target_id );
+		}
+
+		return array(
+			'source_collection_id' => $source['collection_id'],
+			'source_row_id'        => $source_row,
+			'relation_field_id'    => $relation_id,
+			'count_field_id'       => $count_id,
+			'sum_field_id'         => $sum_id,
+			'active_target_id'     => $active_id,
+			'archived_target_id'   => $archived_id,
+			'trashed_target_id'    => $trashed_id,
+		);
+	}
+
+	private function source_row_meta( array $fixture ): array {
+		$response = $this->query_rows(
+			array(
+				'trait'   => $fixture['source_collection_id'],
+				'context' => 'edit',
+			)
+		);
+		$this->assertSame( 200, $response->get_status() );
+		$rows = array_column( $response->get_data()['rows'], null, 'id' );
+		return $rows[ $fixture['source_row_id'] ]['meta'];
+	}
+
+	private function relation_refs_for_source_row( array $fixture ): array {
+		return $this->source_row_meta( $fixture )[ "field-{$fixture['relation_field_id']}" ];
+	}
+
+	private function rollup_values_for_source_row( array $fixture ): array {
+		$meta = $this->source_row_meta( $fixture );
+		return array(
+			$meta[ "field-{$fixture['count_field_id']}" ],
+			$meta[ "field-{$fixture['sum_field_id']}" ],
+		);
 	}
 
 	private function query_rows( array $params ): \WP_REST_Response {

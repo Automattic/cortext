@@ -898,6 +898,70 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'keeps a collection page intact when the editor loads after the page record', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Late editor page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			// Hold the editor chunk so the shell resolves the page record
+			// before the block types are registered.
+			await page.route( '**/build/editor.js*', async ( route ) => {
+				await new Promise( ( resolve ) => setTimeout( resolve, 2500 ) );
+				await route.continue();
+			} );
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			await expect(
+				dataViewTableRow( canvas, 'The Left Hand of Darkness' )
+			).toBeVisible( { timeout: 15_000 } );
+
+			const saved = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
+				params: { context: 'edit' },
+			} );
+			expect( saved.content.raw ).toContain( 'wp:cortext/data-view' );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'hides the parent toolbar only when it overlaps a DataViews menu in the iframe', async ( {
 		admin,
 		page,
@@ -2815,7 +2879,7 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
-	test( 'trashes a row from the DataViews menu and restores it from Trash', async ( {
+	test( 'trashes a row from the DataViews menu and undoes it from the snackbar', async ( {
 		admin,
 		page,
 		requestUtils,
@@ -2891,25 +2955,160 @@ test.describe( 'Collection view block', () => {
 
 			await expect( rowTitle ).toHaveCount( 0 );
 
-			const sidebar = page.locator( '.cortext-sidebar' );
-			await sidebar.locator( '.cortext-sidebar__trash-footer' ).click();
-			const trashPanel = page.locator( '#cortext-sidebar-trash-panel' );
-			await expect( trashPanel ).toContainText(
-				'The Left Hand of Darkness'
-			);
-			await expect( trashPanel ).toContainText(
-				fixture.collection.title.rendered
-			);
-
-			await trashPanel
-				.getByRole( 'button', { name: 'Restore' } )
-				.click( { force: true } );
+			// The snackbar offers to undo it, which brings the row back
+			// without leaving the collection.
+			const snackbar = page
+				.locator( '.components-snackbar' )
+				.filter( { hasText: 'Document moved to Trash.' } );
+			await snackbar.getByRole( 'button', { name: 'Undo' } ).click();
 
 			await expect( rowTitle ).toBeVisible();
-			await expect( trashPanel ).not.toContainText(
-				'The Left Hand of Darkness'
-			);
 		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.field && `/wp/v2/crtxt_fields/${ fixture.field.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
+	test( 'duplicates a row and keeps its field values after reload', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+		const duplicateTitle = 'Copy of The Left Hand of Darkness';
+
+		try {
+			Object.assign(
+				fixture,
+				await createCollectionFixture( requestUtils )
+			);
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Row duplicate test page',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page.frameLocator( '[name="editor-canvas"]' );
+			const table = canvas.locator( '.dataviews-view-table' );
+			const originalRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: 'The Left Hand of Darkness' } );
+
+			await expect( originalRow ).toBeVisible();
+			await originalRow.hover();
+			await originalRow
+				.getByRole( 'button', { name: 'Actions' } )
+				.click( { force: true } );
+			const duplicateResponsePromise = page.waitForResponse(
+				( response ) =>
+					response.request().method() === 'POST' &&
+					new URL( response.url() ).pathname.endsWith(
+						`/wp-json/cortext/v1/documents/${ fixture.entry.id }/duplicate`
+					)
+			);
+			await canvas.getByRole( 'menuitem', { name: 'Duplicate' } ).click();
+			const duplicateResponse = await duplicateResponsePromise;
+			expect( duplicateResponse.ok() ).toBe( true );
+			const duplicateEnvelope = await duplicateResponse.json();
+			fixture.duplicateId = Number( duplicateEnvelope.id );
+			expect( fixture.duplicateId ).toBeGreaterThan( 0 );
+
+			const duplicateRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: duplicateTitle } );
+			await expect( duplicateRow ).toBeVisible();
+			await expect( duplicateRow ).toContainText( 'Ursula K. Le Guin' );
+
+			const rows = await requestUtils.rest( {
+				path: '/wp/v2/crtxt_documents',
+				params: {
+					context: 'edit',
+					status: 'draft,private,publish',
+					per_page: 100,
+					cortext_trait: fixture.collection.id,
+				},
+			} );
+			const duplicate = rows.find(
+				( row ) => Number( row.id ) === fixture.duplicateId
+			);
+			expect( duplicate ).toBeTruthy();
+			expect( duplicate.title.raw ).toBe( duplicateTitle );
+			expect( duplicate.meta[ `field-${ fixture.field.id }` ] ).toBe(
+				'Ursula K. Le Guin'
+			);
+
+			const cachedDuplicate = await page.evaluate(
+				( { duplicateId, fieldKey } ) => {
+					const record = window.wp.data
+						.select( 'core' )
+						.getEntityRecord(
+							'postType',
+							'crtxt_document',
+							duplicateId
+						);
+					if ( ! record ) {
+						return null;
+					}
+					return {
+						id: record.id,
+						title: record.title?.raw,
+						fieldValue: record.meta?.[ fieldKey ],
+					};
+				},
+				{
+					duplicateId: fixture.duplicateId,
+					fieldKey: `field-${ fixture.field.id }`,
+				}
+			);
+			expect( cachedDuplicate ).toEqual( {
+				id: fixture.duplicateId,
+				title: duplicateTitle,
+				fieldValue: 'Ursula K. Le Guin',
+			} );
+
+			await page.reload();
+			await expect( duplicateRow ).toBeVisible();
+			await expect( duplicateRow ).toContainText( 'Ursula K. Le Guin' );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				fixture.duplicateId &&
+					`/wp/v2/crtxt_documents/${ fixture.duplicateId }`
+			);
 			await deleteIfCreated(
 				requestUtils,
 				fixture.entry && `/wp/v2/crtxt_documents/${ fixture.entry.id }`
@@ -3719,6 +3918,276 @@ test.describe( 'Collection view block', () => {
 		}
 	} );
 
+	test( 'queues inline saves while row details are open and shows save errors', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const fixture = {};
+		const firstStatus = 'First queued value';
+		const successfulStatus = 'Ready for review';
+		const failedStatus = 'This must not persist';
+		const failureMessage = 'Forced row save failure.';
+		let delayedSaveHandler;
+		let failedSaveHandler;
+		let releaseFirstSave = () => {};
+		let rowSavePattern;
+
+		try {
+			Object.assign(
+				fixture,
+				await createCalculationFixture( requestUtils )
+			);
+			const statusKey = `field-${ fixture.fields.status.id }`;
+
+			fixture.page = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'Concurrent inline row saves',
+					status: 'private',
+					content: createDataViewBlockMarkup( fixture.collection.id, {
+						fields: [ 'title', statusKey ],
+					} ),
+				},
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ fixture.page.id }`
+			);
+
+			await page.waitForFunction(
+				( postId ) =>
+					window.wp?.data
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() === postId,
+				fixture.page.id,
+				{ timeout: 15_000 }
+			);
+
+			const canvas = page
+				.getByRole( 'region', { name: 'Content' } )
+				.frameLocator( 'iframe[name="editor-canvas"]' );
+			const table = canvas.locator( '.dataviews-view-table' );
+			const alphaRow = table
+				.locator( 'tbody > tr' )
+				.filter( { hasText: 'Alpha Book' } );
+
+			await expect( alphaRow ).toBeVisible();
+			await alphaRow.hover();
+			await alphaRow.locator( '.cortext-title-cell__open' ).click();
+
+			const detail = page.getByRole( 'dialog', { name: 'Detail' } );
+			await expect( detail ).toBeVisible();
+			await expect(
+				activeRowDetailCanvas( detail )
+					.locator( '[data-type="core/post-title"]' )
+					.first()
+			).toHaveText( 'Alpha Book' );
+
+			rowSavePattern = new RegExp(
+				`/wp-json/wp/v2/crtxt_documents/${ fixture.rows[ 0 ].id }(?:\\?|$)`
+			);
+			const isExpectedMetaSave = ( request, fieldKey, expectedValue ) => {
+				if (
+					request.method() !== 'POST' ||
+					! rowSavePattern.test( request.url() )
+				) {
+					return false;
+				}
+				try {
+					return (
+						request.postDataJSON()?.meta?.[ fieldKey ] ===
+						expectedValue
+					);
+				} catch {
+					return false;
+				}
+			};
+
+			const firstSaveGate = new Promise( ( resolve ) => {
+				releaseFirstSave = resolve;
+			} );
+			delayedSaveHandler = async ( route ) => {
+				if (
+					isExpectedMetaSave(
+						route.request(),
+						statusKey,
+						firstStatus
+					)
+				) {
+					await firstSaveGate;
+				}
+				await route.continue();
+			};
+			await page.route( rowSavePattern, delayedSaveHandler );
+
+			const firstSaveRequest = page.waitForRequest( ( request ) =>
+				isExpectedMetaSave( request, statusKey, firstStatus )
+			);
+			const statusCell = alphaRow.getByText( 'Alpha', {
+				exact: true,
+			} );
+			// The open side peek intercepts pointer events over the canvas. Click
+			// the hidden grid control directly so this test can focus on save
+			// ordering.
+			await statusCell.evaluate( ( cell ) => cell.click() );
+			const statusInput = alphaRow.getByRole( 'textbox', {
+				name: 'Status',
+				exact: true,
+			} );
+			await statusInput.fill( firstStatus, { force: true } );
+			await statusInput.press( 'Enter' );
+			await firstSaveRequest;
+			await expect( statusInput ).toHaveValue( firstStatus );
+
+			await statusInput.fill( successfulStatus, { force: true } );
+			const secondSaveRequest = page.waitForRequest( ( request ) =>
+				isExpectedMetaSave( request, statusKey, successfulStatus )
+			);
+			await statusInput.press( 'Enter' );
+			await expect( statusInput ).toHaveValue( successfulStatus );
+
+			const secondSaveStartedWhileFirstWasPending = await Promise.race( [
+				secondSaveRequest.then( () => true ),
+				page.waitForTimeout( 250 ).then( () => false ),
+			] );
+			expect( secondSaveStartedWhileFirstWasPending ).toBe( false );
+
+			releaseFirstSave();
+			await secondSaveRequest;
+
+			await expect
+				.poll( async () => {
+					const row = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_documents/${ fixture.rows[ 0 ].id }`,
+						params: { context: 'edit' },
+					} );
+					return row.meta[ statusKey ];
+				} )
+				.toBe( successfulStatus );
+			await expect( detail ).toBeVisible();
+
+			await page.unroute( rowSavePattern, delayedSaveHandler );
+			delayedSaveHandler = null;
+			failedSaveHandler = async ( route ) => {
+				if (
+					isExpectedMetaSave(
+						route.request(),
+						statusKey,
+						failedStatus
+					)
+				) {
+					await route.fulfill( {
+						status: 500,
+						contentType: 'application/json',
+						body: JSON.stringify( {
+							code: 'cortext_test_save_failure',
+							message: failureMessage,
+							data: { status: 500 },
+						} ),
+					} );
+					return;
+				}
+				await route.continue();
+			};
+			await page.route( rowSavePattern, failedSaveHandler );
+
+			await expect(
+				alphaRow.getByText( successfulStatus, { exact: true } )
+			).toBeVisible();
+			await alphaRow
+				.getByText( successfulStatus, { exact: true } )
+				.evaluate( ( cell ) => cell.click() );
+			const failingInput = alphaRow.getByRole( 'textbox', {
+				name: 'Status',
+				exact: true,
+			} );
+			await failingInput.fill( failedStatus, { force: true } );
+			const failedSaveRequest = page.waitForRequest( ( request ) =>
+				isExpectedMetaSave( request, statusKey, failedStatus )
+			);
+			await failingInput.press( 'Enter' );
+			await failedSaveRequest;
+
+			await expect(
+				canvas.getByText( failureMessage, { exact: true } )
+			).toBeVisible();
+			await expect( failingInput ).toHaveValue( failedStatus );
+			await page.evaluate(
+				() =>
+					new Promise( ( resolve ) =>
+						window.requestAnimationFrame( () =>
+							window.requestAnimationFrame( resolve )
+						)
+					)
+			);
+			const hasAutosaveErrorNotice = await page.evaluate( () =>
+				window.wp.data
+					.select( 'core/notices' )
+					.getNotices()
+					.some(
+						( notice ) => notice.id === 'cortext-autosave-error'
+					)
+			);
+			expect( hasAutosaveErrorNotice ).toBe( false );
+
+			const persistedAfterFailure = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ fixture.rows[ 0 ].id }`,
+				params: { context: 'edit' },
+			} );
+			expect( persistedAfterFailure.meta[ statusKey ] ).toBe(
+				successfulStatus
+			);
+
+			await page.unroute( rowSavePattern, failedSaveHandler );
+			failedSaveHandler = null;
+			await page.reload();
+
+			const reloadedCanvas = page
+				.getByRole( 'region', { name: 'Content' } )
+				.frameLocator( 'iframe[name="editor-canvas"]' );
+			const reloadedRow = reloadedCanvas
+				.locator( '.dataviews-view-table tbody > tr' )
+				.filter( { hasText: 'Alpha Book' } );
+			await expect( reloadedRow ).toContainText( successfulStatus );
+		} finally {
+			releaseFirstSave();
+			if ( rowSavePattern && delayedSaveHandler ) {
+				await page
+					.unroute( rowSavePattern, delayedSaveHandler )
+					.catch( () => {} );
+			}
+			if ( rowSavePattern && failedSaveHandler ) {
+				await page
+					.unroute( rowSavePattern, failedSaveHandler )
+					.catch( () => {} );
+			}
+			for ( const row of fixture.rows ?? [] ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_documents/${ row.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.page && `/wp/v2/crtxt_documents/${ fixture.page.id }`
+			);
+			for ( const field of Object.values( fixture.fields ?? {} ) ) {
+				await deleteIfCreated(
+					requestUtils,
+					`/wp/v2/crtxt_fields/${ field.id }`
+				);
+			}
+			await deleteIfCreated(
+				requestUtils,
+				fixture.collection &&
+					`/wp/v2/crtxt_documents/${ fixture.collection.id }`
+			);
+		}
+	} );
+
 	test( 'row detail toolbar stays separate from the parent DataView toolbar', async ( {
 		admin,
 		page,
@@ -4142,13 +4611,32 @@ test.describe( 'Collection view block', () => {
 				}
 			};
 			await page.route( delayedSecondRowPattern, delaySecondRow );
+			// Record any spinner while the next row loads; the current row
+			// should stay on screen instead.
+			await detail.evaluate( ( element ) => {
+				window.cortextE2eSpinnerSeen = false;
+				window.cortextE2eSpinnerObserver = new window.MutationObserver(
+					() => {
+						if ( element.querySelector( '.components-spinner' ) ) {
+							window.cortextE2eSpinnerSeen = true;
+						}
+					}
+				);
+				window.cortextE2eSpinnerObserver.observe( element, {
+					childList: true,
+					subtree: true,
+				} );
+			} );
 			await detail.getByRole( 'button', { name: 'Next' } ).click();
-			await expect( detail.locator( '.components-spinner' ) ).toHaveCount(
-				0
-			);
 			// Side and modal panes are local React state, not URL state,
 			// so verify the navigation via the detail title rather than ?row.
 			await expect( detailTitle ).toHaveText( 'Kindred' );
+			expect(
+				await page.evaluate( () => {
+					window.cortextE2eSpinnerObserver.disconnect();
+					return window.cortextE2eSpinnerSeen;
+				} )
+			).toBe( false );
 			// Same collection, same fields, so Tags should still be present.
 			await expect(
 				detailCanvas
@@ -4303,9 +4791,8 @@ test.describe( 'Collection view block', () => {
 				path: `/wp/v2/crtxt_documents/${ fixture.page.id }`,
 				params: { context: 'edit' },
 			} );
-			expect( saved.content.raw ).not.toContain(
-				'"rowDetailMode":"full"'
-			);
+			// The last side or modal choice is kept; Full is a one-off jump.
+			expect( saved.content.raw ).toContain( '"rowDetailMode":"modal"' );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
@@ -4890,8 +5377,8 @@ test.describe( 'Collection view block', () => {
 			const readOnlyCells = canvas.locator(
 				'.cortext-data-view td .cortext-cell-readonly'
 			);
-			await expect( readOnlyCells.first() ).toBeVisible();
-			expect( await readOnlyCells.count() ).toBeGreaterThanOrEqual( 4 );
+			// One row, four system columns; the title cell stays editable.
+			await expect( readOnlyCells ).toHaveCount( 4 );
 
 			const createdByCell = readOnlyCells.nth( 1 );
 			await expect( createdByCell ).not.toHaveText( '' );
@@ -5940,7 +6427,40 @@ test.describe( 'Collection view block', () => {
 				const buttonRect = el.getBoundingClientRect();
 				const spanRect = span.getBoundingClientRect();
 				const styles = window.getComputedStyle( span );
+				const buttonStyles = window.getComputedStyle( el );
+				const ringWidth =
+					parseFloat( buttonStyles.outlineWidth ) +
+					parseFloat( buttonStyles.outlineOffset );
+				// Any ancestor that clips overflow must leave room for the
+				// whole focus outline around the button.
+				const clippedRingEdges = [];
+				for (
+					let ancestor = el.parentElement;
+					ancestor && ancestor !== document.body;
+					ancestor = ancestor.parentElement
+				) {
+					const ancestorStyles = window.getComputedStyle( ancestor );
+					const rect = ancestor.getBoundingClientRect();
+					if ( ancestorStyles.overflowX !== 'visible' ) {
+						if ( buttonRect.left - ringWidth < rect.left ) {
+							clippedRingEdges.push( 'left' );
+						}
+						if ( buttonRect.right + ringWidth > rect.right ) {
+							clippedRingEdges.push( 'right' );
+						}
+					}
+					if ( ancestorStyles.overflowY !== 'visible' ) {
+						if ( buttonRect.top - ringWidth < rect.top ) {
+							clippedRingEdges.push( 'top' );
+						}
+						if ( buttonRect.bottom + ringWidth > rect.bottom ) {
+							clippedRingEdges.push( 'bottom' );
+						}
+					}
+				}
 				return {
+					ringWidth,
+					clippedRingEdges,
 					buttonLeft: buttonRect.left,
 					buttonRight: buttonRect.right,
 					spanLeft: spanRect.left,
@@ -5952,6 +6472,8 @@ test.describe( 'Collection view block', () => {
 			} );
 
 			const epsilon = 0.5;
+			expect( headerState.ringWidth ).toBeGreaterThan( 0 );
+			expect( headerState.clippedRingEdges ).toEqual( [] );
 			expect( headerState.spanOverflow ).toBe( 'hidden' );
 			expect( headerState.spanTextOverflow ).toBe( 'ellipsis' );
 			expect( headerState.spanWhiteSpace ).toBe( 'nowrap' );
@@ -6531,7 +7053,7 @@ test.describe( 'Collection view block', () => {
 				canvas.getByRole( 'columnheader', { name: /Description/ } )
 			).toBeVisible();
 			await expect(
-				canvas.getByRole( 'columnheader', { name: /^Notes$/ } )
+				canvas.getByRole( 'columnheader', { name: /Notes/ } )
 			).toHaveCount( 0 );
 
 			await openColumnDropdown( canvas, 'Description' );
@@ -6554,6 +7076,26 @@ test.describe( 'Collection view block', () => {
 					name: /Copy of Description/,
 				} )
 			).toHaveCount( 0 );
+			// Hiding the column is not enough: the field must leave the
+			// collection on the server.
+			await expect
+				.poll( async () => {
+					const collection = await requestUtils.rest( {
+						path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
+						params: { context: 'edit' },
+					} );
+					const fieldIds = collection.meta.cortext_fields ?? [];
+					const fields = await requestUtils.rest( {
+						path: '/wp/v2/crtxt_fields',
+						params: {
+							include: fieldIds.join( ',' ),
+							context: 'edit',
+							per_page: 100,
+						},
+					} );
+					return fields.map( ( field ) => field.title.raw );
+				} )
+				.not.toContain( 'Copy of Description' );
 
 			const ghostAdd = canvas
 				.locator( 'th' )

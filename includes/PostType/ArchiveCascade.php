@@ -30,6 +30,12 @@ final class ArchiveCascade {
 	/** Unix timestamp recorded when a document is archived. */
 	public const TIME_META = '_cortext_archive_meta_time';
 
+	/**
+	 * User who archived the document. Cascaded children record the same
+	 * user as their root.
+	 */
+	public const ARCHIVED_BY_USER_META = '_cortext_archived_by_user';
+
 	/** Parent that caused this document to be archived. */
 	public const PARENT_MARKER_META = '_cortext_archived_by_parent';
 
@@ -169,6 +175,7 @@ final class ArchiveCascade {
 		) {
 			update_post_meta( (int) $post->ID, self::STATUS_META, $old_status );
 			update_post_meta( (int) $post->ID, self::TIME_META, time() );
+			update_post_meta( (int) $post->ID, self::ARCHIVED_BY_USER_META, get_current_user_id() );
 
 			$this->cascade->cascade(
 				(int) $post->ID,
@@ -191,6 +198,7 @@ final class ArchiveCascade {
 		) {
 			delete_post_meta( (int) $post->ID, self::STATUS_META );
 			delete_post_meta( (int) $post->ID, self::TIME_META );
+			delete_post_meta( (int) $post->ID, self::ARCHIVED_BY_USER_META );
 
 			$this->cascade->restore(
 				(int) $post->ID,
@@ -223,10 +231,6 @@ final class ArchiveCascade {
 		$post    = $post_id > 0 ? get_post( $post_id ) : null;
 		if ( $post instanceof WP_Post && Document::POST_TYPE !== $post->post_type ) {
 			return $prepared_post;
-		}
-
-		if ( $post instanceof WP_Post && Documents::STATUS_ARCHIVED === $post->post_status ) {
-			return $this->archived_write_error();
 		}
 
 		$container_error = $this->rest_container_error( $prepared_post, $post, $request );
@@ -300,9 +304,6 @@ final class ArchiveCascade {
 		}
 
 		if ( $is_autosave ) {
-			if ( Documents::STATUS_ARCHIVED === $post->post_status ) {
-				return $this->archived_write_error();
-			}
 			$container_error = $this->container_error_for_document( $post );
 			if ( $container_error instanceof WP_Error ) {
 				return $container_error;
@@ -819,14 +820,6 @@ final class ArchiveCascade {
 		}
 
 		return null;
-	}
-
-	private function archived_write_error(): WP_Error {
-		return new WP_Error(
-			'cortext_document_archived',
-			__( 'Restore this document before editing it.', 'cortext' ),
-			array( 'status' => 409 )
-		);
 	}
 
 	private function archive_transition_error( WP_Post $post ): ?WP_Error {

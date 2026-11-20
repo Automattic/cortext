@@ -3,6 +3,10 @@ import { act, render } from '@testing-library/react';
 import RowEditor from '../../../src/components/RowEditor';
 import EditorBody from '../../../src/components/EditorBody';
 import usePostLock from '../../../src/hooks/usePostLock';
+import {
+	ActiveEditorProvider,
+	useActiveEditor,
+} from '../../../src/components/ActiveEditorContext';
 
 jest.mock( '@wordpress/components', () => ( {
 	SlotFillProvider: ( { children } ) => <>{ children }</>,
@@ -83,7 +87,7 @@ const unlockedPostLock = {
 	user: null,
 };
 
-function renderRowEditor( overrides = {} ) {
+function renderRowEditor( overrides = {}, options = {} ) {
 	return render(
 		<RowEditor
 			collectionId={ 10 }
@@ -103,7 +107,8 @@ function renderRowEditor( overrides = {} ) {
 			rowId={ 20 }
 			shouldAcquirePostLock
 			{ ...overrides }
-		/>
+		/>,
+		options
 	);
 }
 
@@ -175,5 +180,84 @@ describe( 'RowEditor', () => {
 		);
 
 		expect( onPaneReady ).toHaveBeenCalledWith( 'crtxt_tasks:20' );
+	} );
+
+	it( 'is read-only while a lifecycle request holds the editors and editable once it ends', () => {
+		let lockEditors;
+		function CaptureLock() {
+			lockEditors = useActiveEditor().lockEditors;
+			return null;
+		}
+		renderRowEditor(
+			{},
+			{
+				wrapper: ( { children } ) => (
+					<ActiveEditorProvider>
+						<CaptureLock />
+						{ children }
+					</ActiveEditorProvider>
+				),
+			}
+		);
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( false );
+
+		let unlock;
+		act( () => {
+			unlock = lockEditors();
+		} );
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( true );
+
+		act( () => unlock() );
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( false );
+	} );
+
+	it( 'skips locking archived rows and enables locking after restore', () => {
+		const { rerender } = renderRowEditor( {
+			post: {
+				id: 20,
+				status: 'crtxt_archived',
+				type: 'crtxt_tasks',
+			},
+			row: { id: 20, status: 'crtxt_archived' },
+		} );
+
+		expect( usePostLock ).toHaveBeenLastCalledWith( {
+			postId: 20,
+			postType: 'crtxt_tasks',
+			enabled: false,
+		} );
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( true );
+
+		rerender(
+			<RowEditor
+				collectionId={ 10 }
+				detailKey="crtxt_tasks:20"
+				fields={ [] }
+				isActive
+				isHidden={ false }
+				onApi={ jest.fn() }
+				onPaneReady={ jest.fn() }
+				onRestored={ jest.fn() }
+				onSaved={ jest.fn() }
+				onTogglePropertiesVisible={ jest.fn() }
+				post={ {
+					id: 20,
+					status: 'draft',
+					type: 'crtxt_tasks',
+				} }
+				postType="crtxt_tasks"
+				propertiesVisible
+				row={ { id: 20, status: 'draft' } }
+				rowId={ 20 }
+				shouldAcquirePostLock
+			/>
+		);
+
+		expect( usePostLock ).toHaveBeenLastCalledWith( {
+			postId: 20,
+			postType: 'crtxt_tasks',
+			enabled: true,
+		} );
+		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( false );
 	} );
 } );

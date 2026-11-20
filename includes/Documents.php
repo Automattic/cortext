@@ -33,6 +33,7 @@ use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
 use WP_Query;
+use WP_User;
 
 final class Documents {
 
@@ -414,7 +415,7 @@ final class Documents {
 	 * @return array<string,mixed>|null
 	 */
 	public function format_document( WP_Post $post, array $opts = array() ): ?array {
-		$kind = $this->kind_for_document( $post );
+		$kind = self::kind_for_document( $post );
 		if ( null === $kind ) {
 			return null;
 		}
@@ -476,15 +477,74 @@ final class Documents {
 			if ( $include_trash_meta ) {
 				$meta[ TrashCascade::PARENT_MARKER_META ]     = (int) get_post_meta( $post->ID, TrashCascade::PARENT_MARKER_META, true );
 				$meta[ TrashCascade::COLLECTION_MARKER_META ] = (int) get_post_meta( $post->ID, TrashCascade::COLLECTION_MARKER_META, true );
+				$document                                     = array_merge( $document, $this->trash_details( $post ) );
 			}
 			if ( $include_archive_meta ) {
 				$meta[ ArchiveCascade::PARENT_MARKER_META ]     = (int) get_post_meta( $post->ID, ArchiveCascade::PARENT_MARKER_META, true );
 				$meta[ ArchiveCascade::COLLECTION_MARKER_META ] = (int) get_post_meta( $post->ID, ArchiveCascade::COLLECTION_MARKER_META, true );
+				$document                                       = array_merge(
+					$document,
+					self::lifecycle_details(
+						'archived',
+						(int) get_post_meta( $post->ID, ArchiveCascade::TIME_META, true ),
+						(int) get_post_meta( $post->ID, ArchiveCascade::ARCHIVED_BY_USER_META, true )
+					)
+				);
 			}
 			$document['meta'] = $meta;
 		}
 
 		return $document;
+	}
+
+	/**
+	 * When the document went to trash, who sent it there, and when WordPress's
+	 * scheduled cleanup will delete it. With `EMPTY_TRASH_DAYS` at 0 the
+	 * cleanup's cutoff is now, so `purge_at` equals `trashed_at` and the next
+	 * daily run deletes it. `trashed_by` is null for
+	 * documents trashed before the user was recorded, or whose user is gone.
+	 *
+	 * @param WP_Post $post Trashed document.
+	 * @return array{trashed_at: string, purge_at: string, trashed_by: ?array{id: int, name: string}}
+	 */
+	private function trash_details( WP_Post $post ): array {
+		$trashed_at = (int) get_post_meta( $post->ID, '_wp_trash_meta_time', true );
+
+		$details             = self::lifecycle_details(
+			'trashed',
+			$trashed_at,
+			(int) get_post_meta( $post->ID, TrashCascade::TRASHED_BY_USER_META, true )
+		);
+		$details['purge_at'] = $trashed_at > 0
+			? gmdate( 'c', $trashed_at + EMPTY_TRASH_DAYS * DAY_IN_SECONDS )
+			: '';
+
+		return $details;
+	}
+
+	/**
+	 * When a document entered a lifecycle state and who put it there, as
+	 * `{$state}_at` and `{$state}_by` (`trashed_at`, `archived_by`, `frozen_at`, ...).
+	 * The date is empty when none was recorded. The user is null when none
+	 * was recorded or the user is gone.
+	 *
+	 * @param string $state   Key prefix, such as `trashed`, `archived` or `frozen`.
+	 * @param int    $time    Unix timestamp the state was entered, 0 if unknown.
+	 * @param int    $user_id User who moved the document there, 0 if unknown.
+	 * @return array<string, mixed>
+	 */
+	public static function lifecycle_details( string $state, int $time, int $user_id ): array {
+		$user = get_userdata( $user_id );
+
+		return array(
+			"{$state}_at" => $time > 0 ? gmdate( 'c', $time ) : '',
+			"{$state}_by" => $user instanceof WP_User
+				? array(
+					'id'   => (int) $user->ID,
+					'name' => $user->display_name,
+				)
+				: null,
+		);
 	}
 
 	private function format_gmt_date( string $mysql_gmt ): string {
@@ -500,14 +560,14 @@ final class Documents {
 	 *
 	 * @param WP_Post $post Document post.
 	 */
-	private function kind_for_document( WP_Post $post ): ?string {
+	public static function kind_for_document( WP_Post $post ): ?string {
 		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
 			return null;
 		}
 		if ( Document::is_collection_post( $post ) ) {
 			return self::KIND_COLLECTION;
 		}
-		if ( $this->has_trait_term( $post ) ) {
+		if ( self::has_trait_term( $post ) ) {
 			return self::KIND_ROW;
 		}
 		return self::KIND_PAGE;
@@ -529,7 +589,7 @@ final class Documents {
 	 *
 	 * @param WP_Post $post Document post.
 	 */
-	private function has_trait_term( WP_Post $post ): bool {
+	private static function has_trait_term( WP_Post $post ): bool {
 		if ( Document::POST_TYPE !== $post->post_type ) {
 			return false;
 		}
@@ -606,7 +666,7 @@ final class Documents {
 			return $this->target_not_found_error();
 		}
 
-		$kind = $this->kind_for_document( $post );
+		$kind = self::kind_for_document( $post );
 		if ( null === $kind ) {
 			return $this->target_not_found_error();
 		}

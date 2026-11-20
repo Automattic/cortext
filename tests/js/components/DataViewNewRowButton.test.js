@@ -1,9 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import apiFetch from '@wordpress/api-fetch';
 
-jest.mock( '@wordpress/api-fetch', () => ( {
-	__esModule: true,
-	default: jest.fn(),
+const mockCreateRowDocument = jest.fn();
+jest.mock( '../../../src/components/rowDocumentCreation', () => ( {
+	useCreateRowDocument: () => mockCreateRowDocument,
 } ) );
 
 jest.mock( '@wordpress/i18n', () => ( {
@@ -100,7 +99,7 @@ beforeEach( () => {
 	window.cortextSettings = {
 		experiments: { templates: true },
 	};
-	apiFetch.mockReset();
+	mockCreateRowDocument.mockReset();
 	createTemplate.mockReset();
 	instantiateTemplate.mockReset();
 	notifyTemplatesChanged.mockReset();
@@ -124,13 +123,85 @@ function renderButton( props = {} ) {
 	);
 }
 
+describe( 'DataViewNewRowButton', () => {
+	beforeEach( () => {
+		window.cortextSettings.experiments.templates = false;
+	} );
+
+	it( 'passes eligible filter values when creating a row', async () => {
+		const created = { id: 44, title: { raw: '' } };
+		const onCreated = jest.fn();
+		mockCreateRowDocument.mockResolvedValue( created );
+
+		renderButton( {
+			view: {
+				filters: [
+					{ field: 'priority', operator: 'is', value: 'high' },
+					{ field: 'readonly', operator: 'is', value: 'ignored' },
+					{ field: 'rollup', operator: 'is', value: 10 },
+					{ field: 'priority', operator: 'isAny', value: 'ignored' },
+					{ field: 'title', operator: 'is', value: 'ignored' },
+				],
+			},
+			fields: [
+				{ id: 'priority' },
+				{ id: 'readonly', editable: false },
+				{ id: 'rollup', cortextType: 'rollup' },
+			],
+			onCreated,
+		} );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'New' } ) );
+
+		await waitFor( () =>
+			expect( mockCreateRowDocument ).toHaveBeenCalledWith( {
+				collectionId: 7,
+				meta: { priority: 'high' },
+			} )
+		);
+		await waitFor( () =>
+			expect( onCreated ).toHaveBeenCalledWith( created )
+		);
+	} );
+
+	it( 'omits meta when no active filter can prefill the row', async () => {
+		mockCreateRowDocument.mockResolvedValue( { id: 45 } );
+
+		renderButton();
+		fireEvent.click( screen.getByRole( 'button', { name: 'New' } ) );
+
+		await waitFor( () =>
+			expect( mockCreateRowDocument ).toHaveBeenCalledWith( {
+				collectionId: 7,
+				meta: {},
+			} )
+		);
+	} );
+
+	it( 'shows the save error and does not report the row as created', async () => {
+		const onCreated = jest.fn();
+		mockCreateRowDocument.mockRejectedValue(
+			new Error( 'The row could not be saved.' )
+		);
+
+		renderButton( { onCreated } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'New' } ) );
+
+		expect(
+			( await screen.findAllByText( 'The row could not be saved.' ) )
+				.length
+		).toBeGreaterThan( 0 );
+		expect( onCreated ).not.toHaveBeenCalled();
+	} );
+} );
+
 describe( 'DataViewNewRowButton templates', () => {
 	it( 'creates a blank row while row templates are still loading', async () => {
 		useTemplates.mockReturnValue( {
 			templates: [],
 			isResolving: true,
 		} );
-		apiFetch.mockResolvedValueOnce( { id: 99 } );
+		mockCreateRowDocument.mockResolvedValueOnce( { id: 99 } );
 
 		renderButton();
 
@@ -144,13 +215,15 @@ describe( 'DataViewNewRowButton templates', () => {
 
 		fireEvent.click( primaryButton );
 
-		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		await waitFor( () =>
+			expect( mockCreateRowDocument ).toHaveBeenCalledTimes( 1 )
+		);
 		expect( instantiateTemplate ).not.toHaveBeenCalled();
 	} );
 
 	it( 'creates a blank row without template controls when the experiment is disabled', async () => {
 		window.cortextSettings.experiments.templates = false;
-		apiFetch.mockResolvedValueOnce( { id: 103 } );
+		mockCreateRowDocument.mockResolvedValueOnce( { id: 103 } );
 
 		const { container } = renderButton();
 
@@ -170,7 +243,9 @@ describe( 'DataViewNewRowButton templates', () => {
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'New' } ) );
 
-		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		await waitFor( () =>
+			expect( mockCreateRowDocument ).toHaveBeenCalledTimes( 1 )
+		);
 		expect( instantiateTemplate ).not.toHaveBeenCalled();
 	} );
 
@@ -211,7 +286,7 @@ describe( 'DataViewNewRowButton templates', () => {
 				{ id: 11, title: 'Beta' },
 			],
 		} );
-		apiFetch.mockResolvedValueOnce( { id: 101 } );
+		mockCreateRowDocument.mockResolvedValueOnce( { id: 101 } );
 
 		renderButton( { onCreated } );
 
@@ -227,14 +302,9 @@ describe( 'DataViewNewRowButton templates', () => {
 		);
 
 		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledWith( {
-				path: '/wp/v2/crtxt_documents',
-				method: 'POST',
-				data: {
-					status: 'private',
-					title: '',
-					cortext_trait: 7,
-				},
+			expect( mockCreateRowDocument ).toHaveBeenCalledWith( {
+				collectionId: 7,
+				meta: {},
 			} )
 		);
 		expect( onCreated ).toHaveBeenCalledWith( { id: 101 } );
@@ -243,13 +313,15 @@ describe( 'DataViewNewRowButton templates', () => {
 	it( 'creates a blank row when only one template is available', async () => {
 		const template = { id: 22, title: 'Only template' };
 		useTemplates.mockReturnValue( { templates: [ template ] } );
-		apiFetch.mockResolvedValueOnce( { id: 102 } );
+		mockCreateRowDocument.mockResolvedValueOnce( { id: 102 } );
 
 		renderButton();
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'New' } ) );
 
-		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		await waitFor( () =>
+			expect( mockCreateRowDocument ).toHaveBeenCalledTimes( 1 )
+		);
 		expect( instantiateTemplate ).not.toHaveBeenCalled();
 	} );
 

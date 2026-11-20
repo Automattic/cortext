@@ -1,7 +1,48 @@
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
+import { useContext } from '@wordpress/element';
 import { DataViews as mockDataViews } from '@wordpress/dataviews/wp';
 
+jest.mock( '@wordpress/api-fetch', () => ( {
+	__esModule: true,
+	default: jest.fn(),
+} ) );
+
+const mockSaveRowDocumentField = jest.fn();
+jest.mock( '../../../src/components/rowDocumentMutations', () => ( {
+	saveRowDocumentField: ( ...args ) => mockSaveRowDocumentField( ...args ),
+} ) );
+
 const mockDataViewRowReorder = jest.fn( () => null );
+const mockSetFavorites = jest.fn();
+const mockOpenDocument = jest.fn();
+const mockCloseDocument = jest.fn();
+// Mirrors the provider: flushing waits for every registered pending save.
+const mockPendingSaveFlushers = new Set();
+const flushRegisteredSaves = async () => {
+	for ( const flush of [ ...mockPendingSaveFlushers ] ) {
+		if ( ( await flush() ) === false ) {
+			return false;
+		}
+	}
+	return true;
+};
+const mockFlushActiveEditor = jest.fn( flushRegisteredSaves );
+const mockUnlockEditors = jest.fn();
+const mockLockEditors = jest.fn( () => mockUnlockEditors );
+const mockWaitForOpenDocuments = jest.fn( async () => {} );
+const mockRegisterPendingSaves = ( flush ) => {
+	mockPendingSaveFlushers.add( flush );
+	return () => mockPendingSaveFlushers.delete( flush );
+};
+
+jest.mock( '../../../src/components/ActiveEditorContext', () => ( {
+	useActiveEditor: () => ( {
+		flushActiveEditor: mockFlushActiveEditor,
+		lockEditors: mockLockEditors,
+		registerPendingSaves: mockRegisterPendingSaves,
+		waitForOpenDocuments: mockWaitForOpenDocuments,
+	} ),
+} ) );
 
 jest.mock( '@wordpress/dataviews/wp', () => {
 	const actual = jest.requireActual( '@wordpress/dataviews/wp' );
@@ -36,7 +77,9 @@ jest.mock( '../../../src/hooks/useRecents', () => ( {
 } ) );
 
 jest.mock( '../../../src/hooks/useFavorites', () => ( {
-	useFavorites: jest.fn( () => ( { setFavorites: jest.fn() } ) ),
+	useFavorites: jest.fn( () => ( {
+		setFavorites: jest.fn().mockResolvedValue( undefined ),
+	} ) ),
 } ) );
 
 jest.mock( '../../../src/documents', () => ( {
@@ -50,8 +93,8 @@ jest.mock( '../../../src/documents', () => ( {
 
 jest.mock( '../../../src/components/DocumentPeekProvider', () => ( {
 	useDocumentPeekActions: jest.fn( () => ( {
-		openDocument: jest.fn(),
-		closeDocument: jest.fn(),
+		openDocument: mockOpenDocument,
+		closeDocument: mockCloseDocument,
 	} ) ),
 	useDocumentPeekState: jest.fn( () => ( { peek: null } ) ),
 } ) );
@@ -105,11 +148,22 @@ jest.mock( '../../../src/components/dataViewScroll', () => {
 	};
 } );
 
+import { select } from '@wordpress/data';
+import { store as noticesStore } from '@wordpress/notices';
 import { useCollectionFieldsContext } from '../../../src/components/CollectionFieldsContext';
 import CollectionDataViews from '../../../src/components/CollectionDataViews';
+import { RowMutationContext } from '../../../src/components/EditableCell';
 import { scrollToEndQuickly } from '../../../src/components/dataViewScroll';
 import { whenViewTransitionsSettled } from '../../../src/hooks/viewTransition';
 import useCollectionRows from '../../../src/hooks/useCollectionRows';
+import { COLLECTION_ROWS_CHANGED_EVENT } from '../../../src/hooks/rowInvalidation';
+import { useFavorites } from '../../../src/hooks/useFavorites';
+import { filterFavoritesByDeletedIds } from '../../../src/documents';
+import apiFetch from '@wordpress/api-fetch';
+import {
+	useDocumentPeekActions,
+	useDocumentPeekState,
+} from '../../../src/components/DocumentPeekProvider';
 
 const tableView = {
 	type: 'table',
@@ -144,9 +198,20 @@ function collectionRowsState( overrides = {} ) {
 		error: null,
 		refresh: jest.fn(),
 		mutateRows: jest.fn(),
+		patchRow: jest.fn(),
 		queryMode: 'server',
 		...overrides,
 	};
+}
+
+function deferred() {
+	let resolve;
+	let reject;
+	const promise = new Promise( ( promiseResolve, promiseReject ) => {
+		resolve = promiseResolve;
+		reject = promiseReject;
+	} );
+	return { promise, resolve, reject };
 }
 
 function makeScroller( {
@@ -498,6 +563,670 @@ describe( 'CollectionDataViews surface focus', () => {
 			container.querySelector( 'input[type="search"]' )
 		).not.toHaveFocus();
 		originElement.remove();
+	} );
+} );
+
+describe( 'CollectionDataViews archive actions', () => {
+	beforeEach( () => {
+		mockDataViews.mockClear();
+		useCollectionFieldsContext.mockReturnValue( collectionFieldState );
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( { archived: [] } );
+		mockSaveRowDocumentField.mockReset();
+		mockSaveRowDocumentField.mockResolvedValue( { id: 1 } );
+		filterFavoritesByDeletedIds.mockClear();
+		mockSetFavorites.mockReset();
+		mockSetFavorites.mockImplementation( async ( update ) =>
+			update( [ { id: 1 }, { id: 2 }, { id: 3 } ] )
+		);
+		useFavorites.mockReturnValue( { setFavorites: mockSetFavorites } );
+		mockOpenDocument.mockReset();
+		mockCloseDocument.mockReset();
+		mockCloseDocument.mockResolvedValue( true );
+		useDocumentPeekActions.mockReturnValue( {
+			openDocument: mockOpenDocument,
+			closeDocument: mockCloseDocument,
+		} );
+		useDocumentPeekState.mockReturnValue( { peek: null } );
+		mockFlushActiveEditor.mockReset();
+		mockFlushActiveEditor.mockImplementation( flushRegisteredSaves );
+		mockLockEditors.mockClear();
+		mockUnlockEditors.mockClear();
+		mockWaitForOpenDocuments.mockReset();
+		mockWaitForOpenDocuments.mockResolvedValue( undefined );
+	} );
+
+	it( 'offers bulk Archive before Trash and archives every selected row', async () => {
+		const rows = [
+			{ id: 1, title: { raw: 'One' } },
+			{ id: 2, title: { raw: 'Two' } },
+		];
+		const rowsState = collectionRowsState( {
+			data: rows,
+			paginationInfo: { totalItems: 2, totalPages: 1 },
+		} );
+		useCollectionRows.mockReturnValue( rowsState );
+		apiFetch
+			.mockReset()
+			.mockResolvedValueOnce( {
+				archived: [ 1, 3 ],
+				post: { id: 1, status: 'crtxt_archived' },
+			} )
+			.mockResolvedValueOnce( {
+				archived: [ 2 ],
+				post: { id: 2, status: 'crtxt_archived' },
+			} );
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		const actions = mockDataViews.mock.calls.at( -1 )[ 0 ].actions;
+		const archiveAction = actions.find(
+			( action ) => action.id === 'archive-row'
+		);
+		const trashAction = actions.find(
+			( action ) => action.id === 'delete-row'
+		);
+		expect( archiveAction.supportsBulk ).toBe( true );
+		expect( actions.indexOf( archiveAction ) ).toBeLessThan(
+			actions.indexOf( trashAction )
+		);
+
+		await act( async () => {
+			await archiveAction.callback( rows );
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( apiFetch ).toHaveBeenNthCalledWith( 1, {
+			path: '/cortext/v1/documents/1/archive',
+			method: 'POST',
+		} );
+		expect( apiFetch ).toHaveBeenNthCalledWith( 2, {
+			path: '/cortext/v1/documents/2/archive',
+			method: 'POST',
+		} );
+		expect( rowsState.refresh ).toHaveBeenCalledTimes( 1 );
+
+		const notice = select( noticesStore )
+			.getNotices()
+			.find( ( { id } ) => id === 'cortext-document-archive-success' );
+		expect( notice.content ).toBe( '2 documents archived.' );
+
+		apiFetch.mockReset().mockResolvedValue( { restored: [], post: null } );
+		await act( async () => {
+			await notice.actions
+				.find( ( action ) => action.label === 'Undo' )
+				.onClick();
+		} );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/1/unarchive',
+			method: 'POST',
+		} );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/2/unarchive',
+			method: 'POST',
+		} );
+	} );
+
+	it( 'flushes and closes an open selected row before archiving it', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		const close = deferred();
+		const rowsState = collectionRowsState( {
+			data: [ row ],
+			paginationInfo: { totalItems: 1, totalPages: 1 },
+		} );
+		useCollectionRows.mockReturnValue( rowsState );
+		useDocumentPeekState.mockReturnValue( {
+			peek: { docId: 1, mode: 'side' },
+		} );
+		mockCloseDocument.mockReturnValue( close.promise );
+		apiFetch.mockResolvedValue( {
+			archived: [ 1 ],
+			post: { id: 1, status: 'crtxt_archived' },
+		} );
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		const archiveAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'archive-row' );
+		let archivePromise;
+		act( () => {
+			archivePromise = archiveAction.callback( [ row ] );
+		} );
+		await act( async () => Promise.resolve() );
+
+		expect( apiFetch ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			close.resolve( true );
+			await archivePromise;
+		} );
+
+		expect( mockCloseDocument ).toHaveBeenCalledTimes( 1 );
+		expect( mockCloseDocument.mock.invocationCallOrder[ 0 ] ).toBeLessThan(
+			apiFetch.mock.invocationCallOrder[ 0 ]
+		);
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/1/archive',
+			method: 'POST',
+		} );
+	} );
+
+	it( 'aborts archive when an open selected row cannot be saved', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		useDocumentPeekState.mockReturnValue( {
+			peek: { docId: 1, mode: 'modal' },
+		} );
+		mockCloseDocument.mockResolvedValue( false );
+
+		const { findAllByText } = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		const archiveAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'archive-row' );
+		await act( async () => {
+			await archiveAction.callback( [ row ] );
+		} );
+
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect(
+			await findAllByText(
+				'Could not save changes. Archive was canceled.'
+			)
+		).not.toHaveLength( 0 );
+	} );
+
+	function renderWithMutationContext( row ) {
+		const rowsState = collectionRowsState( {
+			data: [ row ],
+			paginationInfo: { totalItems: 1, totalPages: 1 },
+		} );
+		useCollectionRows.mockReturnValue( rowsState );
+		const captured = {};
+		function CaptureMutationContext() {
+			captured.saveRowField =
+				useContext( RowMutationContext ).saveRowField;
+			return null;
+		}
+		const defaultImplementation = mockDataViews.getMockImplementation();
+		mockDataViews.mockImplementation( () => <CaptureMutationContext /> );
+		const view = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+		mockDataViews.mockImplementation( defaultImplementation );
+		const archiveAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'archive-row' );
+		return { ...view, archiveAction, captured, rowsState };
+	}
+
+	it( 'waits for a pending field save before archiving the row', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		let resolveSave;
+		mockSaveRowDocumentField.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					resolveSave = resolve;
+				} )
+		);
+		apiFetch.mockResolvedValue( {
+			archived: [ 1 ],
+			post: { id: 1, status: 'crtxt_archived' },
+		} );
+		const { archiveAction, captured } = renderWithMutationContext( row );
+
+		let savePromise;
+		let archivePromise;
+		act( () => {
+			savePromise = captured.saveRowField( 1, 'field-9', true );
+			archivePromise = archiveAction.callback( [ row ] );
+		} );
+		await act( async () => {
+			await Promise.resolve();
+		} );
+		expect( apiFetch ).not.toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/1/archive',
+			method: 'POST',
+		} );
+
+		await act( async () => {
+			resolveSave( { id: 1 } );
+			await savePromise;
+			await archivePromise;
+		} );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/1/archive',
+			method: 'POST',
+		} );
+	} );
+
+	it( 'aborts archive when a pending field save fails', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		let rejectSave;
+		mockSaveRowDocumentField.mockImplementation(
+			() =>
+				new Promise( ( resolve, reject ) => {
+					rejectSave = reject;
+				} )
+		);
+		const { archiveAction, captured, findAllByText } =
+			renderWithMutationContext( row );
+
+		let savePromise;
+		let archivePromise;
+		act( () => {
+			savePromise = captured
+				.saveRowField( 1, 'field-9', true )
+				.catch( () => null );
+			archivePromise = archiveAction.callback( [ row ] );
+		} );
+		await act( async () => {
+			rejectSave( new Error( 'offline' ) );
+			await savePromise;
+			await archivePromise;
+		} );
+
+		expect( mockSaveRowDocumentField ).toHaveBeenCalledTimes( 1 );
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect(
+			await findAllByText(
+				'Could not save changes. Archive was canceled.'
+			)
+		).not.toHaveLength( 0 );
+	} );
+
+	it( 'keeps the peek open when its pending property saves fail', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		useDocumentPeekState.mockReturnValue( {
+			peek: { docId: 1, mode: 'side' },
+		} );
+		mockFlushActiveEditor.mockResolvedValueOnce( false );
+
+		const { findAllByText } = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		const archiveAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'archive-row' );
+		await act( async () => {
+			await archiveAction.callback( [ row ] );
+		} );
+
+		expect( mockCloseDocument ).not.toHaveBeenCalled();
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect(
+			await findAllByText(
+				'Could not save changes. Archive was canceled.'
+			)
+		).not.toHaveLength( 0 );
+	} );
+
+	it( 'registers in-flight cell saves so a sidebar archive of the collection waits for them', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		const save = deferred();
+		mockSaveRowDocumentField.mockReturnValue( save.promise );
+		const { captured } = renderWithMutationContext( row );
+
+		let savePromise;
+		act( () => {
+			savePromise = captured
+				.saveRowField( 1, 'field-9', true )
+				.catch( () => null );
+		} );
+		// The sidebar archives through the shared flush, not through this view.
+		let isFlushed = false;
+		const flushPromise = mockFlushActiveEditor().then( ( result ) => {
+			isFlushed = true;
+			return result;
+		} );
+		await act( async () => Promise.resolve() );
+		expect( isFlushed ).toBe( false );
+
+		await act( async () => {
+			save.reject( new Error( 'offline' ) );
+			await savePromise;
+		} );
+		await expect( flushPromise ).resolves.toBe( false );
+	} );
+
+	describe( 'cell saves', () => {
+		let rowsChangedEvents;
+		const onRowsChanged = ( event ) =>
+			rowsChangedEvents.push( event.detail.collectionId );
+
+		beforeEach( () => {
+			jest.useFakeTimers();
+			rowsChangedEvents = [];
+			window.addEventListener(
+				COLLECTION_ROWS_CHANGED_EVENT,
+				onRowsChanged
+			);
+		} );
+
+		afterEach( () => {
+			window.removeEventListener(
+				COLLECTION_ROWS_CHANGED_EVENT,
+				onRowsChanged
+			);
+			jest.useRealTimers();
+		} );
+
+		it( 'patches the row from the save response and refreshes once edits pause', async () => {
+			const row = { id: 1, title: { raw: 'One' } };
+			const record = { id: 1, meta: { 'field-9': true } };
+			mockSaveRowDocumentField.mockResolvedValue( record );
+			const { captured, rowsState } = renderWithMutationContext( row );
+
+			await act( async () => {
+				await captured.saveRowField( 1, 'field-9', true );
+			} );
+			expect( rowsState.patchRow ).toHaveBeenCalledWith( record );
+			expect( rowsState.refresh ).not.toHaveBeenCalled();
+			expect( rowsChangedEvents ).toEqual( [] );
+
+			await act( async () => {
+				await captured.saveRowField( 1, 'field-9', false );
+			} );
+			act( () => jest.advanceTimersByTime( 399 ) );
+			expect( rowsState.refresh ).not.toHaveBeenCalled();
+
+			act( () => jest.advanceTimersByTime( 1 ) );
+			expect( rowsState.refresh ).toHaveBeenCalledTimes( 1 );
+			expect( rowsChangedEvents ).toEqual( [ 7 ] );
+		} );
+
+		it( 'holds the refresh while another save is in flight', async () => {
+			const row = { id: 1, title: { raw: 'One' } };
+			const slowSave = deferred();
+			mockSaveRowDocumentField
+				.mockResolvedValueOnce( { id: 1 } )
+				.mockReturnValueOnce( slowSave.promise );
+			const { captured, rowsState } = renderWithMutationContext( row );
+
+			let slowSavePromise;
+			await act( async () => {
+				await captured.saveRowField( 1, 'field-9', true );
+				slowSavePromise = captured.saveRowField( 1, 'field-9', false );
+			} );
+			act( () => jest.advanceTimersByTime( 1000 ) );
+			expect( rowsState.refresh ).not.toHaveBeenCalled();
+
+			await act( async () => {
+				slowSave.resolve( { id: 1 } );
+				await slowSavePromise;
+			} );
+			act( () => jest.advanceTimersByTime( 400 ) );
+			expect( rowsState.refresh ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'still refreshes after a failed save', async () => {
+			const row = { id: 1, title: { raw: 'One' } };
+			mockSaveRowDocumentField.mockRejectedValue(
+				new Error( 'offline' )
+			);
+			const { captured, rowsState } = renderWithMutationContext( row );
+
+			await act( async () => {
+				await captured
+					.saveRowField( 1, 'field-9', true )
+					.catch( () => null );
+			} );
+			expect( rowsState.patchRow ).not.toHaveBeenCalled();
+			act( () => jest.advanceTimersByTime( 400 ) );
+			expect( rowsState.refresh ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'tells other views about a pending refresh when it unmounts', async () => {
+			const row = { id: 1, title: { raw: 'One' } };
+			mockSaveRowDocumentField.mockResolvedValue( { id: 1 } );
+			const { captured, unmount } = renderWithMutationContext( row );
+
+			await act( async () => {
+				await captured.saveRowField( 1, 'field-9', true );
+			} );
+			unmount();
+			expect( rowsChangedEvents ).toEqual( [ 7 ] );
+			act( () => jest.advanceTimersByTime( 400 ) );
+			expect( rowsChangedEvents ).toEqual( [ 7 ] );
+		} );
+	} );
+
+	it( 'locks the editors from the flush until the archive request settles', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		const archive = deferred();
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		apiFetch.mockReturnValue( archive.promise );
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+		const archiveAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'archive-row' );
+		let archivePromise;
+		act( () => {
+			archivePromise = archiveAction.callback( [ row ] );
+		} );
+		await act( async () => Promise.resolve() );
+
+		expect( mockLockEditors.mock.invocationCallOrder[ 0 ] ).toBeLessThan(
+			mockFlushActiveEditor.mock.invocationCallOrder[ 0 ]
+		);
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( mockUnlockEditors ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			archive.reject( new Error( 'offline' ) );
+			await archivePromise;
+		} );
+		expect( mockUnlockEditors ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'keeps the editors locked until open documents under trashed rows reload', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		const reload = deferred();
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		mockWaitForOpenDocuments.mockReturnValue( reload.promise );
+		apiFetch.mockResolvedValue( {
+			id: 1,
+			status: 'trash',
+			cascade_deleted: [ 5 ],
+		} );
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+		const trashAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'delete-row' );
+		let trashPromise;
+		act( () => {
+			trashPromise = trashAction.callback( [ row ] );
+		} );
+		await act( async () => Promise.resolve() );
+
+		expect( mockWaitForOpenDocuments ).toHaveBeenCalledWith( [ 5 ] );
+		expect( mockUnlockEditors ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			reload.resolve();
+			await trashPromise;
+		} );
+		expect( mockUnlockEditors ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'saves the open editors before trashing rows', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		const flush = deferred();
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		mockFlushActiveEditor.mockReturnValueOnce( flush.promise );
+		apiFetch.mockResolvedValue( { id: 1, status: 'trash' } );
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+		const trashAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'delete-row' );
+		let trashPromise;
+		act( () => {
+			trashPromise = trashAction.callback( [ row ] );
+		} );
+		await act( async () => Promise.resolve() );
+
+		expect( mockLockEditors ).toHaveBeenCalledTimes( 1 );
+		expect( apiFetch ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			flush.resolve( true );
+			await trashPromise;
+		} );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/wp/v2/crtxt_documents/1',
+			method: 'DELETE',
+		} );
+		expect( mockUnlockEditors ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'cancels the trash when the open editors cannot be saved', async () => {
+		const row = { id: 1, title: { raw: 'One' } };
+		useCollectionRows.mockReturnValue(
+			collectionRowsState( {
+				data: [ row ],
+				paginationInfo: { totalItems: 1, totalPages: 1 },
+			} )
+		);
+		mockFlushActiveEditor.mockResolvedValueOnce( false );
+
+		const { findAllByText } = render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+		const trashAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'delete-row' );
+		await act( async () => {
+			await trashAction.callback( [ row ] );
+		} );
+
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( mockUnlockEditors ).toHaveBeenCalledTimes( 1 );
+		expect(
+			await findAllByText(
+				'Could not save changes. Move to Trash was canceled.'
+			)
+		).not.toHaveLength( 0 );
+	} );
+
+	it( 'always includes trashed row roots with real cascade DELETE ids', async () => {
+		const rows = [ { id: 1 }, { id: 2 } ];
+		const rowsState = collectionRowsState( {
+			data: rows,
+			paginationInfo: { totalItems: 2, totalPages: 1 },
+		} );
+		useCollectionRows.mockReturnValue( rowsState );
+		apiFetch
+			.mockReset()
+			.mockResolvedValueOnce( {
+				id: 1,
+				status: 'trash',
+				cascade_deleted: [ 3 ],
+			} )
+			.mockResolvedValueOnce( {
+				id: 2,
+				status: 'trash',
+				cascade_deleted: [],
+			} );
+
+		render(
+			<CollectionDataViews
+				collectionId={ 7 }
+				view={ tableView }
+				onChangeView={ jest.fn() }
+			/>
+		);
+
+		const trashAction = mockDataViews.mock.calls
+			.at( -1 )[ 0 ]
+			.actions.find( ( action ) => action.id === 'delete-row' );
+		await act( async () => {
+			await trashAction.callback( rows );
+		} );
+
+		expect( filterFavoritesByDeletedIds ).toHaveBeenCalledWith(
+			[ { id: 1 }, { id: 2 }, { id: 3 } ],
+			new Set( [ 1, 2, 3 ] )
+		);
+		expect( rowsState.refresh ).toHaveBeenCalledTimes( 1 );
 	} );
 } );
 

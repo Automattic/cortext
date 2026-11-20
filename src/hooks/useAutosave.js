@@ -6,6 +6,7 @@ import { store as noticesStore } from '@wordpress/notices';
 import { __ } from '@wordpress/i18n';
 
 import { useRecents } from './useRecents';
+import { selectCurrentPostReadOnlyState } from '../documents/readOnlyStore';
 
 const DEBOUNCE_MS = 800;
 const MIN_SAVE_INTERVAL_MS = 2000;
@@ -17,7 +18,7 @@ function canSavePost( state ) {
 		state.isSaveable &&
 		! state.isSaving &&
 		! state.isPostLocked &&
-		state.postStatus !== 'trash'
+		! state.isReadOnlyPost
 	);
 }
 
@@ -40,6 +41,7 @@ export default function useAutosave( options = {} ) {
 		didFail,
 		editsReference,
 		isPostLocked,
+		isReadOnlyPost,
 		postStatus,
 		postTitle,
 		currentPostId,
@@ -52,6 +54,7 @@ export default function useAutosave( options = {} ) {
 			didSucceed: editor.didPostSaveRequestSucceed(),
 			didFail: editor.didPostSaveRequestFail(),
 			isPostLocked: editor.isPostLocked?.() ?? false,
+			isReadOnlyPost: selectCurrentPostReadOnlyState( select ) !== null,
 			editsReference:
 				select( coreDataStore ).getReferenceByDistinctEdits(),
 			postStatus: editor.getEditedPostAttribute( 'status' ),
@@ -85,6 +88,7 @@ export default function useAutosave( options = {} ) {
 		isSaveable,
 		isSaving,
 		isPostLocked,
+		isReadOnlyPost,
 		savePost,
 		editPost,
 		postStatus,
@@ -97,6 +101,7 @@ export default function useAutosave( options = {} ) {
 		isSaveable,
 		isSaving,
 		isPostLocked,
+		isReadOnlyPost,
 		savePost,
 		editPost,
 		postStatus,
@@ -112,7 +117,8 @@ export default function useAutosave( options = {} ) {
 			isSaveable: editor.isEditedPostSaveable(),
 			isSaving: editor.isSavingPost(),
 			isPostLocked: editor.isPostLocked?.() ?? false,
-			postStatus: editor.getEditedPostAttribute( 'status' ),
+			isReadOnlyPost:
+				selectCurrentPostReadOnlyState( registry.select ) !== null,
 			currentPostId: editor.getCurrentPostId(),
 		};
 	}, [ registry ] );
@@ -175,7 +181,7 @@ export default function useAutosave( options = {} ) {
 				hasPendingEdits &&
 				current.isSaveable &&
 				! current.isPostLocked &&
-				current.postStatus !== 'trash'
+				! current.isReadOnlyPost
 			) {
 				// tech-debt.md#td-autosave-save-completion: WordPress 7.1 may
 				// mark a client edit made during this request as saved. Read the
@@ -284,10 +290,10 @@ export default function useAutosave( options = {} ) {
 		if ( ! isDirty || ! isSaveable || isPostLocked ) {
 			return undefined;
 		}
-		// Trashed pages are read-only in the canvas; never autosave them.
+		// Trashed, archived and frozen documents are read-only in the canvas.
 		// The UI is locked via `<Disabled>`, but a stray edit through any
 		// other path (drag-drop, programmatic) shouldn't persist either.
-		if ( postStatus === 'trash' ) {
+		if ( isReadOnlyPost ) {
 			return undefined;
 		}
 		if ( failedEditsReferenceRef.current === editsReference ) {
@@ -306,7 +312,7 @@ export default function useAutosave( options = {} ) {
 				isSaveable: s,
 				isSaving: saving,
 				isPostLocked: locked,
-				postStatus: ps,
+				isReadOnlyPost: readOnly,
 				editsReference: editsRef,
 			} = stateRef.current;
 			if (
@@ -314,7 +320,7 @@ export default function useAutosave( options = {} ) {
 				s &&
 				! saving &&
 				! locked &&
-				ps !== 'trash' &&
+				! readOnly &&
 				failedEditsReferenceRef.current !== editsRef
 			) {
 				saveCurrentPost();
@@ -332,10 +338,10 @@ export default function useAutosave( options = {} ) {
 		editsReference,
 		isDirty,
 		isPostLocked,
+		isReadOnlyPost,
 		isSaveable,
 		isSaving,
 		minSaveIntervalMs,
-		postStatus,
 		saveCurrentPost,
 	] );
 
@@ -364,11 +370,12 @@ export default function useAutosave( options = {} ) {
 					: null;
 			}
 			setStatus( 'saving' );
-		} else if ( didFail ) {
+		} else if ( didFail && wasSaving ) {
+			// Row mutations share this core-data error flag, but they never
+			// enter the editor's saving state. Only an editor save owns the
+			// status, retry pause, and notice managed by this hook.
 			savingTargetRef.current = null;
-			if ( wasSaving || ! failedEditsReferenceRef.current ) {
-				failedEditsReferenceRef.current = editsReference;
-			}
+			failedEditsReferenceRef.current = editsReference;
 			setStatus( 'error' );
 			// Successful autosaves stay quiet, so failures need a clear notice.
 			// Show it once when saving first fails; background retries would

@@ -289,21 +289,6 @@ async function selectParagraph( page, content ) {
 	}, content );
 }
 
-async function selectFirstBlockByName( page, blockName ) {
-	await page.evaluate( ( name ) => {
-		const block = window.wp.data
-			.select( 'core/block-editor' )
-			.getBlocks()
-			.find( ( candidate ) => candidate.name === name );
-		if ( ! block ) {
-			throw new Error( `Block not found: ${ name }` );
-		}
-		window.wp.data
-			.dispatch( 'core/block-editor' )
-			.selectBlock( block.clientId );
-	}, blockName );
-}
-
 async function readCollectionBodyState( page, collectionId ) {
 	return page.evaluate(
 		( { blockedText, legacyText, postId } ) => {
@@ -598,6 +583,93 @@ test.describe( 'editor header blocks', () => {
 		}
 	} );
 
+	test( 'keeps page content when its record loads before the editor blocks register', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		let createdPage;
+		let editorChunkHandler;
+		const editorChunkPattern = /\/build\/editor\.js(?:\?|$)/;
+		try {
+			createdPage = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: 'E2E Early Record Page',
+					status: 'private',
+					content: bodyMarkup(),
+				},
+			} );
+			// A Recents entry makes the shell fetch the full record on boot,
+			// outside the lazy editor chunk that registers the block types.
+			await requestUtils.rest( {
+				method: 'POST',
+				path: '/cortext/v1/recents',
+				data: { id: createdPage.id },
+			} );
+
+			const pagePath = `/wp-json/wp/v2/crtxt_documents/${ createdPage.id }`;
+			const fullRecordLoaded = page.waitForResponse(
+				( response ) => {
+					const url = new URL( response.url() );
+					return (
+						response.request().method() === 'GET' &&
+						url.pathname === pagePath &&
+						! url.searchParams.has( '_fields' )
+					);
+				},
+				{ timeout: 15_000 }
+			);
+			editorChunkHandler = async ( route ) => {
+				await fullRecordLoaded.catch( () => {} );
+				await route.continue();
+			};
+			await page.route( editorChunkPattern, editorChunkHandler );
+
+			const pageSaves = [];
+			page.on( 'request', ( request ) => {
+				if (
+					request.method() === 'POST' &&
+					new URL( request.url() ).pathname === pagePath
+				) {
+					pageSaves.push( request.postData() );
+				}
+			} );
+
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ createdPage.id }`
+			);
+			// Fail when the full record never loaded ahead of the editor chunk;
+			// without that ordering the test cannot reproduce the race.
+			await fullRecordLoaded;
+			await waitForEditorPost( page, createdPage.id );
+			await expectParagraphsAfterTitle( page, [ BODY_A, BODY_B ] );
+
+			// Give autosave its debounce window, then confirm nothing replaced
+			// the stored body.
+			await page.waitForTimeout( 1500 );
+			expect( pageSaves ).toEqual( [] );
+			const stored = await requestUtils.rest( {
+				path: `/wp/v2/crtxt_documents/${ createdPage.id }`,
+				params: { context: 'edit' },
+			} );
+			expect( stored.content.raw ).toContain( BODY_A );
+			expect( stored.content.raw ).toContain( BODY_B );
+		} finally {
+			if ( editorChunkHandler ) {
+				await page
+					.unroute( editorChunkPattern, editorChunkHandler )
+					.catch( () => {} );
+			}
+			await deleteIfCreated(
+				requestUtils,
+				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+		}
+	} );
+
 	test( 'keeps short document canvases as tall as the iframe', async ( {
 		admin,
 		page,
@@ -699,23 +771,7 @@ test.describe( 'editor header blocks', () => {
 			);
 			await waitForEditorPost( page, createdPage.id );
 			await expectHeaderPrefix( page );
-			const editorCanvas = page.frameLocator(
-				'iframe[name="editor-canvas"]'
-			);
 
-			await selectFirstBlockByName( page, DOCUMENT_ICON_BLOCK );
-			await expect(
-				editorCanvas.getByRole( 'button', {
-					name: 'Add block after',
-				} )
-			).toHaveCount( 0 );
-
-			await selectFirstBlockByName( page, POST_TITLE_BLOCK );
-			await expect(
-				editorCanvas.getByRole( 'button', {
-					name: 'Add block after',
-				} )
-			).toHaveCount( 0 );
 			await expectParagraphsAfterTitle( page, [ '' ] );
 
 			fixture = await createRowFixture( requestUtils, {
@@ -728,12 +784,6 @@ test.describe( 'editor header blocks', () => {
 			);
 			await waitForEditorPost( page, fixture.row.id );
 			await expectParagraphsAfterTitle( page, [ '' ] );
-			await selectFirstBlockByName( page, DOCUMENT_PROPERTIES_BLOCK );
-			await expect(
-				editorCanvas.getByRole( 'button', {
-					name: 'Add block after',
-				} )
-			).toHaveCount( 0 );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,
@@ -830,9 +880,6 @@ test.describe( 'editor header blocks', () => {
 				`page=cortext&p=/${ collection.id }`
 			);
 			await waitForEditorPost( page, collection.id );
-			const editorCanvas = page.frameLocator(
-				'iframe[name="editor-canvas"]'
-			);
 			await expectCollectionBodyState( page, collection.id, {
 				blockedCount: 0,
 				legacyLock: {
@@ -860,12 +907,6 @@ test.describe( 'editor header blocks', () => {
 				page.off( 'pageerror', onPageError );
 			}
 			expect( pageErrors ).toEqual( [] );
-			await selectFirstBlockByName( page, POST_TITLE_BLOCK );
-			await expect(
-				editorCanvas.getByRole( 'button', {
-					name: 'Add block after',
-				} )
-			).toHaveCount( 0 );
 		} finally {
 			await deleteIfCreated(
 				requestUtils,

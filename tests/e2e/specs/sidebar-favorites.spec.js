@@ -319,8 +319,11 @@ test.describe( 'Sidebar favorites', () => {
 			const otherTitle = otherRow.locator(
 				'.cortext-sidebar__favorite-title'
 			);
+			const otherIdleBackground = await rowBackground( otherRow );
 			await otherTitle.hover();
 			const otherHoveredBackground = await rowBackground( otherRow );
+			// Guards the comparisons below against reading a resting row.
+			expect( otherHoveredBackground ).not.toBe( otherIdleBackground );
 			const otherBox = await otherTitle.boundingBox();
 			expect( otherBox ).toBeTruthy();
 
@@ -353,6 +356,101 @@ test.describe( 'Sidebar favorites', () => {
 			await deleteIfCreated(
 				requestUtils,
 				createdPage && `/wp/v2/crtxt_documents/${ createdPage.id }`
+			);
+		}
+	} );
+
+	test( 'favorite a collection and a row, and lock a row, from the inspector', async ( {
+		admin,
+		page,
+		requestUtils,
+	} ) => {
+		const collectionTitle = `E2E Inspector Collection ${ SUFFIX }`;
+		const rowTitle = `E2E Inspector Row ${ SUFFIX }`;
+		let collection;
+		let row;
+
+		async function favoriteFromInspector( target, inspectorClass ) {
+			await admin.visitAdminPage(
+				'admin.php',
+				`page=cortext&p=/${ target.id }`
+			);
+			const actions = page
+				.locator( inspectorClass )
+				.locator( '.cortext-document-inspector__actions' );
+			await expect(
+				actions.getByRole( 'button', { name: 'Move to Trash' } )
+			).toBeVisible();
+			await actions
+				.getByRole( 'button', { name: 'Add to favorites' } )
+				.click();
+		}
+
+		try {
+			collection = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: collectionTitle,
+					status: 'private',
+					cortext_collection: true,
+				},
+			} );
+			row = await requestUtils.rest( {
+				method: 'POST',
+				path: '/wp/v2/crtxt_documents',
+				data: {
+					title: rowTitle,
+					status: 'private',
+					cortext_trait: collection.id,
+				},
+			} );
+			await requestUtils.rest( {
+				method: 'PUT',
+				path: '/cortext/v1/favorites',
+				data: { favorites: [] },
+			} );
+
+			const collectionKey = `favorite:${ collection.id }`;
+			const rowKey = `favorite:${ row.id }`;
+
+			await favoriteFromInspector(
+				collection,
+				'.cortext-document-inspector'
+			);
+			await expectStoredFavorites( requestUtils, [ collectionKey ] );
+
+			await favoriteFromInspector( row, '.cortext-row-inspector' );
+			await expectStoredFavorites( requestUtils, [
+				collectionKey,
+				rowKey,
+			] );
+			await expect(
+				page
+					.locator( '.cortext-sidebar__favorites' )
+					.getByText( rowTitle )
+			).toBeVisible();
+
+			// Actions stay usable on a locked row, so it can be unlocked here.
+			const rowActions = page.locator(
+				'.cortext-row-inspector .cortext-document-inspector__actions'
+			);
+			await rowActions.getByRole( 'button', { name: 'Lock' } ).click();
+			await expect(
+				page.locator( '.cortext-breadcrumbs .cortext-frozen-badge' )
+			).toContainText( 'Locked' );
+			await rowActions.getByRole( 'button', { name: 'Unlock' } ).click();
+			await expect(
+				page.locator( '.cortext-breadcrumbs .cortext-frozen-badge' )
+			).toHaveCount( 0 );
+		} finally {
+			await deleteIfCreated(
+				requestUtils,
+				row && `/wp/v2/crtxt_documents/${ row.id }`
+			);
+			await deleteIfCreated(
+				requestUtils,
+				collection && `/wp/v2/crtxt_documents/${ collection.id }`
 			);
 		}
 	} );

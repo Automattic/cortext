@@ -71,6 +71,9 @@ trait InMemoryTermStore {
 		self::$term_store   = array();
 		self::$object_terms = array();
 		self::$next_term_id = 1;
+		// The store was wiped outside WP, so move the term cache salt the way
+		// a real term write would.
+		wp_cache_set_terms_last_changed();
 	}
 
 	/**
@@ -93,6 +96,7 @@ trait InMemoryTermStore {
 			'term_taxonomy_id' => $term_id,
 		);
 		wp_cache_set( $term_id, (object) self::$term_store[ $term_id ], 'terms' );
+		wp_cache_set_terms_last_changed();
 		return $term_id;
 	}
 
@@ -295,11 +299,17 @@ trait InMemoryTermStore {
 	 * @return array
 	 */
 	public function mock_get_object_terms( $terms, $object_ids, $taxonomies, $args ) {
-		if ( ! empty( $terms ) ) {
+		$fields = is_array( $args ) ? (string) ( $args['fields'] ?? 'all' ) : 'all';
+
+		// `all_with_object_id` returns one term per (object, term) pair, which
+		// core's `update_object_term_cache()` groups by `object_id`. The term
+		// query mock cannot attach `object_id`, so always build these here.
+		$with_object_id = 'all_with_object_id' === $fields;
+		if ( ! empty( $terms ) && ! $with_object_id ) {
 			return $terms;
 		}
 
-		$matches = array();
+		$matches        = array();
 		foreach ( (array) $object_ids as $oid ) {
 			foreach ( self::$object_terms[ (int) $oid ] ?? array() as $term_id ) {
 				$row = self::$term_store[ $term_id ] ?? null;
@@ -309,11 +319,20 @@ trait InMemoryTermStore {
 				if ( $taxonomies && ! in_array( $row['taxonomy'], (array) $taxonomies, true ) ) {
 					continue;
 				}
+				if ( $with_object_id ) {
+					$term            = $this->row_to_term( $row );
+					$term->object_id = (int) $oid;
+					$matches[]       = $term;
+					continue;
+				}
 				$matches[ $term_id ] = $row;
 			}
 		}
 
-		$fields = is_array( $args ) ? (string) ( $args['fields'] ?? 'all' ) : 'all';
+		if ( $with_object_id ) {
+			return $matches;
+		}
+
 		return $this->shape_terms( array_values( $matches ), $fields );
 	}
 

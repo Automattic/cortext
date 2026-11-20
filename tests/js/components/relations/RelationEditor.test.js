@@ -6,7 +6,10 @@ import {
 	waitFor,
 } from '@testing-library/react';
 
-jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+const mockCreateRowDocument = jest.fn();
+jest.mock( '../../../../src/components/rowDocumentCreation', () => ( {
+	useCreateRowDocument: () => mockCreateRowDocument,
+} ) );
 jest.mock( '../../../../src/hooks/useCollectionRows', () => ( {
 	__esModule: true,
 	default: jest.fn(),
@@ -28,7 +31,6 @@ jest.mock( '../../../../src/hooks/useRecents', () => ( {
 	useRecents: () => ( { touchRecent: mockTouchRecent } ),
 } ) );
 
-import apiFetch from '@wordpress/api-fetch';
 import RelationEditor from '../../../../src/components/relations/RelationEditor';
 import useCollectionRows from '../../../../src/hooks/useCollectionRows';
 import useCollectionRowsByIds from '../../../../src/hooks/useCollectionRowsByIds';
@@ -52,7 +54,7 @@ async function flushPopoverEffects() {
 }
 
 beforeEach( () => {
-	apiFetch.mockReset();
+	mockCreateRowDocument.mockReset();
 	mockTouchRecent.mockReset();
 	useDebouncedValue.mockImplementation( ( value ) => value );
 	mockRowsResponse();
@@ -230,6 +232,45 @@ describe( 'RelationEditor', () => {
 		await flushPopoverEffects();
 	} );
 
+	it( 'mutes archived toggle chips and describes them on the toggle', async () => {
+		const { container } = render(
+			<RelationEditor
+				value={ [
+					{
+						id: 22,
+						title: { raw: 'Ada Lovelace' },
+						status: 'crtxt_archived',
+					},
+					{
+						id: 23,
+						title: { raw: 'Alan Turing' },
+						status: 'private',
+					},
+				] }
+				relation={ { targetCollectionId: 9, multiple: true } }
+				onSave={ jest.fn() }
+				onCancel={ jest.fn() }
+				label="Assignee"
+				defaultOpen={ false }
+			/>
+		);
+
+		const chips = container.querySelectorAll(
+			'.cortext-relation-edit__toggle-ref'
+		);
+		expect( chips[ 0 ] ).toHaveClass(
+			'cortext-relation-edit__toggle-ref--archived'
+		);
+		expect( chips[ 0 ] ).toHaveAttribute( 'title', 'Archived' );
+		expect( chips[ 1 ] ).not.toHaveClass(
+			'cortext-relation-edit__toggle-ref--archived'
+		);
+		expect(
+			screen.getByRole( 'button', { name: 'Assignee' } )
+		).toHaveAccessibleDescription( 'Ada Lovelace (archived)' );
+		await flushPopoverEffects();
+	} );
+
 	it( 'hides create while the debounced search has not caught up', async () => {
 		// Pin the debounced value so search ('New Row') stays unsettled.
 		useDebouncedValue.mockImplementation( () => '' );
@@ -336,7 +377,10 @@ describe( 'RelationEditor', () => {
 			collection: { title: { raw: 'People' } },
 			refresh: refreshTargetRows,
 		} );
-		apiFetch.mockResolvedValue( { id: 44, title: { raw: 'New Ada' } } );
+		mockCreateRowDocument.mockResolvedValue( {
+			id: 44,
+			title: { raw: 'New Ada' },
+		} );
 		const onSave = jest.fn().mockResolvedValue( true );
 
 		render(
@@ -360,14 +404,9 @@ describe( 'RelationEditor', () => {
 		);
 
 		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledWith( {
-				path: '/wp/v2/crtxt_documents',
-				method: 'POST',
-				data: {
-					title: 'New Ada',
-					status: 'private',
-					cortext_trait: 9,
-				},
+			expect( mockCreateRowDocument ).toHaveBeenCalledWith( {
+				title: 'New Ada',
+				collectionId: 9,
 			} )
 		);
 		await waitFor( () => expect( onSave ).toHaveBeenCalledWith( [ 44 ] ) );
@@ -376,6 +415,42 @@ describe( 'RelationEditor', () => {
 			collectionId: 9,
 		} );
 		expect( refreshTargetRows ).toHaveBeenCalled();
+		await flushPopoverEffects();
+	} );
+
+	it( 'keeps the picker open and shows the error when row creation fails', async () => {
+		const refreshTargetRows = jest.fn();
+		mockRowsResponse( { refresh: refreshTargetRows } );
+		mockCreateRowDocument.mockRejectedValue(
+			new Error( 'The row could not be saved.' )
+		);
+		const onSave = jest.fn();
+
+		render(
+			<RelationEditor
+				value={ [] }
+				relation={ { targetCollectionId: 9, multiple: false } }
+				onSave={ onSave }
+				onCancel={ jest.fn() }
+				label="Assignee"
+			/>
+		);
+
+		fireEvent.change( screen.getByLabelText( 'Search' ), {
+			target: { value: 'New Ada' },
+		} );
+		fireEvent.click(
+			screen.getByRole( 'button', {
+				name: 'Create "New Ada"',
+			} )
+		);
+
+		expect(
+			await screen.findByText( 'The row could not be saved.' )
+		).toBeInTheDocument();
+		expect( onSave ).not.toHaveBeenCalled();
+		expect( mockTouchRecent ).not.toHaveBeenCalled();
+		expect( refreshTargetRows ).not.toHaveBeenCalled();
 		await flushPopoverEffects();
 	} );
 } );

@@ -28,9 +28,15 @@ import {
 	duplicateDocument,
 	trashDocument,
 	restoreDocument,
+	archiveDocument,
+	unarchiveDocument,
+	freezeDocument,
+	unfreezeDocument,
 	permanentlyDeleteDocument,
+	emptyTrash,
 } from './actions';
 import { computeDocumentUri } from '../router/useResolveEntity';
+import { useActiveEditor } from '../components/ActiveEditorContext';
 
 /**
  * Sidebar-scoped context for document actions. The provider supplies the data
@@ -44,7 +50,10 @@ export function DocumentsProvider( {
 	expand,
 	onSelect,
 	onAutoRename,
+	captureLifecycleFocusIntent,
+	cancelLifecycleFocusIntent,
 	onAfterTrash,
+	onAfterArchive,
 	onDuplicateNotice,
 	onFavoritesError,
 	children,
@@ -55,7 +64,10 @@ export function DocumentsProvider( {
 			expand,
 			onSelect,
 			onAutoRename,
+			captureLifecycleFocusIntent,
+			cancelLifecycleFocusIntent,
 			onAfterTrash,
+			onAfterArchive,
 			onDuplicateNotice,
 			onFavoritesError,
 		} ),
@@ -64,7 +76,10 @@ export function DocumentsProvider( {
 			expand,
 			onSelect,
 			onAutoRename,
+			captureLifecycleFocusIntent,
+			cancelLifecycleFocusIntent,
 			onAfterTrash,
+			onAfterArchive,
 			onDuplicateNotice,
 			onFavoritesError,
 		]
@@ -97,9 +112,13 @@ export function useDocumentActions() {
 	const docCtx = useDocumentsContext();
 	const { saveEntityRecord, invalidateResolution, receiveEntityRecords } =
 		useDispatch( 'core' );
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch( 'core/notices' );
 	const navigate = useNavigate();
 	const { touchRecent } = useRecents();
 	const { setFavorites } = useFavorites();
+	const { flushActiveEditor, lockEditors, waitForOpenDocuments } =
+		useActiveEditor();
 
 	const ctx = useMemo(
 		() => ( {
@@ -110,6 +129,11 @@ export function useDocumentActions() {
 			navigate,
 			touchRecent,
 			setFavorites,
+			createErrorNotice,
+			createSuccessNotice,
+			flushActiveEditor,
+			lockEditors,
+			waitForOpenDocuments,
 		} ),
 		[
 			docCtx,
@@ -119,6 +143,11 @@ export function useDocumentActions() {
 			navigate,
 			touchRecent,
 			setFavorites,
+			createErrorNotice,
+			createSuccessNotice,
+			flushActiveEditor,
+			lockEditors,
+			waitForOpenDocuments,
 		]
 	);
 
@@ -142,8 +171,33 @@ export function useDocumentActions() {
 		[ ctx ]
 	);
 
+	const archive = useCallback(
+		async ( record ) => archiveDocument( record, ctx ),
+		[ ctx ]
+	);
+
+	const unarchive = useCallback(
+		async ( record ) => unarchiveDocument( record, ctx ),
+		[ ctx ]
+	);
+
+	const freeze = useCallback(
+		async ( record ) => freezeDocument( record, ctx ),
+		[ ctx ]
+	);
+
+	const unfreeze = useCallback(
+		async ( record ) => unfreezeDocument( record, ctx ),
+		[ ctx ]
+	);
+
 	const permanentDelete = useCallback(
 		async ( record ) => permanentlyDeleteDocument( record, ctx ),
+		[ ctx ]
+	);
+
+	const emptyTrashAction = useCallback(
+		async () => emptyTrash( ctx ),
 		[ ctx ]
 	);
 
@@ -153,9 +207,25 @@ export function useDocumentActions() {
 			duplicate,
 			trash,
 			restore,
+			archive,
+			unarchive,
+			freeze,
+			unfreeze,
 			permanentDelete,
+			emptyTrash: emptyTrashAction,
 		} ),
-		[ rename, duplicate, trash, restore, permanentDelete ]
+		[
+			rename,
+			duplicate,
+			trash,
+			restore,
+			archive,
+			unarchive,
+			freeze,
+			unfreeze,
+			permanentDelete,
+			emptyTrashAction,
+		]
 	);
 }
 

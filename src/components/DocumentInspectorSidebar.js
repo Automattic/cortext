@@ -13,7 +13,6 @@ import {
 import {
 	useEntityProp,
 	useEntityRecord,
-	useEntityRecords,
 	store as coreStore,
 } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
@@ -22,21 +21,24 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import {
+	box as archiveIcon,
 	home as homeIcon,
+	lock as lockIcon,
 	starEmpty,
 	starFilled,
 	trash,
+	unlock as unlockIcon,
 } from '@wordpress/icons';
 import {
 	ComplementaryArea,
 	store as interfaceStore,
 } from '@wordpress/interface';
-import apiFetch from '@wordpress/api-fetch';
 
 import CanvasOwnerInspector, {
 	useIsCanvasOwnerSelected,
@@ -52,19 +54,25 @@ import { SkeletonBlock } from './Skeleton';
 import useDelayedFlag, {
 	SKELETON_MIN_VISIBLE_MS,
 } from '../hooks/useDelayedFlag';
-import { filterFavoritesForTrashedPage } from './SidebarFavorites';
-import {
-	ACTIVE_PAGES_QUERY,
-	POST_TYPE,
-	TRASHED_PAGES_QUERY,
-} from './page-queries';
-import { DOCUMENT_POST_TYPE, FULL_PAGE_COLLECTION_QUERY } from '../collections';
+import { POST_TYPE } from './page-queries';
 import { definesTrait } from '../documents/capabilities';
+import { READ_ONLY_FROZEN } from '../documents/readOnly';
+import {
+	selectCurrentPostReadOnlyState,
+	useIsDocumentFrozen,
+} from '../documents/readOnlyStore';
 import { unlock } from '../lock-unlock';
-import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
-import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import { useFavorites } from '../hooks/useFavorites';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
+import {
+	archiveDocument,
+	archiveSaveFailureMessage,
+	freezeDocument,
+	trashDocument,
+	trashSaveFailureMessage,
+	unfreezeDocument,
+} from '../documents/actions';
+import { useActiveEditor } from './ActiveEditorContext';
 
 const { Tabs } = unlock( componentsPrivateApis );
 
@@ -503,20 +511,14 @@ function PageIdentityInspectorPanel( { postId, postType, title } ) {
 	);
 }
 
-function PageActionsPanel( { postId } ) {
+export function PageActionsPanel( { postId } ) {
 	const { invalidateResolution, receiveEntityRecords } =
 		useDispatch( coreStore );
-	const { records: pages = [] } = useEntityRecords(
-		'postType',
-		POST_TYPE,
-		ACTIVE_PAGES_QUERY
-	);
-	const { records: collections = [] } = useEntityRecords(
-		'postType',
-		DOCUMENT_POST_TYPE,
-		FULL_PAGE_COLLECTION_QUERY
-	);
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch( 'core/notices' );
 	const { home, setHome, isUpdating: isHomeUpdating } = useWorkspaceHome();
+	const { flushActiveEditor, lockEditors, waitForOpenDocuments } =
+		useActiveEditor();
 	const {
 		favorites,
 		setFavorites,
@@ -524,7 +526,10 @@ function PageActionsPanel( { postId } ) {
 		isUpdating: isFavoriteUpdating,
 	} = useFavorites();
 	const [ isTrashing, setIsTrashing ] = useState( false );
+	const [ isArchiving, setIsArchiving ] = useState( false );
+	const [ isFreezing, setIsFreezing ] = useState( false );
 	const [ error, setError ] = useState( null );
+	const isFrozen = useIsDocumentFrozen( postId );
 	const isHome = home?.id === postId;
 	const isFavorite = favorites.some( ( favorite ) => favorite.id === postId );
 
@@ -560,54 +565,40 @@ function PageActionsPanel( { postId } ) {
 		}
 	}, [ isHome, postId, setHome ] );
 
+	const lifecycleCtx = useMemo(
+		() => ( {
+			createErrorNotice,
+			createSuccessNotice,
+			flushActiveEditor,
+			lockEditors,
+			waitForOpenDocuments,
+			invalidateResolution,
+			receiveEntityRecords,
+			setFavorites,
+			onFavoritesError: setError,
+		} ),
+		[
+			createErrorNotice,
+			createSuccessNotice,
+			flushActiveEditor,
+			invalidateResolution,
+			lockEditors,
+			receiveEntityRecords,
+			setFavorites,
+			waitForOpenDocuments,
+		]
+	);
+
 	const trashPage = useCallback( async () => {
 		setError( null );
 		setIsTrashing( true );
 		try {
-			const deleted = await apiFetch( {
-				path: `/wp/v2/crtxt_documents/${ postId }`,
-				method: 'DELETE',
-			} );
-			const trashed = deleted?.previous ?? deleted;
-			if ( trashed?.id ) {
-				receiveEntityRecords( 'postType', POST_TYPE, [ trashed ] );
-			}
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				ACTIVE_PAGES_QUERY,
-			] );
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				TRASHED_PAGES_QUERY,
-			] );
-			// Page trash can also trash inline-owned and nested full-page
-			// collections, so refresh the full-page list now.
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				DOCUMENT_POST_TYPE,
-				FULL_PAGE_COLLECTION_QUERY,
-			] );
-			notifySidebarTreeChanged();
-			notifyDocumentTrashChanged();
-			try {
-				await setFavorites( ( current ) =>
-					filterFavoritesForTrashedPage(
-						current,
-						postId,
-						pages,
-						collections
-					)
-				);
-			} catch ( err ) {
-				setError(
-					err?.message ??
-						__(
-							'Document moved to Trash, but Favorites could not be updated.',
-							'cortext'
-						)
-				);
+			const response = await trashDocument(
+				{ id: postId },
+				lifecycleCtx
+			);
+			if ( response === null ) {
+				setError( trashSaveFailureMessage() );
 			}
 		} catch ( err ) {
 			setError(
@@ -617,14 +608,49 @@ function PageActionsPanel( { postId } ) {
 		} finally {
 			setIsTrashing( false );
 		}
-	}, [
-		invalidateResolution,
-		pages,
-		collections,
-		postId,
-		receiveEntityRecords,
-		setFavorites,
-	] );
+	}, [ lifecycleCtx, postId ] );
+
+	const archivePage = useCallback( async () => {
+		setError( null );
+		setIsArchiving( true );
+		try {
+			const response = await archiveDocument(
+				{ id: postId },
+				lifecycleCtx
+			);
+			if ( response === null ) {
+				setError( archiveSaveFailureMessage() );
+			}
+		} catch ( err ) {
+			setError(
+				err?.message ??
+					__( 'Could not archive this document.', 'cortext' )
+			);
+		} finally {
+			setIsArchiving( false );
+		}
+	}, [ lifecycleCtx, postId ] );
+
+	const toggleFreeze = useCallback( async () => {
+		setError( null );
+		setIsFreezing( true );
+		try {
+			await ( isFrozen ? unfreezeDocument : freezeDocument )(
+				{ id: postId },
+				lifecycleCtx
+			);
+		} catch ( err ) {
+			setError(
+				err?.message ??
+					__(
+						'Could not change the lock on this document.',
+						'cortext'
+					)
+			);
+		} finally {
+			setIsFreezing( false );
+		}
+	}, [ isFrozen, lifecycleCtx, postId ] );
 
 	return (
 		<PanelBody title={ __( 'Actions', 'cortext' ) }>
@@ -669,12 +695,37 @@ function PageActionsPanel( { postId } ) {
 				<Button
 					className="cortext-document-inspector__action-button"
 					variant="secondary"
+					icon={ isFrozen ? unlockIcon : lockIcon }
+					label={
+						isFrozen
+							? __( 'Unlock', 'cortext' )
+							: __( 'Lock', 'cortext' )
+					}
+					onClick={ toggleFreeze }
+					isPressed={ isFrozen }
+					isBusy={ isFreezing }
+					disabled={ isFreezing || ! postId }
+					size="compact"
+				/>
+				<Button
+					className="cortext-document-inspector__action-button"
+					variant="secondary"
+					icon={ archiveIcon }
+					label={ __( 'Archive', 'cortext' ) }
+					onClick={ archivePage }
+					isBusy={ isArchiving }
+					disabled={ isArchiving || isTrashing || ! postId }
+					size="compact"
+				/>
+				<Button
+					className="cortext-document-inspector__action-button"
+					variant="secondary"
 					icon={ trash }
 					label={ __( 'Move to Trash', 'cortext' ) }
 					isDestructive
 					onClick={ trashPage }
 					isBusy={ isTrashing }
-					disabled={ isTrashing || ! postId }
+					disabled={ isTrashing || isArchiving || ! postId }
 					size="compact"
 				/>
 			</div>
@@ -682,52 +733,119 @@ function PageActionsPanel( { postId } ) {
 	);
 }
 
-function DocumentInspectorContent( { postId } ) {
+// Actions stay usable on a locked page so it can be unlocked, archived or
+// trashed; the rest of the inspector is read-only with the page. Identity only
+// edits the page, so a read-only page leaves it out.
+function DocumentInspectorContent( {
+	postId,
+	isLocked,
+	areActionsLocked,
+	isReadOnlyDocument,
+	isDimmed,
+} ) {
 	return (
 		<div className="cortext-document-inspector">
-			<PageIdentityInspectorPanel
-				postId={ postId }
-				postType={ POST_TYPE }
-				title={ __( 'Identity', 'cortext' ) }
-			/>
-			<PageActionsPanel postId={ postId } />
-			<BacklinksPanel documentId={ postId } />
+			{ ! isReadOnlyDocument && (
+				<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+					<PageIdentityInspectorPanel
+						postId={ postId }
+						postType={ POST_TYPE }
+						title={ __( 'Identity', 'cortext' ) }
+					/>
+				</InspectorFrame>
+			) }
+			<InspectorFrame isLocked={ areActionsLocked } isDimmed={ isDimmed }>
+				<PageActionsPanel postId={ postId } />
+			</InspectorFrame>
+			<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+				<BacklinksPanel documentId={ postId } />
+			</InspectorFrame>
 		</div>
 	);
 }
 
-// Collection inspector: identity controls first, then the owner data-view panels.
-function CollectionInspectorContent( { postId, postType } ) {
+// Collection inspector: identity and actions first, then the owner data-view
+// panels. Actions get their own frame for the same reason as on a page.
+function CollectionInspectorContent( {
+	postId,
+	postType,
+	isLocked,
+	areActionsLocked,
+	isReadOnlyDocument,
+	isDimmed,
+} ) {
 	return (
 		<div className="cortext-document-inspector">
-			<PageIdentityInspectorPanel
-				postId={ postId }
-				postType={ postType }
-				title={ __( 'Identity', 'cortext' ) }
-			/>
-			<CanvasOwnerInspector.Slot />
-			<BacklinksPanel documentId={ postId } />
+			{ ! isReadOnlyDocument && (
+				<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+					<PageIdentityInspectorPanel
+						postId={ postId }
+						postType={ postType }
+						title={ __( 'Identity', 'cortext' ) }
+					/>
+				</InspectorFrame>
+			) }
+			<InspectorFrame isLocked={ areActionsLocked } isDimmed={ isDimmed }>
+				<PageActionsPanel postId={ postId } />
+			</InspectorFrame>
+			<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+				<CanvasOwnerInspector.Slot />
+				<BacklinksPanel documentId={ postId } />
+			</InspectorFrame>
 		</div>
 	);
 }
 
-// Row inspector for property actions. Values stay in the document block; the
-// sidebar handles visibility and field creation.
-function RowInspectorContent( { postId } ) {
+// Row inspector: property actions, then document actions. Values stay in the
+// document block; the sidebar handles visibility and field creation.
+function RowInspectorContent( {
+	postId,
+	isLocked,
+	areActionsLocked,
+	isDimmed,
+} ) {
 	return (
 		<div className="cortext-row-inspector">
-			<DocumentPropertiesActions />
-			<BacklinksPanel documentId={ postId } />
+			<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+				<DocumentPropertiesActions />
+			</InspectorFrame>
+			<InspectorFrame isLocked={ areActionsLocked } isDimmed={ isDimmed }>
+				<PageActionsPanel postId={ postId } />
+			</InspectorFrame>
+			<InspectorFrame isLocked={ isLocked } isDimmed={ isDimmed }>
+				<BacklinksPanel documentId={ postId } />
+			</InspectorFrame>
 		</div>
 	);
 }
 
-function InspectorFrame( { children, isLocked } ) {
-	return isLocked ? <Disabled>{ children }</Disabled> : children;
+// Always mounted, so locking for an archive or trash keeps the panels and
+// their state, such as the message when the request is canceled.
+// `display: contents` leaves the layout to the panels. Lasting read-only
+// states (archived, trashed, locked, someone else editing) also dim the
+// panels; the brief lock during an archive or trash request does not, so
+// it doesn't flash.
+const INSPECTOR_FRAME_STYLE = { display: 'contents' };
+
+export function InspectorFrame( { children, isLocked, isDimmed = false } ) {
+	return (
+		<Disabled
+			isDisabled={ isLocked }
+			className={
+				isLocked && isDimmed
+					? 'cortext-inspector-frame is-locked'
+					: 'cortext-inspector-frame'
+			}
+			style={ INSPECTOR_FRAME_STYLE }
+		>
+			{ children }
+		</Disabled>
+	);
 }
 
 export default function DocumentInspectorSidebar( {
 	isLocked = false,
+	areActionsLocked = isLocked,
 	postId,
 	postType,
 } ) {
@@ -741,17 +859,23 @@ export default function DocumentInspectorSidebar( {
 		Array.isArray( currentRecord?.crtxt_trait ) &&
 		currentRecord.crtxt_trait.length > 0;
 	const documentTabLabel = __( 'Document', 'cortext' );
-	const isTrashed = useSelect(
-		( select ) =>
-			select( editorStore ).getCurrentPostAttribute( 'status' ) ===
-			'trash',
-		[]
-	);
+	const readOnlyState = useSelect( selectCurrentPostReadOnlyState, [] );
 	const isStoreLocked = useSelect(
 		( select ) => select( editorStore ).isPostLocked?.() ?? false,
 		[]
 	);
-	const isReadOnly = isTrashed || isLocked || isStoreLocked;
+	const isReadOnly = readOnlyState !== null || isLocked || isStoreLocked;
+	const isLastingReadOnly = readOnlyState !== null || isStoreLocked;
+	const isActionsReadOnly =
+		( readOnlyState !== null && readOnlyState !== READ_ONLY_FROZEN ) ||
+		areActionsLocked ||
+		isStoreLocked;
+	const lockProps = {
+		isLocked: isReadOnly,
+		areActionsLocked: isActionsReadOnly,
+		isReadOnlyDocument: readOnlyState !== null,
+		isDimmed: isLastingReadOnly,
+	};
 	const activeArea = useSelect(
 		( select ) => getActiveInspectorArea( select ),
 		[]
@@ -815,20 +939,22 @@ export default function DocumentInspectorSidebar( {
 				isActiveByDefault
 				tabs={ tabs }
 			>
-				<InspectorFrame isLocked={ isReadOnly }>
-					{ isCollection && (
-						<CollectionInspectorContent
-							postId={ postId }
-							postType={ postType }
-						/>
-					) }
-					{ ! isCollection && hasTrait && (
-						<RowInspectorContent postId={ postId } />
-					) }
-					{ ! isCollection && ! hasTrait && (
-						<DocumentInspectorContent postId={ postId } />
-					) }
-				</InspectorFrame>
+				{ isCollection && (
+					<CollectionInspectorContent
+						postId={ postId }
+						postType={ postType }
+						{ ...lockProps }
+					/>
+				) }
+				{ ! isCollection && hasTrait && (
+					<RowInspectorContent postId={ postId } { ...lockProps } />
+				) }
+				{ ! isCollection && ! hasTrait && (
+					<DocumentInspectorContent
+						postId={ postId }
+						{ ...lockProps }
+					/>
+				) }
 			</InspectorComplementaryArea>
 			{ showBlockTab && (
 				<InspectorComplementaryArea
@@ -836,7 +962,10 @@ export default function DocumentInspectorSidebar( {
 					title={ __( 'Block', 'cortext' ) }
 					tabs={ tabs }
 				>
-					<InspectorFrame isLocked={ isReadOnly }>
+					<InspectorFrame
+						isLocked={ isReadOnly }
+						isDimmed={ isLastingReadOnly }
+					>
 						<BlockInspector />
 					</InspectorFrame>
 				</InspectorComplementaryArea>

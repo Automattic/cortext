@@ -1,6 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEntityRecords } from '@wordpress/core-data';
-import { useDispatch } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
 import {
 	lazy,
@@ -32,17 +31,16 @@ import { RowMutationContext } from '../components/EditableCell';
 import ExperimentsPane from '../components/ExperimentsPane';
 import ImportPane from '../components/ImportPane';
 import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
+import LifecycleView from '../components/lifecycle/LifecycleView';
+import { ARCHIVED, TRASH } from '../components/lifecycle/lifecycleStates';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import CortextSnackbars from '../components/CortextSnackbars';
 import { useSurfaceFocusIntent } from '../components/SurfaceFocusContext';
+import { useActiveEditor } from '../components/ActiveEditorContext';
 import { isSurfaceFocusOriginCurrent } from '../components/collectionSurfaceFocus';
 import WorkspaceTopBar from '../components/WorkspaceTopBar';
-import {
-	ACTIVE_PAGES_QUERY,
-	POST_TYPE,
-	TRASHED_PAGES_QUERY,
-} from '../components/page-queries';
+import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../components/page-queries';
 import { firstDocumentInTree } from '../components/document-tree';
 import { isPublicWebAffordancesEnabled } from '../settings';
 import afterNextPaint from '../hooks/afterNextPaint';
@@ -53,8 +51,6 @@ import {
 import { useRecents } from '../hooks/useRecents';
 import { useWorkspaceHome } from '../hooks/useWorkspaceHome';
 import useCollectionFields from '../hooks/useCollectionFields';
-import { notifyDocumentTrashChanged } from '../hooks/documentTrashInvalidation';
-import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import EmptyState from './EmptyState';
 import { computeDocumentUri, useResolveDocument } from './useResolveEntity';
@@ -182,6 +178,7 @@ export default function EntityRoute( { history } ) {
 	);
 	const { home, isResolving: isResolvingHome } = useWorkspaceHome();
 	const { touchRecent } = useRecents();
+	const { registerActiveEditor } = useActiveEditor();
 	const { records: pages, isResolving: isResolvingPages } = useEntityRecords(
 		'postType',
 		POST_TYPE,
@@ -222,7 +219,21 @@ export default function EntityRoute( { history } ) {
 	// even when the visible pane stayed put.
 	const stateRef = useRef( state );
 	stateRef.current = state;
+	// A target change can wait inside a view transition while the URL moves on,
+	// for example when Trash opens and then selects its first item. When the
+	// held change finally runs it must apply the newest target, or it would
+	// overwrite the one dispatched after it.
+	const latestTargetRef = useRef( target );
 	const dispatch = useCallback( ( action ) => {
+		if ( action.type === 'TARGET_CHANGED' ) {
+			latestTargetRef.current = action.target;
+		}
+		const deferredDispatch = () =>
+			rawDispatch(
+				action.type === 'TARGET_CHANGED'
+					? { ...action, target: latestTargetRef.current }
+					: action
+			);
 		const before = stateRef.current;
 		const after = reducer( before, action );
 		const visualChanged =
@@ -246,24 +257,26 @@ export default function EntityRoute( { history } ) {
 			return;
 		}
 		if ( isContentPane( before.active ) && isContentPane( after.active ) ) {
-			withViewTransition( () => rawDispatch( action ), {
+			withViewTransition( deferredDispatch, {
 				mode: 'hold-old-canvas',
 			} );
 			return;
 		}
-		// Settings panes are lightweight and mostly static. A plain fade keeps
+		// Settings, Trash and Archived panes are lightweight. A plain fade keeps
 		// Chrome's default blend from washing out the transition to white.
 		if (
 			after.active.kind === 'experiments' ||
 			after.active.kind === 'import' ||
-			after.active.kind === 'published'
+			after.active.kind === 'published' ||
+			after.active.kind === 'trash' ||
+			after.active.kind === 'archived'
 		) {
-			withViewTransition( () => rawDispatch( action ), {
+			withViewTransition( deferredDispatch, {
 				mode: 'pane-crossfade',
 			} );
 			return;
 		}
-		withViewTransition( () => rawDispatch( action ) );
+		withViewTransition( deferredDispatch );
 	}, [] );
 
 	const documentResolution = useResolveDocument(
@@ -383,8 +396,18 @@ export default function EntityRoute( { history } ) {
 		} );
 	}, [ target, navigate ] );
 
+	// The reducer drops a resolution for a document it isn't targeting yet. That
+	// happens when TARGET_CHANGED waits inside a view transition while the fetch
+	// finishes first, so hold off until the reducer has the same target.
+	const committedDocumentId =
+		state.target.kind === 'document' ? state.target.id : null;
+
 	useEffect( () => {
-		if ( target.kind !== 'document' || target.id === null ) {
+		if (
+			target.kind !== 'document' ||
+			target.id === null ||
+			committedDocumentId !== target.id
+		) {
 			return;
 		}
 		const {
@@ -404,7 +427,12 @@ export default function EntityRoute( { history } ) {
 			// Rows touch recents in the row-specific effect below, which has
 			// the parent collection id ready as breadcrumb context. Everything
 			// else (pages, collections) just records the open document by id.
-			if ( ( documentResolution.traitIds?.length ?? 0 ) === 0 ) {
+			// Browsing Trash or Archived opens documents that don't belong in
+			// Recents.
+			if (
+				! target.fromLifecycle &&
+				( documentResolution.traitIds?.length ?? 0 ) === 0
+			) {
 				touchRecent( { id: entity.id } );
 			}
 			return;
@@ -415,12 +443,19 @@ export default function EntityRoute( { history } ) {
 				id: target.id,
 			} );
 		}
-	}, [ target, documentResolution, dispatch, touchRecent ] );
+	}, [
+		target,
+		committedDocumentId,
+		documentResolution,
+		dispatch,
+		touchRecent,
+	] );
 
 	useEffect( () => {
 		if (
 			target.kind !== 'document' ||
 			target.id === null ||
+			target.fromLifecycle ||
 			mountedDocumentId !== target.id ||
 			! rowParentCollectionId
 		) {
@@ -433,6 +468,7 @@ export default function EntityRoute( { history } ) {
 	}, [
 		target.kind,
 		target.id,
+		target.fromLifecycle,
 		mountedDocumentId,
 		rowParentCollectionId,
 		touchRecent,
@@ -479,43 +515,14 @@ export default function EntityRoute( { history } ) {
 	);
 	const isRow = Boolean( editorRowContext );
 
-	const { invalidateResolution, receiveEntityRecords } =
-		useDispatch( 'core' );
-
-	// Restore still has two cache paths: pages use core-data for the tree, rows
-	// use collection-scoped queries. Both refresh the Trash list; rows also
-	// notify open collections because relations and rollups can change elsewhere.
-	const onRestoreDocument = useCallback(
-		( postId, postType, response ) => {
-			if ( response?.post && postType ) {
-				receiveEntityRecords( 'postType', postType, [ response.post ] );
-			}
-			// Every document shares one post type, so a restore always re-enters
-			// the workspace tree and leaves the Trash list.
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				ACTIVE_PAGES_QUERY,
-			] );
-			invalidateResolution( 'getEntityRecords', [
-				'postType',
-				POST_TYPE,
-				TRASHED_PAGES_QUERY,
-			] );
-			notifySidebarTreeChanged( {
-				parentId: Number( response?.post?.parent ?? 0 ),
-				revealId: Number( postId ),
-			} );
-			notifyDocumentTrashChanged();
-			// A restored row lives inside a collection's data view rather than
-			// the tree, and can change rollups and relations elsewhere, so
-			// refresh any open collection views too.
-			if ( isRow ) {
-				notifyCollectionRowsChanged();
-			}
-		},
-		[ invalidateResolution, receiveEntityRecords, isRow ]
-	);
+	// The lifecycle actions synchronize entity records and invalidate every
+	// affected list. The route adds reveal context for the restored document.
+	const onRestoreDocument = useCallback( ( postId, _postType, response ) => {
+		notifySidebarTreeChanged( {
+			parentId: Number( response?.post?.parent ?? 0 ),
+			revealId: Number( postId ),
+		} );
+	}, [] );
 
 	const editorRecentTarget =
 		isRow && editorPostId !== null && editorRowContext?.collectionId
@@ -545,6 +552,7 @@ export default function EntityRoute( { history } ) {
 					isEditorSurfaceDisplayed={ isEditorSurfaceDisplayed }
 					surfaceFocusRequest={ editorSurfaceFocusRequest }
 					completeSurfaceFocus={ completeSurfaceFocus }
+					onApi={ registerActiveEditor }
 					onRestored={ onRestoreDocument }
 					recentTarget={ editorRecentTarget }
 				/>
@@ -574,7 +582,9 @@ export default function EntityRoute( { history } ) {
 				) }
 				{ publicWebAffordances ? (
 					<WorkspacePane active={ active.kind === 'published' }>
-						<PublishedDocumentsPane />
+						<PublishedDocumentsPane
+							isActive={ active.kind === 'published' }
+						/>
 					</WorkspacePane>
 				) : null }
 				<WorkspacePane active={ active.kind === 'experiments' }>
@@ -583,6 +593,20 @@ export default function EntityRoute( { history } ) {
 				<WorkspacePane active={ active.kind === 'import' }>
 					<ImportPane />
 				</WorkspacePane>
+				{ [ TRASH, ARCHIVED ].map( ( lifecycle ) => (
+					<WorkspacePane
+						key={ lifecycle.name }
+						active={ active.kind === lifecycle.name }
+					>
+						<LifecycleView
+							state={ lifecycle }
+							isActive={
+								active.kind === lifecycle.name &&
+								target.kind === lifecycle.name
+							}
+						/>
+					</WorkspacePane>
+				) ) }
 				<WorkspacePane active={ active.kind === 'empty' }>
 					<EmptyState isWorkspaceEmpty={ isWorkspaceEmpty } />
 				</WorkspacePane>

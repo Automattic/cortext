@@ -67,6 +67,17 @@
 // gets a real dark theme, mirror the palette under
 // `body[data-cortext-theme="dark"]` so popover portals re-skin too.
 
+// Light text, border and frame values. The shell uses them in light mode;
+// the editor inspector uses them in both modes because it keeps Gutenberg's
+// light styling while the shell is dark.
+@mixin light-content-tokens {
+	--cortext-canvas-frame-surface: #{colors.$white};
+	--cortext-chrome-border: #{colors.$gray-200};
+	--cortext-text: #{colors.$gray-900};
+	--cortext-text-muted: #{colors.$gray-700};
+	--cortext-text-strong: #{colors.$gray-900};
+}
+
 .cortext-root {
 
 	// Shell surfaces
@@ -88,7 +99,6 @@
 	--cortext-state-selected-hover: rgba(0, 0, 0, 0.14);
 	// Hairline top-edge highlight on the active row to suggest a soft "lift".
 	--cortext-state-selected-highlight: rgba(255, 255, 255, 0.6);
-	--cortext-canvas-frame-surface: #{colors.$white};
 	// Light canvas behind the editor iframe and full-page tables.
 	--cortext-canvas-surface: #{colors.$white};
 	--cortext-canvas-border: #{colors.$gray-200};
@@ -97,10 +107,8 @@
 	--cortext-data-view-row-height-compact: #{variables.$grid-unit-50};
 	--cortext-data-view-row-height-balanced: #{variables.$grid-unit-50 + 2 * variables.$grid-unit-15};
 	--cortext-data-view-row-height-comfortable: #{variables.$grid-unit-50 + 2 * variables.$grid-unit-20};
-	--cortext-chrome-border: #{colors.$gray-200};
-	--cortext-text: #{colors.$gray-900};
-	--cortext-text-muted: #{colors.$gray-700};
-	--cortext-text-strong: #{colors.$gray-900};
+
+	@include light-content-tokens;
 	--cortext-shadow-color: rgba(0, 0, 0, 0.12);
 
 	// Shell buttons. These map onto @wordpress/components buttons only inside
@@ -121,8 +129,6 @@
 	--cortext-control-hover-surface: var(--cortext-shell-surface);
 	--cortext-control-highlight: var(--cortext-state-selected-highlight);
 	--cortext-keycap-surface: var(--cortext-sidebar-surface);
-	--cortext-count-badge-surface: var(--cortext-state-hover-strong);
-	--cortext-count-badge-text: var(--cortext-text-muted);
 
 	// Foundation values. Defaults come from WordPress base-styles; keeping
 	// them behind Cortext names lets the shell diverge later without making
@@ -166,5 +172,11 @@
 		--cortext-shadow-color: rgba(0, 0, 0, 0.4);
 		--cortext-scrollbar-thumb: rgba(255, 255, 255, 0.16);
 		--cortext-scrollbar-thumb-hover: rgba(255, 255, 255, 0.32);
+
+		// The inspector stays light, so shell tokens read there must too.
+		.interface-interface-skeleton__sidebar {
+
+			@include light-content-tokens;
+		}
 	}
 }
