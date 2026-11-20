@@ -24,6 +24,24 @@ export const ROW_DETAIL_MODE_OPEN_LABELS = {
 	full: __( 'Open full screen', 'cortext' ),
 };
 
+// Opening a peek full screen grows the panel into the page in two view
+// transition snapshots. The stage on :root tells the CSS which element carries
+// the shared name: 'leaving' names the peek, 'entering' names the workspace.
+export function setPeekToFullStage( stage ) {
+	const root = document.documentElement;
+	if ( stage ) {
+		root.dataset.cortextPeekToFull = stage;
+		return;
+	}
+	delete root.dataset.cortextPeekToFull;
+}
+
+export function getPeekToFullStage() {
+	return typeof document === 'undefined'
+		? undefined
+		: document.documentElement.dataset.cortextPeekToFull;
+}
+
 export function normalizeRowDetailMode( mode ) {
 	return ROW_DETAIL_MODES.includes( mode ) ? mode : DEFAULT_ROW_DETAIL_MODE;
 }
