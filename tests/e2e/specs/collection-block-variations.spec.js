@@ -43,13 +43,8 @@ async function createCollectionFixture( requestUtils ) {
 	} );
 	const field = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_fields',
-		data: { title: 'Author', status: 'private', meta: { type: 'text' } },
-	} );
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: { meta: { cortext_fields: [ String( field.id ) ] } },
+		path: `/cortext/v1/collections/${ collection.id }/fields`,
+		data: { title: 'Author', type: 'text' },
 	} );
 	const entry = await requestUtils.rest( {
 		method: 'POST',

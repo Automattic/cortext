@@ -849,18 +849,10 @@ test.describe( 'Navigation lifecycle', () => {
 			// would be a silent no-op on `cortext_trait`.
 			fixture.field = await requestUtils.rest( {
 				method: 'POST',
-				path: '/wp/v2/crtxt_fields',
+				path: `/cortext/v1/collections/${ fixture.collection.id }/fields`,
 				data: {
 					title: 'Title',
-					status: 'private',
-					meta: { type: 'text' },
-				},
-			} );
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: { cortext_fields: [ String( fixture.field.id ) ] },
+					type: 'text',
 				},
 			} );
 			fixture.entry = await requestUtils.rest( {

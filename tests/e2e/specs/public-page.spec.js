@@ -39,19 +39,10 @@ async function createPublishedCollection( requestUtils, title ) {
 
 	const field = await requestUtils.rest( {
 		method: 'POST',
-		path: '/wp/v2/crtxt_fields',
+		path: `/cortext/v1/collections/${ collection.id }/fields`,
 		data: {
 			title: 'Notes',
-			status: 'private',
-			meta: { type: 'text' },
-		},
-	} );
-
-	await requestUtils.rest( {
-		method: 'POST',
-		path: `/wp/v2/crtxt_documents/${ collection.id }`,
-		data: {
-			meta: { cortext_fields: [ String( field.id ) ] },
+			type: 'text',
 		},
 	} );
 
