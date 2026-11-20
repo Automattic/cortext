@@ -8,6 +8,9 @@ import {
 
 let mockSaveRowField;
 let mockPendingSaves;
+let mockFlushNow;
+let mockAutosaveStatus;
+const mockClearEntityRecordEdits = jest.fn();
 
 jest.mock( '@wordpress/components', () => ( {
 	__esModule: true,
@@ -17,25 +20,40 @@ jest.mock( '@wordpress/components', () => ( {
 		</button>
 	),
 	Modal: ( { children } ) => <div>{ children }</div>,
-	Notice: ( { children } ) => <div role="alert">{ children }</div>,
+	Notice: ( { actions = [], children } ) => (
+		<div role="alert">
+			{ children }
+			{ actions.map( ( action ) => (
+				<button
+					key={ action.label }
+					type="button"
+					onClick={ action.onClick }
+				>
+					{ action.label }
+				</button>
+			) ) }
+		</div>
+	),
 	SlotFillProvider: ( { children } ) => <>{ children }</>,
 	Spinner: () => <div>Loading</div>,
 } ) );
 
 jest.mock( '@wordpress/core-data', () => ( {
 	__esModule: true,
+	store: 'core',
 	useEntityRecord: jest.fn(),
 } ) );
 
 jest.mock( '@wordpress/data', () => ( {
 	__esModule: true,
-	useDispatch: jest.fn( () => ( { resetPost: jest.fn() } ) ),
+	useDispatch: jest.fn( () => ( {
+		clearEntityRecordEdits: mockClearEntityRecordEdits,
+	} ) ),
 } ) );
 
 jest.mock( '@wordpress/editor', () => ( {
 	__esModule: true,
 	EditorProvider: ( { children } ) => <>{ children }</>,
-	store: 'editor-store',
 } ) );
 
 jest.mock( '@wordpress/i18n', () => ( {
@@ -48,7 +66,10 @@ jest.mock( '@wordpress/icons', () => ( {
 
 jest.mock( '../../../src/hooks/useAutosave', () => ( {
 	__esModule: true,
-	default: () => ( { flushNow: jest.fn().mockResolvedValue( true ) } ),
+	default: () => ( {
+		flushNow: ( ...args ) => mockFlushNow( ...args ),
+		status: mockAutosaveStatus,
+	} ),
 } ) );
 
 jest.mock( '../../../src/components/initEditor', () => ( {
@@ -114,6 +135,9 @@ describe( 'TemplateEditorModal', () => {
 	beforeEach( () => {
 		mockSaveRowField = null;
 		mockPendingSaves = null;
+		mockFlushNow = jest.fn().mockResolvedValue( true );
+		mockAutosaveStatus = 'idle';
+		mockClearEntityRecordEdits.mockReset();
 		updateTemplate.mockReset();
 		notifyTemplatesChanged.mockReset();
 		useEntityRecord.mockReturnValue( {
@@ -271,5 +295,61 @@ describe( 'TemplateEditorModal', () => {
 			"Couldn't save the template."
 		);
 		expect( onClose ).not.toHaveBeenCalled();
+	} );
+
+	it( 'discards unsaved changes and closes when saving keeps failing', async () => {
+		mockFlushNow = jest.fn().mockResolvedValue( false );
+		const onClose = jest.fn();
+
+		render(
+			<TemplateEditorModal
+				kind="page"
+				templateId={ 123 }
+				onClose={ onClose }
+			/>
+		);
+		await screen.findByTestId( 'editor-body' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByText( 'Close' ) );
+		} );
+		await act( async () => {
+			fireEvent.click( screen.getByText( 'Retry' ) );
+		} );
+		expect( mockFlushNow ).toHaveBeenCalledTimes( 2 );
+		expect( onClose ).not.toHaveBeenCalled();
+
+		fireEvent.click( screen.getByText( 'Discard' ) );
+
+		expect( mockClearEntityRecordEdits ).toHaveBeenCalledWith(
+			'postType',
+			'crtxt_template',
+			123
+		);
+		expect( onClose ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'clears the save error once a later save succeeds', async () => {
+		mockFlushNow = jest.fn().mockResolvedValue( false );
+		const { rerender } = render(
+			<TemplateEditorModal kind="page" templateId={ 123 } />
+		);
+		await screen.findByTestId( 'editor-body' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByText( 'Close' ) );
+		} );
+		expect(
+			screen.getByText( "Couldn't save the template." )
+		).toBeInTheDocument();
+
+		mockAutosaveStatus = 'saved';
+		rerender( <TemplateEditorModal kind="page" templateId={ 123 } /> );
+
+		await waitFor( () =>
+			expect(
+				screen.queryByText( "Couldn't save the template." )
+			).not.toBeInTheDocument()
+		);
 	} );
 } );

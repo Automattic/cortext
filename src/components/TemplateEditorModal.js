@@ -5,9 +5,9 @@ import {
 	SlotFillProvider,
 	Spinner,
 } from '@wordpress/components';
-import { useEntityRecord } from '@wordpress/core-data';
+import { store as coreDataStore, useEntityRecord } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
-import { EditorProvider, store as editorStore } from '@wordpress/editor';
+import { EditorProvider } from '@wordpress/editor';
 import {
 	useCallback,
 	useEffect,
@@ -58,13 +58,23 @@ const TEMPLATE_EDITOR_CSS = `
 
 const TEMPLATE_EXTRA_STYLES = [ { css: TEMPLATE_EDITOR_CSS } ];
 
-function TemplateAutosaveBridge( { onApi, onSaved } ) {
+function TemplateAutosaveBridge( { onApi, onSaved, templateId } ) {
 	const { flushNow, status } = useAutosave();
 	// Property saves register with the modal's own provider, so this waits
 	// for the template's queued and in-flight property saves only.
 	const { flushActiveEditor: flushPropertySaves } = useActiveEditor();
-	const { resetPost } = useDispatch( editorStore );
-	const discard = useCallback( () => resetPost(), [ resetPost ] );
+	// Dropping the edits leaves nothing dirty, so the save on unmount
+	// doesn't write the discarded changes after all.
+	const { clearEntityRecordEdits } = useDispatch( coreDataStore );
+	const discard = useCallback(
+		() =>
+			clearEntityRecordEdits(
+				'postType',
+				TEMPLATE_POST_TYPE,
+				templateId
+			),
+		[ clearEntityRecordEdits, templateId ]
+	);
 
 	useEffect( () => {
 		onApi?.( { flushNow, flushPropertySaves, discard } );
@@ -126,6 +136,12 @@ export default function TemplateEditorModal( {
 		onClose?.();
 	}, [ onClose ] );
 
+	// The way out when the title or content keeps failing to save.
+	const discardAndClose = useCallback( () => {
+		apiRef.current?.discard?.();
+		onClose?.();
+	}, [ onClose ] );
+
 	const saveTemplateField = useCallback(
 		( rowId, fieldId, value ) => {
 			const save = async () => {
@@ -184,6 +200,8 @@ export default function TemplateEditorModal( {
 	);
 
 	const handleSaved = useCallback( () => {
+		// A later save went through, so the earlier failure no longer applies.
+		setError( null );
 		notifyTemplatesChanged( { kind, collectionId } );
 	}, [ collectionId, kind ] );
 
@@ -222,8 +240,19 @@ export default function TemplateEditorModal( {
 						<Notice
 							className="cortext-row-detail__notice"
 							status="error"
-							isDismissible
-							onRemove={ () => setError( null ) }
+							isDismissible={ false }
+							actions={ [
+								{
+									label: __( 'Retry', 'cortext' ),
+									onClick: closeAfterSave,
+									variant: 'primary',
+								},
+								{
+									label: __( 'Discard', 'cortext' ),
+									onClick: discardAndClose,
+									variant: 'tertiary',
+								},
+							] }
 						>
 							{ error }
 						</Notice>
@@ -271,6 +300,7 @@ export default function TemplateEditorModal( {
 												isVisible
 											>
 												<TemplateAutosaveBridge
+													templateId={ templateId }
 													onApi={ ( api ) => {
 														apiRef.current = api;
 													} }
