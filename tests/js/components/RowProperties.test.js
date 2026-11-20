@@ -827,7 +827,7 @@ describe( 'RowProperties', () => {
 						label: 'Total',
 						cortextFieldType: 'rollup',
 						cortextRecordId: 7,
-						cortextRollupInvalid: true,
+						cortextRollupInvalid: 'target_must_be_number',
 						editable: false,
 					},
 				] }
@@ -835,7 +835,9 @@ describe( 'RowProperties', () => {
 			/>
 		);
 
-		expect( screen.getByText( 'Target field changed type' ) ).toBeVisible();
+		expect(
+			screen.getByText( 'Target property changed type' )
+		).toBeVisible();
 		expect( screen.queryByText( 'Empty' ) ).toBeNull();
 	} );
 

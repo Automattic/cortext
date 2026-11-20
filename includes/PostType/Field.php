@@ -740,7 +740,7 @@ final class Field {
 			self::POST_TYPE,
 			'rollup_invalid',
 			array(
-				'type'          => 'boolean',
+				'type'          => 'string',
 				'single'        => true,
 				'show_in_rest'  => true,
 				'auth_callback' => '__return_false',

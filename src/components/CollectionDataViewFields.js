@@ -15,6 +15,9 @@ import FrozenBadge from './FrozenBadge';
 import { ROW_DETAIL_MODE_ICONS } from './rowDetailUtils';
 import { COVER_FIELD_ID, TITLE_FIELD_ID } from './dataViewColumns';
 import { dataViewsFilterByForType } from '../hooks/fieldMapping';
+import { toRecordId } from '../hooks/fieldIds';
+import CollectionFieldsContext from './collectionFieldsContextObject';
+import RollupInvalidHint from './fields/RollupInvalidHint';
 
 export const TITLE_LABEL = __( 'Title', 'cortext' );
 const TITLE_FILTER_OPERATORS = [
@@ -200,3 +203,31 @@ export const COVER_FIELD = {
 		);
 	},
 };
+
+// A flagged rollup's cell. DataViews renders `field.render` as a component
+// and drops our own field props, so this lives at module level (a new render
+// function on each field-list refresh would remount the cell and close the
+// editor it opened) and reads the reason from the collection's fields.
+function RollupInvalidCell( { field } ) {
+	const recordId = toRecordId( field.id );
+	const fieldsByRecordId = useContext(
+		CollectionFieldsContext
+	)?.fieldsByRecordId;
+	return (
+		<RollupInvalidHint
+			recordId={ recordId }
+			reason={ fieldsByRecordId?.get( recordId )?.cortextRollupInvalid }
+		/>
+	);
+}
+
+// Swaps the value renderer of rollups the server flagged for a hint that
+// opens the rollup editor. Kept out of the field mapping, which the public
+// data view also uses and which must not load the editor.
+export function withRollupInvalidCells( fields ) {
+	return fields.map( ( field ) =>
+		field.cortextRollupInvalid
+			? { ...field, render: RollupInvalidCell }
+			: field
+	);
+}

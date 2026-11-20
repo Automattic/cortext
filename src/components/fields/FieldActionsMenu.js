@@ -19,6 +19,7 @@ import { chevronRight, cog, copy, pencil, trash } from '@wordpress/icons';
 
 import ChangeFieldTypePopover from './ChangeFieldTypePopover';
 import EditOptionsPopover from './EditOptionsPopover';
+import EditRollupPopover from './EditRollupPopover';
 import FieldFormatPopover from './FieldFormatPopover';
 import FormulaConfig from './FormulaConfig';
 import FieldSettingsPopover from './FieldSettingsPopover';
@@ -70,6 +71,7 @@ export default function FieldActionsMenu( {
 	const [ isFormatting, setIsFormatting ] = useState( false );
 	const [ isEditingOptions, setIsEditingOptions ] = useState( false );
 	const [ isEditingFormula, setIsEditingFormula ] = useState( false );
+	const [ isEditingRollup, setIsEditingRollup ] = useState( false );
 	const [ isEditingSettings, setIsEditingSettings ] = useState( false );
 	const [ isChangingType, setIsChangingType ] = useState( false );
 	const [ shouldFocusFormat, setShouldFocusFormat ] = useState( false );
@@ -107,6 +109,7 @@ export default function FieldActionsMenu( {
 	const canFormat = FORMATTABLE_TYPES.has( fieldType );
 	const supportsOptions = TYPES_WITH_OPTIONS.has( fieldType );
 	const supportsFormula = fieldType === 'formula';
+	const isRollup = fieldType === 'rollup';
 	const canChangeType =
 		Boolean( fieldType ) && ! UNCONVERTIBLE_SOURCE_TYPES.has( fieldType );
 	const initialOptions = useMemo(
@@ -434,6 +437,15 @@ export default function FieldActionsMenu( {
 									</Menu.ItemLabel>
 								</Menu.Item>
 							) : null }
+							{ isRollup ? (
+								<Menu.Item
+									onClick={ () => setIsEditingRollup( true ) }
+								>
+									<Menu.ItemLabel>
+										{ __( 'Edit rollup', 'cortext' ) }
+									</Menu.ItemLabel>
+								</Menu.Item>
+							) : null }
 							{ canChangeType ? (
 								<Menu.Item
 									onClick={ () => setIsChangingType( true ) }
@@ -597,6 +609,15 @@ export default function FieldActionsMenu( {
 						/>
 					</div>
 				</Popover>
+			) : null }
+			{ isEditingRollup && isRollup ? (
+				<EditRollupPopover
+					recordId={ recordId }
+					collectionId={ collectionId }
+					anchor={ optionsAnchorRef.current }
+					onClose={ () => setIsEditingRollup( false ) }
+					onSaved={ onRowsChanged }
+				/>
 			) : null }
 			{ isEditingSettings ? (
 				<FieldSettingsPopover

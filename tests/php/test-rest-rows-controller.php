@@ -762,7 +762,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$data = $this->query_rows( array( 'trait' => $source['collection_id'] ) )->get_data();
 		$this->assertSame( 30.0, (float) $data['rows'][0]['meta'][ "field-{$rollup_id}" ] );
 
-		update_post_meta( $rollup_id, 'rollup_invalid', '1' );
+		update_post_meta( $rollup_id, 'rollup_invalid', 'target_must_be_number' );
 
 		$data = $this->query_rows( array( 'trait' => $source['collection_id'] ) )->get_data();
 		$this->assertNull( $data['rows'][0]['meta'][ "field-{$rollup_id}" ] );

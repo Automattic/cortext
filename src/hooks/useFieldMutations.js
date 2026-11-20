@@ -192,6 +192,43 @@ export function useUpdateFormulaExpression( collectionId ) {
 	return { run, isBusy, error };
 }
 
+// Changes which relation, target field and calculation an existing rollup
+// uses. The server validates the whole set and rebuilds the rollup's copy of
+// its target, then the fresh record replaces the cached one.
+export function useUpdateRollup() {
+	const { isBusy, setIsBusy, error, setError } = useMutationState();
+	const flush = useFlushFieldRecord();
+	const run = useCallback(
+		async ( recordId, { relationFieldId, targetFieldId, aggregator } ) => {
+			setIsBusy( true );
+			setError( null );
+			try {
+				const data = {
+					rollup_relation_field_id: relationFieldId,
+					rollup_aggregator: aggregator,
+				};
+				if ( targetFieldId ) {
+					data.rollup_target_field_id = targetFieldId;
+				}
+				const result = await apiFetch( {
+					path: `/cortext/v1/fields/${ recordId }/rollup`,
+					method: 'POST',
+					data,
+				} );
+				await flush( recordId );
+				return result;
+			} catch ( apiError ) {
+				setError( apiError );
+				throw apiError;
+			} finally {
+				setIsBusy( false );
+			}
+		},
+		[ flush, setIsBusy, setError ]
+	);
+	return { run, isBusy, error };
+}
+
 // Refetches a single `crtxt_field` record and pushes it into the
 // entity store, replacing whatever is there. Called by the option
 // popover hosts when they unmount, so the row cells (which read

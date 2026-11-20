@@ -1253,7 +1253,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 
 		$this->assertSame( 200, $this->convert_field( $amount_id, 'text' )->get_status() );
 
-		$this->assertSame( '1', get_post_meta( $rollup_id, 'rollup_invalid', true ) );
+		$this->assertSame( 'target_must_be_number', get_post_meta( $rollup_id, 'rollup_invalid', true ) );
 		$this->assertSame( 'text', get_post_meta( $rollup_id, 'rollup_target_type', true ) );
 		$this->assertSame( $amount_id, (int) get_post_meta( $rollup_id, 'rollup_target_field_id', true ) );
 	}
@@ -1293,7 +1293,7 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$copy_id = (int) $this->duplicate_field( $source_collection_id, $rollup_id )->get_data()['id'];
 
 		$this->assertSame( 'sum', get_post_meta( $copy_id, 'rollup_aggregator', true ) );
-		$this->assertSame( '1', get_post_meta( $copy_id, 'rollup_invalid', true ) );
+		$this->assertSame( 'target_must_be_number', get_post_meta( $copy_id, 'rollup_invalid', true ) );
 	}
 
 	public function test_a_rollup_stored_without_an_aggregator_validates_as_a_count(): void {
@@ -1422,6 +1422,94 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		update_post_meta( $amount_id, 'number_format', '' );
 
 		$this->assertSame( '', get_post_meta( $rollup_id, 'rollup_target_number_format', true ) );
+	}
+
+	public function test_update_rollup_repairs_a_flagged_rollup(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->rollup_fixture( 'repair' );
+		$this->convert_field( $fixture['amount'], 'text' );
+		$this->assertSame( 'target_must_be_number', get_post_meta( $fixture['rollup'], 'rollup_invalid', true ) );
+
+		$response = $this->update_rollup(
+			$fixture['rollup'],
+			array(
+				'rollup_relation_field_id' => $fixture['relation'],
+				'rollup_target_field_id'   => $fixture['amount'],
+				'rollup_aggregator'        => 'show_unique',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'show_unique', get_post_meta( $fixture['rollup'], 'rollup_aggregator', true ) );
+		$this->assertSame( 'text', get_post_meta( $fixture['rollup'], 'rollup_target_type', true ) );
+		$this->assertSame( '', get_post_meta( $fixture['rollup'], 'rollup_invalid', true ) );
+	}
+
+	public function test_update_rollup_rejects_a_calculation_that_does_not_fit_the_target(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->rollup_fixture( 'reject' );
+		$this->convert_field( $fixture['amount'], 'text' );
+
+		$response = $this->update_rollup(
+			$fixture['rollup'],
+			array(
+				'rollup_relation_field_id' => $fixture['relation'],
+				'rollup_target_field_id'   => $fixture['amount'],
+				'rollup_aggregator'        => 'avg',
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_rollup_target_must_be_number', $response->get_data()['code'] );
+		$this->assertSame( 'sum', get_post_meta( $fixture['rollup'], 'rollup_aggregator', true ) );
+		$this->assertSame( 'target_must_be_number', get_post_meta( $fixture['rollup'], 'rollup_invalid', true ) );
+	}
+
+	public function test_update_rollup_switches_to_a_count_without_a_target(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->rollup_fixture( 'count' );
+
+		$response = $this->update_rollup(
+			$fixture['rollup'],
+			array(
+				'rollup_relation_field_id' => $fixture['relation'],
+				'rollup_aggregator'        => 'count',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'count', get_post_meta( $fixture['rollup'], 'rollup_aggregator', true ) );
+		$this->assertSame( '', get_post_meta( $fixture['rollup'], 'rollup_target_field_id', true ) );
+		$this->assertSame( '', get_post_meta( $fixture['rollup'], 'rollup_target_type', true ) );
+	}
+
+	public function test_update_rollup_rejects_fields_that_are_not_rollups(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->rollup_fixture( 'notrollup' );
+
+		$response = $this->update_rollup(
+			$fixture['amount'],
+			array(
+				'rollup_relation_field_id' => $fixture['relation'],
+				'rollup_aggregator'        => 'count',
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'cortext_field_not_rollup', $response->get_data()['code'] );
+		$this->assertSame( '', get_post_meta( $fixture['amount'], 'rollup_aggregator', true ) );
+	}
+
+	public function test_a_rollup_whose_relation_left_its_collection_is_flagged_with_that_reason(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->rollup_fixture( 'foreign' );
+		// A duplicated collection keeps pointing at the original collection's
+		// relation, which is not part of its own schema.
+		delete_post_meta( $fixture['source'], 'cortext_fields', (string) $fixture['relation'] );
+
+		$this->convert_field( $fixture['amount'], 'text' );
+
+		$this->assertSame( 'relation_invalid', get_post_meta( $fixture['rollup'], 'rollup_invalid', true ) );
 	}
 
 	public function test_create_formula_compiles_refs_and_materializes_existing_rows(): void {
@@ -2950,6 +3038,57 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 			$request->set_param( $key, $value );
 		}
 		return rest_do_request( $request );
+	}
+
+	private function update_rollup( int $field_id, array $body ) {
+		$request = new WP_REST_Request(
+			'POST',
+			"/cortext/v1/fields/{$field_id}/rollup"
+		);
+		$request->set_param( 'field_id', $field_id );
+		foreach ( $body as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * Builds Projects -> Invoices with a relation, a number `Amount` field on
+	 * Invoices, and a `sum` rollup of it on Projects.
+	 *
+	 * @param string $suffix Slug suffix that keeps fixtures apart.
+	 * @return array{source:int,target:int,relation:int,amount:int,rollup:int}
+	 */
+	private function rollup_fixture( string $suffix ): array {
+		$source   = $this->create_collection_with_slug( 'Projects', "projects-{$suffix}" );
+		$target   = $this->create_collection_with_slug( 'Invoices', "invoices-{$suffix}" );
+		$relation = (int) $this->create_field(
+			$source,
+			array(
+				'title'                 => 'Invoices',
+				'type'                  => 'relation',
+				'related_collection_id' => $target,
+			)
+		)->get_data()['id'];
+		$amount   = (int) $this->create_field(
+			$target,
+			array(
+				'title' => 'Amount',
+				'type'  => 'number',
+			)
+		)->get_data()['id'];
+		$rollup   = (int) $this->create_field(
+			$source,
+			array(
+				'title'                    => 'Total',
+				'type'                     => 'rollup',
+				'rollup_relation_field_id' => $relation,
+				'rollup_target_field_id'   => $amount,
+				'rollup_aggregator'        => 'sum',
+			)
+		)->get_data()['id'];
+
+		return compact( 'source', 'target', 'relation', 'amount', 'rollup' );
 	}
 
 	private function update_formula( int $field_id, array $body ) {
