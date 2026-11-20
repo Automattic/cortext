@@ -50,7 +50,7 @@ export const TRASH = {
 	HeaderAction: EmptyTrashButton,
 	copy: () => ( {
 		title: __( 'Trash', 'cortext' ),
-		listLabel: __( 'Items in Trash', 'cortext' ),
+		listLabel: __( 'Documents in Trash', 'cortext' ),
 		searchLabel: __( 'Search Trash', 'cortext' ),
 		loadError: __( 'Could not load Trash.', 'cortext' ),
 		emptyList: __( 'Trash is empty.', 'cortext' ),
@@ -90,7 +90,7 @@ export const ARCHIVED = {
 	HeaderAction: null,
 	copy: () => ( {
 		title: __( 'Archived', 'cortext' ),
-		listLabel: __( 'Archived items', 'cortext' ),
+		listLabel: __( 'Archived documents', 'cortext' ),
 		searchLabel: __( 'Search Archived', 'cortext' ),
 		loadError: __( 'Could not load archived documents.', 'cortext' ),
 		emptyList: __( 'No archived documents.', 'cortext' ),

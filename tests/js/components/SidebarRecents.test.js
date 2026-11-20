@@ -263,12 +263,12 @@ describe( 'SidebarRecents animation', () => {
 
 		expect(
 			screen.getByRole( 'button', {
-				name: 'Recent: Roadmap, plain document',
+				name: 'Recent: Roadmap, document',
 			} )
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole( 'button', {
-				name: 'Recent: Roadmap, contains rows',
+				name: 'Recent: Roadmap, collection',
 			} )
 		).toBeInTheDocument();
 	} );

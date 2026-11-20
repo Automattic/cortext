@@ -87,7 +87,7 @@ const FUNCTION_COMPLETIONS = [
 		insertText: 'field("")',
 		caretOffset: 'field("'.length,
 		type: 'field',
-		description: __( 'Use a value from this row.', 'cortext' ),
+		description: __( 'Use a value from this document.', 'cortext' ),
 	},
 	{
 		label: 'prop',
@@ -759,7 +759,7 @@ function FormulaReference() {
 			<FormulaReferenceSection title={ __( 'Fields', 'cortext' ) }>
 				<FormulaReferenceRow
 					code={ 'field("Price")' }
-					text={ __( 'Use a value from this row.', 'cortext' ) }
+					text={ __( 'Use a value from this document.', 'cortext' ) }
 				/>
 				<FormulaReferenceRow
 					code={ 'prop("Price")' }

@@ -26,7 +26,7 @@ export default function EmptyState( { isWorkspaceEmpty = false } ) {
 			</h2>
 			<p className="cortext-canvas__empty-text">
 				{ __(
-					'Add some sample collections and pages to see how Cortext works, or create your first collection from scratch.',
+					'Add some sample collections and documents to see how Cortext works, or create your first collection from scratch.',
 					'cortext'
 				) }
 			</p>

@@ -374,8 +374,8 @@ export default function Sidebar( {
 			? sprintf(
 					/* translators: %d: number of archived items */
 					_n(
-						'Archived, %d item',
-						'Archived, %d items',
+						'Archived, %d document',
+						'Archived, %d documents',
 						archivedCount,
 						'cortext'
 					),
@@ -385,10 +385,10 @@ export default function Sidebar( {
 	const trashButtonLabel =
 		trashCount > 0
 			? sprintf(
-					/* translators: %d: number of items in Trash */
+					/* translators: %d: number of documents in Trash */
 					_n(
-						'Trash, %d item',
-						'Trash, %d items',
+						'Trash, %d document',
+						'Trash, %d documents',
 						trashCount,
 						'cortext'
 					),

@@ -243,7 +243,7 @@ export default function RelationEditor( {
 			const createdId = Number( created?.id );
 			if ( ! createdId ) {
 				throw new Error(
-					__( 'Related item could not be created.', 'cortext' )
+					__( 'Related document could not be created.', 'cortext' )
 				);
 			}
 			touchRecent( {
@@ -265,7 +265,7 @@ export default function RelationEditor( {
 		} catch ( error ) {
 			setCreateError(
 				error?.message ||
-					__( 'Related item could not be created.', 'cortext' )
+					__( 'Related document could not be created.', 'cortext' )
 			);
 		} finally {
 			setIsCreating( false );

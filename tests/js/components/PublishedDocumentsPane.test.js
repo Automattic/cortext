@@ -245,7 +245,7 @@ describe( 'PublishedDocumentsPane', () => {
 		} );
 	} );
 
-	it( 'shows pages, collection items, and collections from the same response', () => {
+	it( 'shows documents, rows, and collections from the same response', () => {
 		useEntityRecords.mockReturnValue( {
 			records: [
 				documentRecord( {
@@ -278,10 +278,10 @@ describe( 'PublishedDocumentsPane', () => {
 		).toBeInTheDocument();
 		expect( screen.getByText( 'Public Collection' ) ).toBeInTheDocument();
 		expect( screen.getByTestId( 'document-10-type' ) ).toHaveTextContent(
-			'Page'
+			'Document'
 		);
 		expect( screen.getByTestId( 'document-20-type' ) ).toHaveTextContent(
-			'Collection item'
+			'Document'
 		);
 		expect( screen.getByTestId( 'document-30-type' ) ).toHaveTextContent(
 			'Collection'
@@ -291,8 +291,7 @@ describe( 'PublishedDocumentsPane', () => {
 			( field ) => field.id === 'type'
 		);
 		expect( typeField.elements ).toEqual( [
-			{ value: 'page', label: 'Page' },
-			{ value: 'collection-item', label: 'Collection item' },
+			{ value: 'document', label: 'Document' },
 			{ value: 'collection', label: 'Collection' },
 		] );
 		expect( typeField.filterBy ).toEqual( {
@@ -302,6 +301,6 @@ describe( 'PublishedDocumentsPane', () => {
 			DataViews.mock.calls[ 0 ][ 0 ].data.map( ( item ) =>
 				typeField.getValue( { item } )
 			)
-		).toEqual( [ 'page', 'collection-item', 'collection' ] );
+		).toEqual( [ 'document', 'document', 'collection' ] );
 	} );
 } );

@@ -96,7 +96,7 @@ export default function DocumentPublishToggle( { disabled = false, postId } ) {
 	const showCascadePublishError = useCallback( () => {
 		createErrorNotice(
 			__(
-				'Could not publish referenced documents that contain rows. The document was not published.',
+				'Could not publish the collections this document references. The document was not published.',
 				'cortext'
 			),
 			{

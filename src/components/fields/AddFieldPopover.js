@@ -121,7 +121,7 @@ function RelationConfig( {
 				__( 'Related %s', 'cortext' ),
 				titleOf( sourceCollection )
 		  )
-		: __( 'Related items', 'cortext' );
+		: __( 'Related documents', 'cortext' );
 
 	const submit = async () => {
 		if ( ! targetCollectionId || isBusy ) {
