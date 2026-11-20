@@ -1,6 +1,13 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from '@testing-library/react';
 
 let mockSaveRowField;
+let mockPendingSaves;
 
 jest.mock( '@wordpress/components', () => ( {
 	__esModule: true,
@@ -77,6 +84,15 @@ jest.mock( '../../../src/components/EditorBody', () => {
 		default: function MockEditorBody() {
 			mockSaveRowField =
 				React.useContext( RowMutationContext ).saveRowField;
+			const { registerPendingSaves } =
+				require( '../../../src/components/ActiveEditorContext' ).useActiveEditor();
+			React.useEffect(
+				() =>
+					mockPendingSaves
+						? registerPendingSaves( mockPendingSaves )
+						: undefined,
+				[ registerPendingSaves ]
+			);
 			return <div data-testid="editor-body" />;
 		},
 	};
@@ -97,6 +113,7 @@ import { notifyTemplatesChanged, updateTemplate } from '../../../src/templates';
 describe( 'TemplateEditorModal', () => {
 	beforeEach( () => {
 		mockSaveRowField = null;
+		mockPendingSaves = null;
 		updateTemplate.mockReset();
 		notifyTemplatesChanged.mockReset();
 		useEntityRecord.mockReturnValue( {
@@ -204,5 +221,55 @@ describe( 'TemplateEditorModal', () => {
 		);
 		expect( screen.queryByText( 'Loading' ) ).not.toBeInTheDocument();
 		expect( screen.queryByTestId( 'editor-body' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'waits for property saves before closing', async () => {
+		let finishSaves;
+		mockPendingSaves = jest.fn(
+			() =>
+				new Promise( ( resolve ) => {
+					finishSaves = resolve;
+				} )
+		);
+		const onClose = jest.fn();
+
+		render(
+			<TemplateEditorModal
+				kind="row"
+				templateId={ 123 }
+				onClose={ onClose }
+			/>
+		);
+		await screen.findByTestId( 'editor-body' );
+
+		fireEvent.click( screen.getByText( 'Close' ) );
+		await waitFor( () => expect( mockPendingSaves ).toHaveBeenCalled() );
+		expect( onClose ).not.toHaveBeenCalled();
+
+		await act( async () => finishSaves( true ) );
+		expect( onClose ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'stays open with an error when a property save fails', async () => {
+		mockPendingSaves = jest.fn().mockResolvedValue( false );
+		const onClose = jest.fn();
+
+		render(
+			<TemplateEditorModal
+				kind="row"
+				templateId={ 123 }
+				onClose={ onClose }
+			/>
+		);
+		await screen.findByTestId( 'editor-body' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByText( 'Close' ) );
+		} );
+
+		expect( await screen.findByRole( 'alert' ) ).toHaveTextContent(
+			"Couldn't save the template."
+		);
+		expect( onClose ).not.toHaveBeenCalled();
 	} );
 } );

@@ -21,6 +21,7 @@ import { closeSmall } from '@wordpress/icons';
 import './RowDetailView.scss';
 
 import { getEditorSettings } from './initEditor';
+import { ActiveEditorProvider, useActiveEditor } from './ActiveEditorContext';
 import { DocumentPropertiesProvider } from './DocumentPropertiesContext';
 import { EditorSurfaceProvider } from './EditorSurfaceContext';
 import EditorBody from './EditorBody';
@@ -59,13 +60,16 @@ const TEMPLATE_EXTRA_STYLES = [ { css: TEMPLATE_EDITOR_CSS } ];
 
 function TemplateAutosaveBridge( { onApi, onSaved } ) {
 	const { flushNow, status } = useAutosave();
+	// Property saves register with the modal's own provider, so this waits
+	// for the template's queued and in-flight property saves only.
+	const { flushActiveEditor: flushPropertySaves } = useActiveEditor();
 	const { resetPost } = useDispatch( editorStore );
 	const discard = useCallback( () => resetPost(), [ resetPost ] );
 
 	useEffect( () => {
-		onApi?.( { flushNow, discard } );
+		onApi?.( { flushNow, flushPropertySaves, discard } );
 		return () => onApi?.( null );
-	}, [ discard, flushNow, onApi ] );
+	}, [ discard, flushNow, flushPropertySaves, onApi ] );
 
 	useEffect( () => {
 		if ( status === 'saved' ) {
@@ -111,8 +115,11 @@ export default function TemplateEditorModal( {
 
 	const closeAfterSave = useCallback( async () => {
 		setError( null );
-		const didSave = await apiRef.current?.flushNow?.();
-		if ( didSave === false ) {
+		const api = apiRef.current;
+		const didSave =
+			( await api?.flushNow?.() ) !== false &&
+			( await api?.flushPropertySaves?.() ) !== false;
+		if ( ! didSave ) {
 			setError( __( "Couldn't save the template.", 'cortext' ) );
 			return;
 		}
@@ -236,52 +243,58 @@ export default function TemplateEditorModal( {
 						</div>
 					) : null }
 					{ record ? (
-						<EditorProvider
-							post={ record }
-							settings={ getEditorSettings() }
-							useSubRegistry
-						>
-							<CortextLinkSuggestions />
-							<SlotFillProvider>
-								<EditorSurfaceProvider
-									hasBlockInspector={ false }
-								>
-									<RowMutationContext.Provider
-										value={ mutationContext }
+						<ActiveEditorProvider>
+							<EditorProvider
+								post={ record }
+								settings={ getEditorSettings() }
+								useSubRegistry
+							>
+								<CortextLinkSuggestions />
+								<SlotFillProvider>
+									<EditorSurfaceProvider
+										hasBlockInspector={ false }
 									>
-										<DocumentPropertiesProvider
-											collectionId={ collectionId }
-											rowId={ templateId }
-											fields={
-												isRowTemplate ? fields : []
-											}
-											allFields={
-												isRowTemplate ? fields : []
-											}
-											detailLayoutEntries={ [] }
-											fallbackRecord={ templateRow }
-											isVisible
+										<RowMutationContext.Provider
+											value={ mutationContext }
 										>
-											<TemplateAutosaveBridge
-												onApi={ ( api ) => {
-													apiRef.current = api;
-												} }
-												onSaved={ handleSaved }
-											/>
-											<EditorBody
-												isActive
-												showIdentityActions={ false }
-												postId={ templateId }
-												postType={ TEMPLATE_POST_TYPE }
-												extraStyles={
-													TEMPLATE_EXTRA_STYLES
+											<DocumentPropertiesProvider
+												collectionId={ collectionId }
+												rowId={ templateId }
+												fields={
+													isRowTemplate ? fields : []
 												}
-											/>
-										</DocumentPropertiesProvider>
-									</RowMutationContext.Provider>
-								</EditorSurfaceProvider>
-							</SlotFillProvider>
-						</EditorProvider>
+												allFields={
+													isRowTemplate ? fields : []
+												}
+												detailLayoutEntries={ [] }
+												fallbackRecord={ templateRow }
+												isVisible
+											>
+												<TemplateAutosaveBridge
+													onApi={ ( api ) => {
+														apiRef.current = api;
+													} }
+													onSaved={ handleSaved }
+												/>
+												<EditorBody
+													isActive
+													showIdentityActions={
+														false
+													}
+													postId={ templateId }
+													postType={
+														TEMPLATE_POST_TYPE
+													}
+													extraStyles={
+														TEMPLATE_EXTRA_STYLES
+													}
+												/>
+											</DocumentPropertiesProvider>
+										</RowMutationContext.Provider>
+									</EditorSurfaceProvider>
+								</SlotFillProvider>
+							</EditorProvider>
+						</ActiveEditorProvider>
 					) : null }
 				</div>
 			</div>
