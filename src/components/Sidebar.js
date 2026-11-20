@@ -533,7 +533,7 @@ export default function Sidebar( {
 			createAndOpenWith(
 				createCollection,
 				input,
-				__( 'Collection could not be created.', 'cortext' )
+				__( "Couldn't create the collection.", 'cortext' )
 			),
 		[ createCollection, createAndOpenWith ]
 	);

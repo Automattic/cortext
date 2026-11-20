@@ -216,10 +216,7 @@ export function restoreDocuments( records, ctx ) {
 		failureMessage: ( failed, total ) =>
 			sprintf(
 				/* translators: 1: number of documents that could not be restored, 2: number of documents in the batch */
-				__(
-					'%1$d of %2$d documents could not be restored.',
-					'cortext'
-				),
+				__( "%1$d of %2$d documents couldn't be restored.", 'cortext' ),
 				failed,
 				total
 			),
@@ -245,7 +242,7 @@ export function unarchiveDocuments( records, ctx ) {
 			sprintf(
 				/* translators: 1: number of documents that could not be unarchived, 2: number of documents in the batch */
 				__(
-					'%1$d of %2$d documents could not be unarchived.',
+					"%1$d of %2$d documents couldn't be unarchived.",
 					'cortext'
 				),
 				failed,
@@ -404,8 +401,8 @@ export async function duplicateDocument( record, ctx ) {
 			sprintf(
 				/* translators: %d: number of fields skipped while duplicating a collection. */
 				_n(
-					'%d field was not copied to the new collection. Add it again if you need it.',
-					'%d fields were not copied to the new collection. Add them again if you need them.',
+					"%d field wasn't copied to the new collection. Add it again if you need it.",
+					"%d fields weren't copied to the new collection. Add them again if you need them.",
 					skipped.length,
 					'cortext'
 				),
@@ -481,7 +478,7 @@ export async function trashDocument( record, ctx ) {
 		ctx,
 		collectCascadeIds( record, deleted?.cascade_deleted ),
 		__(
-			'Document moved to Trash, but Favorites could not be updated.',
+			"Document moved to Trash, but Favorites couldn't be updated.",
 			'cortext'
 		)
 	);

@@ -133,7 +133,7 @@ function CollectionCreator( { onCreate } ) {
 		} catch ( apiError ) {
 			setError(
 				apiError?.message ||
-					__( 'Collection could not be created.', 'cortext' )
+					__( "Couldn't create the collection.", 'cortext' )
 			);
 		} finally {
 			setIsSaving( false );

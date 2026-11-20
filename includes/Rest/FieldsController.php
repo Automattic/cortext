@@ -446,7 +446,7 @@ final class FieldsController {
 		if ( 'formula' !== (string) get_post_meta( $field_id, 'type', true ) ) {
 			return new WP_Error(
 				'cortext_field_type_unsupported',
-				__( 'This field is not a formula.', 'cortext' ),
+				__( 'This field isn\'t a formula.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -598,7 +598,7 @@ final class FieldsController {
 		if ( ! $this->type_supports_options( $type ) ) {
 			return new WP_Error(
 				'cortext_field_type_unsupported',
-				__( 'This field type does not support options.', 'cortext' ),
+				__( 'This field type doesn\'t support options.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -690,7 +690,7 @@ final class FieldsController {
 		if ( ! FieldTypeConverter::supports( $source_type, $target_type ) ) {
 			return new WP_Error(
 				'cortext_field_conversion_unsupported',
-				__( 'This type change is not supported.', 'cortext' ),
+				__( 'This type change isn\'t supported.', 'cortext' ),
 				array( 'status' => 400 )
 			);
 		}

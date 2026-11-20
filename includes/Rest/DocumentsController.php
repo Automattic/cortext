@@ -447,7 +447,7 @@ final class DocumentsController {
 		if ( ! $result ) {
 			return new WP_Error(
 				'cortext_document_restore_failed',
-				__( 'Document could not be restored.', 'cortext' ),
+				__( 'Couldn\'t restore the document.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}
@@ -492,7 +492,7 @@ final class DocumentsController {
 		if ( ! $root_deleted ) {
 			return new WP_Error(
 				'cortext_document_delete_failed',
-				__( 'Document could not be deleted.', 'cortext' ),
+				__( 'Couldn\'t delete the document.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}

@@ -133,7 +133,7 @@ final class Evaluator {
 		if ( '/' === $operator && 0.0 === $b ) {
 			throw new FormulaEvalError(
 				'cortext_formula_divide_by_zero',
-				__( 'You cannot divide by zero.', 'cortext' )
+				__( 'You can\'t divide by zero.', 'cortext' )
 			);
 		}
 

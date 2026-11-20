@@ -779,7 +779,7 @@ function FormulaReference() {
 				/>
 				<p>
 					{ __(
-						'Use single-value fields, formulas, and built-in fields. Multi-select, relation, and rollup fields are not available in v0.',
+						"Use single-value fields, formulas, and built-in fields. Multi-select, relation, and rollup fields aren't available in v0.",
 						'cortext'
 					) }
 				</p>

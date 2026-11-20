@@ -897,7 +897,7 @@ describe( 'Trash snackbars', () => {
 
 		expect( ctx.createSuccessNotice ).not.toHaveBeenCalled();
 		expect( ctx.createErrorNotice ).toHaveBeenCalledWith(
-			'1 of 2 documents could not be restored.',
+			"1 of 2 documents couldn't be restored.",
 			{ id: 'cortext-document-restore-success', type: 'snackbar' }
 		);
 	} );
@@ -1040,7 +1040,7 @@ describe( 'Archive snackbars', () => {
 
 		expect( ctx.createSuccessNotice ).not.toHaveBeenCalled();
 		expect( ctx.createErrorNotice ).toHaveBeenCalledWith(
-			'1 of 2 documents could not be unarchived.',
+			"1 of 2 documents couldn't be unarchived.",
 			{ id: 'cortext-document-restore-success', type: 'snackbar' }
 		);
 	} );

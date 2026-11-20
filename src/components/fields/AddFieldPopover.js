@@ -140,7 +140,7 @@ function RelationConfig( {
 		} catch ( apiError ) {
 			onError(
 				apiError?.message ||
-					__( 'Relation could not be created.', 'cortext' )
+					__( "Couldn't create the relation.", 'cortext' )
 			);
 		}
 	};
@@ -371,7 +371,7 @@ function RollupConfig( {
 		} catch ( apiError ) {
 			onError(
 				apiError?.message ||
-					__( 'Rollup could not be created.', 'cortext' )
+					__( "Couldn't create the rollup.", 'cortext' )
 			);
 		}
 	};
@@ -484,7 +484,7 @@ export default function AddFieldPopover( { collectionId, onCreate } ) {
 		} catch ( apiError ) {
 			setSubmitError(
 				apiError?.message ||
-					__( 'Field could not be created.', 'cortext' )
+					__( "Couldn't create the field.", 'cortext' )
 			);
 		}
 	};

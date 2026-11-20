@@ -128,7 +128,7 @@ final class DocumentDuplicator {
 		if ( ! $document instanceof WP_Post ) {
 			return new WP_Error(
 				'cortext_duplicate_failed',
-				__( 'Document could not be created.', 'cortext' ),
+				__( 'Couldn\'t create the document.', 'cortext' ),
 				array( 'status' => 500 )
 			);
 		}

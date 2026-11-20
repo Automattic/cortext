@@ -361,13 +361,13 @@ final class Compiler {
 		if ( $field_id === $self_field_id ) {
 			throw new FormulaParseError(
 				'cortext_formula_self_reference',
-				__( 'A formula cannot use itself.', 'cortext' )
+				__( 'A formula can\'t use itself.', 'cortext' )
 			);
 		}
 		if ( $field['multiple'] || in_array( $field['type'], array( 'relation', 'rollup' ), true ) ) {
 			throw new FormulaParseError(
 				'cortext_formula_unsupported_target_type',
-				__( 'For now, formulas can only use single-value fields. Multi-select, relation, and rollup fields are not available yet.', 'cortext' )
+				__( 'For now, formulas can only use single-value fields. Multi-select, relation, and rollup fields aren\'t available yet.', 'cortext' )
 			);
 		}
 

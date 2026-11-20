@@ -1322,8 +1322,8 @@ export default function CollectionDataViews( {
 					deleteErrorMessage = sprintf(
 						/* translators: %d: number of documents that failed to move to Trash. */
 						_n(
-							'%d document could not be moved to Trash.',
-							'%d documents could not be moved to Trash.',
+							"%d document couldn't be moved to Trash.",
+							"%d documents couldn't be moved to Trash.",
 							failedRows.length,
 							'cortext'
 						),
@@ -1475,8 +1475,8 @@ export default function CollectionDataViews( {
 					archiveErrorMessage = sprintf(
 						/* translators: %d: number of documents that could not be archived */
 						_n(
-							'%d document could not be archived.',
-							'%d documents could not be archived.',
+							"%d document couldn't be archived.",
+							"%d documents couldn't be archived.",
 							failedRows.length,
 							'cortext'
 						),
