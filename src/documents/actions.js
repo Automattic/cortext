@@ -161,20 +161,24 @@ export function undoAction( ctx, run, noticeId ) {
 	];
 }
 
-// How many restores run at once when undoing a bulk trash, matching the cap
-// the bulk trash itself uses.
+// How many requests run at once when undoing a bulk trash or archive,
+// matching the cap the bulk actions themselves use.
 const RESTORE_CONCURRENCY = 4;
 
-// Restores documents trashed together, such as a bulk row selection. The
-// lists refresh and the snackbar reports once for the whole batch, and a row
-// that fails does not hide the ones that came back.
-export async function restoreDocuments( records, ctx ) {
+// Brings back documents trashed or archived together, such as a bulk row
+// selection. The lists refresh and the snackbar reports once for the whole
+// batch, and a row that fails does not hide the ones that came back.
+async function restoreDocumentBatch(
+	records,
+	ctx,
+	{ endpoint, failureMessage, successMessage }
+) {
 	const results = await allSettledWithConcurrency(
 		records,
 		RESTORE_CONCURRENCY,
 		( record ) =>
 			apiFetch( {
-				path: `/cortext/v1/documents/${ record.id }/restore`,
+				path: `/cortext/v1/documents/${ record.id }/${ endpoint }`,
 				method: 'POST',
 			} )
 	);
@@ -186,14 +190,30 @@ export async function restoreDocuments( records, ctx ) {
 	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
 	notifySidebarTreeChanged();
 	notifyDocumentTrashChanged();
-	notifyDocumentArchiveChanged( { action: 'restore' } );
+	notifyDocumentArchiveChanged( { action: endpoint } );
 	notifyCollectionRowsChanged();
 
 	const failed = results.filter(
 		( result ) => result.status === 'rejected'
 	).length;
 	if ( failed > 0 ) {
-		ctx.createErrorNotice?.(
+		ctx.createErrorNotice?.( failureMessage( failed, records.length ), {
+			id: 'cortext-document-restore-success',
+			type: 'snackbar',
+		} );
+		return;
+	}
+	ctx.createSuccessNotice?.( successMessage( records.length ), {
+		id: 'cortext-document-restore-success',
+		type: 'snackbar',
+	} );
+}
+
+// Restores documents trashed together.
+export function restoreDocuments( records, ctx ) {
+	return restoreDocumentBatch( records, ctx, {
+		endpoint: 'restore',
+		failureMessage: ( failed, total ) =>
 			sprintf(
 				/* translators: 1: number of documents that could not be restored, 2: number of documents in the batch */
 				__(
@@ -201,25 +221,48 @@ export async function restoreDocuments( records, ctx ) {
 					'cortext'
 				),
 				failed,
-				records.length
+				total
 			),
-			{ id: 'cortext-document-restore-success', type: 'snackbar' }
-		);
-		return;
-	}
-	ctx.createSuccessNotice?.(
-		sprintf(
-			/* translators: %d: number of documents restored from Trash */
-			_n(
-				'%d document restored.',
-				'%d documents restored.',
-				records.length,
-				'cortext'
+		successMessage: ( count ) =>
+			sprintf(
+				/* translators: %d: number of documents restored from Trash */
+				_n(
+					'%d document restored.',
+					'%d documents restored.',
+					count,
+					'cortext'
+				),
+				count
 			),
-			records.length
-		),
-		{ id: 'cortext-document-restore-success', type: 'snackbar' }
-	);
+	} );
+}
+
+// Unarchives documents archived together.
+export function unarchiveDocuments( records, ctx ) {
+	return restoreDocumentBatch( records, ctx, {
+		endpoint: 'unarchive',
+		failureMessage: ( failed, total ) =>
+			sprintf(
+				/* translators: 1: number of documents that could not be unarchived, 2: number of documents in the batch */
+				__(
+					'%1$d of %2$d documents could not be unarchived.',
+					'cortext'
+				),
+				failed,
+				total
+			),
+		successMessage: ( count ) =>
+			sprintf(
+				/* translators: %d: number of documents restored from Archived */
+				_n(
+					'%d document unarchived.',
+					'%d documents unarchived.',
+					count,
+					'cortext'
+				),
+				count
+			),
+	} );
 }
 
 export function movedToTrashMessage( nestedCount = 0 ) {
@@ -231,6 +274,22 @@ export function movedToTrashMessage( nestedCount = 0 ) {
 		_n(
 			'Document and %d nested document moved to Trash.',
 			'Document and %d nested documents moved to Trash.',
+			nestedCount,
+			'cortext'
+		),
+		nestedCount
+	);
+}
+
+export function archivedMessage( nestedCount = 0 ) {
+	if ( nestedCount < 1 ) {
+		return __( 'Document archived.', 'cortext' );
+	}
+	return sprintf(
+		/* translators: %d: number of nested documents archived along with the document */
+		_n(
+			'Document and %d nested document archived.',
+			'Document and %d nested documents archived.',
 			nestedCount,
 			'cortext'
 		),
@@ -484,6 +543,17 @@ export async function archiveDocument( record, ctx ) {
 	invalidateDocumentLifecycle( ctx );
 	notifyDocumentArchiveChanged( { action: 'archive' } );
 	ctx.onAfterArchive?.( { record, response, lifecycleFocusIntent } );
+	// The response lists the root along with its cascade.
+	const archivedCount = response?.archived?.length ?? 1;
+	ctx.createSuccessNotice?.( archivedMessage( archivedCount - 1 ), {
+		id: 'cortext-document-archive-success',
+		type: 'snackbar',
+		actions: undoAction(
+			ctx,
+			() => unarchiveDocument( record, ctx ),
+			'cortext-document-archive-success'
+		),
+	} );
 	return response;
 }
 
@@ -495,7 +565,16 @@ export async function unarchiveDocument( record, ctx ) {
 	syncLifecycleEntityRecords( response, ctx, 'restored' );
 	invalidateDocumentLifecycle( ctx );
 	notifyDocumentArchiveChanged( { action: 'unarchive' } );
-	notifyRestored( response, ctx, 'cortext-document-unarchive-success' );
+	notifyRestored(
+		response,
+		ctx,
+		'cortext-document-unarchive-success',
+		undoAction(
+			ctx,
+			() => archiveDocument( record, ctx ),
+			'cortext-document-unarchive-success'
+		)
+	);
 	return response;
 }
 

@@ -1,5 +1,5 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { Icon, archive, arrowUpRight } from '@wordpress/icons';
+import { Icon, arrowUpRight, box as archiveIcon } from '@wordpress/icons';
 
 import {
 	archivedRelationLabel,
@@ -60,7 +60,7 @@ export default function RelationReferences( { value } ) {
 					>
 						<Icon
 							className="cortext-relation-ref__icon"
-							icon={ isArchived ? archive : arrowUpRight }
+							icon={ isArchived ? archiveIcon : arrowUpRight }
 						/>
 						<span className="cortext-relation-ref__title">
 							{ title }

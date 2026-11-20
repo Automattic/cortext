@@ -1,7 +1,7 @@
 /**
  * Shared editor body for Cortext documents (pages, collections, and rows). Runs inside
  * an existing `EditorProvider` and renders the block-editor-owned document
- * body: cover -> icon -> locked title -> block content. Owns the trash banner,
+ * body: cover -> icon -> locked title -> block content. Owns the lifecycle banner,
  * the identity controls above the title, and the layout effect that keeps the
  * locked header blocks present in `post_content`.
  *
@@ -19,7 +19,7 @@ import {
 	useSettings,
 } from '@wordpress/block-editor';
 import { createBlock, parse } from '@wordpress/blocks';
-import { Button, Disabled, Notice } from '@wordpress/components';
+import { Button, Disabled } from '@wordpress/components';
 import {
 	store as coreStore,
 	useEntityBlockEditor,
@@ -52,14 +52,14 @@ import { parseDocumentIcon } from './DocumentIcon';
 import { isSurfaceFocusOriginCurrent } from './collectionSurfaceFocus';
 import afterNextPaint from '../hooks/afterNextPaint';
 import { whenViewTransitionsSettled } from '../hooks/viewTransition';
-import { unarchiveDocument } from '../documents/actions';
 import {
 	READ_ONLY_ARCHIVED,
 	READ_ONLY_FROZEN,
 	READ_ONLY_TRASHED,
 } from '../documents/readOnly';
 import { selectCurrentPostReadOnlyState } from '../documents/readOnlyStore';
-import TrashedNotice from './trash/TrashedNotice';
+import LifecycleNotice from './lifecycle/LifecycleNotice';
+import { ARCHIVED, TRASH } from './lifecycle/lifecycleStates';
 
 const DOCUMENT_ICON_BLOCK = 'cortext/document-icon';
 const HIDDEN_IDENTITY_ACTIONS_STYLE = { visibility: 'hidden' };
@@ -1674,57 +1674,6 @@ function HeaderAwareRootAppender( { ownerBlockName, postId, record } ) {
 	);
 }
 
-function ArchivedNotice( { postId, postType, onRestored } ) {
-	const [ isRestoring, setIsRestoring ] = useState( false );
-	const [ error, setError ] = useState( null );
-	const { invalidateResolution, receiveEntityRecords } =
-		useDispatch( 'core' );
-	const { createSuccessNotice } = useDispatch( 'core/notices' );
-
-	const restore = async () => {
-		setError( null );
-		setIsRestoring( true );
-		try {
-			const response = await unarchiveDocument(
-				{ id: postId },
-				{
-					createSuccessNotice,
-					invalidateResolution,
-					receiveEntityRecords,
-				}
-			);
-			onRestored?.( postId, postType, response );
-		} catch ( err ) {
-			setError(
-				err?.message ??
-					__( 'Could not restore this document.', 'cortext' )
-			);
-		} finally {
-			setIsRestoring( false );
-		}
-	};
-
-	return (
-		<Notice
-			className="cortext-canvas__notice"
-			status="warning"
-			isDismissible={ false }
-			actions={ [
-				{
-					label: __( 'Restore', 'cortext' ),
-					onClick: restore,
-					disabled: isRestoring,
-					variant: 'primary',
-				},
-			] }
-		>
-			{ error
-				? error
-				: __( 'This document is archived and read only.', 'cortext' ) }
-		</Notice>
-	);
-}
-
 function coverSource( media ) {
 	return (
 		media?.media_details?.sizes?.large?.source_url ??
@@ -2372,15 +2321,12 @@ export default function EditorBody( {
 
 	return (
 		<div className="cortext-canvas__visual">
-			{ readOnlyState === READ_ONLY_ARCHIVED && (
-				<ArchivedNotice
-					postId={ postId }
-					postType={ postType }
-					onRestored={ onRestored }
-				/>
-			) }
-			{ readOnlyState === READ_ONLY_TRASHED && (
-				<TrashedNotice
+			{ ( readOnlyState === READ_ONLY_TRASHED ||
+				readOnlyState === READ_ONLY_ARCHIVED ) && (
+				<LifecycleNotice
+					state={
+						readOnlyState === READ_ONLY_TRASHED ? TRASH : ARCHIVED
+					}
 					postId={ postId }
 					postType={ postType }
 					onRestored={ onRestored }

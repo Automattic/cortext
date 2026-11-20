@@ -1,4 +1,4 @@
-import { __, _n, sprintf } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import {
 	useCallback,
 	useEffect,
@@ -6,41 +6,32 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import {
-	Button,
-	Icon,
-	SearchControl,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalConfirmDialog as ConfirmDialog,
-} from '@wordpress/components';
+import { Button, Icon, SearchControl } from '@wordpress/components';
 import { useEntityRecords } from '@wordpress/core-data';
-import { useDispatch } from '@wordpress/data';
 import { humanTimeDiff } from '@wordpress/date';
-import { chevronLeft, trash as trashIcon } from '@wordpress/icons';
+import { chevronLeft } from '@wordpress/icons';
 import { useNavigate } from '@tanstack/react-router';
 
-import './TrashView.scss';
+import './LifecycleView.scss';
 
 import { SidebarListSkeleton } from '../Skeleton';
 import { ACTIVE_PAGES_QUERY, POST_TYPE } from '../page-queries';
-import { EMPTY_COUNTS, useSidebarLifecycleList } from '../SidebarLifecycleList';
+import useLifecycleList, { EMPTY_COUNTS } from './useLifecycleList';
 import {
-	filterTrashItems,
+	filterLifecycleItems,
 	originalPath,
 	typeFilters,
-	useTrashedByName,
-} from './trashItems';
-import { TRASH_MARKER_META_KEYS } from './trashRoots';
-import useTrashActions from './useTrashActions';
+	useLifecycleByName,
+} from './lifecycleItems';
+import useLifecycleActions from './useLifecycleActions';
 import {
 	DocumentsProvider,
 	documentTitle,
-	useDocumentActions,
 	useDocumentRecord,
 } from '../../documents';
-import { trashUri } from '../../router/useResolveEntity';
 
-function TrashItem( {
+function LifecycleItem( {
+	state,
 	item,
 	counts,
 	path,
@@ -54,7 +45,7 @@ function TrashItem( {
 	const { title, listIcon } = useDocumentRecord( record );
 	const details = [
 		byName,
-		record.trashed_at ? humanTimeDiff( record.trashed_at ) : '',
+		record[ state.atKey ] ? humanTimeDiff( record[ state.atKey ] ) : '',
 	].filter( Boolean );
 
 	// The listbox owns focus and keyboard input through
@@ -63,20 +54,22 @@ function TrashItem( {
 		// eslint-disable-next-line jsx-a11y/click-events-have-key-events
 		<div
 			ref={ optionRef }
-			id={ `cortext-trash-item-${ record.id }` }
-			className="cortext-trash__item"
+			id={ `cortext-lifecycle-item-${ record.id }` }
+			className="cortext-lifecycle__item"
 			role="option"
 			tabIndex={ -1 }
 			aria-selected={ isSelected }
 			data-cortext-document-id={ record.id }
 			onClick={ () => onSelect( record.id ) }
 		>
-			<span className="cortext-trash__item-icon">{ listIcon( 16 ) }</span>
-			<span className="cortext-trash__item-text">
-				<span className="cortext-trash__item-title">
+			<span className="cortext-lifecycle__item-icon">
+				{ listIcon( 16 ) }
+			</span>
+			<span className="cortext-lifecycle__item-text">
+				<span className="cortext-lifecycle__item-title">
 					<span>{ title }</span>
 					{ counts.total > 0 && (
-						<span className="cortext-trash__badge">
+						<span className="cortext-lifecycle__badge">
 							{ sprintf(
 								/* translators: %d: number of nested documents restored with this one */
 								__( '+%d', 'cortext' ),
@@ -86,7 +79,7 @@ function TrashItem( {
 					) }
 				</span>
 				{ match ? (
-					<span className="cortext-trash__item-meta">
+					<span className="cortext-lifecycle__item-meta">
 						{ sprintf(
 							/* translators: %s: title of a nested document that matches the search */
 							__( 'Contains “%s”', 'cortext' ),
@@ -94,16 +87,16 @@ function TrashItem( {
 						) }
 					</span>
 				) : (
-					<span className="cortext-trash__item-meta">
+					<span className="cortext-lifecycle__item-meta">
 						{ /* Where it hung from, as breadcrumbs. A long path gives way
 						from its start, so the closest parent stays visible. */ }
 						{ path.length > 0 && (
-							<span className="cortext-trash__item-path">
+							<span className="cortext-lifecycle__item-path">
 								<bdi>{ path.join( ' / ' ) }</bdi>
 							</span>
 						) }
 						{ details.length > 0 && (
-							<span className="cortext-trash__item-details">
+							<span className="cortext-lifecycle__item-details">
 								{ path.length > 0 ? '\u00a0· ' : '' }
 								{ details.join( ' · ' ) }
 							</span>
@@ -111,7 +104,10 @@ function TrashItem( {
 					</span>
 				) }
 				{ error && (
-					<span className="cortext-trash__item-error" role="alert">
+					<span
+						className="cortext-lifecycle__item-error"
+						role="alert"
+					>
 						{ error.message }
 					</span>
 				) }
@@ -120,7 +116,7 @@ function TrashItem( {
 	);
 }
 
-function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
+function LifecycleSidebarList( { state, documentsState, selectedId } ) {
 	const navigate = useNavigate();
 	// Every active page, not the sidebar tree, which only holds the branches
 	// someone expanded: an item's parent can sit in a collapsed one.
@@ -129,11 +125,11 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 		POST_TYPE,
 		ACTIVE_PAGES_QUERY
 	);
-	const trashedByName = useTrashedByName();
-	const list = useSidebarLifecycleList(
-		trashedDocumentsState,
+	const byName = useLifecycleByName( state.byKey );
+	const list = useLifecycleList(
+		documentsState,
 		activePages,
-		TRASH_MARKER_META_KEYS
+		state.markerKeys
 	);
 	const {
 		ancestorById,
@@ -146,46 +142,18 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 		rowError,
 		showSkeleton,
 	} = list;
-	const { restore, requestDelete, confirmDialog } = useTrashActions( list );
-	const { emptyTrash } = useDocumentActions();
-	const { createErrorNotice, createSuccessNotice } =
-		useDispatch( 'core/notices' );
+	const { restore, requestSecondary, confirmDialog } = useLifecycleActions(
+		state,
+		list
+	);
+	const copy = state.copy();
+	const { HeaderAction } = state;
 	const [ search, setSearch ] = useState( '' );
 	const [ typeFilter, setTypeFilter ] = useState( 'all' );
-	const [ isConfirmingEmpty, setIsConfirmingEmpty ] = useState( false );
-	const [ isEmptying, setIsEmptying ] = useState( false );
-
-	const handleEmptyTrash = useCallback( async () => {
-		setIsConfirmingEmpty( false );
-		setIsEmptying( true );
-		try {
-			const response = await emptyTrash();
-			const count = response?.deleted?.length ?? 0;
-			createSuccessNotice(
-				sprintf(
-					/* translators: %d: number of documents deleted for good */
-					_n(
-						'%d document deleted permanently.',
-						'%d documents deleted permanently.',
-						count,
-						'cortext'
-					),
-					count
-				),
-				{ id: 'cortext-trash-emptied', type: 'snackbar' }
-			);
-		} catch ( error ) {
-			createErrorNotice(
-				error?.message ?? __( 'Could not empty Trash.', 'cortext' ),
-				{ id: 'cortext-trash-emptied', type: 'snackbar' }
-			);
-		} finally {
-			setIsEmptying( false );
-		}
-	}, [ createErrorNotice, createSuccessNotice, emptyTrash ] );
 
 	const items = useMemo(
-		() => filterTrashItems( roots, descendantsById, search, typeFilter ),
+		() =>
+			filterLifecycleItems( roots, descendantsById, search, typeFilter ),
 		[ descendantsById, roots, search, typeFilter ]
 	);
 
@@ -208,22 +176,23 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 	}, [ selectedIndex ] );
 
 	// Selection lives in the URL so the canvas can show it and it survives a
-	// reload, but it replaces the history entry: Back leaves Trash instead of
-	// stepping through items.
+	// reload, but it replaces the history entry: Back leaves the view instead
+	// of stepping through items.
+	const { uri } = state;
 	const select = useCallback(
 		( id ) =>
 			navigate( {
 				to: '/$',
-				params: { _splat: trashUri( id ) },
+				params: { _splat: uri( id ) },
 				replace: true,
 			} ),
-		[ navigate ]
+		[ navigate, uri ]
 	);
 	const selectedItemId = selectedItem?.record.id ?? null;
 	// Wait for the first response: before it, an empty list only means the
 	// list hasn't loaded, and dropping the selection would lose the URL's item.
-	const isTrashEmpty =
-		trashedDocumentsState.hasResolved && ! hasError && roots.length === 0;
+	const isListEmpty =
+		documentsState.hasResolved && ! hasError && roots.length === 0;
 	useEffect( () => {
 		if ( isLoading ) {
 			return;
@@ -232,21 +201,22 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 			select( selectedItemId );
 			return;
 		}
-		// Nothing left to show: let the canvas say Trash is empty.
-		if ( isTrashEmpty && selectedId ) {
+		// Nothing left to show: let the canvas say the view is empty.
+		if ( isListEmpty && selectedId ) {
 			navigate( {
 				to: '/$',
-				params: { _splat: trashUri() },
+				params: { _splat: uri() },
 				replace: true,
 			} );
 		}
 	}, [
+		isListEmpty,
 		isLoading,
-		isTrashEmpty,
 		navigate,
 		select,
 		selectedId,
 		selectedItemId,
+		uri,
 	] );
 
 	// Clicking an item moves focus to the list, so the keyboard shortcuts
@@ -308,7 +278,7 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 				case 'Backspace':
 				case 'Delete':
 					event.preventDefault();
-					requestDelete( selectedItem.record );
+					requestSecondary( selectedItem.record );
 					return;
 				default:
 					return;
@@ -316,7 +286,7 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 			event.preventDefault();
 			select( next.record.id );
 		},
-		[ busyId, items, requestDelete, restore, select, selectedItem ]
+		[ busyId, items, requestSecondary, restore, select, selectedItem ]
 	);
 
 	let listContent;
@@ -326,25 +296,20 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 		) : null;
 	} else if ( hasError ) {
 		listContent = (
-			<div className="cortext-trash__message" role="alert">
-				<p>{ __( 'Could not load Trash.', 'cortext' ) }</p>
-				<Button
-					variant="secondary"
-					onClick={ trashedDocumentsState.refresh }
-				>
+			<div className="cortext-lifecycle__message" role="alert">
+				<p>{ copy.loadError }</p>
+				<Button variant="secondary" onClick={ documentsState.refresh }>
 					{ __( 'Retry', 'cortext' ) }
 				</Button>
 			</div>
 		);
 	} else if ( roots.length === 0 ) {
 		listContent = (
-			<p className="cortext-trash__message">
-				{ __( 'Trash is empty.', 'cortext' ) }
-			</p>
+			<p className="cortext-lifecycle__message">{ copy.emptyList }</p>
 		);
 	} else if ( items.length === 0 ) {
 		listContent = (
-			<p className="cortext-trash__message">
+			<p className="cortext-lifecycle__message">
 				{ __( 'Nothing matches.', 'cortext' ) }
 			</p>
 		);
@@ -352,20 +317,21 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 		listContent = (
 			<div
 				ref={ listboxRef }
-				className="cortext-trash__items"
+				className="cortext-lifecycle__items"
 				role="listbox"
 				tabIndex={ 0 }
-				aria-label={ __( 'Items in Trash', 'cortext' ) }
+				aria-label={ copy.listLabel }
 				aria-activedescendant={
 					selectedItemId
-						? `cortext-trash-item-${ selectedItemId }`
+						? `cortext-lifecycle-item-${ selectedItemId }`
 						: undefined
 				}
 				onKeyDown={ onListKeyDown }
 			>
 				{ items.map( ( item ) => (
-					<TrashItem
+					<LifecycleItem
 						key={ item.record.id }
+						state={ state }
 						optionRef={ ( node ) =>
 							node
 								? optionRefs.current.set( item.record.id, node )
@@ -377,7 +343,7 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 							EMPTY_COUNTS
 						}
 						path={ originalPath( item.record, ancestorById ) }
-						byName={ trashedByName( item.record ) }
+						byName={ byName( item.record ) }
 						isSelected={ item.record.id === selectedItemId }
 						error={
 							rowError?.id === item.record.id ? rowError : null
@@ -391,47 +357,40 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 
 	return (
 		<>
-			<div className="cortext-sidebar__section-header cortext-trash__header">
+			<div className="cortext-sidebar__section-header cortext-lifecycle__header">
 				<h2 className="cortext-sidebar__section-title">
-					{ __( 'Trash', 'cortext' ) }
+					{ copy.title }
 					{ roots.length > 0 && (
-						<span className="cortext-trash__count">
+						<span className="cortext-lifecycle__count">
 							{ roots.length }
 						</span>
 					) }
 				</h2>
-				{ roots.length > 0 && (
+				{ HeaderAction && roots.length > 0 && (
 					<div className="cortext-sidebar__section-actions">
-						<Button
-							className="cortext-sidebar__section-action cortext-trash__empty-button"
-							icon={ trashIcon }
-							size="small"
-							label={ __( 'Empty Trash…', 'cortext' ) }
-							disabled={ isEmptying }
-							onClick={ () => setIsConfirmingEmpty( true ) }
-						/>
+						<HeaderAction count={ roots.length } />
 					</div>
 				) }
 			</div>
 			{ roots.length > 0 && (
-				<div className="cortext-trash__filters">
+				<div className="cortext-lifecycle__filters">
 					<SearchControl
 						__nextHasNoMarginBottom
 						value={ search }
 						onChange={ setSearch }
-						label={ __( 'Search Trash', 'cortext' ) }
-						placeholder={ __( 'Search Trash', 'cortext' ) }
+						label={ copy.searchLabel }
+						placeholder={ copy.searchLabel }
 						size="compact"
 					/>
 					<div
-						className="cortext-trash__type-filters"
+						className="cortext-lifecycle__type-filters"
 						role="group"
 						aria-label={ __( 'Type', 'cortext' ) }
 					>
 						{ typeFilters().map( ( filter ) => (
 							<Button
 								key={ filter.value }
-								className="cortext-trash__type-filter"
+								className="cortext-lifecycle__type-filter"
 								size="small"
 								isPressed={ typeFilter === filter.value }
 								onClick={ () => setTypeFilter( filter.value ) }
@@ -442,16 +401,16 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 					</div>
 				</div>
 			) }
-			<div ref={ scrollRef } className="cortext-trash__list-scroll">
+			<div ref={ scrollRef } className="cortext-lifecycle__list-scroll">
 				{ listContent }
 			</div>
 			{ items.length > 0 && (
-				<p className="cortext-trash__shortcuts" aria-hidden="true">
+				<p className="cortext-lifecycle__shortcuts" aria-hidden="true">
 					<span>
-						<kbd>↵</kbd> { __( 'restore', 'cortext' ) }
+						<kbd>↵</kbd> { copy.primaryShortcut }
 					</span>
 					<span>
-						<kbd>⌫</kbd> { __( 'delete', 'cortext' ) }
+						<kbd>⌫</kbd> { copy.secondaryShortcut }
 					</span>
 					<span>
 						<kbd>↑↓</kbd> { __( 'move', 'cortext' ) }
@@ -459,50 +418,35 @@ function TrashSidebarList( { trashedDocumentsState, selectedId } ) {
 				</p>
 			) }
 			{ confirmDialog }
-			{ isConfirmingEmpty && (
-				<ConfirmDialog
-					onConfirm={ handleEmptyTrash }
-					onCancel={ () => setIsConfirmingEmpty( false ) }
-					confirmButtonText={ __( 'Empty Trash', 'cortext' ) }
-				>
-					{ sprintf(
-						/* translators: %d: number of items in Trash */
-						_n(
-							"Delete %d item in Trash permanently? This can't be undone.",
-							"Delete all %d items in Trash permanently? This can't be undone.",
-							roots.length,
-							'cortext'
-						),
-						roots.length
-					) }
-				</ConfirmDialog>
-			) }
 		</>
 	);
 }
 
 /**
- * The sidebar while Trash is open: a way back, how much is in Trash and a way
- * to empty it, then the trashed items with search, type filters, and keyboard
- * shortcuts. The selected item opens in the canvas.
+ * The sidebar while a lifecycle view (Trash, Archived) is open: a way back,
+ * how many items the view holds and its header action, then the items with
+ * search, type filters, and keyboard shortcuts. The selected item opens in the
+ * canvas.
  *
- * Only cascade roots are listed. Documents trashed along with a parent or a
+ * Only cascade roots are listed. Documents that went along with a parent or a
  * collection come back, or go away, with it.
  *
  * @param {Object}   props
- * @param {boolean}  props.collapsed             Whether the sidebar is collapsed.
- * @param {Function} props.onBack                Leaves Trash.
- * @param {Object}   props.trashedDocumentsState Trashed document query state.
- * @param {?number}  props.selectedId            Item selected in the URL.
+ * @param {Object}   props.state          Lifecycle state from `lifecycleStates`.
+ * @param {boolean}  props.collapsed      Whether the sidebar is collapsed.
+ * @param {Function} props.onBack         Leaves the view.
+ * @param {Object}   props.documentsState The state's document query state.
+ * @param {?number}  props.selectedId     Item selected in the URL.
  */
-export default function TrashSidebar( {
+export default function LifecycleSidebar( {
+	state,
 	collapsed,
 	onBack,
-	trashedDocumentsState,
+	documentsState,
 	selectedId,
 } ) {
 	return (
-		<div className="cortext-sidebar__trash">
+		<div className="cortext-sidebar__lifecycle">
 			<div className="cortext-sidebar__quick-actions cortext-sidebar__settings-nav">
 				<Button
 					className="cortext-sidebar__quick-action cortext-sidebar__settings-back"
@@ -515,8 +459,12 @@ export default function TrashSidebar( {
 			</div>
 			{ ! collapsed && (
 				<DocumentsProvider>
-					<TrashSidebarList
-						trashedDocumentsState={ trashedDocumentsState }
+					<LifecycleSidebarList
+						// A fresh list per state, so search, filters and the
+						// remembered position don't carry over.
+						key={ state.name }
+						state={ state }
+						documentsState={ documentsState }
 						selectedId={ selectedId }
 					/>
 				</DocumentsProvider>

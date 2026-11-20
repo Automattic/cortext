@@ -5,6 +5,7 @@ import {
 	SETTINGS_IMPORT_URI,
 	SETTINGS_PUBLISHED_URI,
 	SETTINGS_URI,
+	isArchivedUri,
 	isTrashUri,
 	parseIdFromUri,
 	parseSplatUri,
@@ -33,19 +34,40 @@ export function parseTarget( splat, options = {} ) {
 		}
 		return { kind: 'published', tail: '' };
 	}
-	if ( isTrashUri( splat ) ) {
-		// `trash/<id>` opens that trashed document in the canvas while the
-		// sidebar lists Trash. `trash` alone is the Trash pane itself.
+	// `trash/<id>` and `archived/<id>` open that document in the canvas while
+	// the sidebar lists its view. `trash` and `archived` alone are the panes
+	// shown when nothing is selected.
+	const lifecycle = lifecycleOfUri( splat );
+	if ( lifecycle ) {
 		const id = Number( parseSplatUri( splat ).tail ) || null;
 		if ( id ) {
-			return { kind: 'document', id, tail: `${ id }`, inTrash: true };
+			return {
+				kind: 'document',
+				id,
+				tail: `${ id }`,
+				fromLifecycle: lifecycle,
+			};
 		}
-		return { kind: 'trash', tail: '' };
+		return { kind: lifecycle, tail: '' };
 	}
 	if ( ! splat ) {
 		return { kind: 'empty', tail: '' };
 	}
 	return { kind: 'document', id: parseIdFromUri( splat ), tail: splat };
+}
+
+function lifecycleOfUri( splat ) {
+	if ( isTrashUri( splat ) ) {
+		return 'trash';
+	}
+	if ( isArchivedUri( splat ) ) {
+		return 'archived';
+	}
+	return null;
+}
+
+function isLifecyclePane( target ) {
+	return target.kind === 'trash' || target.kind === 'archived';
 }
 
 function isContentPane( active ) {
@@ -69,8 +91,8 @@ export function reducer( state, action ) {
 				active = { kind: 'experiments' };
 			} else if ( target.kind === 'import' ) {
 				active = { kind: 'import' };
-			} else if ( target.kind === 'trash' ) {
-				active = { kind: 'trash' };
+			} else if ( isLifecyclePane( target ) ) {
+				active = { kind: target.kind };
 			} else if ( target.kind === 'document' ) {
 				if ( target.id === null ) {
 					active = { kind: 'document-not-found' };
@@ -144,8 +166,8 @@ export function init( target ) {
 		active = { kind: 'experiments' };
 	} else if ( target.kind === 'import' ) {
 		active = { kind: 'import' };
-	} else if ( target.kind === 'trash' ) {
-		active = { kind: 'trash' };
+	} else if ( isLifecyclePane( target ) ) {
+		active = { kind: target.kind };
 	} else if ( target.kind === 'redirect' ) {
 		active = { kind: 'loading' };
 	} else if ( target.kind === 'document' && target.id === null ) {

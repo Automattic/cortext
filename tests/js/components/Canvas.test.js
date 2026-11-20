@@ -345,9 +345,9 @@ describe( 'Canvas archived lifecycle lock', () => {
 			postType: 'crtxt_document',
 			enabled: false,
 		} );
-		expect( DocumentPublishToggle.mock.calls.at( -1 )[ 0 ].disabled ).toBe(
-			true
-		);
+		// Publishing doesn't apply to an archived document, so the toggle
+		// stays out of the top bar until it is restored.
+		expect( DocumentPublishToggle ).not.toHaveBeenCalled();
 		expect( EditorBody.mock.calls.at( -1 )[ 0 ].isLocked ).toBe( true );
 		expect(
 			DocumentInspectorSidebar.mock.calls.at( -1 )[ 0 ].isLocked

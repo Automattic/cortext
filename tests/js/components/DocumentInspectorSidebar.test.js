@@ -76,7 +76,7 @@ jest.mock( '@wordpress/data', () => ( {
 jest.mock( '@wordpress/editor', () => ( { store: {} } ) );
 jest.mock( '@wordpress/i18n', () => ( { __: ( value ) => value } ) );
 jest.mock( '@wordpress/icons', () => ( {
-	archive: 'archive',
+	box: 'archive',
 	home: 'home',
 	lock: 'lock',
 	unlock: 'unlock',

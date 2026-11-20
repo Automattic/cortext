@@ -148,6 +148,8 @@ jest.mock( '../../../src/components/dataViewScroll', () => {
 	};
 } );
 
+import { select } from '@wordpress/data';
+import { store as noticesStore } from '@wordpress/notices';
 import { useCollectionFieldsContext } from '../../../src/components/CollectionFieldsContext';
 import CollectionDataViews from '../../../src/components/CollectionDataViews';
 import { RowMutationContext } from '../../../src/components/EditableCell';
@@ -649,6 +651,26 @@ describe( 'CollectionDataViews archive actions', () => {
 			method: 'POST',
 		} );
 		expect( rowsState.refresh ).toHaveBeenCalledTimes( 1 );
+
+		const notice = select( noticesStore )
+			.getNotices()
+			.find( ( { id } ) => id === 'cortext-document-archive-success' );
+		expect( notice.content ).toBe( '2 documents archived.' );
+
+		apiFetch.mockReset().mockResolvedValue( { restored: [], post: null } );
+		await act( async () => {
+			await notice.actions
+				.find( ( action ) => action.label === 'Undo' )
+				.onClick();
+		} );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/1/unarchive',
+			method: 'POST',
+		} );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/cortext/v1/documents/2/unarchive',
+			method: 'POST',
+		} );
 	} );
 
 	it( 'flushes and closes an open selected row before archiving it', async () => {

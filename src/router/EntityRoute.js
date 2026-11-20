@@ -31,7 +31,8 @@ import { RowMutationContext } from '../components/EditableCell';
 import ExperimentsPane from '../components/ExperimentsPane';
 import ImportPane from '../components/ImportPane';
 import PublishedDocumentsPane from '../components/PublishedDocumentsPane';
-import TrashView from '../components/trash/TrashView';
+import LifecycleView from '../components/lifecycle/LifecycleView';
+import { ARCHIVED, TRASH } from '../components/lifecycle/lifecycleStates';
 import { CanvasProgressBar } from '../components/Skeleton';
 import useDelayedFlag from '../hooks/useDelayedFlag';
 import CortextSnackbars from '../components/CortextSnackbars';
@@ -261,13 +262,14 @@ export default function EntityRoute( { history } ) {
 			} );
 			return;
 		}
-		// Settings and Trash panes are lightweight. A plain fade keeps
+		// Settings, Trash and Archived panes are lightweight. A plain fade keeps
 		// Chrome's default blend from washing out the transition to white.
 		if (
 			after.active.kind === 'experiments' ||
 			after.active.kind === 'import' ||
 			after.active.kind === 'published' ||
-			after.active.kind === 'trash'
+			after.active.kind === 'trash' ||
+			after.active.kind === 'archived'
 		) {
 			withViewTransition( deferredDispatch, {
 				mode: 'pane-crossfade',
@@ -425,10 +427,10 @@ export default function EntityRoute( { history } ) {
 			// Rows touch recents in the row-specific effect below, which has
 			// the parent collection id ready as breadcrumb context. Everything
 			// else (pages, collections) just records the open document by id.
-			// Browsing Trash opens trashed documents; they don't belong in
+			// Browsing Trash or Archived opens documents that don't belong in
 			// Recents.
 			if (
-				! target.inTrash &&
+				! target.fromLifecycle &&
 				( documentResolution.traitIds?.length ?? 0 ) === 0
 			) {
 				touchRecent( { id: entity.id } );
@@ -453,7 +455,7 @@ export default function EntityRoute( { history } ) {
 		if (
 			target.kind !== 'document' ||
 			target.id === null ||
-			target.inTrash ||
+			target.fromLifecycle ||
 			mountedDocumentId !== target.id ||
 			! rowParentCollectionId
 		) {
@@ -466,7 +468,7 @@ export default function EntityRoute( { history } ) {
 	}, [
 		target.kind,
 		target.id,
-		target.inTrash,
+		target.fromLifecycle,
 		mountedDocumentId,
 		rowParentCollectionId,
 		touchRecent,
@@ -591,13 +593,20 @@ export default function EntityRoute( { history } ) {
 				<WorkspacePane active={ active.kind === 'import' }>
 					<ImportPane />
 				</WorkspacePane>
-				<WorkspacePane active={ active.kind === 'trash' }>
-					<TrashView
-						isActive={
-							active.kind === 'trash' && target.kind === 'trash'
-						}
-					/>
-				</WorkspacePane>
+				{ [ TRASH, ARCHIVED ].map( ( lifecycle ) => (
+					<WorkspacePane
+						key={ lifecycle.name }
+						active={ active.kind === lifecycle.name }
+					>
+						<LifecycleView
+							state={ lifecycle }
+							isActive={
+								active.kind === lifecycle.name &&
+								target.kind === lifecycle.name
+							}
+						/>
+					</WorkspacePane>
+				) ) }
 				<WorkspacePane active={ active.kind === 'empty' }>
 					<EmptyState isWorkspaceEmpty={ isWorkspaceEmpty } />
 				</WorkspacePane>

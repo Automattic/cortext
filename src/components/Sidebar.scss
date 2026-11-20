@@ -124,14 +124,15 @@
 	}
 
 	&__view--settings,
-	&__view--trash {
+	&__view--lifecycle {
 		transform: translateX(100%);
 		opacity: 0;
 		pointer-events: none;
 	}
 
 	&__views[data-mode="settings"],
-	&__views[data-mode="trash"] {
+	&__views[data-mode="trash"],
+	&__views[data-mode="archived"] {
 
 		.cortext-sidebar__view--main {
 			transform: translateX(-25%);
@@ -141,7 +142,8 @@
 	}
 
 	&__views[data-mode="settings"] .cortext-sidebar__view--settings,
-	&__views[data-mode="trash"] .cortext-sidebar__view--trash {
+	&__views[data-mode="trash"] .cortext-sidebar__view--lifecycle,
+	&__views[data-mode="archived"] .cortext-sidebar__view--lifecycle {
 		transform: translateX(0);
 		opacity: 1;
 		pointer-events: auto;
@@ -357,61 +359,6 @@
 		height: $grid-unit-40;
 		padding: 0;
 		justify-content: center;
-	}
-
-	&__archive-footer.components-button {
-		width: auto;
-		gap: $grid-unit-05;
-		padding: 0 $grid-unit-10;
-	}
-
-	&__trash-footer.components-button {
-		position: relative;
-	}
-
-	&__footer-dot {
-		position: absolute;
-		top: 5px;
-		right: 5px;
-		width: 5px;
-		height: 5px;
-		border-radius: 50%;
-		background: currentcolor;
-	}
-
-	&__footer-count {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 16px;
-		height: 16px;
-		padding: 0 5px;
-		border-radius: 999px;
-		background: var(--cortext-count-badge-surface);
-		color: var(--cortext-count-badge-text);
-		font-size: 10px;
-		font-weight: 600;
-		line-height: 16px;
-		text-align: center;
-	}
-
-	&__trash-panel {
-		flex: 0 1 auto;
-		max-height: min(280px, 38vh);
-		overflow-y: auto;
-		padding: $grid-unit-10 $grid-unit-15;
-		border-top: var(--cortext-shell-border-width) solid var(--cortext-chrome-border);
-	}
-
-	&__trash-panel-header {
-		display: flex;
-		align-items: center;
-		padding: $grid-unit-10 $grid-unit-05 0;
-	}
-
-	&__trash-panel-header &__section-title {
-		margin: 0;
-		padding: 0;
 	}
 
 	/* stylelint-disable-next-line no-descending-specificity */
@@ -773,84 +720,6 @@
 		white-space: nowrap;
 	}
 
-	/* stylelint-disable-next-line no-descending-specificity */
-	&__trash-row .cortext-sidebar__row {
-		padding: $grid-unit-05;
-		align-items: flex-start;
-	}
-
-	// The whole trash row's title/breadcrumb is one Button so the user can
-	// click anywhere on the text to open the trashed page in the canvas.
-	// Override the default inline-flex / center alignment so the two lines
-	// stack vertically with the title on top.
-	&__trash-text.components-button {
-		flex: 1 1 auto;
-		min-width: 0;
-		height: auto;
-		padding: 2px $grid-unit-05;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 2px;
-		text-align: start;
-	}
-
-	&__trash-title {
-		font-weight: 500;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		max-width: 100%;
-		display: inline-flex;
-		align-items: center;
-		gap: $grid-unit-05;
-	}
-
-	&__trash-title-text {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	&__breadcrumb {
-		font-size: 11px;
-		color: $gray-700;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	&__breadcrumb-crumb {
-		display: inline-flex;
-		align-items: center;
-		gap: 2px;
-	}
-
-	&__breadcrumb-sep {
-		margin: 0 2px;
-	}
-
-	&__trash-actions {
-		flex: 0 0 auto;
-		display: flex;
-		gap: 2px;
-		opacity: 0;
-		transition: opacity 0.12s ease;
-	}
-
-	&__trash-row:hover &__trash-actions,
-	&__trash-row:focus-within &__trash-actions {
-		opacity: 1;
-	}
-
-	&__error {
-		padding: $grid-unit-10;
-		display: flex;
-		flex-direction: column;
-		gap: $grid-unit-05;
-		color: $gray-700;
-	}
-
 	&__row-error {
 		margin: 0;
 		padding: 0 $grid-unit-05;
@@ -956,16 +825,6 @@
 			border-color: transparent;
 			background: transparent;
 			box-shadow: none;
-		}
-
-		.cortext-sidebar__archive-footer.components-button {
-			width: $grid-unit-40;
-			min-width: $grid-unit-40;
-			padding: 0;
-		}
-
-		.cortext-sidebar__footer-count {
-			display: none;
 		}
 	}
 }

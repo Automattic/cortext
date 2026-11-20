@@ -27,7 +27,7 @@ import {
 } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import {
-	archive,
+	box as archiveIcon,
 	home as homeIcon,
 	lock as lockIcon,
 	starEmpty,
@@ -710,7 +710,7 @@ export function PageActionsPanel( { postId } ) {
 				<Button
 					className="cortext-document-inspector__action-button"
 					variant="secondary"
-					icon={ archive }
+					icon={ archiveIcon }
 					label={ __( 'Archive', 'cortext' ) }
 					onClick={ archivePage }
 					isBusy={ isArchiving }
