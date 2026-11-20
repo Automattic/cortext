@@ -69,10 +69,51 @@ final class FieldsController {
 		'date_range',
 	);
 
+	/**
+	 * Target field meta copied onto a rollup, keyed by the source meta key.
+	 * The target's `type` is handled separately because it lands under a name
+	 * that does not follow the same pattern.
+	 *
+	 * @var array<string,string>
+	 */
+	private const ROLLUP_TARGET_META_MAP = array(
+		'options'               => 'rollup_target_options',
+		'number_format'         => 'rollup_target_number_format',
+		'date_format'           => 'rollup_target_date_format',
+		'related_collection_id' => 'rollup_target_related_collection_id',
+		'relation_multiple'     => 'rollup_target_relation_multiple',
+	);
+
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
 		add_filter( 'rest_pre_insert_' . Field::POST_TYPE, array( $this, 'guard_core_field_write' ), 5, 2 );
 		add_filter( 'rest_dispatch_request', array( $this, 'guard_core_field_delete' ), 10, 4 );
+		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $hook ) {
+			add_action( $hook, array( $this, 'refresh_rollups_on_target_format_change' ), 10, 3 );
+		}
+	}
+
+	/**
+	 * Keeps rollup snapshots in step when a target field's format changes.
+	 *
+	 * Formats are written straight to meta by the format popover rather than
+	 * through a Cortext route, so there is no handler to hang the refresh on.
+	 * Only the source keys are watched, which is also what keeps the refresh's
+	 * own `rollup_target_*` writes from coming back around.
+	 *
+	 * @param mixed  $meta_id   Meta row ID, or IDs on delete. Unused.
+	 * @param int    $object_id Post the meta belongs to.
+	 * @param string $meta_key  Meta key that changed.
+	 */
+	public function refresh_rollups_on_target_format_change( mixed $meta_id, int $object_id, string $meta_key ): void {
+		if ( ! in_array( $meta_key, array( 'number_format', 'date_format' ), true ) ) {
+			return;
+		}
+		if ( Field::POST_TYPE !== get_post_type( $object_id ) ) {
+			return;
+		}
+
+		$this->refresh_rollup_snapshots_for_target( $object_id );
 	}
 
 	public function register_routes(): void {
@@ -568,6 +609,7 @@ final class FieldsController {
 				'rollup_target_date_format',
 				'rollup_target_related_collection_id',
 				'rollup_target_relation_multiple',
+				'rollup_invalid',
 			) as $key
 		) {
 			$value = get_post_meta( $field_id, $key, true );
@@ -634,6 +676,7 @@ final class FieldsController {
 
 		update_post_meta( $field_id, 'options', wp_json_encode( $normalized ) );
 		$this->reconcile_option_default( $field_id, $type, $normalized, is_array( $migrations ) ? $migrations : array() );
+		$this->refresh_rollup_snapshots_for_target( $field_id );
 
 		return new WP_REST_Response(
 			array(
@@ -733,6 +776,7 @@ final class FieldsController {
 
 		delete_post_meta( $field_id, FieldDefaults::META_KEY );
 		update_post_meta( $field_id, 'type', $target_type );
+		$this->refresh_rollup_snapshots_for_target( $field_id );
 
 		return new WP_REST_Response(
 			array(
@@ -1465,15 +1509,7 @@ final class FieldsController {
 			$meta['rollup_target_type'] = $target_type;
 		}
 
-		foreach (
-			array(
-				'options'               => 'rollup_target_options',
-				'number_format'         => 'rollup_target_number_format',
-				'date_format'           => 'rollup_target_date_format',
-				'related_collection_id' => 'rollup_target_related_collection_id',
-				'relation_multiple'     => 'rollup_target_relation_multiple',
-			) as $source_key => $rollup_key
-		) {
+		foreach ( self::ROLLUP_TARGET_META_MAP as $source_key => $rollup_key ) {
 			$value = get_post_meta( $target_field_id, $source_key, true );
 			if ( '' !== $value && null !== $value ) {
 				$meta[ $rollup_key ] = (string) $value;
@@ -1481,6 +1517,67 @@ final class FieldsController {
 		}
 
 		return $meta;
+	}
+
+	/**
+	 * Rebuilds the cached target snapshot on every rollup that reads a field,
+	 * and records whether each one still has a workable configuration.
+	 *
+	 * A rollup copies its target's type, options, and formats at configuration
+	 * time so rendering a row does not have to fetch the target field. Changing
+	 * that target's type or options leaves the copy describing a shape the
+	 * field no longer has, which is how a rollup ends up formatting values it
+	 * never held.
+	 *
+	 * @param int $target_field_id Field whose type or options just changed.
+	 */
+	private function refresh_rollup_snapshots_for_target( int $target_field_id ): void {
+		$dependents = ( new Field() )->rollup_ids_targeting( $target_field_id );
+		if ( count( $dependents ) === 0 ) {
+			return;
+		}
+
+		$snapshot_keys = array_merge(
+			array( 'rollup_target_type' ),
+			array_values( self::ROLLUP_TARGET_META_MAP )
+		);
+		$fresh         = $this->rollup_target_meta( $target_field_id );
+
+		foreach ( $dependents as $rollup_id ) {
+			foreach ( $snapshot_keys as $key ) {
+				if ( isset( $fresh[ $key ] ) ) {
+					update_post_meta( $rollup_id, $key, $fresh[ $key ] );
+					continue;
+				}
+				delete_post_meta( $rollup_id, $key );
+			}
+			$this->record_rollup_validity( $rollup_id );
+		}
+	}
+
+	/**
+	 * Flags a rollup whose stored configuration stopped validating, so the read
+	 * path can render it empty and the field editor can offer a repair instead
+	 * of aggregating over a target that changed shape underneath it.
+	 *
+	 * @param int $rollup_id Rollup field post ID.
+	 */
+	private function record_rollup_validity( int $rollup_id ): void {
+		// A rollup stored without an aggregator reads as a count.
+		$aggregator = (string) get_post_meta( $rollup_id, 'rollup_aggregator', true );
+		$valid      = $this->validate_rollup_config(
+			$this->collection_id_for_field( $rollup_id ),
+			(int) get_post_meta( $rollup_id, 'rollup_relation_field_id', true ),
+			(int) get_post_meta( $rollup_id, 'rollup_target_field_id', true ),
+			'' === $aggregator ? 'count' : $aggregator
+		);
+
+		if ( is_wp_error( $valid ) ) {
+			update_post_meta( $rollup_id, 'rollup_invalid', '1' );
+			return;
+		}
+
+		delete_post_meta( $rollup_id, 'rollup_invalid' );
 	}
 
 	private function validate_rollup_config(

@@ -250,15 +250,32 @@ final class Field {
 	}
 
 	/**
-	 * Finds rollup fields that use a field as their relation or target.
+	 * Finds rollup fields that read a field as their target property.
 	 *
-	 * @param int $field_id Dependency field post ID.
+	 * A rollup copies its target's type, options, and formats at configuration
+	 * time, so whoever changes the target has to find these and refresh them.
+	 *
+	 * @param int $target_field_id Target field post ID.
 	 * @return int[]
 	 */
-	private function dependent_rollup_ids( int $field_id ): array {
+	public function rollup_ids_targeting( int $target_field_id ): array {
+		return $this->dependent_rollup_ids( $target_field_id, array( 'rollup_target_field_id' ) );
+	}
+
+	/**
+	 * Finds rollup fields that use a field as their relation or target.
+	 *
+	 * @param int      $field_id  Dependency field post ID.
+	 * @param string[] $meta_keys Rollup meta keys to match the field against.
+	 * @return int[]
+	 */
+	private function dependent_rollup_ids(
+		int $field_id,
+		array $meta_keys = array( 'rollup_relation_field_id', 'rollup_target_field_id' )
+	): array {
 		$field_id_str = (string) $field_id;
 		$rollup_ids   = array();
-		foreach ( array( 'rollup_relation_field_id', 'rollup_target_field_id' ) as $meta_key ) {
+		foreach ( $meta_keys as $meta_key ) {
 			$dependents = get_posts(
 				array(
 					'post_type'      => self::POST_TYPE,
@@ -678,6 +695,17 @@ final class Field {
 				'type'         => 'boolean',
 				'single'       => true,
 				'show_in_rest' => true,
+			)
+		);
+
+		register_post_meta(
+			self::POST_TYPE,
+			'rollup_invalid',
+			array(
+				'type'          => 'boolean',
+				'single'        => true,
+				'show_in_rest'  => true,
+				'auth_callback' => '__return_false',
 			)
 		);
 
