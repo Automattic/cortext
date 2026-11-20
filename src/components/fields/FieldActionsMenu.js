@@ -241,6 +241,15 @@ export default function FieldActionsMenu( {
 	// headers. Both are sibling popovers that act like submenus.
 	const hideMenuOnInteractOutside = useCallback( ( event ) => {
 		const target = event.target;
+		// The block editor re-dispatches pointer events from its iframe on the
+		// iframe element. A copy from the menu's own iframe is not an outside
+		// interaction; Ariakit already handled the original inside the iframe.
+		if (
+			target?.tagName === 'IFRAME' &&
+			target.contentDocument === optionsAnchorRef.current?.ownerDocument
+		) {
+			return false;
+		}
 		if ( target && typeof target.closest === 'function' ) {
 			if (
 				target.closest( '.cortext-format-submenu' ) ||
