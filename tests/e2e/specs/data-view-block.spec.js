@@ -230,7 +230,7 @@ async function startParentToolbarOverlapFlashLog( page ) {
 			).filter( ( toolbar ) => isVisible( toolbar, window ) );
 			const menus = Array.from(
 				iframeDocument.querySelectorAll(
-					'[data-dialog][role="menu"][data-open]'
+					'[role="menu"][data-open]'
 				)
 			).filter( ( menu ) =>
 				isVisible( menu, iframeDocument.defaultView )
@@ -989,7 +989,7 @@ test.describe( 'Collection view block', () => {
 				'.cortext-column-drag-handle'
 			);
 			const openMenu = canvas
-				.locator( '[data-dialog][role="menu"][data-open]' )
+				.locator( '[role="menu"][data-open]' )
 				.first();
 
 			// Start with no selection. This real click selects the block and opens
@@ -2853,7 +2853,7 @@ test.describe( 'Collection view block', () => {
 				.getByRole( 'button', { name: 'Actions' } )
 				.click( { force: true } );
 			const actionsMenu = canvas
-				.locator( '[data-dialog][role="menu"][data-open]' )
+				.locator( '[role="menu"][data-open]' )
 				.first();
 			const trashMenuItem = canvas.getByRole( 'menuitem', {
 				name: 'Trash',

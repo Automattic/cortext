@@ -79,7 +79,7 @@ const HEADER_BOUNDARY_MOVE_UP_SCOPE_SELECTOR = [
 	'.block-editor-block-contextual-toolbar',
 	'.block-editor-block-toolbar',
 ].join( ',' );
-const OPEN_CANVAS_MENU_SELECTOR = '[data-dialog][role="menu"][data-open]';
+const OPEN_CANVAS_MENU_SELECTOR = '[role="menu"][data-open]';
 const CANVAS_TOOLBAR_SELECTOR = '.block-editor-block-contextual-toolbar';
 const CANVAS_MENU_TOOLBAR_OVERLAP_CLASS =
 	'cortext-canvas__block-canvas--menu-toolbar-overlap';
