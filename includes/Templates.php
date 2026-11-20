@@ -289,6 +289,13 @@ final class Templates {
 					array( 'status' => 400 )
 				);
 			}
+			if ( ! current_user_can( 'edit_post', $parent_id ) ) {
+				return new WP_Error(
+					'cortext_template_parent_forbidden',
+					__( "You can't add documents inside this document.", 'cortext' ),
+					array( 'status' => 403 )
+				);
+			}
 			$archived = ( new ArchiveCascade() )->archived_container_error( array( $parent_id ) );
 			if ( $archived instanceof WP_Error ) {
 				return $archived;

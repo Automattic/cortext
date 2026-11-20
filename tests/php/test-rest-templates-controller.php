@@ -231,6 +231,31 @@ final class Test_Rest_Templates_Controller extends BaseTestCase {
 		}
 	}
 
+	public function test_instantiate_page_template_rejects_parent_the_user_cannot_edit(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$parent_id = $this->create_document( 'Private parent' );
+
+		$author_id = $this->create_user( 'author' );
+		wp_set_current_user( $author_id );
+		$template_id = $this->create_template(
+			array(
+				'kind'  => Templates::KIND_PAGE,
+				'title' => 'Project brief',
+			)
+		);
+		$before      = (int) wp_count_posts( Document::POST_TYPE )->draft;
+
+		$response = $this->request(
+			'POST',
+			'/cortext/v1/templates/' . $template_id . '/instantiate',
+			array( 'parent' => $parent_id )
+		);
+
+		$this->assertSame( 403, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'cortext_template_parent_forbidden', $response->get_data()['code'] );
+		$this->assertSame( $before, (int) wp_count_posts( Document::POST_TYPE )->draft );
+	}
+
 	public function test_instantiate_rejects_archived_parent_and_archived_collection(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		( new ArchiveCascade() )->register_status();
