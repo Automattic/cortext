@@ -72,7 +72,10 @@ export default function ColumnHeaderActions( {
 				.querySelectorAll( '[data-cortext-field-marker]' )
 				.forEach( ( marker ) => {
 					const th = marker.closest( 'th' );
-					if ( ! th ) {
+					// While rows are selected, DataViews renders a visually
+					// hidden copy of each header label, so a header can hold
+					// two markers. Mount one set of actions per header.
+					if ( ! th || next.some( ( target ) => target.th === th ) ) {
 						return;
 					}
 					const recordId = Number(

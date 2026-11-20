@@ -269,6 +269,7 @@ function Harness( {
 	onFieldCreated = jest.fn(),
 	onFieldFormatSaved = jest.fn(),
 	onRowsChanged = jest.fn(),
+	hiddenLabelCopy = false,
 } ) {
 	return (
 		<div className="cortext-data-view">
@@ -277,6 +278,11 @@ function Harness( {
 					<tr>
 						{ recordId ? (
 							<th>
+								{ hiddenLabelCopy ? (
+									<span
+										data-cortext-field-marker={ recordId }
+									/>
+								) : null }
 								<span data-cortext-field-marker={ recordId } />
 							</th>
 						) : null }
@@ -369,6 +375,37 @@ describe( 'ColumnHeaderActions', () => {
 				name: 'Sort descending',
 			} )
 		).toHaveAttribute( 'aria-checked', 'false' );
+	} );
+
+	it( 'mounts one set of actions per header when the label renders twice', async () => {
+		useCollectionFieldsContext.mockReturnValue( {
+			fields: [
+				{
+					id: 'field-77',
+					recordId: 77,
+					label: 'Amount',
+					cortextType: 'number',
+				},
+			],
+		} );
+
+		const { container } = render(
+			<Harness
+				collectionId={ 5 }
+				recordId={ 77 }
+				view={ { fields: [ 'field-77' ] } }
+				hiddenLabelCopy
+			/>
+		);
+
+		expect(
+			await screen.findByRole( 'button', { name: 'Amount' } )
+		).toBeInTheDocument();
+		expect(
+			container.querySelectorAll(
+				'th .cortext-column-header-actions:not(.cortext-column-header-actions--add)'
+			)
+		).toHaveLength( 1 );
 	} );
 
 	it( 'shows the field type icon in custom column headers', async () => {
