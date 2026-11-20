@@ -46,7 +46,7 @@ export async function fetchCortextLinkSuggestions(
 			icon: record.meta?.cortext_document_icon ?? '',
 			cortext_defines_trait: record.cortext_defines_trait,
 			crtxt_trait: record.crtxt_trait,
-			title: record.title?.raw || __( '(no title)', 'cortext' ),
+			title: record.title?.raw || __( '(untitled)', 'cortext' ),
 			type: DOCUMENT_POST_TYPE,
 			kind: 'post-type',
 		} ) )
