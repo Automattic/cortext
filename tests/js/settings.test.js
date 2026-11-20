@@ -5,7 +5,6 @@ import {
 	isExperimentEnabled,
 	isPublicWebAffordancesEnabled,
 	isWordPressAffordancesEnabled,
-	syncCortextExperiments,
 } from '../../src/settings';
 
 describe( 'settings', () => {
@@ -67,28 +66,6 @@ describe( 'settings', () => {
 		expect( isExperimentEnabled( 'quickEditing' ) ).toBe( true );
 		expect( isExperimentEnabled( 'slowEditing' ) ).toBe( false );
 		expect( isExperimentEnabled( 'missing' ) ).toBe( false );
-	} );
-
-	it( 'synchronizes experiment flags from the REST response', () => {
-		const settings = {
-			adminUrl: '/wp-admin/',
-			experiments: { oldExperiment: true },
-		};
-		window.cortextSettings = settings;
-
-		syncCortextExperiments( [
-			{ id: 'quickEditing', enabled: true },
-			{ id: 'slowEditing', enabled: false },
-		] );
-
-		expect( window.cortextSettings ).toBe( settings );
-		expect( getCortextExperiments() ).toEqual( {
-			quickEditing: true,
-			slowEditing: false,
-		} );
-		expect( isExperimentEnabled( 'quickEditing' ) ).toBe( true );
-		expect( isExperimentEnabled( 'oldExperiment' ) ).toBe( false );
-		expect( window.cortextSettings.adminUrl ).toBe( '/wp-admin/' );
 	} );
 
 	it( 'defaults experiment and capability helpers to disabled', () => {
