@@ -259,8 +259,7 @@ final class DocumentDuplicator {
 			}
 
 			if ( 'relation' === $field_type ) {
-				$reverse_id = (int) get_post_meta( $field_id, 'relation_reverse_field_id', true );
-				if ( $reverse_id < 1 || ! Relations::relation_is_multiple( $reverse_id ) ) {
+				if ( ! Relations::reverse_accepts_many( $field_id ) ) {
 					continue;
 				}
 				$values = Relations::relation_values( (int) $source->ID, $field_id );

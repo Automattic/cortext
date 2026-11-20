@@ -82,12 +82,20 @@ final class FieldValueStore {
 		return $stored;
 	}
 
+	/**
+	 * The metadata API unslashes what it stores, so this slashes first to
+	 * keep backslashes in the value.
+	 *
+	 * @param int    $document_id Document id.
+	 * @param string $key         Meta key.
+	 * @param mixed  $value       Value to store.
+	 */
 	private function update_document_meta( int $document_id, string $key, mixed $value ): void {
-		update_metadata( 'post', $document_id, $key, $value );
+		update_metadata( 'post', $document_id, $key, wp_slash( $value ) );
 	}
 
 	private function add_document_meta( int $document_id, string $key, mixed $value ): void {
-		add_metadata( 'post', $document_id, $key, $value );
+		add_metadata( 'post', $document_id, $key, wp_slash( $value ) );
 	}
 
 	private function delete_document_meta( int $document_id, string $key ): void {

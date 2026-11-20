@@ -783,7 +783,7 @@ final class ArchiveCascade {
 	 * @param int[] $container_ids         Parent and collection document IDs.
 	 * @param int[] $ignored_container_ids Containers that will become active in the same operation.
 	 */
-	private function archived_container_error( array $container_ids, array $ignored_container_ids = array() ): ?WP_Error {
+	public function archived_container_error( array $container_ids, array $ignored_container_ids = array() ): ?WP_Error {
 		$ignored = array_fill_keys( array_map( 'intval', $ignored_container_ids ), true );
 		$queue   = array_values( array_unique( array_map( 'intval', $container_ids ) ) );
 		$seen    = array();
