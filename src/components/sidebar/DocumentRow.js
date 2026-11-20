@@ -179,6 +179,29 @@ export default function DocumentRow( {
 		setIsRenaming( true );
 	}
 
+	const [ isMenuOpen, setIsMenuOpen ] = useState( false );
+	const [ menuAnchor, setMenuAnchor ] = useState( null );
+
+	// Right-click opens the actions menu at the cursor. The rename input
+	// keeps the browser menu for copy, paste and spellcheck. The menu is
+	// portaled but still bubbles through React, so right-clicks inside it
+	// are swallowed instead of moving it.
+	function openMenuAtPointer( event ) {
+		if ( ! event.currentTarget.contains( event.target ) ) {
+			event.preventDefault();
+			return;
+		}
+		if ( isRenaming ) {
+			return;
+		}
+		event.preventDefault();
+		const { clientX: x, clientY: y } = event;
+		setMenuAnchor( {
+			getBoundingClientRect: () => new window.DOMRect( x, y, 0, 0 ),
+		} );
+		setIsMenuOpen( true );
+	}
+
 	// Drag source. The existing DnD hook still expects page:/collection:
 	// prefixes, so keep that id shape while the row itself stays shared.
 	const {
@@ -233,6 +256,7 @@ export default function DocumentRow( {
 					className={ rowClasses.join( ' ' ) }
 					{ ...attributes }
 					{ ...listeners }
+					onContextMenu={ openMenuAtPointer }
 				>
 					{ canExpand ? (
 						<Button
@@ -331,7 +355,16 @@ export default function DocumentRow( {
 					) }
 
 					<Dropdown
-						popoverProps={ { placement: 'bottom-end' } }
+						open={ isMenuOpen }
+						onToggle={ setIsMenuOpen }
+						popoverProps={
+							menuAnchor
+								? {
+										placement: 'bottom-start',
+										anchor: menuAnchor,
+								  }
+								: { placement: 'bottom-end' }
+						}
 						renderToggle={ ( { isOpen, onToggle } ) => (
 							<Button
 								className="cortext-sidebar__menu"
@@ -342,7 +375,10 @@ export default function DocumentRow( {
 									__( 'Actions for %s', 'cortext' ),
 									title
 								) }
-								onClick={ onToggle }
+								onClick={ () => {
+									setMenuAnchor( null );
+									onToggle();
+								} }
 								isPressed={ isOpen }
 								aria-expanded={ isOpen }
 								onPointerDown={ ( e ) => e.stopPropagation() }

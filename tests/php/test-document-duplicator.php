@@ -334,7 +334,7 @@ final class Test_Document_Duplicator extends BaseTestCase {
 					'type'               => 'rollup',
 					'rollup_aggregator'  => 'sum',
 					'rollup_target_type' => 'text',
-					'rollup_invalid'     => '1',
+					'rollup_invalid'     => 'target_must_be_number',
 				),
 			)
 		);
@@ -345,7 +345,7 @@ final class Test_Document_Duplicator extends BaseTestCase {
 		$this->assertIsArray( $result );
 		$cloned_field_ids = array_map( 'intval', $this->stored_collection_field_ids( (int) $result['document']->ID ) );
 		$this->assertCount( 1, $cloned_field_ids );
-		$this->assertSame( '1', get_post_meta( $cloned_field_ids[0], 'rollup_invalid', true ) );
+		$this->assertSame( 'target_must_be_number', get_post_meta( $cloned_field_ids[0], 'rollup_invalid', true ) );
 	}
 
 	public function test_duplicate_row_keeps_trait_and_copies_field_values(): void {

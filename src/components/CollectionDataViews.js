@@ -44,6 +44,7 @@ import {
 	COVER_FIELD,
 	OpenRowActionContext,
 	TITLE_FIELD,
+	withRollupInvalidCells,
 } from './CollectionDataViewFields';
 import GridNewRowPortal from './GridNewRowPortal';
 import { CollectionRowsSkeleton } from './Skeleton';
@@ -168,7 +169,7 @@ export default function CollectionDataViews( {
 	const knownFieldIdsRef = useRef( null );
 
 	const availableFields = useMemo(
-		() => [ TITLE_FIELD, COVER_FIELD, ...fields ],
+		() => [ TITLE_FIELD, COVER_FIELD, ...withRollupInvalidCells( fields ) ],
 		[ fields ]
 	);
 	const dataViewsView = useMemo(

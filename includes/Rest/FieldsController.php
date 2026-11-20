@@ -237,6 +237,37 @@ final class FieldsController {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/fields/(?P<field_id>\d+)/rollup',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'update_rollup' ),
+					'permission_callback' => array( $this, 'can_edit_field' ),
+					'args'                => array(
+						'field_id'                 => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'rollup_relation_field_id' => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'rollup_target_field_id'   => array(
+							'type'     => 'integer',
+							'required' => false,
+						),
+						'rollup_aggregator'        => array(
+							'type'     => 'string',
+							'required' => true,
+							'enum'     => self::ROLLUP_AGGREGATORS,
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/fields/(?P<field_id>\d+)/options',
 			array(
 				array(
@@ -623,6 +654,60 @@ final class FieldsController {
 			FormulaMaterializer::recompute_collection( $collection_id );
 		}
 		return $response;
+	}
+
+	/**
+	 * Reconfigures an existing rollup: which relation it follows, which field
+	 * of the related collection it reads, and how it aggregates. Runs the same
+	 * checks as creating one, then rebuilds the rollup's copy of its target
+	 * and clears any flag left by an earlier change to that target.
+	 *
+	 * @param WP_REST_Request $request Request carrying the rollup settings.
+	 */
+	public function update_rollup( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$field_id = (int) $request->get_param( 'field_id' );
+		if ( 'rollup' !== (string) get_post_meta( $field_id, 'type', true ) ) {
+			return new WP_Error(
+				'cortext_field_not_rollup',
+				__( 'This property isn\'t a rollup.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$relation_field_id = (int) $request->get_param( 'rollup_relation_field_id' );
+		$target_field_id   = (int) $request->get_param( 'rollup_target_field_id' );
+		$aggregator        = (string) $request->get_param( 'rollup_aggregator' );
+
+		$validation = $this->validate_rollup_config(
+			$this->collection_id_for_field( $field_id ),
+			$relation_field_id,
+			$target_field_id,
+			$aggregator
+		);
+		if ( is_wp_error( $validation ) ) {
+			return $validation;
+		}
+
+		update_post_meta( $field_id, 'rollup_relation_field_id', (string) $relation_field_id );
+		update_post_meta( $field_id, 'rollup_aggregator', $aggregator );
+		if ( $target_field_id > 0 ) {
+			update_post_meta( $field_id, 'rollup_target_field_id', (string) $target_field_id );
+			$this->write_rollup_target_snapshot( $field_id, $this->rollup_target_meta( $target_field_id ) );
+		} else {
+			delete_post_meta( $field_id, 'rollup_target_field_id' );
+			$this->write_rollup_target_snapshot( $field_id, array() );
+		}
+		delete_post_meta( $field_id, 'rollup_invalid' );
+
+		return new WP_REST_Response(
+			array(
+				'id'                       => $field_id,
+				'rollup_relation_field_id' => $relation_field_id,
+				'rollup_target_field_id'   => $target_field_id,
+				'rollup_aggregator'        => $aggregator,
+			),
+			200
+		);
 	}
 
 	public function update_options( WP_REST_Request $request ): WP_REST_Response|WP_Error {
@@ -1537,28 +1622,40 @@ final class FieldsController {
 			return;
 		}
 
+		$fresh = $this->rollup_target_meta( $target_field_id );
+		foreach ( $dependents as $rollup_id ) {
+			$this->write_rollup_target_snapshot( $rollup_id, $fresh );
+			$this->record_rollup_validity( $rollup_id );
+		}
+	}
+
+	/**
+	 * Replaces a rollup's copy of its target's setup. Keys missing from the
+	 * fresh copy are deleted, so nothing from a previous target lingers.
+	 *
+	 * @param int                  $rollup_id Rollup field post ID.
+	 * @param array<string,string> $fresh     Output of `rollup_target_meta()`.
+	 */
+	private function write_rollup_target_snapshot( int $rollup_id, array $fresh ): void {
 		$snapshot_keys = array_merge(
 			array( 'rollup_target_type' ),
 			array_values( self::ROLLUP_TARGET_META_MAP )
 		);
-		$fresh         = $this->rollup_target_meta( $target_field_id );
-
-		foreach ( $dependents as $rollup_id ) {
-			foreach ( $snapshot_keys as $key ) {
-				if ( isset( $fresh[ $key ] ) ) {
-					update_post_meta( $rollup_id, $key, $fresh[ $key ] );
-					continue;
-				}
-				delete_post_meta( $rollup_id, $key );
+		foreach ( $snapshot_keys as $key ) {
+			if ( isset( $fresh[ $key ] ) ) {
+				update_post_meta( $rollup_id, $key, $fresh[ $key ] );
+				continue;
 			}
-			$this->record_rollup_validity( $rollup_id );
+			delete_post_meta( $rollup_id, $key );
 		}
 	}
 
 	/**
 	 * Flags a rollup whose stored configuration stopped validating, so the read
 	 * path can render it empty and the field editor can offer a repair instead
-	 * of aggregating over a target that changed shape underneath it.
+	 * of aggregating over a target that changed shape underneath it. The flag
+	 * holds the reason (the validation error code without its
+	 * `cortext_rollup_` prefix) so the hint can say what to fix.
 	 *
 	 * @param int $rollup_id Rollup field post ID.
 	 */
@@ -1573,7 +1670,11 @@ final class FieldsController {
 		);
 
 		if ( is_wp_error( $valid ) ) {
-			update_post_meta( $rollup_id, 'rollup_invalid', '1' );
+			update_post_meta(
+				$rollup_id,
+				'rollup_invalid',
+				(string) preg_replace( '/^cortext_rollup_/', '', (string) $valid->get_error_code() )
+			);
 			return;
 		}
 

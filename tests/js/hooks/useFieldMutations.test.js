@@ -38,6 +38,7 @@ import {
 	useOptionUsage,
 	useCreateFieldOption,
 	useFlushFieldRecord,
+	useUpdateRollup,
 } from '../../../src/hooks/useFieldMutations';
 
 beforeEach( () => {
@@ -457,6 +458,59 @@ describe( 'useFlushFieldRecord', () => {
 			await result.current( 42 );
 		} );
 		expect( mockDispatch.receiveEntityRecords ).not.toHaveBeenCalled();
+	} );
+} );
+
+describe( 'useUpdateRollup', () => {
+	it( 'POSTs the rollup settings and refreshes the field record', async () => {
+		const fresh = { id: 12, meta: { rollup_aggregator: 'show_unique' } };
+		apiFetch
+			.mockResolvedValueOnce( { id: 12 } )
+			.mockResolvedValueOnce( fresh );
+
+		const { result } = renderHook( () => useUpdateRollup() );
+		await act( async () => {
+			await result.current.run( 12, {
+				relationFieldId: 77,
+				targetFieldId: 88,
+				aggregator: 'show_unique',
+			} );
+		} );
+
+		expect( apiFetch ).toHaveBeenNthCalledWith( 1, {
+			path: '/cortext/v1/fields/12/rollup',
+			method: 'POST',
+			data: {
+				rollup_relation_field_id: 77,
+				rollup_target_field_id: 88,
+				rollup_aggregator: 'show_unique',
+			},
+		} );
+		expect( mockDispatch.receiveEntityRecords ).toHaveBeenCalledWith(
+			'postType',
+			'crtxt_field',
+			[ fresh ],
+			undefined,
+			true
+		);
+	} );
+
+	it( 'leaves the target out of a count without one', async () => {
+		apiFetch.mockResolvedValue( {} );
+
+		const { result } = renderHook( () => useUpdateRollup() );
+		await act( async () => {
+			await result.current.run( 12, {
+				relationFieldId: 77,
+				targetFieldId: null,
+				aggregator: 'count',
+			} );
+		} );
+
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].data ).toEqual( {
+			rollup_relation_field_id: 77,
+			rollup_aggregator: 'count',
+		} );
 	} );
 } );
 
