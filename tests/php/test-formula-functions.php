@@ -29,6 +29,28 @@ final class Test_Formula_Functions extends BaseTestCase {
 		$this->assertSame( 4, $result['value'] );
 	}
 
+	public function test_date_start_and_end_read_the_edges_of_a_range(): void {
+		$range  = array(
+			'value' => '2026-03-01',
+			'type'  => 'date',
+			'end'   => '2026-03-05',
+		);
+		$single = array(
+			'value' => '2026-03-09',
+			'type'  => 'date',
+		);
+
+		$this->assertSame( '2026-03-01', Functions::evaluate( 'datestart', array( $range ) )['value'] );
+		$this->assertSame( '2026-03-05', Functions::evaluate( 'dateend', array( $range ) )['value'] );
+		$this->assertSame( '2026-03-09', Functions::evaluate( 'dateend', array( $single ) )['value'] );
+		$this->assertSame( 'datetime', Functions::infer( 'dateend', array( array( 'type' => 'datetime' ) ) )['type'] );
+	}
+
+	public function test_date_edges_need_one_date(): void {
+		$this->expectException( \Cortext\Formula\FormulaParseError::class );
+		Functions::infer( 'datestart', array( array( 'type' => 'text' ) ) );
+	}
+
 	public function test_format_date_h_uses_twelve_hour_time(): void {
 		$result = Functions::evaluate(
 			'formatdate',

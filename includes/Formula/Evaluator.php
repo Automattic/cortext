@@ -75,6 +75,15 @@ final class Evaluator {
 				'type'  => $type,
 			);
 		}
+		if ( 'date' === $type || 'datetime' === $type ) {
+			// A range reads as its start. `end` rides along for dateEnd().
+			$parts = DateValue::parse( get_post_meta( $row->ID, Relations::meta_key( $field_id ), true ), $type );
+			return array(
+				'value' => $parts['start'] ?? null,
+				'type'  => $type,
+				'end'   => $parts['end'] ?? null,
+			);
+		}
 		return array(
 			'value' => $this->typed_field_value( $row->ID, $field_id, $type ),
 			'type'  => $type,
@@ -238,8 +247,6 @@ final class Evaluator {
 		return match ( $type ) {
 			'number' => is_numeric( $value ) ? (float) $value : null,
 			'checkbox' => Relations::is_truthy( $value ),
-			// A range reads as its start until a formula asks for the end.
-			'date', 'datetime' => DateValue::parse( $value, $type )['start'] ?? null,
 			default => (string) $value,
 		};
 	}

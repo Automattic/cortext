@@ -58,6 +58,10 @@ final class Functions {
 				'type'     => self::require_format_date( $args ),
 				'volatile' => $volatile,
 			),
+			'datestart', 'dateend' => array(
+				'type'     => self::require_date_edge( $name, $args ),
+				'volatile' => $volatile,
+			),
 			default => throw new FormulaParseError(
 				'cortext_formula_unknown_function',
 				sprintf(
@@ -111,6 +115,14 @@ final class Functions {
 			'formatdate' => array(
 				'value' => self::format_date( $args ),
 				'type'  => 'text',
+			),
+			'datestart' => array(
+				'value' => $args[0]['value'] ?? null,
+				'type'  => (string) ( $args[0]['type'] ?? 'date' ),
+			),
+			'dateend' => array(
+				'value' => $args[0]['end'] ?? $args[0]['value'] ?? null,
+				'type'  => (string) ( $args[0]['type'] ?? 'date' ),
 			),
 			default => throw new FormulaEvalError(
 				'cortext_formula_unknown_function',
@@ -280,6 +292,27 @@ final class Functions {
 			);
 		}
 		return 'text';
+	}
+
+	/**
+	 * Types dateStart() and dateEnd(), which take one date and keep its type. A single
+	 * date is its own start and end.
+	 *
+	 * @param array<int,array<string,mixed>> $args
+	 */
+	private static function require_date_edge( string $name, array $args ): string {
+		$function = 'datestart' === $name ? 'dateStart' : 'dateEnd';
+		if ( 1 !== count( $args ) || ! self::type_matches( (string) $args[0]['type'], 'date' ) ) {
+			throw new FormulaParseError(
+				'cortext_formula_type_mismatch',
+				sprintf(
+					/* translators: %s: formula function name, dateStart() or dateEnd(), which must remain in English. */
+					__( '%s() needs one date.', 'cortext' ),
+					$function
+				)
+			);
+		}
+		return (string) $args[0]['type'];
 	}
 
 	private static function type_matches( string $actual, string $expected ): bool {

@@ -109,6 +109,24 @@ final class Test_Rest_Notion_Import extends BaseTestCase {
 		$this->assertSame( $rows_before, $this->imported_row_ids() );
 	}
 
+	public function test_date_values_keep_their_end(): void {
+		$method = new \ReflectionMethod( Importer::class, 'cell_value' );
+		$method->setAccessible( true );
+		$importer = ( new \ReflectionClass( Importer::class ) )->newInstanceWithoutConstructor();
+		$date     = static fn( ?string $start, ?string $end ): array => array(
+			'type' => 'date',
+			'date' => array(
+				'start'     => $start,
+				'end'       => $end,
+				'time_zone' => null,
+			),
+		);
+
+		$this->assertSame( '2026-03-01/2026-06-30', $method->invoke( $importer, $date( '2026-03-01', '2026-06-30' ), 'date' ) );
+		$this->assertSame( '2026-03-01', $method->invoke( $importer, $date( '2026-03-01', null ), 'date' ) );
+		$this->assertNull( $method->invoke( $importer, $date( null, null ), 'date' ) );
+	}
+
 	public static function hidden_statuses(): array {
 		return array(
 			'archived' => array( 'crtxt_archived', 'The collection was archived, so the import stopped.' ),

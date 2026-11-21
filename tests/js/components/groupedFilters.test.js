@@ -1,4 +1,5 @@
 import { filterSortAndPaginateWithGroups } from '../../../src/components/groupedFilters';
+import { sortByDateRangeStart } from '../../../src/utils/dateRange';
 
 const fields = [
 	{
@@ -28,6 +29,71 @@ const fields = [
 		getValue: ( { item } ) => item.score,
 	},
 ];
+
+describe( 'date range filters', () => {
+	const dateFields = [
+		{
+			id: 'when',
+			type: 'date',
+			label: 'When',
+			getValue: ( { item } ) => item.when,
+		},
+		{
+			id: 'title',
+			type: 'text',
+			label: 'Title',
+			getValue: ( { item } ) => item.title,
+		},
+	];
+	const rows = [
+		{ id: 1, title: 'Spans the week', when: '2026-05-11/2026-05-31' },
+		{ id: 2, title: 'Inside', when: '2026-05-20' },
+		{ id: 3, title: 'Earlier', when: '2026-05-01/2026-05-17' },
+		{ id: 4, title: 'Later', when: '2026-05-25' },
+		{ id: 5, title: 'Empty', when: '' },
+	];
+	const ids = ( view ) =>
+		filterSortAndPaginateWithGroups( rows, view, dateFields ).data.map(
+			( row ) => row.id
+		);
+
+	it( 'matches ranges that overlap a between filter', () => {
+		expect(
+			ids( {
+				filters: [
+					{
+						field: 'when',
+						operator: 'between',
+						value: [ '2026-05-18', '2026-05-24' ],
+					},
+				],
+			} )
+		).toEqual( [ 1, 2 ] );
+	} );
+
+	it( 'matches ranges covering an on day, alongside other filters', () => {
+		expect(
+			ids( {
+				filters: [
+					{ field: 'when', operator: 'on', value: '2026-05-15' },
+					{ field: 'title', operator: 'contains', value: 'e' },
+				],
+			} )
+		).toEqual( [ 1, 3 ] );
+	} );
+
+	it( 'sorts by start', () => {
+		expect(
+			filterSortAndPaginateWithGroups(
+				rows.slice( 0, 4 ),
+				{ sort: { field: 'when', direction: 'asc' } },
+				dateFields.map( ( f ) =>
+					f.id === 'when' ? { ...f, sort: sortByDateRangeStart } : f
+				)
+			).data.map( ( row ) => row.id )
+		).toEqual( [ 3, 1, 2, 4 ] );
+	} );
+} );
 
 describe( 'filterSortAndPaginateWithGroups', () => {
 	it( 'applies OR groups in client mode instead of letting DataViews ignore them', () => {

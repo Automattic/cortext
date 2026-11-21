@@ -33,6 +33,7 @@ namespace Cortext\Notion;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Documents;
+use Cortext\Fields\DateValue;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
 use WP_Error;
@@ -405,8 +406,6 @@ final class Importer {
 
 	/**
 	 * Convert a Notion property payload to its Cortext-shaped value.
-	 * Mirrors `cellValue` in `src/components/notionImport.js` so the
-	 * server writes the same shapes the client renders.
 	 *
 	 * @param array  $prop         Notion property object on a row.
 	 * @param string $cortext_type Target Cortext field type.
@@ -435,7 +434,11 @@ final class Importer {
 			case 'status':
 				return $prop['status']['name'] ?? null;
 			case 'date':
-				return $prop['date']['start'] ?? null;
+				if ( empty( $prop['date']['start'] ) ) {
+					return null;
+				}
+				$value = DateValue::join( (string) $prop['date']['start'], empty( $prop['date']['end'] ) ? null : (string) $prop['date']['end'] );
+				return in_array( $cortext_type, array( 'date', 'datetime' ), true ) ? DateValue::normalize( $value, $cortext_type ) : $value;
 			case 'checkbox':
 				return ! empty( $prop['checkbox'] );
 			case 'url':

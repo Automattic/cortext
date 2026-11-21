@@ -9,6 +9,11 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalNumberControl as NumberControl,
 	TextControl,
+	ToggleControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControl as ToggleGroupControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
 import { getSettings } from '@wordpress/date';
 import {
@@ -29,6 +34,7 @@ import { toRecordId } from '../hooks/fieldIds';
 import RelationEditor from './relations/RelationEditor';
 import { getReadOnlyState } from '../documents/readOnly';
 import RelationReferences from './relations/RelationReferences';
+import { joinDateRange, parseDateRange } from '../utils/dateRange';
 
 // Resolves the WordPress site locale into a BCP 47 tag for Intl. WP
 // stores locales as `en_US` / `de_DE`; Intl expects `en-US` / `de-DE`.
@@ -206,6 +212,17 @@ export function formatDateValue( value, type, format ) {
 	return new Intl.DateTimeFormat( locale, options ).format( date );
 }
 
+// Formats a start and an optional end, collapsing to one date when the
+// two read the same.
+function formatDateRangeValue( start, end, type, format ) {
+	const from = start ? formatDateValue( start, type, format ) : '';
+	const to = end ? formatDateValue( end, type, format ) : '';
+	if ( from && to && from !== to ) {
+		return `${ from } - ${ to }`;
+	}
+	return from || to;
+}
+
 // Maps a numeric value to a 0..1 fill ratio for the bar/ring visuals.
 // Percent fields are treated as 0..1 directly; everything else is
 // divided by `format.divideBy` (default 100). Out-of-range values clamp,
@@ -323,16 +340,7 @@ export function formatDisplay( value, type, options = {} ) {
 		}
 		const dateType =
 			format?.rollup_target_type === 'datetime' ? 'datetime' : 'date';
-		const start = value.start
-			? formatDateValue( value.start, dateType, format )
-			: '';
-		const end = value.end
-			? formatDateValue( value.end, dateType, format )
-			: '';
-		if ( start && end && start !== end ) {
-			return `${ start } - ${ end }`;
-		}
-		return start || end;
+		return formatDateRangeValue( value.start, value.end, dateType, format );
 	}
 
 	if ( type === 'checkbox' ) {
@@ -439,13 +447,16 @@ export function formatDisplay( value, type, options = {} ) {
 	}
 
 	if ( type === 'date' || type === 'datetime' ) {
+		const formatOne = ( item ) => {
+			const range = parseDateRange( item );
+			return range
+				? formatDateRangeValue( range.start, range.end, type, format )
+				: formatDateValue( item, type, format );
+		};
 		if ( Array.isArray( value ) ) {
-			return value
-				.map( ( item ) => formatDateValue( item, type, format ) )
-				.filter( Boolean )
-				.join( ', ' );
+			return value.map( formatOne ).filter( Boolean ).join( ', ' );
 		}
-		return formatDateValue( value, type, format );
+		return formatOne( value );
 	}
 
 	if ( type === 'number' ) {
@@ -819,22 +830,103 @@ export function DateEditor( {
 			) }
 			renderContent={ ( { onClose } ) => (
 				<div className={ contentClassName }>
-					<DateTimePicker
-						currentDate={ value || null }
-						onChange={ async ( next ) => {
-							const didSave = await onCommit(
-								type === 'date' ? dateOnlyValue( next ) : next
-							);
-							if ( closeOnCommit && didSave ) {
-								onClose();
-							}
-						} }
-						is12Hour={ format?.hour12 ?? true }
-						aria-label={ label }
+					<DateRangePicker
+						value={ value }
+						type={ type }
+						format={ format }
+						label={ label }
+						onCommit={ onCommit }
+						onClose={ closeOnCommit ? onClose : undefined }
 					/>
 				</div>
 			) }
 		/>
+	);
+}
+
+// One calendar that edits either edge of the value. With "End date" off it
+// behaves like a plain picker and closes on pick; with it on it stays open
+// so both edges can be set, moving a date to the end once the start is
+// picked.
+function DateRangePicker( { value, type, format, label, onCommit, onClose } ) {
+	const range = parseDateRange( value );
+	const start = range?.start ?? '';
+	const end = range?.end ?? '';
+	const [ hasEnd, setHasEnd ] = useState( Boolean( end ) );
+	const [ edge, setEdge ] = useState( 'start' );
+	const normalize = ( next ) =>
+		type === 'date' ? dateOnlyValue( next ) : next;
+
+	const pick = async ( next ) => {
+		const picked = normalize( next );
+		if ( ! hasEnd ) {
+			const didSave = await onCommit( picked );
+			if ( didSave ) {
+				onClose?.();
+			}
+			return;
+		}
+		if ( edge === 'start' ) {
+			await onCommit( joinDateRange( picked, end ), { keepOpen: true } );
+			// A datetime pick may be a time tweak, so only dates advance.
+			if ( type === 'date' ) {
+				setEdge( 'end' );
+			}
+			return;
+		}
+		await onCommit( joinDateRange( start || picked, picked ), {
+			keepOpen: true,
+		} );
+	};
+
+	const toggleEnd = async ( next ) => {
+		setHasEnd( next );
+		setEdge( next ? 'end' : 'start' );
+		if ( ! next && end ) {
+			await onCommit( start, { keepOpen: true } );
+		}
+	};
+
+	const activeValue = hasEnd && edge === 'end' ? end || start : start;
+
+	return (
+		<div className="cortext-date-range">
+			<div className="cortext-date-range__controls">
+				<ToggleControl
+					__nextHasNoMarginBottom
+					label={ __( 'End date', 'cortext' ) }
+					checked={ hasEnd }
+					onChange={ toggleEnd }
+				/>
+				{ hasEnd ? (
+					<ToggleGroupControl
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+						isBlock
+						hideLabelFromVision
+						label={ __( 'Date to edit', 'cortext' ) }
+						value={ edge }
+						onChange={ ( next ) => setEdge( next ) }
+					>
+						<ToggleGroupControlOption
+							value="start"
+							label={ __( 'Start', 'cortext' ) }
+						/>
+						<ToggleGroupControlOption
+							value="end"
+							label={ __( 'End', 'cortext' ) }
+						/>
+					</ToggleGroupControl>
+				) : null }
+			</div>
+			<DateTimePicker
+				key={ hasEnd ? edge : 'single' }
+				currentDate={ activeValue || null }
+				onChange={ pick }
+				is12Hour={ format?.hour12 ?? true }
+				aria-label={ label }
+			/>
+		</div>
 	);
 }
 
@@ -959,7 +1051,9 @@ export default function EditableCell( {
 		setError( null );
 	};
 
-	const commit = async ( next ) => {
+	// `keepOpen` lets an editor save without closing, like a date range
+	// that sets its start and then its end.
+	const commit = async ( next, { keepOpen = false } = {} ) => {
 		// Skip the round-trip when nothing changed.
 		const equal = Array.isArray( next )
 			? Array.isArray( value ) &&
@@ -968,14 +1062,20 @@ export default function EditableCell( {
 			: next === value ||
 			  ( next === '' && ( value === null || value === undefined ) );
 		if ( equal ) {
-			closeEditor();
+			if ( ! keepOpen ) {
+				closeEditor();
+			}
 			return true;
 		}
 		setIsSaving( true );
 		setError( null );
 		try {
 			await saveRowField( rowId, fieldId, next );
-			closeEditor();
+			if ( keepOpen ) {
+				setIsSaving( false );
+			} else {
+				closeEditor();
+			}
 			return true;
 		} catch ( err ) {
 			setError( err?.message ?? __( "Couldn't save.", 'cortext' ) );

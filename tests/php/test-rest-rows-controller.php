@@ -928,6 +928,19 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertTrue( $method->invoke( $controller, $fixture['collection_id'], $sort_request ) );
 	}
 
+	public function test_formulas_read_the_start_and_end_of_a_date_range(): void {
+		$fixture = $this->create_collection_fixture( 'formula-range', 'date' );
+		$range   = $this->create_row_fixture( $fixture['collection_id'], 'Trip', 'private', array( "field-{$fixture['field_id']}" => '2026-03-01/2026-03-05' ) );
+		$single  = $this->create_row_fixture( $fixture['collection_id'], 'Day', 'private', array( "field-{$fixture['field_id']}" => '2026-03-09' ) );
+
+		$length = $this->create_formula_field( $fixture['collection_id'], 'Length', 'dateBetween(dateEnd(prop("Score")), dateStart(prop("Score")), "days")' );
+		$starts = $this->create_formula_field( $fixture['collection_id'], 'Starts', 'formatDate(prop("Score"), "YYYY-MM-DD")' );
+
+		$this->assertSame( 4.0, (float) get_post_meta( $range, "field-{$length}", true ) );
+		$this->assertSame( 0.0, (float) get_post_meta( $single, "field-{$length}", true ) );
+		$this->assertSame( '2026-03-01', get_post_meta( $range, "field-{$starts}", true ) );
+	}
+
 	public function test_date_between_uses_calendar_months(): void {
 		$method = new \ReflectionMethod( FormulaFunctions::class, 'date_between' );
 		$method->setAccessible( true );

@@ -26,6 +26,7 @@ Each **document in a collection** has its own values for the collection's proper
 - **Create a collection.** Add a collection from the sidebar, or insert the "Collection view" block in a document and create one from there. Name it, then start adding properties.
 - **Add properties.** Open the collection, add a property, and choose its type.
 - **Add documents to a collection.** Add one from the table and fill in its properties inline, or open it to edit it in full.
+- **Give a date an end.** Turn on "End date" in the date picker to set a start and an end, like a trip or a project. Filters for a day or a stretch of days match any range that overlaps them.
 - **Switch layout.** Toggle between table, grid, and list to see the same documents differently.
 - **Link documents.** Add a Relation property, pick the collection it points to, then connect documents from either side.
 - **Summarize with a rollup.** Add a Rollup property on top of a relation to count or total the related documents.

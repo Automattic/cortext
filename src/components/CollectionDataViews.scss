@@ -1386,3 +1386,16 @@ tr:has(.cortext-title-cell--is-opening)
 		}
 	}
 }
+
+// Date picker with an optional end, shared by table cells and row properties.
+.cortext-date-range__controls {
+	display: flex;
+	flex-direction: column;
+	gap: $grid-unit-15;
+	padding: $grid-unit-15 $grid-unit-10 $grid-unit-05;
+}
+
+// Row properties already pad their popover.
+.cortext-row-detail__date-popover .cortext-date-range__controls {
+	padding: 0 0 $grid-unit-15;
+}

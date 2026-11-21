@@ -1,6 +1,7 @@
 import { __ } from '@wordpress/i18n';
 
 import { formatDateValue, formatNumberValue } from './EditableCell';
+import { dateRangeEnd, dateRangeStart } from '../utils/dateRange';
 
 export const CALCULATION_NONE = 'none';
 
@@ -263,8 +264,18 @@ function compareComparable( a, b ) {
 }
 
 function extremaValue( values, field, direction ) {
+	const isDate = DATE_TYPES.has( fieldCalculationType( field ) );
 	let best = null;
-	for ( const value of values ) {
+	for ( const raw of values ) {
+		// The earliest date is a start and the latest an end, so a range
+		// counts at both of its edges.
+		let value = raw;
+		if ( isDate ) {
+			value =
+				direction === 'min'
+					? dateRangeStart( raw )
+					: dateRangeEnd( raw );
+		}
 		const comparable = comparableValue( value, field );
 		if ( comparable === null ) {
 			continue;

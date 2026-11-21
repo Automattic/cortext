@@ -5,6 +5,7 @@ import EditableCell, { formatNumberValue } from '../components/EditableCell';
 import { SystemFieldIcon } from '../components/fields/fieldTypes';
 import { parseDefaultConfig } from './fieldDefaults';
 import { elementsFromOptions } from './optionElements';
+import { sortByDateRangeStart } from '../utils/dateRange';
 
 // Re-export for existing call sites. The implementation lives in
 // `optionElements` (a leaf module with no React/component imports) so
@@ -628,9 +629,9 @@ export function mapField( field ) {
 			};
 		}
 		case 'date':
-			return { ...base, type: 'date' };
+			return { ...base, type: 'date', sort: sortByDateRangeStart };
 		case 'datetime':
-			return { ...base, type: 'datetime' };
+			return { ...base, type: 'datetime', sort: sortByDateRangeStart };
 		case 'text':
 		default:
 			return { ...base, type: 'text' };

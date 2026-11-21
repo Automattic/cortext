@@ -1,7 +1,11 @@
 import { getDate } from '@wordpress/date';
 import { filterSortAndPaginate } from '@wordpress/dataviews/wp';
 
+import { parseDateRange } from '../utils/dateRange';
+
 const MANUAL_SORT_ID = 'manual';
+const DATE_FIELD_TYPES = new Set( [ 'date', 'datetime' ] );
+const OVERLAP_OPERATORS = new Set( [ 'between', 'on' ] );
 
 function isGroupFilter( filter ) {
 	return Boolean( filter?.relation || filter?.filters );
@@ -34,6 +38,39 @@ function isEmptyValue( value ) {
 function dateOrNull( value ) {
 	const date = getDate( value );
 	return Number.isNaN( date.getTime() ) ? null : date;
+}
+
+// Date and datetime values can be a `start/end` range, which DataViews'
+// own operators can't read. `between` and `on` match any overlap with the
+// requested days, like the server does.
+function isDateOverlapFilter( filter, fieldMap ) {
+	return (
+		! isGroupFilter( filter ) &&
+		OVERLAP_OPERATORS.has( filter?.operator ) &&
+		DATE_FIELD_TYPES.has( fieldMap.get( filter?.field )?.type )
+	);
+}
+
+function matchesDateOverlap( fieldValue, operator, filterValue ) {
+	const bounds =
+		operator === 'on' ? [ filterValue, filterValue ] : filterValue;
+	if (
+		! Array.isArray( bounds ) ||
+		bounds.length !== 2 ||
+		bounds.some( ( bound ) => bound === undefined || bound === '' )
+	) {
+		return true;
+	}
+	const range = parseDateRange( fieldValue );
+	const start = range && dateOrNull( range.start );
+	const end = range && dateOrNull( range.end ?? range.start );
+	const from = dateOrNull( bounds[ 0 ] );
+	const to = dateOrNull( bounds[ 1 ] );
+	if ( ! start || ! end || ! from || ! to ) {
+		return false;
+	}
+	const [ low, high ] = from <= to ? [ from, to ] : [ to, from ];
+	return start <= high && end >= low;
 }
 
 function relativeDate( value, unit ) {
@@ -70,6 +107,10 @@ function matchesLeaf( item, filter, fieldMap ) {
 	const fieldValue = field.getValue( { item } );
 	const filterValue = filter.value;
 	const filterValues = Array.isArray( filterValue ) ? filterValue : [];
+
+	if ( isDateOverlapFilter( filter, fieldMap ) ) {
+		return matchesDateOverlap( fieldValue, filter.operator, filterValue );
+	}
 
 	switch ( filter.operator ) {
 		case 'isAny':
@@ -281,18 +322,32 @@ export function filterSortAndPaginateWithGroups( data, view, fields ) {
 			? { ...( view ?? {} ), sort: null }
 			: view;
 
-	if ( ! hasGroupFilters( view?.filters ) ) {
+	const fieldMap = new Map( fields.map( ( field ) => [ field.id, field ] ) );
+	const filters = Array.isArray( view?.filters ) ? view.filters : [];
+	// Group filters take every filter; otherwise only date overlaps are
+	// matched here and the rest stay with DataViews.
+	const ownFilters = hasGroupFilters( filters )
+		? filters
+		: filters.filter( ( filter ) =>
+				isDateOverlapFilter( filter, fieldMap )
+		  );
+
+	if ( ownFilters.length === 0 ) {
 		return filterSortAndPaginate( data, queryView, fields );
 	}
 
-	const fieldMap = new Map( fields.map( ( field ) => [ field.id, field ] ) );
 	const filteredData = ( Array.isArray( data ) ? data : [] ).filter(
-		( item ) => matchesFilters( item, view?.filters, fieldMap )
+		( item ) => matchesFilters( item, ownFilters, fieldMap )
 	);
 
 	return filterSortAndPaginate(
 		filteredData,
-		{ ...( queryView ?? {} ), filters: [] },
+		{
+			...( queryView ?? {} ),
+			filters: filters.filter(
+				( filter ) => ! ownFilters.includes( filter )
+			),
+		},
 		fields
 	);
 }

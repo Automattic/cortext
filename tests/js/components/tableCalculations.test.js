@@ -185,6 +185,21 @@ describe( 'calculateField', () => {
 		expect( calculateField( rows, dateField, 'max' ) ).toBe( '03/03/2026' );
 	} );
 
+	it( 'reads date ranges at their start for min and their end for max', () => {
+		const dateField = field( {
+			type: 'date',
+			cortextType: 'date',
+			cortextFormat: { style: 'us' },
+		} );
+		const rows = [
+			{ value: '2026-02-01/2026-04-15' },
+			{ value: '2026-03-03' },
+			{ value: '2026-01-10/2026-01-20' },
+		];
+		expect( calculateField( rows, dateField, 'min' ) ).toBe( '01/10/2026' );
+		expect( calculateField( rows, dateField, 'max' ) ).toBe( '04/15/2026' );
+	} );
+
 	it( 'returns blank when a non-count calculation has no comparable values', () => {
 		const rows = [ { value: '' }, { value: null } ];
 		expect( calculateField( rows, field(), 'min' ) ).toBe( '' );

@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 import {
+	DateEditor,
 	dateOnlyValue,
 	default as EditableCell,
 	formatDateValue,
@@ -61,6 +62,21 @@ describe( 'formatDisplay', () => {
 				format: { style: 'us', time: true, hour12: false },
 			} );
 			expect( out ).toContain( '14:30' );
+		} );
+
+		it( 'formats date ranges from start and end', () => {
+			expect(
+				formatDisplay( '2026-05-01/2026-05-03', 'date', {
+					format: { style: 'us' },
+				} )
+			).toBe( '05/01/2026 - 05/03/2026' );
+			expect(
+				formatDisplay(
+					'2026-05-01T09:00:00+00:00/2026-05-01T17:00:00+00:00',
+					'datetime',
+					{ format: { style: 'us', time: false } }
+				)
+			).toBe( '05/01/2026' );
 		} );
 
 		it( 'formats date range rollups from object values', () => {
@@ -543,5 +559,94 @@ describe( 'EditableCell on a locked row', () => {
 		expect(
 			container.querySelector( '.cortext-cell-readonly' )
 		).toHaveTextContent( '3' );
+	} );
+} );
+
+describe( 'DateEditor', () => {
+	const originalResizeObserver = window.ResizeObserver;
+	beforeAll( () => {
+		// The Start/End toggle group measures itself; jsdom has no observer.
+		window.ResizeObserver = class {
+			observe() {}
+			unobserve() {}
+			disconnect() {}
+		};
+	} );
+	afterAll( () => {
+		window.ResizeObserver = originalResizeObserver;
+	} );
+
+	it( 'offers an end date and edits the start or end of a range', async () => {
+		const onCommit = jest.fn( async () => true );
+		render(
+			<DateEditor
+				value="2026-05-01/2026-05-03"
+				type="date"
+				onCommit={ onCommit }
+				onCancel={ () => {} }
+				label="When"
+			/>
+		);
+
+		expect(
+			screen.getByRole( 'checkbox', { name: 'End date' } )
+		).toBeChecked();
+		expect( screen.getByRole( 'radio', { name: 'Start' } ) ).toBeChecked();
+
+		fireEvent.click( screen.getByRole( 'radio', { name: 'End' } ) );
+		await act( async () => {
+			fireEvent.click(
+				screen.getByRole( 'button', { name: /May 10, 2026/ } )
+			);
+		} );
+		expect( onCommit ).toHaveBeenLastCalledWith( '2026-05-01/2026-05-10', {
+			keepOpen: true,
+		} );
+	} );
+
+	it( 'drops the end when End date is turned off', async () => {
+		const onCommit = jest.fn( async () => true );
+		render(
+			<DateEditor
+				value="2026-05-01/2026-05-03"
+				type="date"
+				onCommit={ onCommit }
+				onCancel={ () => {} }
+				label="When"
+			/>
+		);
+
+		await act( async () => {
+			fireEvent.click(
+				screen.getByRole( 'checkbox', { name: 'End date' } )
+			);
+		} );
+		expect( onCommit ).toHaveBeenCalledWith( '2026-05-01', {
+			keepOpen: true,
+		} );
+		expect( screen.queryByRole( 'radio', { name: 'End' } ) ).toBeNull();
+	} );
+
+	it( 'keeps single dates a single pick', async () => {
+		const onCommit = jest.fn( async () => true );
+		render(
+			<DateEditor
+				value="2026-05-01"
+				type="date"
+				onCommit={ onCommit }
+				onCancel={ () => {} }
+				label="When"
+			/>
+		);
+
+		expect(
+			screen.getByRole( 'checkbox', { name: 'End date' } )
+		).not.toBeChecked();
+		await act( async () => {
+			fireEvent.click(
+				screen.getByRole( 'button', { name: /May 10, 2026/ } )
+			);
+		} );
+		expect( onCommit ).toHaveBeenCalledWith( '2026-05-10' );
 	} );
 } );

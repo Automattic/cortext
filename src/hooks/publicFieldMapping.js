@@ -9,6 +9,7 @@
 import { __ } from '@wordpress/i18n';
 
 import { dataViewsFilterByForType, elementsFromOptions } from './fieldMapping';
+import { sortByDateRangeStart } from '../utils/dateRange';
 import { formatDisplay } from '../utils/formatDisplay';
 
 const PUBLIC_SEARCHABLE_TYPES = new Set( [
@@ -317,6 +318,7 @@ function mapPublicField( fieldDef ) {
 			return {
 				...base,
 				type: 'datetime',
+				sort: sortByDateRangeStart,
 			};
 		case 'checkbox':
 			return {

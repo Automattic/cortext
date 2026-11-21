@@ -10,6 +10,7 @@ Cortext stores its main data in WordPress posts and post meta:
 -   `crtxt_trait` is the taxonomy that wires rows to their collection. Each collection document mirrors itself as a term in this taxonomy (term slug = the collection's post id).
 -   `crtxt_field` stores field definitions.
 -   Row values are stored as field-keyed post meta (`field-<id>`) on the row document.
+-   Date and date and time values are ISO strings (`2026-03-01`, or RFC 3339 in UTC). A value with an end date joins both with a slash (`2026-03-01/2026-06-30`). The start comes first, so sorting the raw string still sorts by start.
 
 This keeps the data inspectable with normal WordPress tools while the product surface can stay focused on knowledge base workflows.
 

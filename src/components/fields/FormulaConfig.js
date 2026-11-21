@@ -173,6 +173,22 @@ const FUNCTION_COMPLETIONS = [
 		type: 'text',
 		description: __( 'Format a date as text.', 'cortext' ),
 	},
+	{
+		label: 'dateStart',
+		signature: 'dateStart(date)',
+		insertText: 'dateStart()',
+		caretOffset: 'dateStart('.length,
+		type: 'date',
+		description: __( 'First day of a date range.', 'cortext' ),
+	},
+	{
+		label: 'dateEnd',
+		signature: 'dateEnd(date)',
+		insertText: 'dateEnd()',
+		caretOffset: 'dateEnd('.length,
+		type: 'date',
+		description: __( 'Last day of a date range.', 'cortext' ),
+	},
 ];
 
 const HIGHLIGHT_FUNCTIONS = new Set( [
@@ -187,6 +203,8 @@ const HIGHLIGHT_FUNCTIONS = new Set( [
 	'now',
 	'datebetween',
 	'formatdate',
+	'datestart',
+	'dateend',
 ] );
 
 function isNameStart( char ) {
