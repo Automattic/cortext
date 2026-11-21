@@ -24,6 +24,9 @@ import './prioritizeCortextInserterBlocks';
 // Register Cortext's inline mention format and @ completer.
 import './mention';
 
+// Register the `cortext/property` block bindings source.
+import '../blocks/property-bindings';
+
 // Our link picker's "Create" action makes a Cortext document, not a WordPress
 // page, so relabel Gutenberg's create button. "Create: %s" (text and image
 // links) and "Create page: %s" (the button block) are core default-domain

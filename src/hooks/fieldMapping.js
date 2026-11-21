@@ -112,7 +112,7 @@ function parseBooleanMeta( raw, fallback = false ) {
 	);
 }
 
-function rollupDisplayType( meta ) {
+export function rollupDisplayType( meta ) {
 	const aggregator = meta?.rollup_aggregator ?? 'count';
 	if ( aggregator === 'date_range' ) {
 		return 'rollup-date-range';

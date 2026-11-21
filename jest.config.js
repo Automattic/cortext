@@ -1,5 +1,11 @@
 const base = require( '@wordpress/scripts/config/jest-unit.config' );
 
+// Format dates in UTC everywhere, as CI does, so local runs match it and the
+// cases shared with PHPUnit (which formats in the UTC site time zone) agree.
+// Set here, before Jest starts its workers, because the test sandbox can't
+// change the time zone.
+process.env.TZ = 'UTC';
+
 module.exports = {
 	...base,
 	rootDir: '.',

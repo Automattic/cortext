@@ -17,6 +17,7 @@ use Cortext\Compat\IndexedDefaultMetadata;
 use Cortext\Editor\DocumentCoverBlock;
 use Cortext\Editor\DocumentIconBlock;
 use Cortext\Editor\DocumentPropertiesBlock;
+use Cortext\Editor\PropertyBindings;
 use Cortext\Editor\RevisionThrottle;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Frontend\AdminBar;
@@ -85,6 +86,7 @@ final class Plugin {
 		( new DocumentIconBlock() )->register();
 		( new DocumentCoverBlock() )->register();
 		( new DocumentPropertiesBlock() )->register();
+		( new PropertyBindings() )->register();
 		( new FavoritesController() )->register();
 		( new FieldsController() )->register();
 		( new BacklinksController() )->register();

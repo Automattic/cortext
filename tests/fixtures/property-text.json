@@ -1,0 +1,195 @@
+{
+	"about": "Shared cases for PropertyText.php and propertyText.js. Both run with the en_US locale and the UTC time zone, and compare after turning narrow no-break spaces into plain spaces, since ICU versions differ there.",
+	"cases": [
+		{
+			"name": "text is trimmed",
+			"config": { "type": "text" },
+			"value": "  Ada  ",
+			"expected": "Ada"
+		},
+		{
+			"name": "empty text",
+			"config": { "type": "text" },
+			"value": "",
+			"expected": ""
+		},
+		{
+			"name": "null value",
+			"config": { "type": "number" },
+			"value": null,
+			"expected": ""
+		},
+		{
+			"name": "url",
+			"config": { "type": "url" },
+			"value": "https://example.com/a",
+			"expected": "https://example.com/a"
+		},
+		{
+			"name": "plain number",
+			"config": { "type": "number" },
+			"value": 1234.5,
+			"expected": "1234.5"
+		},
+		{
+			"name": "plain number keeps up to three decimals",
+			"config": { "type": "number" },
+			"value": 1.23456,
+			"expected": "1.235"
+		},
+		{
+			"name": "comma number",
+			"config": { "type": "number", "format": { "style": "comma" } },
+			"value": 1234.5,
+			"expected": "1,234.5"
+		},
+		{
+			"name": "fixed decimals",
+			"config": {
+				"type": "number",
+				"format": { "style": "comma", "decimals": 2 }
+			},
+			"value": 1234.5,
+			"expected": "1,234.50"
+		},
+		{
+			"name": "currency",
+			"config": {
+				"type": "number",
+				"format": {
+					"style": "currency",
+					"currency": "EUR",
+					"decimals": 2
+				}
+			},
+			"value": 1234.5,
+			"expected": "€1,234.50"
+		},
+		{
+			"name": "percent",
+			"config": { "type": "number", "format": { "style": "percent" } },
+			"value": 0.256,
+			"expected": "26%"
+		},
+		{
+			"name": "non-numeric number",
+			"config": { "type": "number" },
+			"value": "abc",
+			"expected": "abc"
+		},
+		{
+			"name": "list of numbers",
+			"config": { "type": "number" },
+			"value": [ 1, 2 ],
+			"expected": "1, 2"
+		},
+		{
+			"name": "date",
+			"config": { "type": "date" },
+			"value": "2026-11-21",
+			"expected": "11/21/2026"
+		},
+		{
+			"name": "date, day first",
+			"config": { "type": "date", "format": { "style": "eu" } },
+			"value": "2026-11-21",
+			"expected": "21/11/2026"
+		},
+		{
+			"name": "datetime",
+			"config": { "type": "datetime", "format": { "style": "us" } },
+			"value": "2026-11-21T15:04:00+00:00",
+			"expected": "11/21/2026, 03:04 PM"
+		},
+		{
+			"name": "datetime, 24 hours",
+			"config": {
+				"type": "datetime",
+				"format": { "style": "us", "hour12": false }
+			},
+			"value": "2026-11-21T15:04:00+00:00",
+			"expected": "11/21/2026, 15:04"
+		},
+		{
+			"name": "datetime without time",
+			"config": {
+				"type": "datetime",
+				"format": { "style": "us", "time": false }
+			},
+			"value": "2026-11-21T15:04:00+00:00",
+			"expected": "11/21/2026"
+		},
+		{
+			"name": "checked",
+			"config": { "type": "checkbox" },
+			"value": true,
+			"expected": "Yes"
+		},
+		{
+			"name": "unchecked",
+			"config": { "type": "checkbox" },
+			"value": false,
+			"expected": "No"
+		},
+		{
+			"name": "unset checkbox",
+			"config": { "type": "checkbox" },
+			"value": "",
+			"expected": "No"
+		},
+		{
+			"name": "select label",
+			"config": {
+				"type": "select",
+				"elements": [ { "value": "a", "label": "Alpha" } ]
+			},
+			"value": "a",
+			"expected": "Alpha"
+		},
+		{
+			"name": "select without a matching option",
+			"config": { "type": "select", "elements": [] },
+			"value": "z",
+			"expected": "z"
+		},
+		{
+			"name": "multiselect labels",
+			"config": {
+				"type": "multiselect",
+				"elements": [
+					{ "value": "a", "label": "Alpha" },
+					{ "value": "b", "label": "Beta" }
+				]
+			},
+			"value": [ "a", "b" ],
+			"expected": "Alpha, Beta"
+		},
+		{
+			"name": "relation titles",
+			"config": { "type": "relation" },
+			"value": [
+				{ "id": 1, "title": { "raw": "Launch plan" } },
+				{ "id": 2, "title": { "raw": "" } }
+			],
+			"expected": "Launch plan, (untitled)"
+		},
+		{
+			"name": "date range",
+			"config": {
+				"type": "rollup-date-range",
+				"format": { "rollup_target_type": "date" }
+			},
+			"value": { "start": "2026-01-01", "end": "2026-02-01" },
+			"expected": "01/01/2026 - 02/01/2026"
+		},
+		{
+			"name": "date range on one day",
+			"config": {
+				"type": "rollup-date-range",
+				"format": { "rollup_target_type": "date" }
+			},
+			"value": { "start": "2026-01-01", "end": "2026-01-01" },
+			"expected": "01/01/2026"
+		}
+	]
+}

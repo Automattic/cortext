@@ -29,6 +29,7 @@ jest.mock( '../../src/components/initInserterMediaCategories', () => ( {} ) );
 // Mention registration is covered separately; avoid pulling rich-text stores
 // into this allowlist test.
 jest.mock( '../../src/components/mention', () => ( {} ) );
+jest.mock( '../../src/blocks/property-bindings', () => ( {} ) );
 
 import {
 	ALLOWED_BLOCK_TYPES,
