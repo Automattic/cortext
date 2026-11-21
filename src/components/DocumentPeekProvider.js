@@ -210,7 +210,6 @@ export function DocumentPeekProvider( { children } ) {
 
 	const runTransition = useCallback(
 		async ( transition, options = {} ) => {
-			const commit = () => applyTransition( transition );
 			const api = detailApiRef.current;
 			setSaveError( null );
 
@@ -224,7 +223,7 @@ export function DocumentPeekProvider( { children } ) {
 
 			if ( options.discard ) {
 				api?.discard?.();
-				commit();
+				applyTransition( transition );
 				sourceToRefresh?.refresh?.();
 				return true;
 			}
@@ -243,7 +242,7 @@ export function DocumentPeekProvider( { children } ) {
 				}
 			}
 
-			commit();
+			applyTransition( transition );
 			if ( refreshAfterFlush ) {
 				sourceToRefresh?.refresh?.();
 			}

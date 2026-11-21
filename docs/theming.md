@@ -32,7 +32,7 @@ Shell colors are controlled by CSS custom properties:
   state overlays (so dark mode can override via
   `.cortext-root[data-theme="dark"]`).
 - `src/styles/_tokens-row-detail.scss`: row-detail tokens. Scoped to
-  `.cortext-row-detail, .cortext-row-detail-modal`. Light-only by design;
+  `.cortext-row-detail`. Light-only by design;
   see "current behavior" above.
 
 The tokens are useful for local experiments, but they are not a public

@@ -496,7 +496,6 @@ export default function RowDetailView( {
 		return () => clearTimeout( timeout );
 	}, [ detailPanes ] );
 
-	const requestClose = onClose;
 	const activePane = detailPanes.find(
 		( pane ) => pane.key === activeDetailKey
 	);
@@ -525,7 +524,7 @@ export default function RowDetailView( {
 
 	const content =
 		! activeDetail && detailPanes.length === 0 ? (
-			<LoadingDetail onClose={ requestClose } />
+			<LoadingDetail onClose={ onClose } />
 		) : (
 			<DetailShell
 				arePropertiesVisible={ arePropertiesVisible }
@@ -537,7 +536,7 @@ export default function RowDetailView( {
 				isPinned={ isPinned }
 				isPropertiesLayoutEditing={ isPropertiesLayoutEditing }
 				mode={ normalizedMode }
-				onClose={ requestClose }
+				onClose={ onClose }
 				onDiscardPending={ onDiscardPending }
 				onModeChange={ onModeChange }
 				onNext={ onNext }
