@@ -216,6 +216,7 @@ final class DocumentDuplicator {
 					'post_type'   => Field::POST_TYPE,
 					'post_status' => 'private',
 					'post_title'  => $clone_title,
+					'post_parent' => $target_id,
 					'meta_input'  => $meta,
 				),
 				true

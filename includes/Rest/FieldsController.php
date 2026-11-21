@@ -1814,6 +1814,7 @@ final class FieldsController {
 				'post_type'   => Field::POST_TYPE,
 				'post_status' => 'private',
 				'post_title'  => $title,
+				'post_parent' => $collection_id,
 				'meta_input'  => $meta,
 			),
 			true

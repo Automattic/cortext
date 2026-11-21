@@ -135,7 +135,7 @@ final class Importer {
 			if ( ! is_array( $prop ) ) {
 				continue;
 			}
-			$field_id = $this->create_field( (string) $name, $prop );
+			$field_id = $this->create_field( (int) $collection_id, (string) $name, $prop );
 			if ( $field_id instanceof WP_Error ) {
 				$this->discard_partial_collection( (int) $collection_id, $field_ids );
 				return $field_id;
@@ -301,11 +301,12 @@ final class Importer {
 	 * actual save failure. The caller attaches the returned id to the
 	 * collection schema.
 	 *
-	 * @param string $name Property display name.
-	 * @param array  $prop Notion property schema.
+	 * @param int    $collection_id Collection the field belongs to.
+	 * @param string $name          Property display name.
+	 * @param array  $prop          Notion property schema.
 	 * @return int|WP_Error Field id, 0 on skip, WP_Error on hard failure.
 	 */
-	private function create_field( string $name, array $prop ) {
+	private function create_field( int $collection_id, string $name, array $prop ) {
 		$notion_type = (string) ( $prop['type'] ?? '' );
 		if ( '' === $notion_type || 'title' === $notion_type ) {
 			return 0;
@@ -317,10 +318,11 @@ final class Importer {
 		}
 
 		$payload = array(
-			'title'  => $name,
-			'status' => 'private',
-			'type'   => $cortext_type,
-			'meta'   => array(
+			'title'         => $name,
+			'status'        => 'private',
+			'type'          => $cortext_type,
+			'collection_id' => $collection_id,
+			'meta'          => array(
 				self::META_FIELD_PROPERTY_ID => $this->decode_property_id( (string) ( $prop['id'] ?? '' ) ),
 				self::META_FIELD_NOTION_TYPE => $notion_type,
 			),

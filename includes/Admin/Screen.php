@@ -17,6 +17,7 @@ namespace Cortext\Admin;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\PostType\Document;
 use Cortext\Runtime\Features;
 use Cortext\Runtime\Experiments;
 use Cortext\Theming\Preferences;
@@ -43,7 +44,7 @@ final class Screen {
 		add_menu_page(
 			__( 'Cortext', 'cortext' ),
 			__( 'Cortext', 'cortext' ),
-			'edit_posts',
+			Document::CAPABILITY,
 			self::MENU_SLUG,
 			array( $this, 'render' ),
 			'dashicons-welcome-write-blog',

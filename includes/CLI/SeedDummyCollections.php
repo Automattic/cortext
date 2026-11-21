@@ -4885,6 +4885,7 @@ final class SeedDummyCollections {
 					'post_type'   => Field::POST_TYPE,
 					'post_title'  => $title,
 					'post_status' => 'private',
+					'post_parent' => $collection_id,
 				),
 				true
 			);
@@ -5926,6 +5927,7 @@ final class SeedDummyCollections {
 				'post_type'   => Field::POST_TYPE,
 				'post_title'  => $title,
 				'post_status' => 'private',
+				'post_parent' => $collection_id,
 			),
 			true
 		);

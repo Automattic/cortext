@@ -791,6 +791,162 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( '1', get_post_meta( $reverse_field_id, 'relation_multiple', true ) );
 	}
 
+	public function test_field_permissions_follow_the_collection_not_who_added_the_field(): void {
+		$field = new Field();
+		add_filter( 'map_meta_cap', array( $field, 'map_field_caps_to_collection' ), 10, 4 );
+		$author_id = $this->create_user( 'author' );
+		$other_id  = $this->create_user( 'author' );
+
+		wp_set_current_user( $author_id );
+		$collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-field-caps' );
+
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$response = $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Notes',
+				'type'  => 'text',
+			)
+		);
+		$this->assertSame( 201, $response->get_status() );
+		$field_id = (int) $response->get_data()['id'];
+
+		wp_set_current_user( $author_id );
+		$this->assertTrue( current_user_can( 'read_post', $field_id ) );
+		$this->assertTrue( current_user_can( 'edit_post', $field_id ) );
+		$this->assertTrue( current_user_can( 'delete_post', $field_id ) );
+
+		wp_set_current_user( $other_id );
+		$this->assertFalse( current_user_can( 'read_post', $field_id ) );
+		$this->assertFalse( current_user_can( 'edit_post', $field_id ) );
+		$this->assertFalse( current_user_can( 'delete_post', $field_id ) );
+
+		remove_filter( 'map_meta_cap', array( $field, 'map_field_caps_to_collection' ), 10 );
+	}
+
+	public function test_a_collection_cannot_list_a_field_it_does_not_own(): void {
+		$field = new Field();
+		add_filter( 'map_meta_cap', array( $field, 'map_field_caps_to_collection' ), 10, 4 );
+
+		$owner_id = $this->create_user( 'author' );
+		wp_set_current_user( $owner_id );
+		$collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-owned-field' );
+		$response      = $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Notes',
+				'type'  => 'text',
+			)
+		);
+		$this->assertSame( 201, $response->get_status() );
+		$field_id = (int) $response->get_data()['id'];
+		$this->assertSame( $collection_id, (int) get_post( $field_id )->post_parent );
+
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$other_collection_id = $this->create_collection_with_slug( 'Other', 'other-owned-field' );
+
+		// WorDBless stores meta even after an earlier filter short-circuits,
+		// so check the guard's answer directly.
+		$this->assertFalse( $field->guard_collection_field_list( null, $other_collection_id, 'cortext_fields', (string) $field_id ) );
+		$this->assertFalse( $field->guard_collection_field_list( null, $other_collection_id, 'cortext_fields', (string) ( $field_id + 1000 ) ) );
+		$this->assertNull( $field->guard_collection_field_list( null, $collection_id, 'cortext_fields', (string) $field_id ) );
+		$this->assertNull( $field->guard_collection_field_list( null, $other_collection_id, 'cortext_detail_layout', (string) $field_id ) );
+
+		// Even if the foreign ID lands in the list, the field still belongs
+		// to its own collection.
+		add_post_meta( $other_collection_id, 'cortext_fields', (string) $field_id );
+		$this->assertFalse( current_user_can( 'edit_post', $field_id ) );
+
+		wp_set_current_user( $owner_id );
+		$this->assertTrue( current_user_can( 'edit_post', $field_id ) );
+
+		// Once the collection is gone, core's rules apply again so the field
+		// can still be cleaned up.
+		wp_delete_post( $collection_id, true );
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$this->assertTrue( current_user_can( 'delete_post', $field_id ) );
+
+		remove_filter( 'map_meta_cap', array( $field, 'map_field_caps_to_collection' ), 10 );
+	}
+
+	public function test_deleting_a_relation_needs_edit_access_to_both_collections(): void {
+		$field = new Field();
+		add_filter( 'map_meta_cap', array( $field, 'map_field_caps_to_collection' ), 10, 4 );
+
+		$author_id = $this->create_user( 'author' );
+		wp_set_current_user( $author_id );
+		$author_collection_id = $this->create_collection_with_slug( 'People', 'people-pair' );
+
+		$editor_id = $this->create_user( 'editor' );
+		wp_set_current_user( $editor_id );
+		$editor_collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-pair' );
+		$response             = $this->create_field(
+			$editor_collection_id,
+			array(
+				'title'                 => 'Assignee',
+				'type'                  => 'relation',
+				'related_collection_id' => $author_collection_id,
+			)
+		);
+		$this->assertSame( 201, $response->get_status() );
+		$reverse_id = (int) get_post_meta( (int) $response->get_data()['id'], 'relation_reverse_field_id', true );
+		$this->assertSame( $author_collection_id, (int) get_post( $reverse_id )->post_parent );
+
+		wp_set_current_user( $author_id );
+		$this->assertTrue( current_user_can( 'edit_post', $reverse_id ) );
+		$this->assertFalse( current_user_can( 'delete_post', $reverse_id ) );
+
+		wp_set_current_user( $editor_id );
+		$this->assertTrue( current_user_can( 'delete_post', $reverse_id ) );
+
+		remove_filter( 'map_meta_cap', array( $field, 'map_field_caps_to_collection' ), 10 );
+	}
+
+	public function test_field_list_guard_covers_writes_by_meta_id(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-by-mid' );
+		$own_field_id  = (int) $this->create_field(
+			$collection_id,
+			array(
+				'title' => 'Notes',
+				'type'  => 'text',
+			)
+		)->get_data()['id'];
+
+		$other_collection_id = $this->create_collection_with_slug( 'Other', 'other-by-mid' );
+		$foreign_field_id    = (int) $this->create_field(
+			$other_collection_id,
+			array(
+				'title' => 'Secret',
+				'type'  => 'text',
+			)
+		)->get_data()['id'];
+
+		$meta_id = (int) add_post_meta( $collection_id, 'cortext_fields', (string) $own_field_id );
+		$this->assertGreaterThan( 0, $meta_id );
+		// WorDBless answers a meta ID lookup with the bare value; WordPress
+		// returns the row object.
+		$row_by_mid = static fn( $check, $mid ) => $meta_id === (int) $mid
+			? (object) array(
+				'meta_id'    => $meta_id,
+				'post_id'    => (string) $collection_id,
+				'meta_key'   => 'cortext_fields',
+				'meta_value' => (string) $own_field_id,
+			)
+			: $check;
+		add_filter( 'get_post_metadata_by_mid', $row_by_mid, 11, 2 );
+
+		$field = new Field();
+		// XML-RPC custom fields update the existing row without a key.
+		$this->assertFalse( $field->guard_collection_field_list_by_mid( null, $meta_id, (string) $foreign_field_id, false ) );
+		$this->assertFalse( $field->guard_collection_field_list_by_mid( null, $meta_id, (string) $foreign_field_id, 'cortext_fields' ) );
+		$this->assertNull( $field->guard_collection_field_list_by_mid( null, $meta_id, (string) $own_field_id, false ) );
+		// Renaming the row to another key isn't a property list write.
+		$this->assertNull( $field->guard_collection_field_list_by_mid( null, $meta_id, (string) $foreign_field_id, 'cortext_extra_list' ) );
+
+		remove_filter( 'get_post_metadata_by_mid', $row_by_mid, 11 );
+	}
+
 	public function test_create_relation_rejects_a_target_the_user_cannot_edit(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$target_collection_id = $this->create_collection_with_slug( 'People', 'people-forbidden' );

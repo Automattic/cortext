@@ -34,7 +34,7 @@ final class Test_Admin_Screen extends BaseTestCase {
 		}
 
 		$this->assertNotNull( $cortext_item, 'Cortext menu entry was not registered.' );
-		$this->assertSame( 'edit_posts', $cortext_item[1], 'Cortext menu capability should be edit_posts.' );
+		$this->assertSame( 'publish_posts', $cortext_item[1], 'Cortext menu capability should be publish_posts.' );
 		$this->assertSame( 'Cortext', $cortext_item[0], 'Cortext menu title should be "Cortext".' );
 		$this->assertSame( 'dashicons-welcome-write-blog', $cortext_item[6], 'Cortext should keep the compact wp-admin menu icon.' );
 

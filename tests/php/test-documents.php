@@ -398,7 +398,7 @@ final class Test_Documents extends BaseTestCase {
 
 	public function test_list_paginates_after_permission_filtering(): void {
 		$owner_id  = $this->create_user( 'administrator' );
-		$viewer_id = $this->create_user( 'contributor' );
+		$viewer_id = $this->create_user( 'author' );
 
 		wp_set_current_user( $owner_id );
 		$this->create_page(

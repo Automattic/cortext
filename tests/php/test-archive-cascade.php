@@ -362,7 +362,7 @@ final class Test_Archive_Cascade extends BaseTestCase {
 	}
 
 	public function test_archived_draft_keeps_its_authors_normal_capabilities(): void {
-		$author_id = $this->create_user( 'contributor' );
+		$author_id = $this->create_user( 'author' );
 		$post_id   = $this->create_page(
 			array(
 				'post_author' => $author_id,

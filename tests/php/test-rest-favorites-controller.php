@@ -186,7 +186,7 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 			)
 		);
 
-		wp_set_current_user( $this->create_user( 'contributor' ) );
+		wp_set_current_user( $this->create_user( 'author' ) );
 		$response = $this->set_favorites( array( array( 'id' => $page_id ) ) );
 
 		$this->assertSame( 403, $response->get_status() );
@@ -198,7 +198,7 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 
 	public function test_get_omits_invalid_deleted_trashed_duplicate_and_inaccessible_targets(): void {
 		$owner_id = $this->create_user( 'administrator' );
-		$user_id  = $this->create_user( 'contributor' );
+		$user_id  = $this->create_user( 'author' );
 		wp_set_current_user( $owner_id );
 		$valid_page = $this->create_page(
 			array(
@@ -388,7 +388,7 @@ final class Test_Rest_Favorites_Controller extends BaseTestCase {
 			)
 		);
 
-		$user_id = $this->create_user( 'contributor' );
+		$user_id = $this->create_user( 'author' );
 		wp_set_current_user( $user_id );
 		$response = $this->set_favorites( array( array( 'id' => $page_id ) ) );
 

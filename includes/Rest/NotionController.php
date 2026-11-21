@@ -35,6 +35,7 @@ defined( 'ABSPATH' ) || exit;
 use Cortext\Documents;
 use Cortext\Notion\Client;
 use Cortext\Notion\Importer;
+use Cortext\PostType\Document;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -110,7 +111,7 @@ final class NotionController {
 	}
 
 	public function can_import(): bool {
-		return current_user_can( 'edit_posts' );
+		return current_user_can( Document::CAPABILITY );
 	}
 
 	// -----------------------------------------------------------------
@@ -206,6 +207,7 @@ final class NotionController {
 		$this->save_job(
 			$job_id,
 			array(
+				'user_id'         => get_current_user_id(),
 				'collection_id'   => (int) $collection_id,
 				'collection_slug' => (string) get_post_field( 'post_name', (int) $collection_id ),
 				'data_source_id'  => $data_source_id,
@@ -405,7 +407,8 @@ final class NotionController {
 
 	private function load_job( string $job_id ): ?array {
 		$value = get_option( self::JOB_OPTION_PREFIX . $job_id, null );
-		if ( ! is_array( $value ) ) {
+		// Another user's job reads as missing.
+		if ( ! is_array( $value ) || get_current_user_id() !== (int) ( $value['user_id'] ?? 0 ) ) {
 			return null;
 		}
 		return $value;

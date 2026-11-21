@@ -36,6 +36,23 @@ final class Document {
 	public const POST_TYPE = 'crtxt_document';
 
 	/**
+	 * Capability needed to use Cortext at all. Documents are private by
+	 * default and creating private posts needs `publish_posts`, so roles
+	 * without it (Contributor) can't work in Cortext.
+	 */
+	public const CAPABILITY = 'publish_posts';
+
+	/**
+	 * Primitive caps that differ from core `post` caps. Shared with fields so
+	 * both post types gate the same way.
+	 *
+	 * @var array<string,string>
+	 */
+	public const CAPABILITIES = array(
+		'edit_posts' => self::CAPABILITY,
+	);
+
+	/**
 	 * Relation updates prepared in `rest_pre_insert_crtxt_document` and
 	 * consumed in `rest_after_insert_crtxt_document`. Keyed by [row_id][field_id].
 	 *
@@ -60,6 +77,7 @@ final class Document {
 		// "create a document attached to this taxonomy term by post id of the
 		// trait", so this filter bridges it.
 		add_action( 'rest_after_insert_' . self::POST_TYPE, array( $this, 'assign_trait_from_request' ), 10, 3 );
+		add_filter( 'rest_pre_insert_' . self::POST_TYPE, array( $this, 'guard_placement' ), 5 );
 		// Relation meta writes need pre-validation (the desired targets must be
 		// valid rows of the related collection) and post-write reverse-pointer
 		// sync. WP REST writes the forward meta itself between these two hooks.
@@ -492,6 +510,33 @@ final class Document {
 	}
 
 	/**
+	 * Rejects REST writes that put a document under a page the user can't
+	 * edit. Core doesn't check the parent; collection membership is checked
+	 * by `validate_membership_update()`.
+	 *
+	 * @param \stdClass|WP_Error $prepared_post Post prepared for insert.
+	 * @return \stdClass|WP_Error
+	 */
+	public function guard_placement( $prepared_post ) {
+		if ( $prepared_post instanceof WP_Error ) {
+			return $prepared_post;
+		}
+
+		$parent_id = (int) ( $prepared_post->post_parent ?? 0 );
+		$current   = isset( $prepared_post->ID ) ? get_post( (int) $prepared_post->ID ) : null;
+		$moved     = ! $current instanceof WP_Post || (int) $current->post_parent !== $parent_id;
+		if ( $parent_id > 0 && $moved && ! current_user_can( 'edit_post', $parent_id ) ) {
+			return new WP_Error(
+				'cortext_parent_forbidden',
+				__( 'Sorry, you are not allowed to add documents inside this one.', 'cortext' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
+
+		return $prepared_post;
+	}
+
+	/**
 	 * Reads `cortext_trait` from the REST request body. Used by both the
 	 * REST insert hook (to assign the term after a create) and the schema
 	 * description so the param is discoverable.
@@ -776,6 +821,10 @@ final class Document {
 		if ( ! is_array( $meta ) || count( $meta ) === 0 ) {
 			return $prepared_post;
 		}
+		// The server keeps a collection's property list. Core-data sends the
+		// whole `meta` object whenever it saves a meta edit, so a stale list
+		// would otherwise re-add or drop properties.
+		unset( $meta['cortext_fields'] );
 		// Rollups and formulas are computed and read-only, exposed in
 		// `cortext_hydrated_meta`. Drop any computed `field-<id>` from the
 		// write, so a stray one (stale client, hand-built request) is ignored
@@ -1104,6 +1153,7 @@ final class Document {
 					'thumbnail',
 				),
 				'capability_type'       => 'post',
+				'capabilities'          => self::CAPABILITIES,
 				'map_meta_cap'          => true,
 				'can_export'            => true,
 				'delete_with_user'      => false,

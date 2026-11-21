@@ -40,7 +40,7 @@ final class SampleContentController {
 	}
 
 	public function can_seed(): bool {
-		return current_user_can( 'edit_posts' );
+		return current_user_can( Document::CAPABILITY );
 	}
 
 	public function seed(): WP_REST_Response|WP_Error {

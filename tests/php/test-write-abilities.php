@@ -179,9 +179,11 @@ final class Test_Write_Abilities extends BaseTestCase {
 	}
 
 	public function test_create_page_needs_permission_to_create_documents(): void {
-		wp_set_current_user( $this->create_user( 'subscriber' ) );
+		foreach ( array( 'subscriber', 'contributor' ) as $role ) {
+			wp_set_current_user( $this->create_user( $role ) );
 
-		$this->assertPermissionDenied( wp_get_ability( 'cortext/create-page' )->execute( array( 'title' => 'Nope' ) ) );
+			$this->assertPermissionDenied( wp_get_ability( 'cortext/create-page' )->execute( array( 'title' => 'Nope' ) ) );
+		}
 	}
 
 	public function test_create_row_adds_it_to_the_collection_with_its_property_values(): void {

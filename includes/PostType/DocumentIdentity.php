@@ -70,7 +70,7 @@ final class DocumentIdentity {
 				'default'           => '',
 				'show_in_rest'      => true,
 				'auth_callback'     => static function () {
-					return current_user_can( 'edit_posts' );
+					return current_user_can( Document::CAPABILITY );
 				},
 				'sanitize_callback' => array( self::class, 'sanitize' ),
 			)

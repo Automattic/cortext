@@ -4,6 +4,14 @@ Running log of significant design decisions. Newest first. Each entry captures *
 
 Desktop-specific runtime and packaging decisions live in `docs/desktop-decisions.md`.
 
+## 2026-11-23: Cortext needs `publish_posts`; properties belong to their collection
+
+**Decision.** Documents and fields still use `capability_type => 'post'`, but their `edit_posts` and `create_posts` caps map to `publish_posts` (`Document::CAPABILITY`). The admin menu and the workspace-level `cortext/v1` routes (lists, favorites, recents, home, import) check the same constant; routes for one document check that document. A field stores its collection in `post_parent` when it's created, and `read_post` / `edit_post` / `delete_post` on a field map to the same check on that collection. A collection's `cortext_fields` list only accepts its own fields. Deleting one side of a relation also needs `edit_post` on the other side's collection, since the pair goes together. Nesting a document under a parent needs `edit_post` on the parent (joining a collection is checked by the traits endpoint and `Document::validate_membership_update()`). Both checks run on REST writes only: XML-RPC still asks only for core's `assign_terms` and doesn't check the parent. This supersedes the "shell is gated on `edit_posts`" part of the 2026-04-23 entry below.
+
+**Why.** Documents are private by default and creating private posts needs `publish_posts`, so Contributors could open Cortext but most of their actions failed. Properties were checked against whoever added them, so an Author couldn't change a property an Editor added to the Author's own collection. The owning collection lives on the field because the `cortext_fields` list is post meta, which XML-RPC custom fields and any PHP code can write, so it can't be trusted to decide permissions. REST writes to a document ignore the list; the server keeps it (fields endpoints, import, duplicate).
+
+**Revisit when.** Workspace membership and per-document access (issue #553) replace blog roles; `Document::CAPABILITY` becomes the membership capability then.
+
 ## 2026-05-30 — One `crtxt_document` post type for pages, collections, and rows
 
 **Decision.** Pages, collections, and rows are all one post type, `crtxt_document`. A document's role comes from its state: a `cortext_fields` schema makes it a collection (mirrored as a `crtxt_trait` taxonomy term), carrying a collection's `crtxt_trait` term makes it a row, and neither makes it a plain page. Field definitions stay in `crtxt_field` posts; row values stay in row post meta with the optional `cortext_field_values` sidecar. This replaced registering a dynamic post type per collection.
