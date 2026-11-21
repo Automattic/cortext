@@ -103,6 +103,14 @@ trait InMemoryPostsQuery {
 			);
 		}
 
+		if ( ! empty( $vars['post__in'] ) ) {
+			$ids        = array_map( 'intval', (array) $vars['post__in'] );
+			$candidates = array_filter(
+				$candidates,
+				static fn( WP_Post $post ): bool => in_array( (int) $post->ID, $ids, true )
+			);
+		}
+
 		if ( $wants_parent_filter ) {
 			$parent     = (int) $vars['post_parent'];
 			$candidates = array_filter(

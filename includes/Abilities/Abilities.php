@@ -94,6 +94,39 @@ final class Abilities {
 		);
 
 		wp_register_ability(
+			'cortext/get-document',
+			array(
+				'label'               => __( 'Read a document', 'cortext' ),
+				'description'         => __( 'Returns a page or row as Markdown. A row starts with its property values as YAML front matter.', 'cortext' ),
+				'category'            => self::CATEGORY,
+				'input_schema'        => array(
+					'type'                 => 'object',
+					'properties'           => array(
+						'id' => array(
+							'type'        => 'integer',
+							'description' => __( 'ID of the document.', 'cortext' ),
+						),
+					),
+					'required'             => array( 'id' ),
+					'additionalProperties' => false,
+				),
+				'output_schema'       => array(
+					'type'       => 'object',
+					'properties' => array(
+						'id'         => array( 'type' => 'integer' ),
+						'title'      => array( 'type' => 'string' ),
+						'path'       => array( 'type' => 'string' ),
+						'collection' => array( 'type' => 'object' ),
+						'markdown'   => array( 'type' => 'string' ),
+					),
+				),
+				'execute_callback'    => array( $this, 'get_document' ),
+				'permission_callback' => array( $this, 'can_read_document' ),
+				'meta'                => self::READ_ONLY,
+			)
+		);
+
+		wp_register_ability(
 			'cortext/list-collections',
 			array(
 				'label'               => __( 'List collections', 'cortext' ),
@@ -198,6 +231,37 @@ final class Abilities {
 	}
 
 	/**
+	 * Same lookup as the rest of Cortext: a document the user can edit that
+	 * isn't in Trash.
+	 *
+	 * @param array<string,mixed> $input Ability input.
+	 */
+	public function can_read_document( array $input ): bool {
+		return null !== ( new Documents() )->find( (int) $input['id'] );
+	}
+
+	/**
+	 * The document as Markdown. A row's property values come first, read
+	 * through the `/cortext/v1/rows` route so they match the table.
+	 *
+	 * @param array<string,mixed> $input Ability input.
+	 * @return array<string,mixed>
+	 */
+	public function get_document( array $input ): array {
+		$document   = ( new Documents() )->find( (int) $input['id'] );
+		$serializer = new MarkdownSerializer();
+		$markdown   = $serializer->serialize( (string) get_post_field( 'post_content', $document['id'] ) );
+
+		if ( isset( $document['collection'] ) ) {
+			$front_matter = $serializer->front_matter( $this->row_properties( $document['id'], $document['collection']['id'] ) );
+			$markdown     = trim( $front_matter . "\n\n" . $markdown );
+		}
+
+		$document['markdown'] = $markdown;
+		return $document;
+	}
+
+	/**
 	 * Lists documents through the same query as `/cortext/v1/documents`.
 	 *
 	 * @param array<string,mixed> $input Ability input.
@@ -254,6 +318,56 @@ final class Abilities {
 		}
 
 		return $response->get_data();
+	}
+
+	/**
+	 * A row's non-empty property values, labelled and in the collection's
+	 * order. Relations show the titles of the rows they point to.
+	 *
+	 * @param int $row_id        Row post ID.
+	 * @param int $collection_id Collection post ID.
+	 * @return array<int,array{label:string,value:mixed}>
+	 */
+	private function row_properties( int $row_id, int $collection_id ): array {
+		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
+		$request->set_query_params(
+			array(
+				'trait'   => $collection_id,
+				'include' => array( $row_id ),
+				'context' => 'edit',
+			)
+		);
+
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+		if ( $response->is_error() || ! isset( $data['rows'][0]['meta'] ) ) {
+			return array();
+		}
+
+		$values     = $data['rows'][0]['meta'];
+		$properties = array();
+		foreach ( $data['fields'] as $field ) {
+			$value = $values[ "field-{$field['id']}" ] ?? null;
+			if ( 'relation' === $field['type'] && is_array( $value ) ) {
+				$value = array_map(
+					static fn( array $target ): string => '' === $target['title']['raw'] ? __( '(untitled)', 'cortext' ) : $target['title']['raw'],
+					$value
+				);
+			}
+			if ( is_float( $value ) && floor( $value ) === $value ) {
+				$value = (int) $value;
+			}
+			if ( null === $value || '' === $value || array() === $value ) {
+				continue;
+			}
+
+			$properties[] = array(
+				'label' => $field['label'],
+				'value' => $value,
+			);
+		}
+
+		return $properties;
 	}
 
 	/**

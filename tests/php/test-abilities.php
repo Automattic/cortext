@@ -27,6 +27,7 @@ final class Test_Abilities extends BaseTestCase {
 
 	private const ABILITIES = array(
 		'cortext/search-documents',
+		'cortext/get-document',
 		'cortext/list-collections',
 		'cortext/query-rows',
 	);
@@ -87,6 +88,7 @@ final class Test_Abilities extends BaseTestCase {
 
 		$inputs = array(
 			'cortext/search-documents' => null,
+			'cortext/get-document'     => array( 'id' => $collection_id ),
 			'cortext/list-collections' => null,
 			'cortext/query-rows'       => array( 'collection' => $collection_id ),
 		);
@@ -186,6 +188,75 @@ final class Test_Abilities extends BaseTestCase {
 
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertStringStartsWith( 'cortext_', $result->get_error_code() );
+	}
+
+	public function test_get_document_returns_a_page_as_markdown(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'Projects' );
+		$page_id       = $this->create_document( 'Plan' );
+		wp_update_post(
+			array(
+				'ID'           => $page_id,
+				'post_content' => '<!-- wp:heading --><h2 class="wp-block-heading">Goals</h2><!-- /wp:heading -->'
+					. '<!-- wp:list --><ul class="wp-block-list"><!-- wp:list-item --><li><a href="https://example.com">Launch</a></li><!-- /wp:list-item --></ul><!-- /wp:list -->'
+					. '<!-- wp:cortext/data-view {"collectionId":' . $collection_id . '} /-->',
+			)
+		);
+
+		$result = wp_get_ability( 'cortext/get-document' )->execute( array( 'id' => $page_id ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $result );
+		$this->assertSame( $page_id, $result['id'] );
+		$this->assertSame( 'Plan', $result['title'] );
+		$this->assertArrayNotHasKey( 'collection', $result );
+		$this->assertSame(
+			"## Goals\n\n- [Launch](https://example.com)\n\nCollection view: [Projects](" . get_permalink( $collection_id ) . ')',
+			$result['markdown']
+		);
+	}
+
+	public function test_get_document_starts_a_row_with_its_properties(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$collection_id = $this->create_collection( 'Projects' );
+		$score_id      = $this->add_field( $collection_id, 'Score', 'number' );
+		$this->add_field( $collection_id, 'Notes', 'text' );
+		$row_id = $this->create_row( $collection_id, 'Launch plan' );
+		$this->create_row( $collection_id, 'Other row' );
+		update_post_meta( $row_id, "field-{$score_id}", '7' );
+		wp_update_post(
+			array(
+				'ID'           => $row_id,
+				'post_content' => '<!-- wp:cortext/document-properties /--><!-- wp:paragraph --><p>Kickoff</p><!-- /wp:paragraph -->',
+			)
+		);
+
+		$result = wp_get_ability( 'cortext/get-document' )->execute( array( 'id' => $row_id ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $result );
+		$this->assertSame( $collection_id, $result['collection']['id'] );
+		$this->assertSame( "---\nScore: 7\n---\n\nKickoff", $result['markdown'] );
+	}
+
+	public function test_get_document_refuses_a_document_the_user_cannot_edit(): void {
+		$other = $this->create_document( 'Not mine', $this->create_user( 'editor' ) );
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		$result = wp_get_ability( 'cortext/get-document' )->execute( array( 'id' => $other ) );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'ability_invalid_permissions', $result->get_error_code() );
+	}
+
+	public function test_get_document_refuses_a_trashed_document(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$page_id = $this->create_document( 'Old notes' );
+		wp_trash_post( $page_id );
+
+		$result = wp_get_ability( 'cortext/get-document' )->execute( array( 'id' => $page_id ) );
+
+		$this->assertSame( 'trash', get_post_status( $page_id ) );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'ability_invalid_permissions', $result->get_error_code() );
 	}
 
 	private function find_by_id( array $items, int $id ): array {
