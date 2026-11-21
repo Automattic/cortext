@@ -44,7 +44,7 @@ final class Documents {
 	public const STATUS_ARCHIVED = 'crtxt_archived';
 	public const STATUS_TRASH    = 'trash';
 
-	private const DEFAULT_STATUSES = array( 'publish', 'draft', 'private' );
+	public const DEFAULT_STATUSES  = array( 'publish', 'draft', 'private' );
 	private const DEFAULT_PER_PAGE = 20;
 	private const MAX_PER_PAGE     = 100;
 
