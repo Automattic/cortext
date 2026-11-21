@@ -91,7 +91,7 @@ final class MentionRenderer {
 		$snapshot = wp_strip_all_tags( (string) ( $matches['inner'] ?? '' ) );
 		$post     = get_post( $id );
 
-		if ( ! $this->can_render_target( $post, $id ) ) {
+		if ( ! Documents::is_visible_to_viewer( $post ) ) {
 			return sprintf(
 				'<span class="cortext-mention cortext-mention--missing">%s</span>',
 				esc_html( $snapshot )
@@ -188,18 +188,5 @@ final class MentionRenderer {
 		}
 
 		return '';
-	}
-
-	private function can_render_target( ?WP_Post $post, int $id ): bool {
-		if ( ! $post instanceof WP_Post ) {
-			return false;
-		}
-		if ( in_array( $post->post_status, array( Documents::STATUS_TRASH, Documents::STATUS_ARCHIVED ), true ) ) {
-			return false;
-		}
-		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
-			return false;
-		}
-		return current_user_can( 'read_post', $id );
 	}
 }

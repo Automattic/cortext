@@ -547,6 +547,28 @@ final class Documents {
 		);
 	}
 
+	/**
+	 * Whether public output may show this document to the current viewer,
+	 * for example as a mention title or a relation value. Trashed and
+	 * archived documents stay hidden even from viewers who could read them.
+	 *
+	 * @param WP_Post|null $post Target document.
+	 */
+	public static function is_visible_to_viewer( ?WP_Post $post ): bool {
+		if ( ! $post instanceof WP_Post ) {
+			return false;
+		}
+		if ( in_array( $post->post_status, array( self::STATUS_TRASH, self::STATUS_ARCHIVED ), true ) ) {
+			return false;
+		}
+		if ( ! post_type_supports( $post->post_type, 'cortext-document' ) ) {
+			return false;
+		}
+		// `read_post` maps a published post to the `read` capability, which
+		// logged-out visitors lack, so check public visibility first.
+		return is_post_publicly_viewable( $post ) || current_user_can( 'read_post', $post->ID );
+	}
+
 	private function format_gmt_date( string $mysql_gmt ): string {
 		$timestamp = strtotime( $mysql_gmt . ' UTC' );
 		return false === $timestamp ? '' : gmdate( 'c', $timestamp );

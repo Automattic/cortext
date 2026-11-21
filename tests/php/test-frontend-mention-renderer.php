@@ -185,6 +185,20 @@ final class Test_Frontend_Mention_Renderer extends BaseTestCase {
 		$this->assertStringNotContainsString( 'Secret title', $rendered );
 	}
 
+	public function test_logged_out_visitors_see_published_targets(): void {
+		$target = $this->create_document( 'Public title' );
+		wp_set_current_user( 0 );
+		$html = sprintf(
+			'<p><a class="cortext-mention" data-crtxt-mention="%d" href="old">Snapshot</a></p>',
+			$target
+		);
+
+		$rendered = $this->renderer->refresh_mentions( $html );
+
+		$this->assertStringContainsString( '>Public title</a>', $rendered );
+		$this->assertStringNotContainsString( 'cortext-mention--missing', $rendered );
+	}
+
 	public function test_content_without_mentions_is_unchanged(): void {
 		$html = '<p>No mention here.</p>';
 
