@@ -20,8 +20,10 @@ namespace Cortext\Rest;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Documents;
+use Cortext\Fields\DateValue;
 use Cortext\Fields\FieldDefaults;
 use Cortext\Fields\FieldTypeConverter;
+use Cortext\Fields\FieldTypeRegistry;
 use Cortext\FieldValues\FieldValueReadQuery;
 use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\PostType\Document;
@@ -1101,6 +1103,11 @@ final class RowsController {
 		$type = (string) ( $field['type'] ?? 'text' );
 		$best = null;
 		foreach ( $values as $value ) {
+			// The earliest date is a start and the latest is an end, so a
+			// range counts at both of its edges.
+			if ( in_array( $type, self::DATE_TYPES, true ) ) {
+				$value = 'min' === $direction ? DateValue::start( $value, $type ) : DateValue::end( $value, $type );
+			}
 			$comparable = $this->comparable_calculation_value( $value, $type );
 			if ( null === $comparable ) {
 				continue;
@@ -1129,7 +1136,7 @@ final class RowsController {
 			return is_numeric( $value ) ? (float) $value : null;
 		}
 		if ( in_array( $type, self::DATE_TYPES, true ) ) {
-			$timestamp = strtotime( (string) $value );
+			$timestamp = is_scalar( $value ) ? strtotime( (string) $value ) : false;
 			return false === $timestamp ? null : $timestamp;
 		}
 		return null;
@@ -1580,10 +1587,14 @@ final class RowsController {
 	 */
 	private function date_extrema_rollup_value( array $row_ids, int $target_field_id, string $direction ): ?string {
 		$key       = Relations::meta_key( $target_field_id );
+		$type      = FieldTypeRegistry::effective_type_for_field( $target_field_id );
 		$best_time = null;
 		$best      = null;
 		foreach ( $row_ids as $row_id ) {
-			$value = (string) get_post_meta( $row_id, $key, true );
+			// Earliest looks at starts and latest at ends, so a range target
+			// widens the result on both sides.
+			$stored = get_post_meta( $row_id, $key, true );
+			$value  = 'min' === $direction ? DateValue::start( $stored, $type ) : DateValue::end( $stored, $type );
 			if ( '' === $value ) {
 				continue;
 			}
@@ -2028,17 +2039,8 @@ final class RowsController {
 		}
 
 		if ( 'date' === $field_type || 'datetime' === $field_type ) {
-			$text = is_array( $stored ) ? '' : trim( (string) $stored );
-			if ( '' === $text ) {
-				return '';
-			}
-			$timestamp = strtotime( $text );
-			if ( false === $timestamp ) {
-				return '';
-			}
-			return 'date' === $field_type
-				? gmdate( 'Y-m-d', $timestamp )
-				: gmdate( DATE_RFC3339, $timestamp );
+			$parts = DateValue::parse( $stored, $field_type );
+			return null === $parts ? '' : DateValue::join( $parts['start'], $parts['end'] );
 		}
 
 		if ( 'checkbox' === $field_type ) {

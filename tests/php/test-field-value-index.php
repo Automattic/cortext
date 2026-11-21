@@ -47,6 +47,21 @@ final class Test_Field_Value_Index extends BaseTestCase {
 		$this->assertSame( 220, $text[0]['value_text_length'] );
 	}
 
+	public function test_date_ranges_index_their_start_and_end(): void {
+		$index = new FieldValueIndex();
+
+		$single   = $index->normalized_value_rows( 11, 'date', '2026-05-23' );
+		$range    = $index->normalized_value_rows( 11, 'date', '2026-05-23/2026-06-02' );
+		$datetime = $index->normalized_value_rows( 12, 'datetime', '2026-05-23T10:00:00+00:00/2026-05-23T18:30:00+00:00' );
+
+		$this->assertSame( '2026-05-23 00:00:00', $single[0]['value_date_end'] );
+		$this->assertSame( '2026-05-23 00:00:00', $range[0]['value_date'] );
+		$this->assertSame( '2026-06-02 00:00:00', $range[0]['value_date_end'] );
+		$this->assertSame( '2026-05-23/2026-06-02', $range[0]['value_text'] );
+		$this->assertSame( '2026-05-23 10:00:00', $datetime[0]['value_date'] );
+		$this->assertSame( '2026-05-23 18:30:00', $datetime[0]['value_date_end'] );
+	}
+
 	public function test_formula_values_are_indexed_by_result_type(): void {
 		$index = new FieldValueIndex();
 
@@ -114,7 +129,7 @@ final class Test_Field_Value_Index extends BaseTestCase {
 		$reflection = new \ReflectionClass( FieldValueIndex::class );
 
 		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
-		update_option( 'cortext_field_values_schema_version', 2, false );
+		update_option( 'cortext_field_values_schema_version', 3, false );
 
 		$table_cache = $reflection->getProperty( 'table_exists_cache' );
 		$table_cache->setAccessible( true );
@@ -153,7 +168,7 @@ final class Test_Field_Value_Index extends BaseTestCase {
 		$reflection = new \ReflectionClass( FieldValueIndex::class );
 
 		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
-		update_option( 'cortext_field_values_schema_version', 2, false );
+		update_option( 'cortext_field_values_schema_version', 3, false );
 
 		$table_cache = $reflection->getProperty( 'table_exists_cache' );
 		$table_cache->setAccessible( true );

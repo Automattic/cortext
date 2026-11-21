@@ -90,7 +90,7 @@ final class FieldTypeConverter {
 		}
 
 		if ( 'date' === $to || 'datetime' === $to ) {
-			return false !== strtotime( $text ) ? self::STATUS_DISPLAYS : self::STATUS_HIDDEN;
+			return null !== DateValue::parse( $text, $to ) ? self::STATUS_DISPLAYS : self::STATUS_HIDDEN;
 		}
 
 		if ( 'email' === $to ) {

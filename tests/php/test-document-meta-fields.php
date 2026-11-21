@@ -228,6 +228,23 @@ final class Test_Document_Meta_Fields extends BaseTestCase {
 		$this->assertSame( array(), $cleared->get_data()['meta'][ $key ] );
 	}
 
+	public function test_date_writes_store_a_canonical_range(): void {
+		$field_id = $this->create_field( 'date' );
+		add_post_meta( $this->ids['collection_a'], 'cortext_fields', (string) $field_id );
+		( new Document() )->register_field_meta();
+		$key = 'field-' . $field_id;
+
+		$range = $this->put( $this->ids['row_a'], array( $key => '2026-06-30/2026-03-01' ) );
+		$this->assertSame( 200, $range->get_status() );
+		$this->assertSame( '2026-03-01/2026-06-30', get_post_meta( $this->ids['row_a'], $key, true ) );
+
+		$single = $this->put( $this->ids['row_a'], array( $key => '2026-03-01/2026-03-01' ) );
+		$this->assertSame( 200, $single->get_status() );
+		$this->assertSame( '2026-03-01', get_post_meta( $this->ids['row_a'], $key, true ) );
+
+		unregister_meta_key( 'post', $key, Document::POST_TYPE );
+	}
+
 	public function test_relation_writes_still_validate_targets(): void {
 		$targets  = array( $this->ids['row_b'], $this->ids['page'] );
 		$response = $this->put( $this->ids['row_a'], array( 'field-' . $this->ids['a_relation'] => $targets ) );

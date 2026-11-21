@@ -13,6 +13,7 @@ namespace Cortext\Formula;
 // phpcs:disable Squiz.Commenting.FunctionComment.MissingParamTag,Squiz.Commenting.FunctionComment.ParamNameNoMatch,Squiz.Commenting.FunctionComment.IncorrectTypeHint,Squiz.Commenting.FunctionCommentThrowTag.Missing,Squiz.Commenting.FunctionComment.SpacingAfterParamType
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped
 
+use Cortext\Fields\DateValue;
 use Cortext\Relations;
 use WP_Post;
 
@@ -237,8 +238,8 @@ final class Evaluator {
 		return match ( $type ) {
 			'number' => is_numeric( $value ) ? (float) $value : null,
 			'checkbox' => Relations::is_truthy( $value ),
-			'date' => false === strtotime( (string) $value ) ? null : gmdate( 'Y-m-d', (int) strtotime( (string) $value ) ),
-			'datetime' => false === strtotime( (string) $value ) ? null : gmdate( DATE_RFC3339, (int) strtotime( (string) $value ) ),
+			// A range reads as its start until a formula asks for the end.
+			'date', 'datetime' => DateValue::parse( $value, $type )['start'] ?? null,
 			default => (string) $value,
 		};
 	}

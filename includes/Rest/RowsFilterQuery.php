@@ -555,6 +555,16 @@ final class RowsFilterQuery {
 		};
 	}
 
+	/**
+	 * `is`/`on` and `between` match values that overlap the requested day or
+	 * range, so ranges count when any part of them falls inside. `before` and
+	 * `after` compare the start, which is the stored string's prefix.
+	 *
+	 * @param string $key      Field meta key.
+	 * @param string $type     `date` or `datetime`.
+	 * @param string $operator Filter operator.
+	 * @param mixed  $value    Raw filter value.
+	 */
 	private function date_filter_sql( string $key, string $type, string $operator, mixed $value ): array|WP_Error {
 		if ( 'isEmpty' === $operator ) {
 			return $this->empty_meta_clause( $key );
@@ -564,18 +574,17 @@ final class RowsFilterQuery {
 			if ( is_wp_error( $range ) ) {
 				return $range;
 			}
-			return $this->meta_clause( $key, 'BETWEEN', $range );
+			return $this->meta_clause( $key, 'OVERLAPS', $range );
 		}
 		if ( 'on' === $operator || 'is' === $operator ) {
 			$day = $this->date_day_value( $value, $operator );
 			if ( is_wp_error( $day ) ) {
 				return $day;
 			}
-			return array(
-				'relation' => 'OR',
-				$this->meta_clause( $key, '=', $day ),
-				$this->meta_clause( $key, 'STARTS_WITH', $day ),
-			);
+			$range = 'date' === $type
+				? array( $day, $day )
+				: array( $day . 'T00:00:00+00:00', $day . 'T23:59:59+00:00' );
+			return $this->meta_clause( $key, 'OVERLAPS', $range );
 		}
 
 		$date = $this->date_compare_value( $value, $type, $operator );
@@ -585,7 +594,7 @@ final class RowsFilterQuery {
 
 		return match ( $operator ) {
 			'before' => $this->meta_clause( $key, '<', $date ),
-			'after' => $this->meta_clause( $key, '>', $date ),
+			'after' => $this->meta_clause( $key, 'STARTS_AFTER', $date ),
 			default => $this->invalid_filter_operator( $operator, $key ),
 		};
 	}

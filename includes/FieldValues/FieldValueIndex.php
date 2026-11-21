@@ -12,6 +12,7 @@ namespace Cortext\FieldValues;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Documents;
+use Cortext\Fields\DateValue;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\PostType\Document;
 use Cortext\PostType\Field;
@@ -30,7 +31,7 @@ final class FieldValueIndex {
 	public const STATUS_STALE       = 'stale';
 	public const STATUS_DISABLED    = 'disabled';
 
-	private const SCHEMA_VERSION         = 2;
+	private const SCHEMA_VERSION         = 3;
 	private const STATUS_OPTION          = 'cortext_field_values_index_status';
 	private const STATUS_ERROR_OPTION    = 'cortext_field_values_index_error';
 	private const SCHEMA_VERSION_OPTION  = 'cortext_field_values_schema_version';
@@ -443,6 +444,7 @@ final class FieldValueIndex {
 				'value_text_length' => $row['value_text_length'],
 				'value_number'      => $row['value_number'],
 				'value_date'        => $row['value_date'],
+				'value_date_end'    => $row['value_date_end'],
 				'post_status'       => $row['post_status'],
 			);
 		}
@@ -471,7 +473,7 @@ final class FieldValueIndex {
 			$result = $wpdb->replace(
 				$this->table_name(),
 				$rows[0],
-				array( '%d', '%d', '%d', '%d', '%s', '%d', '%f', '%s', '%s' )
+				array( '%d', '%d', '%d', '%d', '%s', '%d', '%f', '%s', '%s', '%s' )
 			);
 			if ( false === $result ) {
 				$this->mark_stale( __( 'Cortext could not write to the field-value index.', 'cortext' ) );
@@ -498,7 +500,7 @@ final class FieldValueIndex {
 			$result = $wpdb->insert(
 				$this->table_name(),
 				$row,
-				array( '%d', '%d', '%d', '%d', '%s', '%d', '%f', '%s', '%s' )
+				array( '%d', '%d', '%d', '%d', '%s', '%d', '%f', '%s', '%s', '%s' )
 			);
 			if ( false === $result ) {
 				$this->mark_stale( __( 'Cortext could not write to the field-value index.', 'cortext' ) );
@@ -917,12 +919,15 @@ final class FieldValueIndex {
 			$text   = is_string( $text ) ? $text : '';
 			$number = is_numeric( $value ) ? (float) $value : null;
 			$date   = null;
+			$end    = null;
 
 			if ( 'checkbox' === $field_type ) {
 				$number = Relations::is_truthy( $value ) ? 1.0 : 0.0;
 				$text   = Relations::is_truthy( $value ) ? '1' : '0';
 			} elseif ( in_array( $field_type, array( 'date', 'datetime' ), true ) ) {
-				$date = $this->normalized_date_for_index( $value, $field_type );
+				$parts = DateValue::parse( $value, $field_type );
+				$date  = null === $parts ? null : $this->normalized_date_for_index( $parts['start'], $field_type );
+				$end   = null === $parts ? null : $this->normalized_date_for_index( $parts['end'] ?? $parts['start'], $field_type );
 			}
 
 			if ( 'number' !== $field_type ) {
@@ -936,6 +941,7 @@ final class FieldValueIndex {
 				'value_text_length' => strlen( $text ),
 				'value_number'      => $number,
 				'value_date'        => $date,
+				'value_date_end'    => $end,
 				'post_status'       => $post_status,
 			);
 			++$seq;
@@ -961,6 +967,7 @@ final class FieldValueIndex {
 			value_text_length int(10) unsigned DEFAULT NULL,
 			value_number decimal(20,6) DEFAULT NULL,
 			value_date datetime DEFAULT NULL,
+			value_date_end datetime DEFAULT NULL,
 			post_status varchar(20) NOT NULL DEFAULT 'publish',
 			PRIMARY KEY  (row_id, field_id, value_seq),
 			KEY collection_field_text_len (collection_id, field_id, value_text, value_text_length, row_id),
@@ -1097,6 +1104,7 @@ final class FieldValueIndex {
 				'value_text_length' => $row['value_text_length'],
 				'value_number'      => $row['value_number'],
 				'value_date'        => $row['value_date'],
+				'value_date_end'    => $row['value_date_end'],
 				'post_status'       => $row['post_status'],
 			);
 		}
@@ -1121,7 +1129,7 @@ final class FieldValueIndex {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Verification compares the derived index with postmeta; the table name comes from this plugin.
 		return $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT row_id, collection_id, field_id, value_seq, value_text, value_number, value_date, post_status
+				"SELECT row_id, collection_id, field_id, value_seq, value_text, value_number, value_date, value_date_end, post_status
 				FROM {$table}
 				WHERE collection_id = %d",
 				$collection_id
@@ -1142,6 +1150,7 @@ final class FieldValueIndex {
 				(string) ( $row['value_text'] ?? '' ),
 				null === ( $row['value_number'] ?? null ) ? '' : (string) (float) $row['value_number'],
 				(string) ( $row['value_date'] ?? '' ),
+				(string) ( $row['value_date_end'] ?? '' ),
 				(string) ( $row['post_status'] ?? '' ),
 			)
 		);

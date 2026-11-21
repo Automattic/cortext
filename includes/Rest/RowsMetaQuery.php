@@ -22,6 +22,8 @@ final class RowsMetaQuery extends WP_Meta_Query {
 	private const NOT_EQUALS   = 'NOT_EQUALS';
 	private const NOT_CONTAINS = 'NOT_CONTAINS';
 	private const NONE_IN      = 'NONE_IN';
+	private const OVERLAPS     = 'OVERLAPS';
+	private const STARTS_AFTER = 'STARTS_AFTER';
 
 	/**
 	 * Generates SQL for one first-order clause.
@@ -41,6 +43,14 @@ final class RowsMetaQuery extends WP_Meta_Query {
 
 		if ( in_array( $compare, array( self::STARTS_WITH, self::ENDS_WITH ), true ) ) {
 			return $this->positive_like_meta_clause_sql( $clause, $compare );
+		}
+
+		if ( self::OVERLAPS === $compare ) {
+			return $this->overlaps_meta_clause_sql( $clause );
+		}
+
+		if ( self::STARTS_AFTER === $compare ) {
+			return $this->starts_after_meta_clause_sql( $clause );
 		}
 
 		if ( in_array( $compare, array( self::NOT_EQUALS, self::NOT_CONTAINS, self::NONE_IN ), true ) ) {
@@ -170,6 +180,67 @@ final class RowsMetaQuery extends WP_Meta_Query {
 
 		return array(
 			'join'  => array(),
+			'where' => array( $where ),
+		);
+	}
+
+	/**
+	 * Matches date values that overlap an inclusive `[from, to]` range.
+	 *
+	 * A stored value is a single date or a `start/end` interval.
+	 * `SUBSTRING_INDEX( v, '/', -1 )` returns the whole value when there is
+	 * no slash, so a single date is treated as a range that starts and ends
+	 * on itself.
+	 *
+	 * @param array $clause Filter clause whose value is `[from, to]`.
+	 * @return array{join:string[],where:string[]}
+	 */
+	private function overlaps_meta_clause_sql( array $clause ): array {
+		global $wpdb;
+
+		$key   = (string) ( $clause['key'] ?? '' );
+		$range = is_array( $clause['value'] ?? null ) ? array_values( $clause['value'] ) : array( '', '' );
+		$alias = $this->next_table_alias();
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$where = $wpdb->prepare(
+			"( {$alias}.meta_key = %s AND SUBSTRING_INDEX( {$alias}.meta_value, '/', 1 ) <= %s AND SUBSTRING_INDEX( {$alias}.meta_value, '/', -1 ) >= %s )",
+			$key,
+			(string) ( $range[1] ?? '' ),
+			(string) ( $range[0] ?? '' )
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return array(
+			'join'  => array( $this->inner_join_for_alias( $alias ) ),
+			'where' => array( $where ),
+		);
+	}
+
+	/**
+	 * Matches date values whose start is after the given value. A plain `>`
+	 * on the raw string would also match a range starting on that value,
+	 * because `start/end` sorts after `start`.
+	 *
+	 * @param array $clause Filter clause.
+	 * @return array{join:string[],where:string[]}
+	 */
+	private function starts_after_meta_clause_sql( array $clause ): array {
+		global $wpdb;
+
+		$key   = (string) ( $clause['key'] ?? '' );
+		$alias = $this->next_table_alias();
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$where = $wpdb->prepare(
+			"( {$alias}.meta_key = %s AND SUBSTRING_INDEX( {$alias}.meta_value, '/', 1 ) > %s )",
+			$key,
+			(string) ( $clause['value'] ?? '' )
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return array(
+			'join'  => array( $this->inner_join_for_alias( $alias ) ),
 			'where' => array( $where ),
 		);
 	}

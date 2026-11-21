@@ -286,6 +286,23 @@ final class Test_Field_Value_Read_Query extends BaseTestCase {
 		);
 	}
 
+	public function test_date_day_and_between_filters_match_overlapping_ranges(): void {
+		$query  = new FieldValueReadQuery();
+		$method = new \ReflectionMethod( $query, 'date_filter_predicate' );
+		$method->setAccessible( true );
+
+		$between = $method->invoke( $query, 'date', 'between', array( '2026-05-24', '2026-05-18' ) );
+		$this->assertSame( 'fvf_PLACEHOLDER.value_date_end >= %s AND fvf_PLACEHOLDER.value_date <= %s', $between['sql'] );
+		$this->assertSame( array( '2026-05-18 00:00:00', '2026-05-24 00:00:00' ), $between['args'] );
+
+		$on = $method->invoke( $query, 'date', 'on', '2026-05-24' );
+		$this->assertSame( 'fvf_PLACEHOLDER.value_date_end >= %s AND fvf_PLACEHOLDER.value_date < %s', $on['sql'] );
+		$this->assertSame( array( '2026-05-24 00:00:00', '2026-05-25 00:00:00' ), $on['args'] );
+
+		$after = $method->invoke( $query, 'date', 'after', '2026-05-24' );
+		$this->assertSame( 'fvf_PLACEHOLDER.value_date > %s', $after['sql'] );
+	}
+
 	private function field_schema(): array {
 		return array(
 			'title'     => array(

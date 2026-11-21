@@ -11,6 +11,7 @@ namespace Cortext\FieldValues;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Fields\DateValue;
 use Cortext\Relations;
 
 final class FieldValueStore {
@@ -72,7 +73,7 @@ final class FieldValueStore {
 		}
 
 		if ( 'date' === $field_type || 'datetime' === $field_type ) {
-			$stored = $this->normalize_date_field_value( $value, $field_type );
+			$stored = DateValue::normalize( $value, $field_type );
 			$this->update_document_meta( $row_id, $key, $stored );
 			return $stored;
 		}
@@ -92,27 +93,5 @@ final class FieldValueStore {
 
 	private function delete_document_meta( int $document_id, string $key ): void {
 		delete_metadata( 'post', $document_id, $key );
-	}
-
-	private function normalize_date_field_value( mixed $value, string $field_type ): string {
-		$text = trim( (string) $value );
-		if ( '' === $text ) {
-			return '';
-		}
-
-		if ( preg_match( '/^(\d{4}-\d{2}-\d{2})/', $text, $matches ) ) {
-			if ( 'date' === $field_type ) {
-				return $matches[1];
-			}
-			$timestamp = strtotime( $text );
-			return false === $timestamp ? sanitize_text_field( $text ) : gmdate( DATE_RFC3339, $timestamp );
-		}
-
-		$timestamp = strtotime( $text );
-		if ( false === $timestamp ) {
-			return sanitize_text_field( $text );
-		}
-
-		return 'date' === $field_type ? gmdate( 'Y-m-d', $timestamp ) : gmdate( DATE_RFC3339, $timestamp );
 	}
 }

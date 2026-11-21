@@ -211,6 +211,38 @@ final class Test_Rest_Rows_Filter_Query extends BaseTestCase {
 		$this->assertSame( 'cortext_invalid_filter', $result->get_error_code() );
 	}
 
+	public function test_date_between_and_on_compile_to_overlap_on_postmeta(): void {
+		$collection_id = $this->create_collection_with_slug( 'Trips', 'rows-date-overlap' );
+		$date_id       = $this->create_collection_field( $collection_id, 'When', 'date' );
+		$datetime_id   = $this->create_collection_field( $collection_id, 'Slot', 'datetime' );
+		$query         = new RowsFilterQuery();
+		$schema        = $query->field_schema_for( $collection_id );
+
+		$compile = fn( string $field, string $operator, mixed $value ) => $query->compile_filters(
+			array(
+				array(
+					'field'    => $field,
+					'operator' => $operator,
+					'value'    => $value,
+				),
+			),
+			$schema,
+			$collection_id
+		);
+
+		// A range from last week to next week overlaps this week.
+		$between = $compile( "field-{$date_id}", 'between', array( '2026-05-24', '2026-05-18' ) );
+		$this->assertStringContainsString( "SUBSTRING_INDEX( wp_postmeta.meta_value, '/', 1 ) <= '2026-05-24'", $between['where'] );
+		$this->assertStringContainsString( "SUBSTRING_INDEX( wp_postmeta.meta_value, '/', -1 ) >= '2026-05-18'", $between['where'] );
+
+		$on = $compile( "field-{$datetime_id}", 'on', '2026-05-20' );
+		$this->assertStringContainsString( "<= '2026-05-20T23:59:59+00:00'", $on['where'] );
+		$this->assertStringContainsString( ">= '2026-05-20T00:00:00+00:00'", $on['where'] );
+
+		$after = $compile( "field-{$date_id}", 'after', '2026-05-20' );
+		$this->assertStringContainsString( "SUBSTRING_INDEX( wp_postmeta.meta_value, '/', 1 ) > '2026-05-20'", $after['where'] );
+	}
+
 	public function test_group_nesting_allows_two_nested_levels_and_rejects_third(): void {
 		$collection_id = $this->create_collection_with_slug( 'Groups', 'rows-groups' );
 		$field_id      = $this->create_collection_field( $collection_id, 'Text', 'text' );

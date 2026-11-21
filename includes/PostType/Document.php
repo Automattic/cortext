@@ -21,6 +21,7 @@ namespace Cortext\PostType;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Documents;
+use Cortext\Fields\DateValue;
 use Cortext\Fields\FieldTypeRegistry;
 use Cortext\FieldValues\FieldValueIndex;
 use Cortext\Formula\Materializer as FormulaMaterializer;
@@ -542,7 +543,9 @@ final class Document {
 				'single'       => ! $is_multi,
 				'show_in_rest' => 'formula' !== $type,
 			);
-			if ( 'string' === $wp_meta ) {
+			if ( 'date' === $type || 'datetime' === $type ) {
+				$config['sanitize_callback'] = static fn( $value ) => DateValue::normalize( $value, $type );
+			} elseif ( 'string' === $wp_meta ) {
 				$config['sanitize_callback'] = 'sanitize_text_field';
 			}
 			register_post_meta( self::POST_TYPE, 'field-' . (int) $field_id, $config );

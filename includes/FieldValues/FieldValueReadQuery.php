@@ -477,6 +477,16 @@ final class FieldValueReadQuery {
 		};
 	}
 
+	/**
+	 * `is`/`on` and `between` match any value that overlaps the requested
+	 * day or range, so a range counts when any part of it falls inside.
+	 * `before`/`after` compare the start. A single date has its end set to
+	 * its start, so the overlap checks reduce to the plain comparisons.
+	 *
+	 * @param string $type     `date` or `datetime`.
+	 * @param string $operator Filter operator.
+	 * @param mixed  $value    Raw filter value.
+	 */
 	private function date_filter_predicate( string $type, string $operator, mixed $value ): ?array {
 		if ( in_array( $operator, array( 'is', 'on' ), true ) ) {
 			$range = $this->date_day_range( $value );
@@ -484,7 +494,7 @@ final class FieldValueReadQuery {
 				return null;
 			}
 			return array(
-				'sql'  => 'fvf_PLACEHOLDER.value_date >= %s AND fvf_PLACEHOLDER.value_date < %s',
+				'sql'  => 'fvf_PLACEHOLDER.value_date_end >= %s AND fvf_PLACEHOLDER.value_date < %s',
 				'args' => $range,
 			);
 		}
@@ -495,7 +505,7 @@ final class FieldValueReadQuery {
 				return null;
 			}
 			return array(
-				'sql'  => 'fvf_PLACEHOLDER.value_date BETWEEN %s AND %s',
+				'sql'  => 'fvf_PLACEHOLDER.value_date_end >= %s AND fvf_PLACEHOLDER.value_date <= %s',
 				'args' => $range,
 			);
 		}

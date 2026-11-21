@@ -768,6 +768,62 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertNull( $data['rows'][0]['meta'][ "field-{$rollup_id}" ] );
 	}
 
+	public function test_query_rows_reads_date_ranges_and_widens_date_rollups_and_calculations(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$source = $this->create_collection_fixture( 'rangesource', 'text' );
+		$target = $this->create_collection_fixture( 'rangetarget', 'date' );
+
+		$relation_id = $this->add_field_to_collection(
+			$source['collection_id'],
+			'relation',
+			array(
+				'related_collection_id' => (string) $target['collection_id'],
+				'relation_multiple'     => '1',
+			)
+		);
+		$rollups     = array();
+		foreach ( array( 'earliest', 'latest', 'date_range' ) as $aggregator ) {
+			$rollups[ $aggregator ] = $this->add_field_to_collection(
+				$source['collection_id'],
+				'rollup',
+				array(
+					'rollup_relation_field_id' => (string) $relation_id,
+					'rollup_target_field_id'   => (string) $target['field_id'],
+					'rollup_aggregator'        => $aggregator,
+					'rollup_target_type'       => 'date',
+				)
+			);
+		}
+
+		$row_id = $this->create_row_for_collection( $source['collection_id'], 'Trip' );
+		foreach ( array( '2026-03-05', '2026-03-01/2026-03-20' ) as $value ) {
+			$target_row_id = $this->create_row_for_collection( $target['collection_id'], "Leg {$value}" );
+			update_post_meta( $target_row_id, "field-{$target['field_id']}", $value );
+			add_post_meta( $row_id, "field-{$relation_id}", (string) $target_row_id );
+		}
+
+		$meta = $this->query_rows( array( 'trait' => $source['collection_id'] ) )->get_data()['rows'][0]['meta'];
+		$this->assertSame( '2026-03-01', $meta[ "field-{$rollups['earliest']}" ] );
+		$this->assertSame( '2026-03-20', $meta[ "field-{$rollups['latest']}" ] );
+		$this->assertSame(
+			array(
+				'start' => '2026-03-01',
+				'end'   => '2026-03-20',
+			),
+			$meta[ "field-{$rollups['date_range']}" ]
+		);
+
+		$data   = $this->query_rows(
+			array(
+				'trait'        => $target['collection_id'],
+				'calculations' => array( "field-{$target['field_id']}" => 'max' ),
+			)
+		)->get_data();
+		$values = array_map( static fn( $row ) => $row['meta'][ "field-{$target['field_id']}" ], $data['rows'] );
+		$this->assertContains( '2026-03-01/2026-03-20', $values );
+		$this->assertSame( '2026-03-20', $data['calculations'][ "field-{$target['field_id']}" ]['value'] );
+	}
+
 	public function test_recomputing_collection_formulas_includes_archived_rows(): void {
 		( new ArchiveCascade() )->register_status();
 
@@ -1075,7 +1131,7 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$table_cache->setAccessible( true );
 
 		update_option( 'cortext_field_values_index_status', FieldValueIndex::STATUS_READY, false );
-		update_option( 'cortext_field_values_schema_version', 2, false );
+		update_option( 'cortext_field_values_schema_version', 3, false );
 		$table_cache->setValue( null, array( ( new FieldValueIndex() )->table_name() => true ) );
 
 		try {
