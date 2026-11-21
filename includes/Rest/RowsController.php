@@ -1728,21 +1728,18 @@ final class RowsController {
 		// Match `format_row` for system fields too. The normal WP response
 		// exposes `author` / `date_gmt`, which the row field getters do not
 		// read, so detail views would otherwise show "Empty".
-		$created_by_id = (int) $post->post_author;
+		$system = $this->system_values_for_row( $post );
 		if ( $include_created_at ) {
-			$data['created_at'] = $this->format_gmt_date( $post->post_date_gmt );
+			$data['created_at'] = $system['created_at'];
 		}
 		if ( $include_modified_at ) {
-			$data['modified_at'] = $this->format_gmt_date( $post->post_modified_gmt );
+			$data['modified_at'] = $system['modified_at'];
 		}
 		if ( $include_created_by ) {
-			$data['created_by'] = $this->display_name_for( $created_by_id );
+			$data['created_by'] = $system['created_by'];
 		}
 		if ( $include_modified_by ) {
-			$modified_by_id      = (int) get_post_meta( $post->ID, '_modified_by', true );
-			$data['modified_by'] = $this->display_name_for(
-				$modified_by_id > 0 ? $modified_by_id : $created_by_id
-			);
+			$data['modified_by'] = $system['modified_by'];
 		}
 		if ( $include_cover ) {
 			$data['cover'] = $this->cover_data_for_post( $post );
@@ -1750,49 +1747,113 @@ final class RowsController {
 
 		$field_ids = $include_hydrated ? Document::collection_field_ids( $collection->ID ) : array();
 		if ( count( $field_ids ) > 0 ) {
-			FormulaMaterializer::recompute_row( $collection->ID, $post->ID );
-
 			// Keep hydrated values out of `meta`. Those keys are registered as
 			// strings; if autosave sends hydrated objects back, REST rejects the
 			// save with 400. `cortext_hydrated_meta` is read-only display data.
-			$ctx             = $this->row_format_context_for_collection( $request, $collection->ID, $field_ids );
-			$related_row_ids = $this->collect_related_row_ids( array( $post ), $field_ids, $ctx );
-			if ( count( $related_row_ids ) > 0 ) {
-				_prime_post_caches( $related_row_ids, false, true );
-			}
-
-			$hydrated        = array();
-			$multi_field_ids = $this->multi_value_field_ids_from( $ctx->field_types );
-			foreach ( $field_ids as $field_id ) {
-				$field_type = $ctx->field_types[ $field_id ] ?? (string) get_post_meta( $field_id, 'type', true );
-				$key        = "field-{$field_id}";
-
-				if ( 'relation' === $field_type ) {
-					$hydrated[ $key ] = $this->format_relation_value( $post->ID, $field_id, $ctx );
-				} elseif ( 'rollup' === $field_type ) {
-					$hydrated[ $key ] = $this->compute_rollup_value( $post->ID, $field_id, $ctx );
-				} elseif ( 'formula' === $field_type ) {
-					$hydrated[ $key ] = $this->format_typed_value(
-						$post->ID,
-						$field_id,
-						$this->formula_result_type_for( $field_id ),
-						false
-					);
-				} else {
-					$hydrated[ $key ] = $this->format_typed_value(
-						$post->ID,
-						$field_id,
-						$field_type,
-						isset( $multi_field_ids[ $field_id ] )
-					);
-				}
-			}
-
-			$data['cortext_hydrated_meta'] = $hydrated;
+			$data['cortext_hydrated_meta'] = $this->hydrated_meta_for_row( $post, $collection->ID, $field_ids, $request );
 		}
 
 		$response->set_data( $data );
 		return $response;
+	}
+
+	/**
+	 * Returns a row's typed values: one entry per collection field, keyed by
+	 * field id, plus the system fields. These are the same values the row
+	 * REST responses carry in `cortext_hydrated_meta`, for server-side
+	 * callers such as property bindings.
+	 *
+	 * @param WP_Post $post Row post.
+	 * @return array{collection_id:int,fields:array<int,mixed>,system:array<string,string>}|null
+	 *         Null when the post is not a row.
+	 */
+	public function typed_values_for_row( WP_Post $post ): ?array {
+		$collection = $this->find_trait_for_document( $post->ID );
+		if ( ! $collection instanceof WP_Post ) {
+			return null;
+		}
+
+		$fields    = array();
+		$field_ids = Document::collection_field_ids( $collection->ID );
+		if ( count( $field_ids ) > 0 ) {
+			foreach ( $this->hydrated_meta_for_row( $post, $collection->ID, $field_ids, null ) as $key => $value ) {
+				$fields[ (int) substr( $key, strlen( 'field-' ) ) ] = $value;
+			}
+		}
+
+		return array(
+			'collection_id' => (int) $collection->ID,
+			'fields'        => $fields,
+			'system'        => $this->system_values_for_row( $post ),
+		);
+	}
+
+	/**
+	 * Builds the `cortext_hydrated_meta` map for one row.
+	 *
+	 * @param WP_Post              $post          Row post.
+	 * @param int                  $collection_id Row's collection id.
+	 * @param int[]                $field_ids     Collection field ids.
+	 * @param WP_REST_Request|null $request       Request whose format context to reuse.
+	 * @return array<string,mixed>
+	 */
+	private function hydrated_meta_for_row( WP_Post $post, int $collection_id, array $field_ids, ?WP_REST_Request $request ): array {
+		FormulaMaterializer::recompute_row( $collection_id, $post->ID );
+
+		$ctx             = $this->row_format_context_for_collection( $request, $collection_id, $field_ids );
+		$related_row_ids = $this->collect_related_row_ids( array( $post ), $field_ids, $ctx );
+		if ( count( $related_row_ids ) > 0 ) {
+			_prime_post_caches( $related_row_ids, false, true );
+		}
+
+		$hydrated        = array();
+		$multi_field_ids = $this->multi_value_field_ids_from( $ctx->field_types );
+		foreach ( $field_ids as $field_id ) {
+			$hydrated[ "field-{$field_id}" ] = $this->typed_field_value( $post->ID, $field_id, $multi_field_ids, $ctx );
+		}
+		return $hydrated;
+	}
+
+	/**
+	 * Reads one field's typed value for a row, whatever the field type.
+	 *
+	 * @param int                   $row_id          Row post ID.
+	 * @param int                   $field_id        Field post ID.
+	 * @param array<int,true>       $multi_field_ids Field IDs that are multi-value.
+	 * @param RowFormatContext|null $ctx             Formatting context.
+	 * @return mixed
+	 */
+	private function typed_field_value( int $row_id, int $field_id, array $multi_field_ids, ?RowFormatContext $ctx ): mixed {
+		$field_type = $ctx->field_types[ $field_id ] ?? (string) get_post_meta( $field_id, 'type', true );
+
+		if ( 'relation' === $field_type ) {
+			return $this->format_relation_value( $row_id, $field_id, $ctx );
+		}
+		if ( 'rollup' === $field_type ) {
+			return $this->compute_rollup_value( $row_id, $field_id, $ctx );
+		}
+		if ( 'formula' === $field_type ) {
+			return $this->format_typed_value( $row_id, $field_id, $this->formula_result_type_for( $field_id ), false );
+		}
+		return $this->format_typed_value( $row_id, $field_id, $field_type, isset( $multi_field_ids[ $field_id ] ) );
+	}
+
+	/**
+	 * Returns the system field values `format_row` and the row REST response
+	 * share: creation and last-edit dates and authors.
+	 *
+	 * @param WP_Post $post Row post.
+	 * @return array{created_at:string,modified_at:string,created_by:string,modified_by:string}
+	 */
+	private function system_values_for_row( WP_Post $post ): array {
+		$created_by_id  = (int) $post->post_author;
+		$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );
+		return array(
+			'created_at'  => $this->format_gmt_date( $post->post_date_gmt ),
+			'modified_at' => $this->format_gmt_date( $post->post_modified_gmt ),
+			'created_by'  => $this->display_name_for( $created_by_id ),
+			'modified_by' => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
+		);
 	}
 
 	/**
@@ -1845,37 +1906,14 @@ final class RowsController {
 	private function format_row( WP_Post $post, array $field_ids, array $multi_field_ids, ?RowFormatContext $ctx = null ): array {
 		$meta = array();
 		foreach ( $field_ids as $field_id ) {
-			$key        = "field-{$field_id}";
-			$field_type = $ctx->field_types[ $field_id ] ?? (string) get_post_meta( $field_id, 'type', true );
-
-			if ( 'relation' === $field_type ) {
-				$meta[ $key ] = $this->format_relation_value( $post->ID, $field_id, $ctx );
-			} elseif ( 'rollup' === $field_type ) {
-				$meta[ $key ] = $this->compute_rollup_value( $post->ID, $field_id, $ctx );
-			} elseif ( 'formula' === $field_type ) {
-				$meta[ $key ] = $this->format_typed_value(
-					$post->ID,
-					$field_id,
-					$this->formula_result_type_for( $field_id ),
-					false
-				);
-			} else {
-				$meta[ $key ] = $this->format_typed_value(
-					$post->ID,
-					$field_id,
-					$field_type,
-					isset( $multi_field_ids[ $field_id ] )
-				);
-			}
+			$meta[ "field-{$field_id}" ] = $this->typed_field_value( $post->ID, $field_id, $multi_field_ids, $ctx );
 		}
 
 		// Include the document icon so the row renders with its glyph in
 		// the table (and anywhere else the title gets a leading icon).
 		$meta['cortext_document_icon'] = (string) get_post_meta( $post->ID, 'cortext_document_icon', true );
 
-		$created_by_id  = (int) $post->post_author;
-		$modified_by_id = (int) get_post_meta( $post->ID, '_modified_by', true );
-		$cover_id       = (int) get_post_thumbnail_id( $post );
+		$system = $this->system_values_for_row( $post );
 
 		return array(
 			'id'             => $post->ID,
@@ -1885,11 +1923,11 @@ final class RowsController {
 			),
 			'status'         => $post->post_status,
 			'cortext_frozen' => DocumentFreeze::details( (int) $post->ID ),
-			'created_at'     => $this->format_gmt_date( $post->post_date_gmt ),
-			'modified_at'    => $this->format_gmt_date( $post->post_modified_gmt ),
-			'created_by'     => $this->display_name_for( $created_by_id ),
-			'modified_by'    => $this->display_name_for( $modified_by_id > 0 ? $modified_by_id : $created_by_id ),
-			'featured_media' => $cover_id,
+			'created_at'     => $system['created_at'],
+			'modified_at'    => $system['modified_at'],
+			'created_by'     => $system['created_by'],
+			'modified_by'    => $system['modified_by'],
+			'featured_media' => (int) get_post_thumbnail_id( $post ),
 			'cover'          => $this->cover_data_for_post( $post ),
 			'meta'           => $meta,
 		);
