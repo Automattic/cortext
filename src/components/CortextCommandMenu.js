@@ -44,6 +44,15 @@ const CATEGORY_LABELS = {
 	workflow: __( 'Workflow' ),
 };
 
+// cmdk re-scores and re-sorts every item on each keystroke. For server-side
+// search results (the documents group) that means the highlighted item can
+// hop around the list as the user types. Pin all document commands to a
+// constant score so cmdk keeps the server's order and stops shuffling them.
+// The pinned score sits between cmdk's scores for a word match (0.89 and up)
+// and a loose match, so an action the search names ranks above documents
+// that only mention it.
+const DOCUMENT_RESULT_SCORE = 0.5;
+
 function isRecentCommand( command ) {
 	return command?.name?.startsWith( RECENT_COMMAND_PREFIX );
 }
@@ -161,7 +170,7 @@ function CommandList( { commands, search, showCategory, valuePrefix } ) {
 	) );
 }
 
-function CommandInput( { search, setSearch } ) {
+function CommandInput( { search, setSearch, placeholder, onEmptyBackspace } ) {
 	const commandMenuInput = useRef();
 	const selectedValue = useCommandState( ( state ) => state.value );
 	const selectedItemId = selectedValue
@@ -177,8 +186,18 @@ function CommandInput( { search, setSearch } ) {
 			ref={ commandMenuInput }
 			value={ search }
 			onValueChange={ setSearch }
-			placeholder={ inputPlaceholder }
+			placeholder={ placeholder ?? inputPlaceholder }
 			aria-activedescendant={ selectedItemId }
+			onKeyDown={ ( event ) => {
+				if (
+					event.key === 'Backspace' &&
+					! search &&
+					onEmptyBackspace
+				) {
+					event.preventDefault();
+					onEmptyBackspace();
+				}
+			} }
 		/>
 	);
 }
@@ -198,9 +217,35 @@ function PaletteGroups( { search } ) {
 	const { documentCommands, recentCommands, commands } = splitPaletteCommands(
 		search ? allCommands : contextualCommands
 	);
+	// The groups keep a fixed order, since the search results mount after
+	// cmdk sorts. Actions go first when one of them matches the search
+	// better than the documents do.
+	const actionsFirst =
+		Boolean( search ) &&
+		commands.some(
+			( command ) =>
+				defaultFilter(
+					command.searchLabel ?? command.label,
+					search,
+					command.keywords
+				) > DOCUMENT_RESULT_SCORE
+		);
+	const actionsGroup = commands.length > 0 && (
+		<Command.Group
+			className="cortext-command-palette__group"
+			heading={
+				search
+					? __( 'Actions', 'cortext' )
+					: __( 'Suggestions', 'cortext' )
+			}
+		>
+			<CommandList commands={ commands } search={ search } />
+		</Command.Group>
+	);
 
 	return (
 		<>
+			{ actionsFirst && actionsGroup }
 			{ search && documentCommands.length > 0 && (
 				<Command.Group
 					className="cortext-command-palette__group cortext-command-palette__group--documents"
@@ -227,26 +272,14 @@ function PaletteGroups( { search } ) {
 					/>
 				</Command.Group>
 			) }
-			{ ! search && commands.length > 0 && (
-				<Command.Group
-					className="cortext-command-palette__group"
-					heading={ __( 'Suggestions', 'cortext' ) }
-				>
-					<CommandList commands={ commands } search={ search } />
-				</Command.Group>
-			) }
+			{ ! actionsFirst && actionsGroup }
 		</>
 	);
 }
 
-// cmdk re-scores and re-sorts every item on each keystroke. For server-side
-// search results (the documents group) that means the highlighted item can
-// hop around the list as the user types. Pin all document commands to a
-// constant score so cmdk keeps the server's order and stops shuffling them.
-// Non-document items still go through cmdk's default filter.
 function palettePinnedFilter( value, search, keywords ) {
 	if ( value.startsWith( 'document-' ) ) {
-		return 1;
+		return DOCUMENT_RESULT_SCORE;
 	}
 	return defaultFilter( value, search, keywords );
 }
@@ -258,6 +291,8 @@ export default function CortextCommandMenu( {
 	selectedValue,
 	onSelectedValueChange = () => {},
 	previewPane = null,
+	prompt = null,
+	onLeavePrompt = () => {},
 } = {} ) {
 	const { registerShortcut } = useDispatch( keyboardShortcutsStore );
 	const { open, close } = useDispatch( commandsStore );
@@ -266,7 +301,7 @@ export default function CortextCommandMenu( {
 		[]
 	);
 	const hasRoomForPreview = useMediaQuery( PREVIEW_MEDIA_QUERY );
-	const preview = hasRoomForPreview ? previewPane : null;
+	const preview = hasRoomForPreview && ! prompt ? previewPane : null;
 
 	useEffect( () => {
 		registerShortcut( {
@@ -315,7 +350,8 @@ export default function CortextCommandMenu( {
 				.filter( Boolean )
 				.join( ' ' ) }
 			overlayClassName="commands-command-menu__overlay"
-			onRequestClose={ closeAndReset }
+			// Escape inside a prompt goes back to the full list.
+			onRequestClose={ prompt ? onLeavePrompt : closeAndReset }
 			__experimentalHideHeader
 			size={ preview ? 'large' : 'medium' }
 			contentLabel={ __( 'Command palette' ) }
@@ -334,19 +370,30 @@ export default function CortextCommandMenu( {
 							icon={ inputIcon }
 						/>
 						<CommandInput
+							key={ prompt ? 'prompt' : 'root' }
 							search={ search }
 							setSearch={ setSearch }
+							placeholder={ prompt?.placeholder }
+							onEmptyBackspace={ prompt ? onLeavePrompt : null }
 						/>
 					</div>
 					{ /* Keep the list directly under cmdk because upstream
 					     styles use child selectors. */ }
 					<Command.List label={ __( 'Command suggestions' ) }>
-						{ search && ! isDocumentSearchPending && (
+						{ search && ! isDocumentSearchPending && ! prompt && (
 							<Command.Empty>
 								{ __( 'No results found.' ) }
 							</Command.Empty>
 						) }
-						<PaletteGroups search={ search } />
+						{ prompt ? (
+							prompt.renderItems( {
+								search,
+								close,
+								selectValue: onSelectedValueChange,
+							} )
+						) : (
+							<PaletteGroups search={ search } />
+						) }
 					</Command.List>
 					{ preview && (
 						<div

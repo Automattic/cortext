@@ -65,6 +65,12 @@ const mockMenu = {
 };
 
 // Mock the preview so these tests only track which document it receives.
+// Document actions are covered end to end in palette-actions.spec.js.
+jest.mock( '../../../src/components/DocumentPaletteCommands', () => ( {
+	__esModule: true,
+	default: () => null,
+} ) );
+
 jest.mock( '../../../src/components/CommandPalettePreview', () => ( {
 	__esModule: true,
 	default: ( { doc, documents } ) => (

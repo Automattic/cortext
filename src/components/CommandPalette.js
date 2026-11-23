@@ -23,6 +23,7 @@ import {
 } from '@wordpress/element';
 
 import CommandPalettePreview from './CommandPalettePreview';
+import DocumentPaletteCommands from './DocumentPaletteCommands';
 import CortextCommandMenu, {
 	CommandDescriptionContext,
 } from './CortextCommandMenu';
@@ -303,13 +304,17 @@ function CommandPaletteContents( {
 	// the prior selection) and clicks all flow back here. Clearing the
 	// input resets the anchor so the next session starts fresh.
 	const [ selectedValue, setSelectedValue ] = useState();
+	// An action that needs input, like a title or a destination, swaps the
+	// list for its own prompt until it runs or the user goes back.
+	const [ prompt, setPrompt ] = useState( null );
 	const isPaletteOpen = useSelect(
 		( select ) => select( commandsStore ).isOpen(),
 		[]
 	);
 
 	const isDebouncing = search !== debouncedSearch;
-	const shouldFetchDocuments = isPaletteOpen && Boolean( debouncedSearch );
+	const shouldFetchDocuments =
+		isPaletteOpen && Boolean( debouncedSearch ) && ! prompt;
 	const isDocumentSearchPending =
 		Boolean( search ) && ( isDebouncing || isFetchingDocuments );
 
@@ -318,7 +323,7 @@ function CommandPaletteContents( {
 	// available. Recents can be replaced while the palette is open, so keep a
 	// highlight that is still listed: a current recent, or a command.
 	useEffect( () => {
-		if ( ! isPaletteOpen || search ) {
+		if ( ! isPaletteOpen || search || prompt ) {
 			return;
 		}
 		const recentValues = recents.map( recentCommandValue );
@@ -332,7 +337,7 @@ function CommandPaletteContents( {
 			}
 			return recentValues[ 0 ];
 		} );
-	}, [ isPaletteOpen, search, recents ] );
+	}, [ isPaletteOpen, search, prompt, recents ] );
 
 	// Reset the input and the controlled selection whenever the palette
 	// closes, regardless of how it closed. Picking a result calls
@@ -343,8 +348,26 @@ function CommandPaletteContents( {
 		if ( ! isPaletteOpen ) {
 			setSearch( '' );
 			setSelectedValue( undefined );
+			setPrompt( null );
 		}
 	}, [ isPaletteOpen ] );
+
+	const openPrompt = useCallback( ( nextPrompt ) => {
+		setPrompt( nextPrompt );
+		setSearch( nextPrompt.initialSearch ?? '' );
+		setSelectedValue( undefined );
+	}, [] );
+
+	const leavePrompt = useCallback( () => {
+		setPrompt( null );
+		setSearch( '' );
+		setSelectedValue( undefined );
+	}, [] );
+
+	const focusCanvas = useCallback(
+		() => focusCanvasAfterPaletteCloses( canvasRef ),
+		[ canvasRef ]
+	);
 
 	const handleDocumentsResolved = useCallback( ( documents ) => {
 		setResolvedDocuments( documents );
@@ -354,10 +377,15 @@ function CommandPaletteContents( {
 		const values = documentCommandValues( documents );
 		setSelectedValue( ( current ) => {
 			// If the user's current selection survived into the new
-			// result set, keep it. Otherwise jump to the first new doc so
-			// the highlight does not blink off while cmdk's internal
-			// recovery is still scheduled.
-			if ( current && values.includes( current ) ) {
+			// result set, keep it, and keep an action the search matched
+			// better than any document. Otherwise jump to the first new
+			// doc so the highlight does not blink off while cmdk's
+			// internal recovery is still scheduled.
+			const isAction =
+				Boolean( current ) &&
+				! current.startsWith( DOCUMENT_COMMAND_VALUE_PREFIX ) &&
+				! current.startsWith( RECENT_COMMAND_VALUE_PREFIX );
+			if ( current && ( values.includes( current ) || isAction ) ) {
 				return current;
 			}
 			return values[ 0 ];
@@ -387,6 +415,10 @@ function CommandPaletteContents( {
 	return (
 		<CommandDescriptionContext.Provider value={ documentDescriptions }>
 			<CommandPaletteOpenBridge />
+			<DocumentPaletteCommands
+				focusCanvas={ focusCanvas }
+				openPrompt={ openPrompt }
+			/>
 			<HomeCommandRegistration
 				canvasRef={ canvasRef }
 				homePath={ homePath }
@@ -409,6 +441,8 @@ function CommandPaletteContents( {
 				/>
 			) }
 			<CortextCommandMenu
+				prompt={ prompt }
+				onLeavePrompt={ leavePrompt }
 				search={ search }
 				setSearch={ setSearch }
 				isDocumentSearchPending={ isDocumentSearchPending }
