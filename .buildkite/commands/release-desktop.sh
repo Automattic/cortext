@@ -14,8 +14,8 @@ else
   publish=false
 fi
 
-# A tag build spends an hour compiling, signing and notarizing before it uploads
-# anything, so check up front that the upload can work.
+# A tag build compiles, signs and notarizes the app before it uploads anything,
+# so check up front that the upload can work.
 if "$publish"; then
   echo "--- :closed_lock_with_key: check GitHub Release access"
   [[ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]] || {

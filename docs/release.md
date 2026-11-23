@@ -155,7 +155,7 @@ Until someone approves it, there is no tag and no desktop build.
 Buildkite builds the macOS desktop app from that tag while the Release
 is still a draft: it signs, notarizes, and staples the app, then attaches the
 DMG and the auto-update feed (see [Desktop app](#desktop-app)). That takes about
-an hour. Publishing the Release later reuses the tag, so it doesn't start a
+15 minutes. Publishing the Release later reuses the tag, so it doesn't start a
 second build. If you throw a draft away, delete its tag too; preparing the same
 version again fails if the tag points at a different commit.
 
