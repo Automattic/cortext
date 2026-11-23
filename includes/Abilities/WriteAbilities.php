@@ -474,8 +474,8 @@ final class WriteAbilities {
 	}
 
 	/**
-	 * A document can only go under a live Cortext document. Core accepts any
-	 * post as parent, and the sidebar wouldn't show the result.
+	 * A document can only go under a live Cortext page. Core accepts any post
+	 * as parent, and the sidebar wouldn't show the result.
 	 *
 	 * @param int $parent_id Parent ID, 0 for the top level.
 	 */
@@ -490,6 +490,15 @@ final class WriteAbilities {
 				'cortext_parent_not_found',
 				__( 'Couldn\'t find the document to put it under.', 'cortext' ),
 				array( 'status' => 404 )
+			);
+		}
+
+		// Collections and the documents in them are leaves in the tree.
+		if ( Documents::KIND_PAGE !== Documents::kind_for_document( $parent ) ) {
+			return new WP_Error(
+				'cortext_invalid_parent',
+				__( 'Couldn\'t put the document there: collections and the documents in them can\'t hold other documents.', 'cortext' ),
+				array( 'status' => 400 )
 			);
 		}
 

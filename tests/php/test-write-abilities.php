@@ -208,6 +208,32 @@ final class Test_Write_Abilities extends BaseTestCase {
 		$this->assertSame( 0, (int) get_post_field( 'post_parent', $document_id ) );
 	}
 
+	public function test_create_page_and_move_refuse_a_collection_or_its_documents_as_parent(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$document_id   = $this->create_document( 'Child' );
+		$collection_id = $this->create_document( 'Projects' );
+		$this->add_field( $collection_id, 'Owner' );
+		$row_id = $this->create_row( $collection_id, 'Launch' );
+
+		foreach ( array( $collection_id, $row_id ) as $parent_id ) {
+			$created = wp_get_ability( 'cortext/create-page' )->execute(
+				array(
+					'title'  => 'New',
+					'parent' => $parent_id,
+				)
+			);
+			$moved   = wp_get_ability( 'cortext/move-document' )->execute(
+				array(
+					'id'     => $document_id,
+					'parent' => $parent_id,
+				)
+			);
+
+			$this->assertSame( 'cortext_invalid_parent', $created->get_error_code(), (string) $parent_id );
+			$this->assertSame( 'cortext_invalid_parent', $moved->get_error_code(), (string) $parent_id );
+		}
+	}
+
 	public function test_create_page_needs_permission_to_create_documents(): void {
 		wp_set_current_user( $this->create_user( 'subscriber' ) );
 
