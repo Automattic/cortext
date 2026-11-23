@@ -1244,6 +1244,14 @@ final class FieldsController {
 				array( 'status' => 400 )
 			);
 		}
+		// The relation adds a reverse property to the target collection.
+		if ( ! current_user_can( 'edit_post', $target_collection_id ) ) {
+			return new WP_Error(
+				'cortext_relation_target_forbidden',
+				__( 'Sorry, you are not allowed to link to this collection.', 'cortext' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
 		$target_read_only_error = $this->read_only_collection_error( $target_collection_id );
 		if ( $target_read_only_error instanceof WP_Error ) {
 			return $target_read_only_error;

@@ -791,6 +791,30 @@ final class Test_Rest_Fields_Controller extends BaseTestCase {
 		$this->assertSame( '1', get_post_meta( $reverse_field_id, 'relation_multiple', true ) );
 	}
 
+	public function test_create_relation_rejects_a_target_the_user_cannot_edit(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$target_collection_id = $this->create_collection_with_slug( 'People', 'people-forbidden' );
+
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$source_collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-forbidden' );
+		$source_fields        = get_post_meta( $source_collection_id, 'cortext_fields', false );
+		$target_fields        = get_post_meta( $target_collection_id, 'cortext_fields', false );
+
+		$response = $this->create_field(
+			$source_collection_id,
+			array(
+				'title'                 => 'Assignee',
+				'type'                  => 'relation',
+				'related_collection_id' => $target_collection_id,
+			)
+		);
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'cortext_relation_target_forbidden', $response->get_data()['code'] );
+		$this->assertSame( $source_fields, get_post_meta( $source_collection_id, 'cortext_fields', false ) );
+		$this->assertSame( $target_fields, get_post_meta( $target_collection_id, 'cortext_fields', false ) );
+	}
+
 	public function test_create_relation_rolls_back_source_when_reverse_attach_fails(): void {
 		wp_set_current_user( $this->create_user( 'editor' ) );
 		$source_collection_id = $this->create_collection_with_slug( 'Tasks', 'tasks-rev-fail' );

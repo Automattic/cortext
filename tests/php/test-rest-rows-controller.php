@@ -89,6 +89,43 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
+	public function test_edit_context_rejects_a_private_collection_the_user_cannot_read(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->create_collection_fixture( 'editor-private' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Secret row', 'private' );
+
+		wp_set_current_user( $this->create_user( 'author' ) );
+
+		foreach ( array( 'full', 'ids' ) as $shape ) {
+			$response = $this->query_rows(
+				array(
+					'trait'   => $fixture['collection_id'],
+					'context' => 'edit',
+					'shape'   => $shape,
+				)
+			);
+			$this->assertSame( 403, $response->get_status(), $shape );
+		}
+	}
+
+	public function test_edit_context_lets_an_editor_read_another_users_private_collection(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'author-private' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Author row', 'private' );
+
+		wp_set_current_user( $this->create_user( 'editor' ) );
+
+		$response = $this->query_rows(
+			array(
+				'trait'   => $fixture['collection_id'],
+				'context' => 'edit',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $response->get_data()['total'] );
+	}
+
 	public function test_view_context_allows_anonymous_for_published_collection(): void {
 		wp_set_current_user( 0 );
 
@@ -971,6 +1008,26 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $fixture['archived_target_id'] ) );
 		$this->assertSame( array( 3, 60.0 ), $before );
 		$this->assertSame( $before, $after );
+	}
+
+	public function test_relation_refs_and_rollups_hide_a_target_collection_the_user_cannot_read(): void {
+		$editor_id = $this->create_user( 'editor' );
+		$author_id = $this->create_user( 'author' );
+		wp_set_current_user( $editor_id );
+		$fixture = $this->create_relation_rollup_fixture( 'relhidden' );
+		foreach ( array( $fixture['source_collection_id'], $fixture['source_row_id'] ) as $post_id ) {
+			wp_update_post(
+				array(
+					'ID'          => $post_id,
+					'post_author' => $author_id,
+				)
+			);
+		}
+
+		wp_set_current_user( $author_id );
+
+		$this->assertSame( array(), $this->relation_refs_for_source_row( $fixture ) );
+		$this->assertSame( array( 0, 0 ), $this->rollup_values_for_source_row( $fixture ) );
 	}
 
 	/**
