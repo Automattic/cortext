@@ -11,6 +11,7 @@ namespace Cortext;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Abilities\Abilities;
 use Cortext\Admin\Screen;
 use Cortext\Block\DataView;
 use Cortext\Compat\IndexedDefaultMetadata;
@@ -106,6 +107,7 @@ final class Plugin {
 		( new DataView() )->register();
 		( new CortextMedia() )->register();
 		( new Preferences() )->register();
+		( new Abilities() )->register();
 	}
 
 	private function __construct() {}
