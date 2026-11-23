@@ -45,7 +45,6 @@ use Cortext\Rest\RowsController;
 use Cortext\Rest\SampleContentController;
 use Cortext\Rest\SidebarTreePreferencesController;
 use Cortext\Rest\WorkspaceHomeController;
-use Cortext\Runtime\Experiments;
 use Cortext\Taxonomy\MentionTaxonomy;
 use Cortext\Taxonomy\TraitTaxonomy;
 use Cortext\Theming\Preferences;
@@ -62,8 +61,6 @@ final class Plugin {
 	}
 
 	public function boot(): void {
-		add_filter( 'cortext_experiments', array( $this, 'register_experiments' ) );
-
 		( new IndexedDefaultMetadata() )->register();
 		( new Screen() )->register();
 		( new Document() )->register();
@@ -109,24 +106,6 @@ final class Plugin {
 		( new DataView() )->register();
 		( new CortextMedia() )->register();
 		( new Preferences() )->register();
-	}
-
-	/**
-	 * Adds first-party experiments to the shared registry.
-	 *
-	 * @param array<int,array<string,mixed>> $experiments Registered experiments.
-	 * @return array<int,array<string,mixed>>
-	 */
-	public function register_experiments( array $experiments ): array {
-		$experiments[] = array(
-			'id'          => Experiments::TRAITS_ID,
-			'label'       => __( 'Traits', 'cortext' ),
-			'description' => __( 'Let a document carry several traits and appear in each of their collections.', 'cortext' ),
-			'group'       => __( 'Collections', 'cortext' ),
-			'default'     => false,
-		);
-
-		return $experiments;
 	}
 
 	private function __construct() {}

@@ -68,10 +68,6 @@ beforeEach( () => {
 	);
 } );
 
-afterEach( () => {
-	delete window.cortextSettings;
-} );
-
 describe( 'useBreadcrumbSegments', () => {
 	it( 'builds the chain from the cached lists without fetching by id', () => {
 		lists = {
@@ -113,9 +109,8 @@ describe( 'useBreadcrumbSegments', () => {
 		expect( labelsOf( render( row ).segments ) ).toEqual( [ 'INV-1' ] );
 	} );
 
-	describe( 'with traits enabled', () => {
+	describe( 'with traits', () => {
 		beforeEach( () => {
-			window.cortextSettings = { experiments: { traits: true } };
 			// Mirror term slug is the collection's post id.
 			lists = {
 				pages: [],
@@ -245,23 +240,6 @@ describe( 'useBreadcrumbSegments', () => {
 				'Projects',
 				'People',
 			] );
-		} );
-
-		it( 'keeps the legacy parent chain and hides chips when traits are disabled', () => {
-			delete window.cortextSettings;
-
-			const result = render( {
-				id: 100,
-				title: { raw: 'Ada' },
-				crtxt_trait: [ 11, 22 ],
-				parent: 0,
-			} );
-
-			expect( labelsOf( result.segments ) ).toEqual( [
-				'Projects',
-				'Ada',
-			] );
-			expect( result.chips ).toEqual( [] );
 		} );
 
 		it( 'returns empty segments and chips without a document', () => {

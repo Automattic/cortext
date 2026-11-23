@@ -28,7 +28,6 @@ use Cortext\PostType\DocumentWriteGuard;
 use Cortext\PostType\TrashCascade;
 use Cortext\Relations;
 use Cortext\Rest\RowsManualOrder;
-use Cortext\Runtime\Experiments;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
@@ -218,7 +217,7 @@ final class DocumentsController {
 				array(
 					'methods'             => 'PUT',
 					'callback'            => array( $this, 'update_traits' ),
-					'permission_callback' => array( $this, 'can_update_document_membership' ),
+					'permission_callback' => array( $this, 'check_document_membership' ),
 					'args'                => array(
 						'id'             => array(
 							'type'     => 'integer',
@@ -480,27 +479,6 @@ final class DocumentsController {
 		}
 
 		return current_user_can( 'edit_post', $id );
-	}
-
-	/**
-	 * Permission gate for changing collection memberships. Reading the current
-	 * memberships stays available so existing multi-collection data remains
-	 * understandable if the experiment is later disabled.
-	 *
-	 * @param WP_REST_Request $request Incoming REST request.
-	 *
-	 * @return bool|WP_Error
-	 */
-	public function can_update_document_membership( WP_REST_Request $request ) {
-		if ( ! ( new Experiments() )->is_enabled( Experiments::TRAITS_ID ) ) {
-			return new WP_Error(
-				'cortext_experiment_disabled',
-				__( 'Traits are not enabled.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		return $this->check_document_membership( $request );
 	}
 
 	/**

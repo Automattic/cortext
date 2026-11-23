@@ -286,7 +286,6 @@ const fields = [
 const allFields = [ ...fields, { id: 'field-11', label: 'Hidden field' } ];
 
 beforeEach( () => {
-	window.cortextSettings = { experiments: { traits: true } };
 	mockCanEdit = true;
 	mockCanEditById = null;
 	mockIsSaving = false;
@@ -327,12 +326,10 @@ beforeEach( () => {
 	};
 } );
 
-afterEach( () => {
-	delete window.cortextSettings;
-} );
+afterEach( () => {} );
 
 describe( 'document-properties Customize properties mode', () => {
-	it( 'mounts the membership control when traits are enabled', () => {
+	it( 'mounts the membership control on a row', () => {
 		render( <Edit /> );
 
 		expect( mockTraitsDocumentId ).toBe( 123 );
@@ -572,26 +569,6 @@ describe( 'document-properties Customize properties mode', () => {
 		);
 		fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
 		expect( refresh ).toHaveBeenCalled();
-	} );
-
-	it( 'keeps the legacy single-collection surface when traits are disabled', () => {
-		delete window.cortextSettings;
-		mockTraits = {
-			collections: [
-				{ id: 77, title: 'Projects', icon: '' },
-				{ id: 88, title: 'People', icon: '' },
-			],
-			isResolving: false,
-			isUnknown: false,
-			refresh: jest.fn(),
-		};
-
-		render( <Edit /> );
-
-		expect( mockTraitsDocumentId ).toBeNull();
-		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
-		expect( screen.queryByText( 'People' ) ).toBeNull();
-		expect( screen.queryByTestId( 'trait-control' ) ).toBeNull();
 	} );
 
 	it( 'saves layout edits when fields move or change visibility', async () => {
@@ -1377,8 +1354,12 @@ describe( 'document-properties Customize properties mode', () => {
 
 describe( 'document-properties selection', () => {
 	it( 'hands the selection to the previous block when it shows nothing', () => {
-		delete window.cortextSettings;
-		mockContext = { ...mockContext, fields: [], allFields: [] };
+		mockContext = {
+			...mockContext,
+			rowId: null,
+			fields: [],
+			allFields: [],
+		};
 
 		const { container } = render(
 			<Edit clientId="properties-block" isSelected />
@@ -1405,8 +1386,12 @@ describe( 'document-properties selection', () => {
 	} );
 
 	it( 'leaves the selection alone while another block is selected', () => {
-		delete window.cortextSettings;
-		mockContext = { ...mockContext, fields: [], allFields: [] };
+		mockContext = {
+			...mockContext,
+			rowId: null,
+			fields: [],
+			allFields: [],
+		};
 
 		render( <Edit clientId="properties-block" isSelected={ false } /> );
 

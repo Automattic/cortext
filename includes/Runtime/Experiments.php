@@ -15,8 +15,7 @@ use WP_Error;
 
 final class Experiments {
 
-	public const OPTION    = 'cortext_experiments';
-	public const TRAITS_ID = 'traits';
+	public const OPTION = 'cortext_experiments';
 
 	/**
 	 * Returns registered experiment metadata keyed by experiment ID.

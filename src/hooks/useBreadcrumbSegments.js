@@ -14,7 +14,6 @@ import {
 } from '../components/page-queries';
 import { COLLECTION_QUERY, DOCUMENT_POST_TYPE } from '../collections';
 import { computeDocumentUri } from '../router/useResolveEntity';
-import { isExperimentEnabled, TRAITS_EXPERIMENT_ID } from '../settings';
 
 const TRAIT_TAXONOMY = 'crtxt_trait';
 const TRAIT_TERMS_QUERY = { per_page: 100, context: 'view' };
@@ -113,7 +112,6 @@ function createLookup( select, documentsById, termsById ) {
 export default function useBreadcrumbSegments( paintedDocumentId ) {
 	const navigate = useNavigate();
 	const documentId = paintedDocumentId ?? null;
-	const traitsEnabled = isExperimentEnabled( TRAITS_EXPERIMENT_ID );
 
 	const { record: document } = useEntityRecord(
 		'postType',
@@ -174,12 +172,12 @@ export default function useBreadcrumbSegments( paintedDocumentId ) {
 	// (more than 100 collections, terms, or documents) resolves by id. Those
 	// single-record fetches are not invalidated by document saves, unlike the
 	// lists, so they stay cached once loaded.
-	// Every live collection the current item belongs to. With traits on and
-	// more than one, the item has no single owning collection: they render as
-	// chips beside it instead of one of them heading the chain.
+	// Every live collection the current item belongs to. With more than one,
+	// the item has no single owning collection: they render as chips beside it
+	// instead of one of them heading the chain.
 	const itemCollections = useSelect(
 		( select ) => {
-			if ( ! traitsEnabled || ! documentId || ! document ) {
+			if ( ! documentId || ! document ) {
 				return [];
 			}
 			const collections = collectionsOfRecord(
@@ -188,7 +186,7 @@ export default function useBreadcrumbSegments( paintedDocumentId ) {
 			);
 			return collections.length > 1 ? collections : [];
 		},
-		[ traitsEnabled, documentId, document, documentsById, termsById ]
+		[ documentId, document, documentsById, termsById ]
 	);
 	const isMultiCollection = itemCollections.length > 1;
 

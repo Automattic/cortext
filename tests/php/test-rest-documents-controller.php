@@ -11,7 +11,6 @@ namespace Cortext\Tests;
 
 use Cortext\Documents;
 use Cortext\Formula\Compiler as FormulaCompiler;
-use Cortext\Plugin;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentFreeze;
@@ -20,7 +19,6 @@ use Cortext\PostType\Field;
 use Cortext\PostType\TrashCascade;
 use Cortext\Relations;
 use Cortext\Rest\DocumentsController;
-use Cortext\Runtime\Experiments;
 use Cortext\Taxonomy\TraitTaxonomy;
 use WorDBless\BaseTestCase;
 use WP_REST_Request;
@@ -49,12 +47,6 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		$archive_cascade = new ArchiveCascade();
 		$archive_cascade->register_status();
 		$archive_cascade->register_meta();
-		add_filter( 'cortext_experiments', array( Plugin::instance(), 'register_experiments' ) );
-		update_option(
-			Experiments::OPTION,
-			array( Experiments::TRAITS_ID => true ),
-			false
-		);
 
 		$GLOBALS['wp_rest_server'] = new WP_REST_Server();
 		( new DocumentsController() )->register();
@@ -64,8 +56,6 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 	public function tear_down(): void {
 		$this->uninstall_in_memory_posts_query();
 		$this->uninstall_in_memory_term_store();
-		remove_all_filters( 'cortext_experiments' );
-		delete_option( Experiments::OPTION );
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -296,35 +286,6 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 	public function test_traits_route_is_registered(): void {
 		$routes = rest_get_server()->get_routes();
 		$this->assertArrayHasKey( '/cortext/v1/documents/(?P<id>\d+)/traits', $routes );
-	}
-
-	public function test_put_traits_is_unavailable_when_traits_experiment_is_disabled(): void {
-		update_option(
-			Experiments::OPTION,
-			array( Experiments::TRAITS_ID => false ),
-			false
-		);
-		wp_set_current_user( $this->create_user( 'administrator' ) );
-		$collection_a = $this->create_collection( 'projects-disabled', 'Projects' );
-		$collection_b = $this->create_collection( 'people-disabled', 'People' );
-		$row_id       = $this->create_row( $collection_a, 'Ada' );
-
-		$response = $this->request_traits(
-			$row_id,
-			array( $collection_a, $collection_b )
-		);
-
-		$this->assertSame( 404, $response->get_status() );
-		$this->assertSame( 'cortext_experiment_disabled', $response->get_data()['code'] );
-		$this->assertSame(
-			array( $collection_a ),
-			( new \Cortext\Documents() )->membership_ids( $row_id )
-		);
-
-		$get = rest_do_request(
-			new WP_REST_Request( 'GET', '/cortext/v1/documents/' . $row_id . '/traits' )
-		);
-		$this->assertSame( 200, $get->get_status(), 'Existing membership data remains readable while the experiment is off.' );
 	}
 
 	public function test_put_traits_adds_membership_and_get_returns_all(): void {

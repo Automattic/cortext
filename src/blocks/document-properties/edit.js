@@ -34,7 +34,6 @@ import { CollectionFieldsSnapshotProvider } from '../../components/CollectionFie
 import { useDocumentPropertiesContext } from '../../components/DocumentPropertiesContext';
 import useDocumentTraits from '../../hooks/useDocumentTraits';
 import useDetailLayoutEditing from '../../hooks/useDetailLayoutEditing';
-import { isExperimentEnabled, TRAITS_EXPERIMENT_ID } from '../../settings';
 
 // Row documents show collection properties between the title and body. Canvas
 // and RowEditor provide the source collection's fields and the fallback row
@@ -56,29 +55,19 @@ export default function Edit( { clientId, isSelected } ) {
 		onToggleVisible,
 	} = ctx ?? {};
 	const isVisible = contextIsVisible !== false;
-	const traitsEnabled = isExperimentEnabled( TRAITS_EXPERIMENT_ID );
 
 	// All the collections this row belongs to. `collectionId` from
 	// context is the source collection (the one the row was opened from); the
 	// rest render as additional groups below it.
 	const {
-		collections: traitMemberships,
+		collections: memberships,
 		isResolving: membershipsResolving,
 		isUnknown: membershipsUnknown = false,
 		error: membershipsError = null,
 		refresh: refreshTraits,
-	} = useDocumentTraits( traitsEnabled ? rowId : null );
-	// With the experiment off, retain the legacy single-collection surface and
-	// skip the traits request. The backend remains multi-membership aware so
-	// existing data is preserved if an administrator disables the experiment.
-	const memberships = useMemo( () => {
-		if ( traitsEnabled ) {
-			return traitMemberships;
-		}
-		return collectionId ? [ { id: collectionId } ] : [];
-	}, [ collectionId, traitsEnabled, traitMemberships ] );
+	} = useDocumentTraits( rowId );
 	const membershipsAreActionable =
-		! traitsEnabled || ( ! membershipsResolving && ! membershipsUnknown );
+		! membershipsResolving && ! membershipsUnknown;
 	// Archived and trashed memberships stay in `memberships` so a PUT keeps them
 	// for restore. A row that lives in another collection does not show or
 	// write their fields, so only live memberships render property groups. A
@@ -138,7 +127,6 @@ export default function Edit( { clientId, isSelected } ) {
 	// group. Also hide it while refreshing: those fields and layout handlers
 	// target a membership whose continued existence is not yet known.
 	const sourceInactive =
-		traitsEnabled &&
 		membershipsAreActionable &&
 		! visibleMemberships.some(
 			( collection ) => collection.id === collectionId
@@ -455,7 +443,6 @@ export default function Edit( { clientId, isSelected } ) {
 	] );
 
 	const canRenderTraitShell =
-		traitsEnabled &&
 		rowId &&
 		( ( membershipsAreActionable && memberships.length > 0 ) ||
 			membershipsError );
@@ -668,8 +655,7 @@ export default function Edit( { clientId, isSelected } ) {
 							: undefined
 					}
 				>
-					{ traitsEnabled &&
-					rowId &&
+					{ rowId &&
 					! isEditingLayout &&
 					membershipsAreActionable &&
 					memberships.length > 0 ? (
