@@ -46,7 +46,7 @@ final class Abilities {
 			self::CATEGORY,
 			array(
 				'label'       => __( 'Cortext', 'cortext' ),
-				'description' => __( 'Find and read documents and collections in Cortext.', 'cortext' ),
+				'description' => __( 'Find, read and change documents and collections in Cortext.', 'cortext' ),
 			)
 		);
 	}
@@ -262,10 +262,30 @@ final class Abilities {
 	 * @return array<string,mixed>|WP_Error
 	 */
 	public function query_rows( array $input ) {
-		$request = new WP_REST_Request( 'GET', '/cortext/v1/rows' );
-		$request->set_query_params( array_diff_key( $input, array( 'collection' => true ) ) );
-		$request->set_param( 'trait', (int) $input['collection'] );
-		$request->set_param( 'context', 'edit' );
+		$params = array(
+			'trait'   => (int) $input['collection'],
+			'context' => 'edit',
+		) + array_diff_key( $input, array( 'collection' => true ) );
+
+		return self::dispatch( 'GET', '/cortext/v1/rows', $params );
+	}
+
+	/**
+	 * Runs a REST route in the current request, so its permission checks,
+	 * validation and hooks apply as they do for the app.
+	 *
+	 * @param string              $method HTTP method.
+	 * @param string              $route  Route path.
+	 * @param array<string,mixed> $params Query params for GET, body params otherwise.
+	 * @return mixed|WP_Error Response data, or the route's error.
+	 */
+	public static function dispatch( string $method, string $route, array $params = array() ) {
+		$request = new WP_REST_Request( $method, $route );
+		if ( 'GET' === $method ) {
+			$request->set_query_params( $params );
+		} else {
+			$request->set_body_params( $params );
+		}
 
 		$response = rest_do_request( $request );
 		if ( $response->is_error() ) {
