@@ -120,5 +120,10 @@ export function rowHref( ref ) {
 	const params = new URLSearchParams();
 	params.set( 'page', menuSlug );
 	params.set( 'p', `/${ route }` );
+	const collectionId = Number( ref?.collectionId );
+	if ( collectionId > 0 ) {
+		params.set( 'collection', String( collectionId ) );
+		params.set( 'collectionRow', String( ref.id ) );
+	}
 	return `${ base }admin.php?${ params.toString() }`;
 }

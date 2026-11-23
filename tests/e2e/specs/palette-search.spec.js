@@ -281,6 +281,7 @@ test.describe( 'Command palette search', () => {
 				data: {
 					title: collectionTitle,
 					status: 'private',
+					cortext_collection: true,
 				},
 			} );
 

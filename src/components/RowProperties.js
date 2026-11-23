@@ -827,6 +827,7 @@ function RowProperty( {
 	handleFieldFormatSaved,
 	handleFieldOptionsSaved,
 	isLayoutEditing,
+	isSaveLocked,
 	isDragging,
 	isCollapsedForHiddenDrop,
 	localFormatOverrides,
@@ -846,7 +847,8 @@ function RowProperty( {
 } ) {
 	const relation = relationConfigForField( field );
 	const editContext = { collectionId, rowId };
-	const isEditable = isRowDetailFieldEditable( field, editContext );
+	const isEditable =
+		! isSaveLocked && isRowDetailFieldEditable( field, editContext );
 	const value = valueForField( field, data );
 	const type = fieldType( field );
 	const displayType = displayFieldType( field );
@@ -1056,8 +1058,13 @@ function SortableRowProperty( props ) {
  * @param {number}   props.collectionId The row's parent collection ID.
  * @param {Array}    props.fields       Fields shown for this row.
  * @param {boolean}  props.isLayoutEditing Whether the user is arranging properties.
+ * @param {boolean}  [props.isSaveLocked] Whether membership removal has locked field saves.
+ * @param {Function} [props.isCollectionSaveLocked] Synchronously reads the
+ *                                               authoritative collection lock.
  * @param {Function} props.onLayoutReorder Reorders fields from the properties list.
  * @param {Function} props.onLayoutVisibilityToggle Shows or hides a field in the layout.
+ * @param {Function} [props.registerPendingSaveFlusher] Registers an async
+ *                                               collection-scoped save barrier.
  * @param {number}   [props.rowId]      The current row ID.
  * @param {Object}   [props.row]        Fallback row record for values outside editor state,
  *                                      such as relations and rollups.
@@ -1066,8 +1073,11 @@ export default function RowProperties( {
 	collectionId,
 	fields,
 	isLayoutEditing = false,
+	isCollectionSaveLocked,
+	isSaveLocked = false,
 	onLayoutReorder,
 	onLayoutVisibilityToggle,
+	registerPendingSaveFlusher,
 	row,
 	rowId: providedRowId,
 } ) {
@@ -1096,6 +1106,7 @@ export default function RowProperties( {
 	const pendingSavesRef = useRef( new Map() );
 	const inFlightSavesRef = useRef( new Set() );
 	const { registerPendingSaves } = useActiveEditor();
+	const failedSavesRef = useRef( new Map() );
 	const saveTimersRef = useRef( new Map() );
 	const fieldSaveVersionsRef = useRef( new Map() );
 	const handleFieldOptionsSaved = useCallback(
@@ -1254,7 +1265,7 @@ export default function RowProperties( {
 	}, [] );
 
 	const flushQueuedFieldSave = useCallback(
-		async ( fieldId, { rethrow = false } = {} ) => {
+		async ( fieldId, { preserveState = true, rethrow = false } = {} ) => {
 			const entry = pendingSavesRef.current.get( fieldId );
 			if ( ! entry ) {
 				return null;
@@ -1272,7 +1283,11 @@ export default function RowProperties( {
 						entry.value
 					)
 				);
-				if ( ! isMountedRef.current ) {
+				const failedEntry = failedSavesRef.current.get( fieldId );
+				if ( failedEntry?.version === entry.version ) {
+					failedSavesRef.current.delete( fieldId );
+				}
+				if ( ! preserveState || ! isMountedRef.current ) {
 					return updated;
 				}
 				const isLatestSave =
@@ -1291,11 +1306,14 @@ export default function RowProperties( {
 				}
 				return updated;
 			} catch ( error ) {
-				if (
-					isMountedRef.current &&
+				const isLatestSave =
 					fieldSaveVersionsRef.current.get( fieldId ) ===
-						entry.version
-				) {
+					entry.version;
+				if ( preserveState && isMountedRef.current && isLatestSave ) {
+					// Keep the failed value available to the collection-scoped
+					// save barrier. A second removal attempt can retry it instead
+					// of silently discarding the local edit.
+					failedSavesRef.current.set( fieldId, entry );
 					setFieldErrors( ( current ) => ( {
 						...current,
 						[ fieldId ]: saveErrorMessage( error ),
@@ -1324,7 +1342,11 @@ export default function RowProperties( {
 			value,
 			{ debounce = false, rethrow = false, field = null } = {}
 		) => {
-			if ( ! rowId ) {
+			if (
+				! rowId ||
+				isSaveLocked ||
+				isCollectionSaveLocked?.( collectionId ) === true
+			) {
 				return null;
 			}
 
@@ -1334,6 +1356,7 @@ export default function RowProperties( {
 			const version =
 				( fieldSaveVersionsRef.current.get( fieldId ) ?? 0 ) + 1;
 			fieldSaveVersionsRef.current.set( fieldId, version );
+			failedSavesRef.current.delete( fieldId );
 			pendingSavesRef.current.set( fieldId, {
 				rowId,
 				value,
@@ -1354,69 +1377,131 @@ export default function RowProperties( {
 
 			return flushQueuedFieldSave( fieldId, { rethrow } );
 		},
-		[ applyLocalFieldValue, clearSaveTimer, flushQueuedFieldSave, rowId ]
+		[
+			applyLocalFieldValue,
+			clearSaveTimer,
+			collectionId,
+			flushQueuedFieldSave,
+			isCollectionSaveLocked,
+			isSaveLocked,
+			rowId,
+		]
 	);
 
 	const flushAllPendingSaves = useCallback(
-		async ( { preserveState = true } = {} ) => {
-			const entries = Array.from( pendingSavesRef.current.entries() );
-			pendingSavesRef.current.clear();
-			saveTimersRef.current.forEach( ( timer ) => clearTimeout( timer ) );
-			saveTimersRef.current.clear();
+		async ( {
+			preserveState = true,
+			rethrow = false,
+			retryFailed = true,
+		} = {} ) => {
+			// Keep draining until no edit queued while an earlier request was in
+			// flight remains. This is what makes the function a real barrier before
+			// a collection membership (and its fields) can disappear.
+			while ( true ) {
+				saveTimersRef.current.forEach( ( timer ) =>
+					clearTimeout( timer )
+				);
+				saveTimersRef.current.clear();
 
-			let didSaveAll = true;
-			for ( const [ fieldId, entry ] of entries ) {
-				try {
-					const updated = await trackFieldSave(
-						saveRowDocumentField(
-							saveEntityRecord,
-							entry.rowId,
-							fieldId,
-							entry.value
-						)
+				// A timer may already have started its request before this barrier
+				// ran. Wait for raw promises so failures also block membership PUTs.
+				const active = Array.from( inFlightSavesRef.current );
+				if ( active.length > 0 ) {
+					const activeResults = await Promise.allSettled( active );
+					const failed = activeResults.find(
+						( result ) => result.status === 'rejected'
 					);
-					if ( preserveState && isMountedRef.current ) {
-						const isLatestSave =
-							fieldSaveVersionsRef.current.get( fieldId ) ===
-							entry.version;
-						if ( isLatestSave ) {
-							applyCommittedFieldValue( fieldId, entry, updated );
-							setFieldErrors( ( current ) =>
-								withoutKey( current, fieldId )
-							);
-							clearLocalFieldValue( fieldId );
+					if ( failed ) {
+						if ( rethrow ) {
+							throw failed.reason;
 						}
-						refreshRows?.();
-						if ( collectionId ) {
-							notifyCollectionRowsChanged( collectionId );
-						}
+						return false;
 					}
-				} catch ( error ) {
-					didSaveAll = false;
+					continue;
+				}
+
+				// Failed values are intentionally retried on a later barrier call.
+				// Callers that opt out leave them queued for that barrier.
+				const entriesByField = new Map(
+					retryFailed ? failedSavesRef.current : undefined
+				);
+				pendingSavesRef.current.forEach( ( entry, fieldId ) =>
+					entriesByField.set( fieldId, entry )
+				);
+				const entries = Array.from( entriesByField.entries() );
+				if ( entries.length === 0 ) {
+					return true;
+				}
+				pendingSavesRef.current.clear();
+				if ( retryFailed ) {
+					failedSavesRef.current.clear();
+				}
+				const errors = [];
+
+				for ( const [ fieldId, entry ] of entries ) {
+					// If the user edited this field after the snapshot, leave the newer
+					// entry queued; the next loop iteration will save it.
 					if (
-						preserveState &&
-						isMountedRef.current &&
-						fieldSaveVersionsRef.current.get( fieldId ) ===
-							entry.version
+						( pendingSavesRef.current.get( fieldId )?.version ??
+							0 ) > entry.version
 					) {
-						setFieldErrors( ( current ) => ( {
-							...current,
-							[ fieldId ]: saveErrorMessage( error ),
-						} ) );
+						continue;
+					}
+					pendingSavesRef.current.set( fieldId, entry );
+					try {
+						await flushQueuedFieldSave( fieldId, {
+							preserveState,
+							rethrow: true,
+						} );
+					} catch ( error ) {
+						errors.push( error );
 					}
 				}
+
+				if ( errors.length > 0 ) {
+					if ( rethrow ) {
+						throw errors[ 0 ];
+					}
+					return false;
+				}
 			}
-			return didSaveAll;
 		},
-		[
-			applyCommittedFieldValue,
-			clearLocalFieldValue,
-			collectionId,
-			refreshRows,
-			saveEntityRecord,
-			trackFieldSave,
-		]
+		[ flushQueuedFieldSave ]
 	);
+	const flushAllPendingSavesRef = useRef( flushAllPendingSaves );
+	flushAllPendingSavesRef.current = flushAllPendingSaves;
+	const participatesInParentSaveRegistry = Boolean(
+		collectionId && registerPendingSaveFlusher
+	);
+
+	useEffect( () => {
+		if ( ! participatesInParentSaveRegistry ) {
+			return undefined;
+		}
+		const unregister = registerPendingSaveFlusher( collectionId, () =>
+			flushAllPendingSavesRef.current( { rethrow: true } )
+		);
+		return () => {
+			// Collapsing the properties block unmounts this component. Hand the
+			// resulting flush promise to the parent before unregistering so a
+			// later membership removal cannot overtake the orphaned save.
+			const pendingSave = flushAllPendingSavesRef.current( {
+				preserveState: false,
+				rethrow: true,
+			} );
+			if ( typeof unregister === 'function' ) {
+				unregister( pendingSave );
+			} else {
+				// A third-party registry that does not return an unregister callback
+				// cannot retain the promise; still prevent an unhandled rejection.
+				pendingSave.catch( () => {} );
+			}
+		};
+	}, [
+		collectionId,
+		participatesInParentSaveRegistry,
+		registerPendingSaveFlusher,
+	] );
 
 	// Saves queued or in flight when an action like Archive asks the editor
 	// to flush. Resolves false if any of them fails, so the action can stop.
@@ -1439,17 +1524,21 @@ export default function RowProperties( {
 		isMountedRef.current = true;
 		return () => {
 			isMountedRef.current = false;
-			flushAllPendingSaves( { preserveState: false } );
+			if ( ! participatesInParentSaveRegistry ) {
+				flushAllPendingSavesRef.current( { preserveState: false } );
+			}
 		};
-	}, [ flushAllPendingSaves ] );
+	}, [ participatesInParentSaveRegistry ] );
 
 	useEffect( () => {
+		// Losing focus only flushes edits that have not been sent yet. A value
+		// the server already rejected would be rejected again on every blur.
 		const flushOnExit = () => {
-			flushAllPendingSaves();
+			flushAllPendingSaves( { retryFailed: false } );
 		};
 		const flushOnVisibilityChange = () => {
 			if ( document.visibilityState === 'hidden' ) {
-				flushAllPendingSaves();
+				flushAllPendingSaves( { retryFailed: false } );
 			}
 		};
 		window.addEventListener( 'blur', flushOnExit );
@@ -1707,6 +1796,8 @@ export default function RowProperties( {
 		_n( '%d property', '%d properties', propertyFields.length, 'cortext' ),
 		propertyFields.length
 	);
+	const saveLockedForRender =
+		isSaveLocked || isCollectionSaveLocked?.( collectionId ) === true;
 	const renderProperty = ( field ) =>
 		canReorderLayout ? (
 			<SortableRowProperty
@@ -1724,6 +1815,7 @@ export default function RowProperties( {
 				}
 				isDroppingIntoEmptyHiddenDrop={ isDroppingIntoEmptyHidden }
 				isLayoutEditing={ isLayoutEditing }
+				isSaveLocked={ saveLockedForRender }
 				localFormatOverrides={ localFormatOverrides }
 				localOptionOverrides={ localOptionOverrides }
 				onLayoutVisibilityToggle={ onLayoutVisibilityToggle }
@@ -1750,6 +1842,7 @@ export default function RowProperties( {
 				handleFieldOptionsSaved={ handleFieldOptionsSaved }
 				isCollapsedForHiddenDrop={ false }
 				isLayoutEditing={ isLayoutEditing }
+				isSaveLocked={ saveLockedForRender }
 				localFormatOverrides={ localFormatOverrides }
 				localOptionOverrides={ localOptionOverrides }
 				onLayoutVisibilityToggle={ onLayoutVisibilityToggle }
@@ -1768,6 +1861,7 @@ export default function RowProperties( {
 			ref={ propertiesRef }
 			className="cortext-row-detail__properties cortext-row-detail__properties--rows"
 			aria-label={ fieldCountLabel }
+			aria-disabled={ saveLockedForRender || undefined }
 		>
 			{ propertyFields.map( ( field, index ) => {
 				const startsHiddenGroup =

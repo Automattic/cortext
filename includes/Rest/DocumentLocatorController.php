@@ -19,8 +19,8 @@ namespace Cortext\Rest;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\PostType\Document;
-use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
 use WP_REST_Request;
@@ -111,20 +111,10 @@ final class DocumentLocatorController {
 		if ( Document::POST_TYPE !== $post->post_type ) {
 			return array();
 		}
-		$terms = get_the_terms( $post, TraitTaxonomy::TAXONOMY );
-		if ( ! is_array( $terms ) || empty( $terms ) ) {
-			return array();
-		}
-		$ids = array();
-		foreach ( $terms as $term ) {
-			if ( ! is_object( $term ) || ! isset( $term->slug ) ) {
-				continue;
-			}
-			$trait_id = TraitTaxonomy::trait_id_from_slug( (string) $term->slug );
-			if ( $trait_id > 0 ) {
-				$ids[] = $trait_id;
-			}
-		}
-		return $ids;
+
+		return array_map(
+			static fn( WP_Post $collection ): int => (int) $collection->ID,
+			( new Documents() )->find_visible_traits_for_document( $post )
+		);
 	}
 }

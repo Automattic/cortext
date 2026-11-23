@@ -19,12 +19,16 @@ namespace Cortext\Rest;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Documents;
+use Cortext\FieldValues\FieldValueIndex;
+use Cortext\Formula\Materializer as FormulaMaterializer;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
 use Cortext\PostType\DocumentFreeze;
 use Cortext\PostType\DocumentWriteGuard;
 use Cortext\PostType\TrashCascade;
+use Cortext\Relations;
 use Cortext\Rest\RowsManualOrder;
+use Cortext\Taxonomy\TraitTaxonomy;
 use WP_Error;
 use WP_Post;
 use WP_REST_Request;
@@ -202,6 +206,35 @@ final class DocumentsController {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/documents/(?P<id>\d+)/traits',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( $this, 'get_traits' ),
+					'permission_callback' => array( $this, 'check_document_membership' ),
+					'args'                => $id_arg,
+				),
+				array(
+					'methods'             => 'PUT',
+					'callback'            => array( $this, 'update_traits' ),
+					'permission_callback' => array( $this, 'check_document_membership' ),
+					'args'                => array(
+						'id'             => array(
+							'type'     => 'integer',
+							'required' => true,
+						),
+						'collection_ids' => array(
+							'type'     => 'array',
+							'required' => true,
+							'items'    => array( 'type' => 'integer' ),
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/documents/(?P<id>\d+)/reorder',
 			array(
 				array(
@@ -209,19 +242,23 @@ final class DocumentsController {
 					'callback'            => array( $this, 'reorder' ),
 					'permission_callback' => array( $this, 'can_reorder' ),
 					'args'                => array(
-						'id'           => array(
+						'id'            => array(
 							'type'     => 'integer',
 							'required' => true,
 						),
-						'before_id'    => array(
+						'collection_id' => array(
+							'type'     => 'integer',
+							'required' => false,
+						),
+						'before_id'     => array(
 							'type'     => array( 'integer', 'null' ),
 							'required' => false,
 						),
-						'after_id'     => array(
+						'after_id'      => array(
 							'type'     => array( 'integer', 'null' ),
 							'required' => false,
 						),
-						'current_sort' => array(
+						'current_sort'  => array(
 							'type'     => array( 'object', 'null' ),
 							'required' => false,
 						),
@@ -411,6 +448,357 @@ final class DocumentsController {
 		return new WP_REST_Response( array( 'post' => $this->prepared_post( $post ) ), 200 );
 	}
 
+	/**
+	 * Permission gate for the traits (memberships) endpoint. The document must
+	 * be a `crtxt_document` that is not itself a collection, and the user must be
+	 * able to edit it. A collection cannot be a member of another collection, so
+	 * that returns 400 rather than letting the write through.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function check_document_membership( WP_REST_Request $request ) {
+		$id   = (int) $request->get_param( 'id' );
+		$post = get_post( $id );
+
+		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( Document::is_collection_post( $post ) ) {
+			return new WP_Error(
+				'cortext_membership_unsupported',
+				__( 'Collections cannot belong to collections.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		return current_user_can( 'edit_post', $id );
+	}
+
+	/**
+	 * GET /documents/<id>/traits: the collections a document currently belongs to.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 */
+	public function get_traits( WP_REST_Request $request ): WP_REST_Response {
+		$id = (int) $request->get_param( 'id' );
+
+		return new WP_REST_Response(
+			array( 'collections' => $this->documents->get_memberships( $id ) ),
+			200
+		);
+	}
+
+	/**
+	 * PUT /documents/<id>/traits: replaces a document's collection memberships
+	 * with `collection_ids`. Rejects an empty set so the UI cannot strip the last
+	 * membership in v1.
+	 *
+	 * After the write it reconciles derived state for the collections that
+	 * actually changed:
+	 *   - Left collections: detach relation reverse pointers their fields hold on
+	 *     other rows (so those rows stop pointing back), then drop the row's
+	 *     field-value index rows for that collection. Forward field meta is kept,
+	 *     so re-adding the collection restores the row's values.
+	 *   - Joined collections: rebuild the index and relation reverse pointers for
+	 *     the row's existing values of that collection's fields, so indexed reads
+	 *     and related rows reflect the membership immediately instead of waiting
+	 *     for a field edit or a full rebuild.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 */
+	public function update_traits( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$id  = (int) $request->get_param( 'id' );
+		$raw = $request->get_param( 'collection_ids' );
+
+		// Archived and trashed documents are read-only, their traits included. A
+		// locked row can still change collections, like it can still be moved.
+		$lifecycle_error = DocumentWriteGuard::lifecycle_error( get_post( $id ) );
+		if ( $lifecycle_error instanceof WP_Error ) {
+			return $lifecycle_error;
+		}
+
+		$collection_ids = is_array( $raw )
+			? array_values(
+				array_unique(
+					array_filter(
+						array_map( 'intval', $raw ),
+						static fn( int $collection_id ): bool => $collection_id > 0
+					)
+				)
+			)
+			: array();
+
+		if ( count( $collection_ids ) === 0 ) {
+			return new WP_Error(
+				'cortext_membership_empty',
+				__( 'A row must belong to at least one active collection.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		// Only rows change memberships here. Giving a page its first collection
+		// would turn it into a row and drop it, with its child pages, out of the
+		// page tree.
+		$before = $this->documents->membership_ids( $id );
+		if ( count( $before ) === 0 ) {
+			return new WP_Error(
+				'cortext_membership_unsupported',
+				__( 'Only rows can change collection memberships.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$allowed = $this->authorize_membership_changes( $before, $collection_ids );
+		if ( $allowed instanceof WP_Error ) {
+			return $allowed;
+		}
+
+		$result = $this->documents->set_memberships( $id, $collection_ids );
+		if ( $result instanceof WP_Error ) {
+			return $result;
+		}
+
+		$removed = array_values( array_diff( $before, $result ) );
+		$added   = array_values( array_diff( $result, $before ) );
+		$index   = new FieldValueIndex();
+
+		foreach ( $removed as $removed_collection_id ) {
+			$removed_collection_id = (int) $removed_collection_id;
+			$detached_field_ids    = $this->relation_field_ids( $removed_collection_id, $result );
+			if ( count( $detached_field_ids ) > 0 ) {
+				Relations::remove_deleted_row_references( $id, $detached_field_ids );
+			}
+			$index->delete_row_for_collection( $id, $removed_collection_id );
+		}
+
+		foreach ( $added as $added_collection_id ) {
+			$added_collection_id = (int) $added_collection_id;
+			FormulaMaterializer::recompute_row( $added_collection_id, $id );
+			foreach ( Document::collection_field_ids( $added_collection_id ) as $field_id ) {
+				$field_id   = (int) $field_id;
+				$field_type = (string) get_post_meta( $field_id, 'type', true );
+				if ( 'relation' === $field_type ) {
+					$this->restore_relation_pointers( $id, $field_id );
+				}
+				if ( '' !== $field_type && 'rollup' !== $field_type ) {
+					$index->index_row_field( $id, $field_id, $added_collection_id );
+				}
+			}
+		}
+
+		return new WP_REST_Response(
+			array( 'collections' => $this->documents->get_memberships( $id ) ),
+			200
+		);
+	}
+
+	/**
+	 * Validates every requested membership before a write, then requires edit
+	 * permission for each collection whose membership would actually change.
+	 * Unchanged memberships do not mutate their collection and need no extra
+	 * capability check.
+	 *
+	 * @param int[] $before         Current collection ids.
+	 * @param int[] $collection_ids Requested collection ids.
+	 * @return true|WP_Error
+	 */
+	private function authorize_membership_changes( array $before, array $collection_ids ): bool|WP_Error {
+		$has_live_membership = false;
+		foreach ( $collection_ids as $collection_id ) {
+			$collection = get_post( $collection_id );
+			$is_new     = ! in_array( $collection_id, $before, true );
+			if (
+				$collection instanceof WP_Post
+				&& $is_new
+				&& Documents::STATUS_ARCHIVED === $collection->post_status
+			) {
+				return new WP_Error(
+					'cortext_membership_collection_archived',
+					__( 'Restore this collection from Archive before adding items to it.', 'cortext' ),
+					array(
+						'status'        => 409,
+						'collection_id' => $collection_id,
+					)
+				);
+			}
+			if (
+				! $collection instanceof WP_Post
+				|| ( Documents::STATUS_TRASH === $collection->post_status && $is_new )
+				|| ! Document::is_collection_post( $collection )
+				|| TraitTaxonomy::term_id_for_trait( $collection_id ) < 1
+			) {
+				return new WP_Error(
+					'cortext_trait_not_found',
+					__( 'Collection not found.', 'cortext' ),
+					array(
+						'status'        => 404,
+						'collection_id' => $collection_id,
+					)
+				);
+			}
+
+			if ( Documents::is_live_status( $collection->post_status ) ) {
+				$has_live_membership = true;
+			}
+		}
+
+		// A membership kept in an archived or trashed collection is not enough to
+		// keep a live row addressable. Require at least one collection that can
+		// actually surface the row before changing any taxonomy relationships.
+		if ( ! $has_live_membership ) {
+			return new WP_Error(
+				'cortext_membership_empty',
+				__( 'A row must belong to at least one active collection.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$changed = array_values(
+			array_unique(
+				array_merge(
+					array_diff( $before, $collection_ids ),
+					array_diff( $collection_ids, $before )
+				)
+			)
+		);
+		foreach ( $changed as $collection_id ) {
+			if ( ! current_user_can( 'edit_post', $collection_id ) ) {
+				return new WP_Error(
+					'cortext_membership_collection_forbidden',
+					__( 'You are not allowed to change membership for this collection.', 'cortext' ),
+					array( 'status' => rest_authorization_required_code() )
+				);
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Restores reverse pointers for a retained forward relation value when its
+	 * collection membership returns. The normal relation update preparer sees
+	 * the retained forward value as both current and desired and therefore has
+	 * no delta to apply, so this recovery path explicitly starts from an empty
+	 * reverse-pointer state.
+	 *
+	 * A single-valued reverse slot that another row took while this row was out
+	 * of the collection keeps that newer link. The target is dropped from this
+	 * row's retained forward value instead of being taken back.
+	 *
+	 * @param int $row_id   Row whose membership was restored.
+	 * @param int $field_id Relation field id.
+	 */
+	private function restore_relation_pointers( int $row_id, int $field_id ): void {
+		$reverse_id = (int) get_post_meta( $field_id, 'relation_reverse_field_id', true );
+		if ( $reverse_id < 1 || 'relation' !== (string) get_post_meta( $reverse_id, 'type', true ) ) {
+			return;
+		}
+
+		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
+		$multiple             = Relations::relation_is_multiple( $field_id );
+		$reverse_multiple     = Relations::relation_is_multiple( $reverse_id );
+		$desired              = array_values(
+			array_filter(
+				Relations::normalize_row_ids(
+					Relations::relation_values( $row_id, $field_id ),
+					$multiple
+				),
+				static fn( int $target_id ): bool => Relations::document_belongs_to_collection(
+					$target_id,
+					$target_collection_id
+				)
+			)
+		);
+
+		if ( ! $reverse_multiple ) {
+			$claimed = array_values(
+				array_filter(
+					$desired,
+					static fn( int $target_id ): bool => count(
+						array_diff( Relations::relation_values( $target_id, $reverse_id ), array( $row_id ) )
+					) > 0
+				)
+			);
+			if ( count( $claimed ) > 0 ) {
+				$desired = array_values( array_diff( $desired, $claimed ) );
+				Relations::set_relation_values(
+					$row_id,
+					$field_id,
+					array_values( array_diff( Relations::relation_values( $row_id, $field_id ), $claimed ) ),
+					$multiple
+				);
+			}
+		}
+
+		Relations::apply_relation_pointers(
+			$row_id,
+			$field_id,
+			array(
+				'reverse_id'       => $reverse_id,
+				'multiple'         => $multiple,
+				'reverse_multiple' => $reverse_multiple,
+				'desired'          => $desired,
+				'current'          => array(),
+			)
+		);
+
+		// Verify through the public meta API that the batch write is visible.
+		// This also repairs a genuinely missing pointer without duplicating one
+		// that `apply_relation_pointers` already restored.
+		$index = null;
+		foreach ( $desired as $target_id ) {
+			$reverse_values = Relations::relation_values( $target_id, $reverse_id );
+			if ( in_array( $row_id, $reverse_values, true ) ) {
+				continue;
+			}
+			Relations::set_relation_values(
+				$target_id,
+				$reverse_id,
+				$reverse_multiple ? array_merge( $reverse_values, array( $row_id ) ) : array( $row_id ),
+				$reverse_multiple
+			);
+			$index ??= new FieldValueIndex();
+			$index->index_row_field( $target_id, $reverse_id );
+		}
+	}
+
+	/**
+	 * Relation field ids in a collection's schema that no retained collection
+	 * still owns. A field definition may be shared by two schemas; leaving one
+	 * must not detach reverse pointers while the row still exposes that same
+	 * field through another membership.
+	 *
+	 * @param int   $collection_id          Collection document id.
+	 * @param int[] $retained_collection_ids Memberships that remain on the row.
+	 * @return int[]
+	 */
+	private function relation_field_ids( int $collection_id, array $retained_collection_ids = array() ): array {
+		$retained_fields = array();
+		foreach ( $retained_collection_ids as $retained_collection_id ) {
+			foreach ( Document::collection_field_ids( (int) $retained_collection_id ) as $field_id ) {
+				$retained_fields[ (int) $field_id ] = true;
+			}
+		}
+
+		$ids = array();
+		foreach ( Document::collection_field_ids( $collection_id ) as $field_id ) {
+			if (
+				! isset( $retained_fields[ (int) $field_id ] )
+				&& 'relation' === (string) get_post_meta( (int) $field_id, 'type', true )
+			) {
+				$ids[] = (int) $field_id;
+			}
+		}
+		return $ids;
+	}
+
 	public function restore( WP_REST_Request $request ) {
 		$id   = (int) $request->get_param( 'id' );
 		$post = get_post( $id );
@@ -427,7 +815,7 @@ final class DocumentsController {
 		// `untrashed_post` action fires synchronously inside `wp_untrash_post`,
 		// so a post-call query alone could not tell which descendants this
 		// restore brought back versus which were already out of trash.
-		$candidates           = $this->cascade->descendants_for_root( $id );
+		$candidates           = $this->cascade->restore_candidates_for_root( $id );
 		$restoring_active_ids = array_values(
 			array_filter(
 				array_merge( array( $id ), $candidates ),
@@ -628,7 +1016,24 @@ final class DocumentsController {
 			);
 		}
 
-		return current_user_can( 'edit_posts' ) && current_user_can( 'edit_post', $id );
+		if ( ! current_user_can( 'edit_posts' ) || ! current_user_can( 'edit_post', $id ) ) {
+			return false;
+		}
+
+		// Duplicating a row creates a new member in every copied collection, so
+		// enforce the same collection capability boundary as PUT /traits on the
+		// collections the copy joins.
+		foreach ( $this->documents->find_visible_traits_for_document( $post ) as $collection ) {
+			if ( ! current_user_can( 'edit_post', $collection->ID ) ) {
+				return new WP_Error(
+					'cortext_duplicate_collection_forbidden',
+					__( 'You are not allowed to duplicate a row into one of its collections.', 'cortext' ),
+					array( 'status' => rest_authorization_required_code() )
+				);
+			}
+		}
+
+		return true;
 	}
 
 	public function duplicate( WP_REST_Request $request ): WP_REST_Response|WP_Error {
@@ -651,57 +1056,32 @@ final class DocumentsController {
 	}
 
 	/**
-	 * Permission gate for reorder. Reorder is row-only: a real document that
-	 * isn't a row returns 400 (unsupported), a missing one 404.
+	 * Permission gate for reorder. Both the row and the resolved collection must
+	 * be editable because manual order mutates their scoped taxonomy relationship
+	 * and may seed state on the collection.
 	 *
 	 * @param WP_REST_Request $request Incoming REST request.
 	 *
 	 * @return bool|WP_Error
 	 */
 	public function can_reorder( WP_REST_Request $request ) {
-		$id   = (int) $request->get_param( 'id' );
-		$post = get_post( $id );
-
-		if ( ! $post instanceof WP_Post || Document::POST_TYPE !== $post->post_type ) {
-			return new WP_Error(
-				'cortext_document_not_found',
-				__( 'Document not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
+		$scope = $this->validate_reorder_scope( $request );
+		if ( $scope instanceof WP_Error ) {
+			return $scope;
 		}
 
-		$trait = $this->documents->find_trait_for_document( $post );
-		if ( ! $trait instanceof WP_Post ) {
-			return new WP_Error(
-				'cortext_reorder_unsupported',
-				__( 'Reordering is only supported for rows.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-
-		return current_user_can( 'edit_post', $id );
+		return current_user_can( 'edit_post', $scope['row']->ID )
+			&& current_user_can( 'edit_post', $scope['collection']->ID );
 	}
 
 	public function reorder( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$row_id = (int) $request->get_param( 'id' );
+		$scope = $this->validate_reorder_scope( $request );
+		if ( $scope instanceof WP_Error ) {
+			return $scope;
+		}
 
-		$row = get_post( $row_id );
-		if ( ! $row instanceof WP_Post ) {
-			return new WP_Error(
-				'cortext_document_not_found',
-				__( 'Document not found.', 'cortext' ),
-				array( 'status' => 404 )
-			);
-		}
-		$collection_post = $this->documents->find_trait_for_document( $row );
-		if ( ! $collection_post instanceof WP_Post ) {
-			return new WP_Error(
-				'cortext_reorder_unsupported',
-				__( 'Reordering is only supported for rows.', 'cortext' ),
-				array( 'status' => 400 )
-			);
-		}
-		$collection_id = (int) $collection_post->ID;
+		$row_id        = (int) $scope['row']->ID;
+		$collection_id = (int) $scope['collection']->ID;
 		$before_id     = $this->nullable_id( $request->get_param( 'before_id' ) );
 		$after_id      = $this->nullable_id( $request->get_param( 'after_id' ) );
 		$current_sort  = $request->get_param( 'current_sort' );
@@ -739,6 +1119,76 @@ final class DocumentsController {
 		}
 
 		return new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * Resolves and validates the collection-scoped row relationship requested by
+	 * a reorder call. New clients send `collection_id` so a shared row can be
+	 * ordered independently in each collection; legacy clients omit it and fall
+	 * back to the row's first active trait.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return array{row:WP_Post,collection:WP_Post}|WP_Error
+	 */
+	private function validate_reorder_scope( WP_REST_Request $request ): array|WP_Error {
+		$row_id = (int) $request->get_param( 'id' );
+		$row    = get_post( $row_id );
+		if ( ! $row instanceof WP_Post || Document::POST_TYPE !== $row->post_type ) {
+			return new WP_Error(
+				'cortext_document_not_found',
+				__( 'Document not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( Document::is_collection_post( $row ) || count( $this->documents->find_traits_for_document( $row ) ) === 0 ) {
+			return new WP_Error(
+				'cortext_reorder_unsupported',
+				__( 'Reordering is only supported for rows.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$has_explicit_collection = $request->has_param( 'collection_id' );
+		$collection_id           = (int) $request->get_param( 'collection_id' );
+		// Without an explicit collection, fall back to a hidden membership so the
+		// manual-order service can ask for that collection to be restored.
+		$collection = $has_explicit_collection
+			? get_post( $collection_id )
+			: (
+				$this->documents->find_trait_for_document( $row )
+				?? ( $this->documents->find_traits_for_document( $row )[0] ?? null )
+			);
+		if ( ! $has_explicit_collection && ! $collection instanceof WP_Post ) {
+			return new WP_Error(
+				'cortext_reorder_unsupported',
+				__( 'Reordering is only supported for rows.', 'cortext' ),
+				array( 'status' => 400 )
+			);
+		}
+		if ( $collection instanceof WP_Post ) {
+			$collection_id = (int) $collection->ID;
+		}
+		if ( ! $collection instanceof WP_Post || ! Document::is_collection_post( $collection ) ) {
+			return new WP_Error(
+				'cortext_collection_not_found',
+				__( 'Collection not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( ! Relations::document_belongs_to_collection( $row_id, $collection_id ) ) {
+			return new WP_Error(
+				'cortext_row_not_found',
+				__( 'Row not found.', 'cortext' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return array(
+			'row'        => $row,
+			'collection' => $collection,
+		);
 	}
 
 	private function nullable_id( mixed $value ): ?int {

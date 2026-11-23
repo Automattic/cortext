@@ -1,12 +1,32 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from '@testing-library/react';
 
 let mockContext;
 let mockCanEdit;
+let mockCanEditById;
 let mockIsSaving;
+let mockPostStatus;
 let mockSaveEntityRecord;
 let mockRowPropertiesProps;
+let mockTraitControlProps;
+let mockUseActualTraitControl;
+let mockFieldSave;
+let mockTraits;
+let mockTraitsDocumentId;
+let mockAdditionalCounts;
+let mockAdditionalProps;
 let mockPreviousClientId;
 let mockSelectBlock;
+
+jest.mock( '@wordpress/api-fetch', () => ( {
+	__esModule: true,
+	default: jest.fn(),
+} ) );
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	__esModule: true,
@@ -17,17 +37,43 @@ jest.mock( '@wordpress/block-editor', () => ( {
 
 jest.mock( '@wordpress/components', () => ( {
 	__esModule: true,
-	Button: ( { children, className, disabled, label, onClick } ) => (
-		<button
-			type="button"
-			className={ className }
-			disabled={ disabled }
-			onClick={ onClick }
-		>
-			{ children ?? label }
-		</button>
+	Button: require( '@wordpress/element' ).forwardRef(
+		( { children, className, disabled, label, onClick }, ref ) => (
+			<button
+				ref={ ref }
+				type="button"
+				className={ className }
+				disabled={ disabled }
+				aria-label={ label }
+				onClick={ onClick }
+			>
+				{ children ?? label }
+			</button>
+		)
 	),
-	Notice: ( { children } ) => <div role="alert">{ children }</div>,
+	Notice: ( { actions, children } ) => (
+		<div role="alert">
+			{ children }
+			{ ( actions ?? [] ).map( ( action ) => (
+				<button
+					key={ action.label }
+					type="button"
+					onClick={ action.onClick }
+				>
+					{ action.label }
+				</button>
+			) ) }
+		</div>
+	),
+	Popover: ( { children } ) => <div>{ children }</div>,
+	SearchControl: ( { onChange, placeholder, value } ) => (
+		<input
+			aria-label={ placeholder }
+			value={ value }
+			onChange={ ( event ) => onChange( event.target.value ) }
+		/>
+	),
+	Spinner: () => <span>loading</span>,
 	ToolbarButton: ( { disabled, label, onClick } ) => (
 		<button type="button" disabled={ disabled } onClick={ onClick }>
 			{ label }
@@ -39,26 +85,93 @@ jest.mock( '@wordpress/components', () => ( {
 jest.mock( '@wordpress/core-data', () => ( {
 	__esModule: true,
 	store: {},
+	useEntityRecords: () => ( {
+		records: [],
+		isResolving: false,
+		totalPages: 1,
+	} ),
 } ) );
 
 jest.mock( '@wordpress/data', () => ( {
 	__esModule: true,
 	useDispatch: () => ( {
+		invalidateResolution: jest.fn(),
 		saveEntityRecord: mockSaveEntityRecord,
 		selectBlock: mockSelectBlock,
 	} ),
 	useSelect: ( callback ) =>
 		callback( () => ( {
-			canUser: () => mockCanEdit,
+			canUser: ( action, resource ) =>
+				mockCanEditById?.[ resource?.id ] ?? mockCanEdit,
 			isSavingEntityRecord: () => mockIsSaving,
+			getCurrentPostAttribute: ( key ) =>
+				key === 'status' ? mockPostStatus : undefined,
 			getPreviousBlockClientId: () => mockPreviousClientId,
 		} ) ),
+} ) );
+
+jest.mock( '@wordpress/editor', () => ( {
+	__esModule: true,
+	store: 'core/editor',
 } ) );
 
 jest.mock( '../../../src/components/DocumentPropertiesActions', () => ( {
 	__esModule: true,
 	default: () => null,
 } ) );
+
+// The traits additions pull in core-data/apiFetch; stub them here so these
+// tests stay focused on the source collection's properties and layout editing.
+jest.mock( '../../../src/hooks/useDocumentTraits', () => ( {
+	__esModule: true,
+	default: ( documentId ) => {
+		mockTraitsDocumentId = documentId;
+		return mockTraits;
+	},
+} ) );
+
+jest.mock( '../../../src/components/TraitControl', () => {
+	const ActualTraitControl = jest.requireActual(
+		'../../../src/components/TraitControl'
+	).default;
+	return {
+		__esModule: true,
+		default: ( props ) => {
+			mockTraitControlProps = props;
+			return mockUseActualTraitControl ? (
+				<ActualTraitControl { ...props } />
+			) : (
+				<div data-testid="trait-control" />
+			);
+		},
+	};
+} );
+
+jest.mock( '../../../src/components/AdditionalCollectionProperties', () => {
+	const { useEffect } = require( '@wordpress/element' );
+	return {
+		__esModule: true,
+		default: function MockAdditionalCollectionProperties( {
+			collection,
+			includeSystemFields,
+			onVisibleCount,
+			registerPendingSaveFlusher,
+			renderProperties,
+		} ) {
+			const count = mockAdditionalCounts[ collection.id ] ?? 0;
+			mockAdditionalProps[ collection.id ] = {
+				includeSystemFields,
+				renderProperties,
+				registerPendingSaveFlusher,
+			};
+			useEffect( () => {
+				onVisibleCount?.( collection.id, count );
+			}, [ collection.id, count, onVisibleCount ] );
+			return renderProperties ? <div>{ collection.title }</div> : null;
+		},
+		CollectionGroupHeader: () => null,
+	};
+} );
 
 jest.mock( '../../../src/components/RowProperties', () => ( {
 	__esModule: true,
@@ -72,6 +185,20 @@ jest.mock( '../../../src/components/RowProperties', () => ( {
 		} = props;
 		return (
 			<div data-testid="row-properties">
+				<button
+					type="button"
+					onClick={ () => {
+						if (
+							props.isSaveLocked ||
+							props.isCollectionSaveLocked?.( props.collectionId )
+						) {
+							return;
+						}
+						mockFieldSave();
+					} }
+				>
+					Edit mocked property
+				</button>
 				{ fields
 					.filter( ( field ) => field.id !== 'title' )
 					.map( ( field ) => (
@@ -149,6 +276,7 @@ jest.mock( '../../../src/components/DocumentPropertiesContext', () => ( {
 } ) );
 
 import Edit from '../../../src/blocks/document-properties/edit';
+import apiFetch from '@wordpress/api-fetch';
 
 const fields = [
 	{ id: 'title', label: 'Title' },
@@ -159,9 +287,24 @@ const allFields = [ ...fields, { id: 'field-11', label: 'Hidden field' } ];
 
 beforeEach( () => {
 	mockCanEdit = true;
+	mockCanEditById = null;
 	mockIsSaving = false;
+	mockPostStatus = 'private';
 	mockSaveEntityRecord = jest.fn().mockResolvedValue( {} );
 	mockRowPropertiesProps = null;
+	mockTraitControlProps = null;
+	mockUseActualTraitControl = false;
+	mockFieldSave = jest.fn();
+	apiFetch.mockReset();
+	mockTraits = {
+		collections: [ { id: 77, title: 'Projects', icon: '' } ],
+		isResolving: false,
+		isUnknown: false,
+		refresh: jest.fn(),
+	};
+	mockTraitsDocumentId = null;
+	mockAdditionalCounts = {};
+	mockAdditionalProps = {};
 	mockPreviousClientId = 'title-block';
 	mockSelectBlock = jest.fn();
 	mockContext = {
@@ -183,7 +326,251 @@ beforeEach( () => {
 	};
 } );
 
+afterEach( () => {} );
+
 describe( 'document-properties Customize properties mode', () => {
+	it( 'mounts the membership control on a row', () => {
+		render( <Edit /> );
+
+		expect( mockTraitsDocumentId ).toBe( 123 );
+		expect( screen.getByTestId( 'trait-control' ) ).toBeInTheDocument();
+		expect( mockTraitControlProps.isReadOnly ).toBe( false );
+	} );
+
+	it( 'makes the trait control read-only on an archived row', () => {
+		mockPostStatus = 'crtxt_archived';
+
+		render( <Edit /> );
+
+		expect( mockTraitControlProps.isReadOnly ).toBe( true );
+	} );
+
+	it( 'coordinates a collection property flush with the membership control', async () => {
+		const flush = jest.fn().mockResolvedValue( true );
+		render( <Edit /> );
+
+		const unregister = mockRowPropertiesProps.registerPendingSaveFlusher(
+			77,
+			flush
+		);
+		let preparation;
+		act( () => {
+			preparation = mockTraitControlProps.beforeRemoveCollection( 77 );
+			// The ref-backed lock is visible synchronously, before React has had a
+			// chance to rerender RowProperties as read-only.
+			expect( mockRowPropertiesProps.isCollectionSaveLocked( 77 ) ).toBe(
+				true
+			);
+		} );
+		let release;
+		await act( async () => {
+			release = await preparation;
+		} );
+
+		expect( flush ).toHaveBeenCalledTimes( 1 );
+		expect( mockRowPropertiesProps.isSaveLocked ).toBe( true );
+		act( () => release() );
+		expect( mockRowPropertiesProps.isCollectionSaveLocked( 77 ) ).toBe(
+			false
+		);
+		await waitFor( () =>
+			expect( mockRowPropertiesProps.isSaveLocked ).toBe( false )
+		);
+		unregister();
+		let releaseWithoutFields;
+		await act( async () => {
+			releaseWithoutFields =
+				await mockTraitControlProps.beforeRemoveCollection( 77 );
+		} );
+		act( () => releaseWithoutFields() );
+	} );
+
+	it( 'keeps field edits locked from remove click until the membership PUT settles', async () => {
+		mockUseActualTraitControl = true;
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '', active: true },
+				{ id: 88, title: 'People', icon: '', active: true },
+			],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+		let resolveFlush;
+		let resolvePut;
+		const pendingFlush = new Promise( ( resolve ) => {
+			resolveFlush = resolve;
+		} );
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					resolvePut = resolve;
+				} )
+		);
+		render( <Edit /> );
+		mockRowPropertiesProps.registerPendingSaveFlusher(
+			77,
+			() => pendingFlush
+		);
+
+		fireEvent.click( screen.getAllByLabelText( 'Remove trait' )[ 0 ] );
+		expect( mockRowPropertiesProps.isCollectionSaveLocked( 77 ) ).toBe(
+			true
+		);
+		expect( apiFetch ).not.toHaveBeenCalled();
+
+		await act( async () => resolveFlush( true ) );
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		expect( mockRowPropertiesProps.isSaveLocked ).toBe( true );
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Edit mocked property' } )
+		);
+		expect( mockFieldSave ).not.toHaveBeenCalled();
+
+		await act( async () =>
+			resolvePut( { collections: [ { id: 88, active: true } ] } )
+		);
+		await waitFor( () =>
+			expect( mockRowPropertiesProps.isSaveLocked ).toBe( false )
+		);
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Edit mocked property' } )
+		);
+		expect( mockFieldSave ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'waits for an orphaned collapse save after expanding before membership removal', async () => {
+		let resolveOrphanedSave;
+		let resolveExpandedSave;
+		const orphanedSave = new Promise( ( resolve ) => {
+			resolveOrphanedSave = resolve;
+		} );
+		const expandedSave = new Promise( ( resolve ) => {
+			resolveExpandedSave = resolve;
+		} );
+		const { rerender } = render( <Edit /> );
+		const unregisterCollapsedGroup =
+			mockRowPropertiesProps.registerPendingSaveFlusher( 77, jest.fn() );
+
+		mockContext = { ...mockContext, isVisible: false };
+		rerender( <Edit /> );
+		unregisterCollapsedGroup( orphanedSave );
+
+		mockContext = { ...mockContext, isVisible: true };
+		rerender( <Edit /> );
+		const expandedFlush = jest.fn( () => expandedSave );
+		mockRowPropertiesProps.registerPendingSaveFlusher( 77, expandedFlush );
+
+		let removalBarrier;
+		act( () => {
+			removalBarrier = mockTraitControlProps.beforeRemoveCollection( 77 );
+		} );
+		let barrierSettled = false;
+		removalBarrier.then( () => {
+			barrierSettled = true;
+		} );
+		await Promise.resolve();
+
+		expect( expandedFlush ).not.toHaveBeenCalled();
+		expect( barrierSettled ).toBe( false );
+
+		act( () => resolveOrphanedSave() );
+		await waitFor( () => expect( expandedFlush ).toHaveBeenCalled() );
+		expect( barrierSettled ).toBe( false );
+
+		let release;
+		await act( async () => {
+			resolveExpandedSave();
+			release = await removalBarrier;
+		} );
+		expect( barrierSettled ).toBe( true );
+		act( () => release() );
+	} );
+
+	it( 'rejects membership removal when an orphaned collapse save failed', async () => {
+		let rejectOrphanedSave;
+		const orphanedSave = new Promise( ( resolve, reject ) => {
+			rejectOrphanedSave = reject;
+		} );
+		render( <Edit /> );
+		const unregisterCollapsedGroup =
+			mockRowPropertiesProps.registerPendingSaveFlusher( 77, jest.fn() );
+		unregisterCollapsedGroup( orphanedSave );
+		mockRowPropertiesProps.registerPendingSaveFlusher(
+			77,
+			jest.fn().mockResolvedValue( true )
+		);
+
+		let removalBarrier;
+		act( () => {
+			removalBarrier = mockTraitControlProps.beforeRemoveCollection( 77 );
+		} );
+		await act( async () => {
+			rejectOrphanedSave( new Error( 'Status could not be saved.' ) );
+			await expect( removalBarrier ).rejects.toThrow(
+				'Status could not be saved.'
+			);
+		} );
+		expect( mockRowPropertiesProps.isCollectionSaveLocked( 77 ) ).toBe(
+			false
+		);
+		// The rejection is consumed after being reported, so a deliberate retry
+		// can proceed instead of permanently locking the membership.
+		let release;
+		await act( async () => {
+			release = await mockTraitControlProps.beforeRemoveCollection( 77 );
+		} );
+		act( () => release() );
+	} );
+
+	it( 'keeps traits usable when the source collection has no properties', () => {
+		mockContext = {
+			...mockContext,
+			fields: [],
+			allFields: [],
+			detailLayoutEntries: [],
+		};
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '' },
+				{ id: 88, title: 'People', icon: '' },
+			],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+
+		render( <Edit /> );
+
+		expect( screen.getByTestId( 'trait-control' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'People' ) ).toBeInTheDocument();
+	} );
+
+	it( 'keeps the memberships retry notice when the source has no properties', () => {
+		const refresh = jest.fn();
+		mockContext = {
+			...mockContext,
+			fields: [],
+			allFields: [],
+			detailLayoutEntries: [],
+		};
+		mockTraits = {
+			collections: [],
+			isResolving: false,
+			isUnknown: true,
+			error: new Error( 'Network error' ),
+			refresh,
+		};
+
+		render( <Edit /> );
+
+		expect( screen.getByRole( 'alert' ) ).toHaveTextContent(
+			"Couldn't load the collections for this item."
+		);
+		fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
+		expect( refresh ).toHaveBeenCalled();
+	} );
+
 	it( 'saves layout edits when fields move or change visibility', async () => {
 		render( <Edit /> );
 
@@ -710,11 +1097,307 @@ describe( 'document-properties Customize properties mode', () => {
 			expect.objectContaining( { isLayoutEditing: true } )
 		);
 	} );
+
+	it( 'resolves additional collection counts while collapsed', async () => {
+		mockContext = { ...mockContext, isVisible: false };
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '' },
+				{ id: 88, title: 'People', icon: '' },
+			],
+			isResolving: false,
+			refresh: jest.fn(),
+		};
+		mockAdditionalCounts = { 88: 3 };
+
+		render( <Edit /> );
+
+		expect(
+			await screen.findByRole( 'button', {
+				name: '5 properties collapsed',
+			} )
+		).toBeInTheDocument();
+		expect( screen.queryByText( 'People' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'hides stale source handlers while removing the source membership', async () => {
+		const onLayoutEditingChange = jest.fn();
+		mockContext = { ...mockContext, onLayoutEditingChange };
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '' },
+				{ id: 88, title: 'People', icon: '' },
+			],
+			isResolving: false,
+			refresh: jest.fn(),
+		};
+		const { rerender } = render( <Edit /> );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Customize properties' } )
+		);
+		expect(
+			screen.getByRole( 'button', { name: 'Done customizing' } )
+		).toBeInTheDocument();
+
+		mockTraits = {
+			collections: [],
+			isResolving: true,
+			refresh: jest.fn(),
+		};
+		rerender( <Edit /> );
+
+		expect( screen.queryByTestId( 'row-properties' ) ).toBeNull();
+		expect(
+			screen.queryByRole( 'button', { name: 'Done customizing' } )
+		).toBeNull();
+		expect(
+			screen.queryByRole( 'button', { name: 'Customize properties' } )
+		).toBeNull();
+		await waitFor( () =>
+			expect( onLayoutEditingChange ).toHaveBeenLastCalledWith( false )
+		);
+
+		mockAdditionalProps = {};
+		mockTraits = {
+			collections: [
+				{ id: 88, title: 'People', icon: '' },
+				{ id: 99, title: 'Goals', icon: '' },
+			],
+			isResolving: false,
+			refresh: jest.fn(),
+		};
+		rerender( <Edit /> );
+
+		expect( screen.queryByTestId( 'row-properties' ) ).toBeNull();
+		expect( screen.getByText( 'People' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Goals' ) ).toBeInTheDocument();
+		expect( mockAdditionalProps[ 88 ].includeSystemFields ).toBe( true );
+		expect( mockAdditionalProps[ 99 ].includeSystemFields ).toBe( false );
+	} );
+
+	it( 'does not authorize layout editing from a removed editable source', () => {
+		mockCanEditById = { 77: true, 88: false };
+		const onLayoutEditingChange = jest.fn();
+		mockContext = {
+			...mockContext,
+			layoutEditRequest: 1,
+			onLayoutEditingChange,
+		};
+		mockTraits = {
+			collections: [ { id: 88, title: 'People', icon: '' } ],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+
+		render( <Edit /> );
+
+		expect( screen.getByText( 'People' ) ).toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Customize properties' } )
+		).toBeNull();
+		expect(
+			screen.queryByRole( 'button', { name: 'Done customizing' } )
+		).toBeNull();
+		expect( onLayoutEditingChange ).not.toHaveBeenCalledWith( true );
+	} );
+
+	it( 'authorizes layout editing from an editable surviving membership', async () => {
+		mockCanEditById = { 77: false, 88: true };
+		mockContext = { ...mockContext, layoutEditRequest: 1 };
+		mockTraits = {
+			collections: [ { id: 88, title: 'People', icon: '' } ],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+
+		render( <Edit /> );
+
+		expect(
+			await screen.findByRole( 'button', { name: 'Done customizing' } )
+		).toBeInTheDocument();
+	} );
+
+	it( 'keeps membership-backed UI hidden after a failed refresh', async () => {
+		const onLayoutEditingChange = jest.fn();
+		mockContext = { ...mockContext, onLayoutEditingChange };
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '' },
+				{ id: 88, title: 'People', icon: '' },
+			],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+		const { rerender } = render( <Edit /> );
+
+		fireEvent.click(
+			screen.getByRole( 'button', { name: 'Customize properties' } )
+		);
+		mockTraits = {
+			collections: [],
+			isResolving: false,
+			isUnknown: true,
+			error: new Error( 'refresh failed' ),
+			refresh: jest.fn(),
+		};
+		rerender( <Edit /> );
+
+		expect( screen.queryByTestId( 'row-properties' ) ).toBeNull();
+		expect( screen.queryByText( 'People' ) ).toBeNull();
+		expect(
+			screen.queryByRole( 'button', { name: 'Customize properties' } )
+		).toBeNull();
+		expect(
+			screen.queryByRole( 'button', { name: 'Done customizing' } )
+		).toBeNull();
+		await waitFor( () =>
+			expect( onLayoutEditingChange ).toHaveBeenLastCalledWith( false )
+		);
+	} );
+
+	it( 'shows the source properties and a bare traits row during the first load', () => {
+		mockTraits = {
+			collections: [],
+			isResolving: true,
+			isInitialLoad: true,
+			isUnknown: true,
+			refresh: jest.fn(),
+		};
+
+		render( <Edit /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect( screen.getByTestId( 'trait-control' ) ).toBeInTheDocument();
+		expect( mockTraitControlProps.collections ).toEqual( [] );
+		expect( mockTraitControlProps.isReadOnly ).toBe( true );
+		expect(
+			screen.queryByRole( 'button', { name: 'Customize properties' } )
+		).toBeNull();
+	} );
+
+	it( 'hides the stale source when a resolved row has no memberships', () => {
+		mockTraits = {
+			collections: [],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+
+		render( <Edit /> );
+
+		expect( screen.queryByTestId( 'row-properties' ) ).toBeNull();
+		expect(
+			screen.queryByRole( 'button', { name: 'Customize properties' } )
+		).toBeNull();
+	} );
+
+	it( 'does not render a property group for a trashed membership', () => {
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '', active: true },
+				{ id: 88, title: 'People', icon: '', active: false },
+			],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+		mockAdditionalCounts = { 88: 3 };
+
+		render( <Edit /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'People' ) ).toBeNull();
+		expect( screen.getByTestId( 'trait-control' ) ).toBeInTheDocument();
+	} );
+
+	it( 'does not render a property group for a collection the user cannot read', () => {
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '', active: true },
+				{ id: 88, active: true, readable: false },
+			],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+		mockAdditionalCounts = { 88: 3 };
+
+		render( <Edit /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect( mockAdditionalProps[ 88 ] ).toBeUndefined();
+	} );
+
+	it( 'hides the source group when the source membership is trashed', () => {
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '', active: false },
+				{ id: 88, title: 'People', icon: '', active: true },
+			],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+
+		render( <Edit /> );
+
+		expect( screen.queryByTestId( 'row-properties' ) ).toBeNull();
+		expect( screen.getByText( 'People' ) ).toBeInTheDocument();
+		expect( mockAdditionalProps[ 88 ].includeSystemFields ).toBe( true );
+	} );
+
+	it( 'keeps showing the collections of a row retired together with them', () => {
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '', active: false },
+				{ id: 88, title: 'People', icon: '', active: false },
+			],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+
+		render( <Edit /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect( mockAdditionalProps[ 88 ] ).toBeDefined();
+	} );
+
+	it( 'offers a retry when the traits request fails', () => {
+		const refresh = jest.fn();
+		mockTraits = {
+			collections: [],
+			isResolving: false,
+			isUnknown: true,
+			error: new Error( 'load failed' ),
+			refresh,
+		};
+
+		render( <Edit /> );
+
+		expect( screen.queryByTestId( 'row-properties' ) ).toBeNull();
+		expect( screen.getByRole( 'alert' ) ).toHaveTextContent(
+			"Couldn't load the collections for this item."
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
+
+		expect( refresh ).toHaveBeenCalled();
+	} );
 } );
 
 describe( 'document-properties selection', () => {
 	it( 'hands the selection to the previous block when it shows nothing', () => {
-		mockContext = { ...mockContext, fields: [], allFields: [] };
+		mockContext = {
+			...mockContext,
+			rowId: null,
+			fields: [],
+			allFields: [],
+		};
 
 		const { container } = render(
 			<Edit clientId="properties-block" isSelected />
@@ -731,8 +1414,22 @@ describe( 'document-properties selection', () => {
 		expect( mockSelectBlock ).not.toHaveBeenCalled();
 	} );
 
-	it( 'leaves the selection alone while another block is selected', () => {
+	it( 'keeps the selection when it only shows the traits row', () => {
 		mockContext = { ...mockContext, fields: [], allFields: [] };
+
+		render( <Edit clientId="properties-block" isSelected /> );
+
+		expect( screen.getByTestId( 'trait-control' ) ).toBeInTheDocument();
+		expect( mockSelectBlock ).not.toHaveBeenCalled();
+	} );
+
+	it( 'leaves the selection alone while another block is selected', () => {
+		mockContext = {
+			...mockContext,
+			rowId: null,
+			fields: [],
+			allFields: [],
+		};
 
 		render( <Edit clientId="properties-block" isSelected={ false } /> );
 

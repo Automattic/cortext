@@ -1086,6 +1086,71 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$this->assertSame( array( $collection_id ), $response->get_data()['restored'] );
 	}
 
+	public function test_restore_response_includes_shared_row_revived_by_another_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_a = $this->create_full_page_collection( 'shared-a' );
+		$collection_b = $this->create_full_page_collection( 'shared-b' );
+		$row_id       = $this->create_row( $collection_a );
+		$term_id      = TraitTaxonomy::term_id_for_trait( $collection_b );
+		$this->assertGreaterThan( 0, $term_id );
+		wp_set_object_terms( $row_id, array( $term_id ), TraitTaxonomy::TAXONOMY, true );
+
+		wp_trash_post( $collection_a );
+		wp_trash_post( $collection_b );
+		$this->assertSame( 'trash', get_post_status( $row_id ) );
+
+		$response = $this->restore( $collection_a );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotSame( 'trash', get_post_status( $row_id ) );
+		$this->assertContains( $collection_a, $response->get_data()['restored'] );
+		$this->assertContains(
+			$row_id,
+			$response->get_data()['restored'],
+			'The response must report a shared row revived through this collection even when another collection owned its trash marker.'
+		);
+	}
+
+	public function test_restore_response_includes_shared_row_archived_with_another_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_a = $this->create_full_page_collection( 'cross-restore-a' );
+		$collection_b = $this->create_full_page_collection( 'cross-restore-b' );
+		$row_id       = $this->create_row( $collection_a );
+		wp_set_object_terms( $row_id, array( TraitTaxonomy::term_id_for_trait( $collection_b ) ), TraitTaxonomy::TAXONOMY, true );
+
+		wp_trash_post( $collection_a );
+		$this->assertSame( 200, $this->archive( $collection_b )->get_status() );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $row_id ) );
+
+		$response = $this->restore( $collection_a );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'private', get_post_status( $row_id ) );
+		$this->assertContains( $row_id, $response->get_data()['restored'] );
+	}
+
+	public function test_unarchive_revives_shared_row_left_in_trash_by_a_deleted_collection(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+
+		$collection_a = $this->create_full_page_collection( 'cross-unarchive-a' );
+		$collection_b = $this->create_full_page_collection( 'cross-unarchive-b' );
+		$row_id       = $this->create_row( $collection_a );
+		wp_set_object_terms( $row_id, array( TraitTaxonomy::term_id_for_trait( $collection_b ) ), TraitTaxonomy::TAXONOMY, true );
+
+		$this->assertSame( 200, $this->archive( $collection_b )->get_status() );
+		wp_trash_post( $collection_a );
+		$this->assertSame( 200, $this->permanent_delete( $collection_a )->get_status() );
+		$this->assertSame( 'trash', get_post_status( $row_id ), 'The row is kept for its archived collection.' );
+
+		$response = $this->unarchive( $collection_b );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'private', get_post_status( $row_id ) );
+		$this->assertContains( $row_id, $response->get_data()['restored'] );
+	}
+
 	public function test_permanent_delete_removes_a_trashed_collection_and_its_rows(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 

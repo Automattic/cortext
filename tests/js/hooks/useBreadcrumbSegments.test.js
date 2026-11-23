@@ -1,3 +1,9 @@
+/**
+ * Tests for `src/hooks/useBreadcrumbSegments.js`: the breadcrumb chain and the
+ * collection chips for multi-collection items. core-data, data, and the
+ * router are mocked so each case controls the records and navigation.
+ */
+
 import { renderHook } from '@testing-library/react';
 
 jest.mock( '@wordpress/core-data', () => ( {
@@ -23,13 +29,21 @@ const collection = { id: 10, parent: 4, title: { raw: 'Invoices' } };
 const row = { id: 50, parent: 0, crtxt_trait: [ 7 ], title: { raw: 'INV-1' } };
 const term = { id: 7, slug: '10' };
 
+const projects = { id: 1, parent: 0, title: { raw: 'Projects' } };
+const people = { id: 2, parent: 0, title: { raw: 'People' } };
+
 let lists;
 let byId;
 const getEntityRecord = jest.fn( ( kind, name, id ) => byId[ kind ]?.[ id ] );
 
-function labels() {
-	const { result } = renderHook( () => useBreadcrumbSegments( row.id ) );
-	return result.current.map( ( segment ) => segment.label );
+function render( document ) {
+	useEntityRecord.mockReturnValue( { record: document } );
+	return renderHook( () => useBreadcrumbSegments( document?.id ?? null ) )
+		.result.current;
+}
+
+function labelsOf( items ) {
+	return items.map( ( item ) => item.label );
 }
 
 beforeEach( () => {
@@ -39,7 +53,6 @@ beforeEach( () => {
 		postType: { 4: page, 10: collection, 50: row },
 		taxonomy: { 7: term },
 	};
-	useEntityRecord.mockReturnValue( { record: row } );
 	useEntityRecords.mockImplementation( ( kind, name, query ) => {
 		if ( kind === 'taxonomy' ) {
 			return { records: lists.terms };
@@ -63,16 +76,24 @@ describe( 'useBreadcrumbSegments', () => {
 			terms: [ term ],
 		};
 
-		expect( labels() ).toEqual( [ 'Workspace', 'Invoices', 'INV-1' ] );
+		expect( labelsOf( render( row ).segments ) ).toEqual( [
+			'Workspace',
+			'Invoices',
+			'INV-1',
+		] );
 		expect( getEntityRecord ).not.toHaveBeenCalled();
 	} );
 
 	it( 'resolves ancestors missing from the cached lists by id', () => {
-		expect( labels() ).toEqual( [ 'Workspace', 'Invoices', 'INV-1' ] );
+		expect( labelsOf( render( row ).segments ) ).toEqual( [
+			'Workspace',
+			'Invoices',
+			'INV-1',
+		] );
 	} );
 
 	it( 'reads fallback terms in view context, like the terms list', () => {
-		labels();
+		render( row );
 
 		expect( getEntityRecord ).toHaveBeenCalledWith(
 			'taxonomy',
@@ -85,6 +106,147 @@ describe( 'useBreadcrumbSegments', () => {
 	it( 'stops at the last ancestor that has loaded', () => {
 		delete byId.postType[ 10 ];
 
-		expect( labels() ).toEqual( [ 'INV-1' ] );
+		expect( labelsOf( render( row ).segments ) ).toEqual( [ 'INV-1' ] );
+	} );
+
+	describe( 'with traits', () => {
+		beforeEach( () => {
+			// Mirror term slug is the collection's post id.
+			lists = {
+				pages: [],
+				collections: [ projects, people ],
+				terms: [
+					{ id: 11, slug: '1' },
+					{ id: 22, slug: '2' },
+				],
+			};
+		} );
+
+		it( 'returns the collection as the parent for a single-collection row, no chips', () => {
+			const result = render( {
+				id: 100,
+				title: { raw: 'Ada' },
+				crtxt_trait: [ 11 ],
+				parent: 0,
+			} );
+
+			expect( labelsOf( result.segments ) ).toEqual( [
+				'Projects',
+				'Ada',
+			] );
+			expect( result.chips ).toEqual( [] );
+		} );
+
+		it( 'skips an unresolved membership when choosing the parent', () => {
+			lists.terms = [
+				{ id: 99, slug: '999' },
+				{ id: 22, slug: '2' },
+			];
+
+			const result = render( {
+				id: 100,
+				title: { raw: 'Ada' },
+				crtxt_trait: [ 99, 22 ],
+				parent: 0,
+			} );
+
+			expect( labelsOf( result.segments ) ).toEqual( [
+				'People',
+				'Ada',
+			] );
+			expect( result.chips ).toEqual( [] );
+		} );
+
+		it( 'skips a trashed collection fetched by id', () => {
+			lists.terms.push( { id: 33, slug: '3' } );
+			byId.postType[ 3 ] = {
+				id: 3,
+				parent: 0,
+				status: 'trash',
+				title: { raw: 'Archive' },
+			};
+
+			const result = render( {
+				id: 100,
+				title: { raw: 'Ada' },
+				crtxt_trait: [ 33, 22 ],
+				parent: 0,
+			} );
+
+			expect( labelsOf( result.segments ) ).toEqual( [
+				'People',
+				'Ada',
+			] );
+			expect( result.chips ).toEqual( [] );
+		} );
+
+		it( 'skips an archived collection as parent and chip while another one is live', () => {
+			lists.terms.push( { id: 55, slug: '5' } );
+			byId.postType[ 5 ] = {
+				id: 5,
+				parent: 0,
+				status: 'crtxt_archived',
+				title: { raw: 'Old projects' },
+			};
+
+			const result = render( {
+				id: 100,
+				title: { raw: 'Ada' },
+				crtxt_trait: [ 55, 11, 22 ],
+				parent: 0,
+			} );
+
+			expect( labelsOf( result.segments ) ).toEqual( [ 'Ada' ] );
+			expect( labelsOf( result.chips ) ).toEqual( [
+				'Projects',
+				'People',
+			] );
+		} );
+
+		it( 'keeps the collection of a row retired together with it', () => {
+			lists.terms.push( { id: 33, slug: '3' } );
+			byId.postType[ 3 ] = {
+				id: 3,
+				parent: 0,
+				status: 'trash',
+				title: { raw: 'Old tasks' },
+			};
+
+			const result = render( {
+				id: 100,
+				title: { raw: 'Ada' },
+				crtxt_trait: [ 33 ],
+				parent: 0,
+			} );
+
+			expect( labelsOf( result.segments ) ).toEqual( [
+				'Old tasks',
+				'Ada',
+			] );
+			expect( result.chips ).toEqual( [] );
+		} );
+
+		it( 'shows the item alone with its collections as chips when it belongs to several', () => {
+			const result = render( {
+				id: 100,
+				title: { raw: 'Ada' },
+				crtxt_trait: [ 11, 22 ],
+				parent: 0,
+			} );
+
+			// No arbitrary collection is chosen as the parent.
+			expect( labelsOf( result.segments ) ).toEqual( [ 'Ada' ] );
+			expect( labelsOf( result.chips ) ).toEqual( [
+				'Projects',
+				'People',
+			] );
+		} );
+
+		it( 'returns empty segments and chips without a document', () => {
+			const result = render( null );
+
+			expect( result.segments ).toEqual( [] );
+			expect( result.chips ).toEqual( [] );
+		} );
 	} );
 } );

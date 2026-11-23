@@ -1,0 +1,28 @@
+.cortext-property-group {
+
+	& + & {
+		margin-top: 20px;
+	}
+}
+
+.cortext-property-group__header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 4px 0 8px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+	color: var(--wp--preset--color--contrast-2, #757575);
+}
+
+.cortext-property-group__title {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.cortext-property-group--source .cortext-property-group__header {
+	color: var(--wp--preset--color--contrast, #1e1e1e);
+}

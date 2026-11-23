@@ -484,6 +484,309 @@ describe( 'RowProperties', () => {
 		expect( didFlush ).toBe( false );
 	} );
 
+	it( 'registers a collection save barrier that flushes and retries debounced edits', async () => {
+		jest.useFakeTimers();
+		let flushPendingSaves;
+		const unregister = jest.fn();
+		const registerPendingSaveFlusher = jest.fn( ( id, flush ) => {
+			flushPendingSaves = flush;
+			return unregister;
+		} );
+		mockSaveEntityRecord
+			.mockRejectedValueOnce( new Error( 'Status could not be saved.' ) )
+			.mockResolvedValueOnce( {
+				id: 99,
+				meta: { 'field-7': 'Doing' },
+			} );
+
+		try {
+			const { unmount } = render(
+				<RowProperties
+					collectionId={ 7 }
+					fields={ [
+						{
+							id: 'field-7',
+							label: 'Status',
+							cortextFieldType: 'text',
+							editable: true,
+						},
+					] }
+					registerPendingSaveFlusher={ registerPendingSaveFlusher }
+					row={ { id: 99, meta: { 'field-7': 'Open' } } }
+				/>
+			);
+
+			expect( registerPendingSaveFlusher ).toHaveBeenCalledWith(
+				7,
+				expect.any( Function )
+			);
+			fireEvent.change(
+				screen.getByRole( 'textbox', { name: 'Status' } ),
+				{ target: { value: 'Doing' } }
+			);
+
+			await expect(
+				act( async () => flushPendingSaves() )
+			).rejects.toThrow( 'Status could not be saved.' );
+			expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 1 );
+			expect(
+				await screen.findByText( 'Status could not be saved.' )
+			).toBeInTheDocument();
+
+			await act( async () => flushPendingSaves() );
+			expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 2 );
+			act( () => jest.advanceTimersByTime( 500 ) );
+			expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 2 );
+
+			unmount();
+			expect( unregister ).toHaveBeenCalledWith( expect.any( Promise ) );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	it( 'leaves a failed save for the collection barrier when the window loses focus', async () => {
+		jest.useFakeTimers();
+		let flushPendingSaves;
+		const registerPendingSaveFlusher = jest.fn( ( id, flush ) => {
+			flushPendingSaves = flush;
+			return jest.fn();
+		} );
+		mockSaveEntityRecord
+			.mockRejectedValueOnce( new Error( 'Status could not be saved.' ) )
+			.mockResolvedValueOnce( {
+				id: 99,
+				meta: { 'field-7': 'Doing' },
+			} );
+
+		try {
+			render(
+				<RowProperties
+					collectionId={ 7 }
+					fields={ [
+						{
+							id: 'field-7',
+							label: 'Status',
+							cortextFieldType: 'text',
+							editable: true,
+						},
+					] }
+					registerPendingSaveFlusher={ registerPendingSaveFlusher }
+					row={ { id: 99, meta: { 'field-7': 'Open' } } }
+				/>
+			);
+
+			fireEvent.change(
+				screen.getByRole( 'textbox', { name: 'Status' } ),
+				{ target: { value: 'Doing' } }
+			);
+			await act( async () => {
+				jest.advanceTimersByTime( 500 );
+				await Promise.resolve();
+			} );
+			expect(
+				await screen.findByText( 'Status could not be saved.' )
+			).toBeInTheDocument();
+			expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 1 );
+
+			await act( async () => {
+				window.dispatchEvent( new Event( 'blur' ) );
+				await Promise.resolve();
+			} );
+			expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 1 );
+
+			await act( async () => flushPendingSaves() );
+			expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 2 );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	it( 'hands its pending flush promise to the parent registry on unmount', async () => {
+		let resolveSave;
+		const unregister = jest.fn();
+		mockSaveEntityRecord.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					resolveSave = resolve;
+				} )
+		);
+		const { unmount } = render(
+			<RowProperties
+				collectionId={ 7 }
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+					},
+				] }
+				registerPendingSaveFlusher={ () => unregister }
+				row={ { id: 99, meta: { 'field-7': 'Open' } } }
+			/>
+		);
+
+		fireEvent.change( screen.getByRole( 'textbox', { name: 'Status' } ), {
+			target: { value: 'Doing' },
+		} );
+		unmount();
+
+		expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 1 );
+		expect( unregister ).toHaveBeenCalledWith( expect.any( Promise ) );
+		const orphanedSave = unregister.mock.calls[ 0 ][ 0 ];
+		let settled = false;
+		orphanedSave.then( () => {
+			settled = true;
+		} );
+		await act( async () => Promise.resolve() );
+		expect( settled ).toBe( false );
+
+		await act( async () => {
+			resolveSave( { id: 99, meta: { 'field-7': 'Doing' } } );
+			await orphanedSave;
+		} );
+		expect( settled ).toBe( true );
+	} );
+
+	it( 'blocks saves synchronously while collection removal owns the lock', async () => {
+		jest.useFakeTimers();
+		let locked = false;
+		const isCollectionSaveLocked = jest.fn( () => locked );
+		mockSaveEntityRecord.mockResolvedValue( {
+			id: 99,
+			meta: { 'field-7': 'Done' },
+		} );
+		const field = {
+			id: 'field-7',
+			label: 'Status',
+			cortextFieldType: 'text',
+			editable: true,
+		};
+
+		try {
+			const { container, rerender } = render(
+				<RowProperties
+					collectionId={ 7 }
+					fields={ [ field ] }
+					isCollectionSaveLocked={ isCollectionSaveLocked }
+					row={ { id: 99, meta: { 'field-7': 'Open' } } }
+				/>
+			);
+
+			// Flip only the authoritative ref read by the callback. This models
+			// the same event turn as the remove click, before React rerenders.
+			locked = true;
+			fireEvent.change(
+				screen.getByRole( 'textbox', { name: 'Status' } ),
+				{ target: { value: 'Blocked' } }
+			);
+			act( () => jest.advanceTimersByTime( 500 ) );
+			expect( mockSaveEntityRecord ).not.toHaveBeenCalled();
+
+			rerender(
+				<RowProperties
+					collectionId={ 7 }
+					fields={ [ field ] }
+					isCollectionSaveLocked={ isCollectionSaveLocked }
+					isSaveLocked
+					row={ { id: 99, meta: { 'field-7': 'Open' } } }
+				/>
+			);
+			expect(
+				screen.queryByRole( 'textbox', { name: 'Status' } )
+			).toBeNull();
+			expect(
+				container.querySelector(
+					'.cortext-row-detail__properties--rows'
+				)
+			).toHaveAttribute( 'aria-disabled', 'true' );
+
+			locked = false;
+			rerender(
+				<RowProperties
+					collectionId={ 7 }
+					fields={ [ field ] }
+					isCollectionSaveLocked={ isCollectionSaveLocked }
+					row={ { id: 99, meta: { 'field-7': 'Open' } } }
+				/>
+			);
+			fireEvent.change(
+				screen.getByRole( 'textbox', { name: 'Status' } ),
+				{ target: { value: 'Done' } }
+			);
+			await act( async () => {
+				jest.advanceTimersByTime( 500 );
+				await Promise.resolve();
+			} );
+			expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 1 );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	it( 'keeps draining edits queued while the save barrier is in flight', async () => {
+		let flushPendingSaves;
+		const requests = [];
+		mockSaveEntityRecord.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					requests.push( resolve );
+				} )
+		);
+		render(
+			<RowProperties
+				collectionId={ 7 }
+				fields={ [
+					{
+						id: 'field-7',
+						label: 'Status',
+						cortextFieldType: 'text',
+						editable: true,
+					},
+				] }
+				registerPendingSaveFlusher={ ( id, flush ) => {
+					flushPendingSaves = flush;
+					return () => {};
+				} }
+				row={ { id: 99, meta: { 'field-7': 'Open' } } }
+			/>
+		);
+
+		fireEvent.change( screen.getByRole( 'textbox', { name: 'Status' } ), {
+			target: { value: 'Doing' },
+		} );
+		let barrier;
+		act( () => {
+			barrier = flushPendingSaves();
+		} );
+		expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 1 );
+
+		fireEvent.change( screen.getByRole( 'textbox', { name: 'Status' } ), {
+			target: { value: 'Done' },
+		} );
+		await act( async () => {
+			requests[ 0 ]( { id: 99, meta: { 'field-7': 'Doing' } } );
+			await Promise.resolve();
+		} );
+		await waitFor( () =>
+			expect( mockSaveEntityRecord ).toHaveBeenCalledTimes( 2 )
+		);
+
+		let barrierSettled = false;
+		barrier.then( () => {
+			barrierSettled = true;
+		} );
+		await act( async () => Promise.resolve() );
+		expect( barrierSettled ).toBe( false );
+
+		await act( async () => {
+			requests[ 1 ]( { id: 99, meta: { 'field-7': 'Done' } } );
+			await barrier;
+		} );
+		expect( barrierSettled ).toBe( true );
+	} );
+
 	it( 'shows row meta updates from the table over stale editor meta', () => {
 		const fields = [
 			{

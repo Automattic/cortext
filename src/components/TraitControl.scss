@@ -1,0 +1,151 @@
+@use "@wordpress/base-styles/variables" as *;
+
+// The row reuses the property-row grid (`.cortext-row-detail__property`) and
+// the property list inset, so its label lines up with the property labels
+// below. The bottom gap matches the spacing between collection groups.
+.cortext-traits {
+	margin-bottom: 20px;
+	padding-inline: var(--cortext-row-detail-field-inset);
+}
+
+// The row is as tall as a chip even before the chips load.
+.cortext-traits__chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	min-height: $grid-unit-30;
+	padding: 3px 0;
+}
+
+.cortext-traits__chip {
+	--cortext-traits-chip-background: var(--wp--preset--color--contrast-3, #f0f0f0);
+
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: $grid-unit-30;
+	padding: 0 $grid-unit-10;
+	border-radius: $grid-unit-30;
+	background: var(--cortext-traits-chip-background);
+	font-size: $default-font-size;
+	line-height: 1;
+}
+
+.cortext-traits__chip-title {
+	white-space: nowrap;
+}
+
+// The remove button overlays the end of the chip, over the chip background,
+// so the padding stays symmetric and the chip keeps its width when the button
+// shows on hover or focus.
+.cortext-traits__chip-remove.components-button.has-icon.is-small {
+	position: absolute;
+	top: 50%;
+	right: 4px;
+	min-width: 16px;
+	width: 16px;
+	height: 16px;
+	padding: 0;
+	border-radius: 999px;
+	background: var(--cortext-traits-chip-background);
+	box-shadow: -4px 0 4px var(--cortext-traits-chip-background);
+	color: inherit;
+	opacity: 0;
+	transform: translateY(-50%);
+
+	svg {
+		width: 16px;
+		height: 16px;
+		opacity: 0.6;
+	}
+
+	&:hover,
+	&:focus-visible {
+		opacity: 1;
+		background:
+			linear-gradient(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.1)),
+			var(--cortext-traits-chip-background);
+
+		svg {
+			opacity: 1;
+		}
+	}
+}
+
+.cortext-traits__chip:hover,
+.cortext-traits__chip:focus-within {
+
+	.cortext-traits__chip-remove.components-button.has-icon.is-small {
+		opacity: 1;
+	}
+}
+
+// Without hover the button is always visible, so it sits in the flow instead
+// of covering the title.
+@media (hover: none) {
+
+	.cortext-traits__chip {
+		padding-right: 4px;
+	}
+
+	.cortext-traits__chip-remove.components-button.has-icon.is-small {
+		position: static;
+		box-shadow: none;
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.cortext-traits__add.components-button.has-icon.is-small {
+	min-width: $grid-unit-30;
+	width: $grid-unit-30;
+	height: $grid-unit-30;
+	padding: 0;
+	color: var(--cortext-row-detail-muted, #757575);
+
+	&:is(:hover, :focus-visible):not(:disabled) {
+		color: var(--wp--preset--color--contrast, #1e1e1e);
+	}
+}
+
+.cortext-traits__popover .components-popover__content {
+	min-width: 240px;
+	padding: 8px;
+}
+
+.cortext-traits__suggestions {
+	display: flex;
+	flex-direction: column;
+	max-height: 240px;
+	margin-top: 6px;
+	overflow-y: auto;
+}
+
+.cortext-traits__suggestion.components-button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	justify-content: flex-start;
+	width: 100%;
+	height: auto;
+	padding: 6px 8px;
+	text-align: left;
+}
+
+.cortext-traits__load-more.components-button {
+	justify-content: center;
+	width: 100%;
+}
+
+.cortext-traits__empty {
+	margin: 8px;
+	color: var(--wp--preset--color--contrast-2, #757575);
+}
+
+.cortext-traits__error {
+	margin: 4px 0 0;
+	color: var(--wp--preset--color--vivid-red, #cc1818);
+	font-size: 12px;
+}

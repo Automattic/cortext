@@ -18,8 +18,10 @@ namespace Cortext\PostType;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Documents;
 use Cortext\Relations;
 use Cortext\Taxonomy\TraitTaxonomy;
+use WP_Post;
 
 final class DocumentCascade {
 
@@ -41,10 +43,12 @@ final class DocumentCascade {
 	/**
 	 * Moves a document's active children and rows to the target status.
 	 *
-	 * @param int      $post_id    Document whose children and rows should move.
-	 * @param callable $transition Moves each child or row.
+	 * @param int           $post_id    Document whose children and rows should move.
+	 * @param callable      $transition Moves each child or row.
+	 * @param callable|null $keep_row   Returns true for a row that should stay
+	 *                                  put, given the row and collection IDs.
 	 */
-	public function cascade( int $post_id, callable $transition ): void {
+	public function cascade( int $post_id, callable $transition, ?callable $keep_row = null ): void {
 		if ( Document::POST_TYPE !== get_post_type( $post_id ) ) {
 			return;
 		}
@@ -56,6 +60,9 @@ final class DocumentCascade {
 
 		if ( Document::is_collection( $post_id ) ) {
 			foreach ( $this->active_row_ids( $post_id ) as $row_id ) {
+				if ( null !== $keep_row && $keep_row( $row_id, $post_id ) ) {
+					continue;
+				}
 				update_post_meta( $row_id, $this->collection_marker_meta, $post_id );
 				$transition( $row_id );
 			}
@@ -65,10 +72,12 @@ final class DocumentCascade {
 	/**
 	 * Finds every active descendant a cascade from this document would move.
 	 *
-	 * @param int $root_id Root document ID.
+	 * @param int           $root_id  Root document ID.
+	 * @param callable|null $keep_row Returns true for a row that would stay put,
+	 *                                given the row and collection IDs.
 	 * @return int[] Active descendant IDs, excluding the root.
 	 */
-	public function candidates_for_cascade( int $root_id ): array {
+	public function candidates_for_cascade( int $root_id, ?callable $keep_row = null ): array {
 		if ( Document::POST_TYPE !== get_post_type( $root_id ) ) {
 			return array();
 		}
@@ -82,7 +91,16 @@ final class DocumentCascade {
 			foreach ( $frontier as $current ) {
 				$candidates = $this->active_child_ids( $current );
 				if ( Document::is_collection( $current ) ) {
-					$candidates = array_merge( $candidates, $this->active_row_ids( $current ) );
+					$row_ids = $this->active_row_ids( $current );
+					if ( null !== $keep_row ) {
+						$row_ids = array_values(
+							array_filter(
+								$row_ids,
+								static fn( int $row_id ): bool => ! $keep_row( $row_id, $current )
+							)
+						);
+					}
+					$candidates = array_merge( $candidates, $row_ids );
 				}
 
 				foreach ( $candidates as $candidate_id ) {
@@ -103,10 +121,14 @@ final class DocumentCascade {
 	/**
 	 * Restores the children and rows marked by this document.
 	 *
-	 * @param int      $post_id    Document whose children and rows should be restored.
-	 * @param callable $transition Restores each marked child or row.
+	 * @param int      $post_id               Document whose children and rows should be restored.
+	 * @param callable $transition            Restores each marked child or row.
+	 * @param bool     $any_collection_marker Also restore rows a different
+	 *                                        collection's cascade moved. Rows that
+	 *                                        belong to several collections come
+	 *                                        back when any of them is restored.
 	 */
-	public function restore( int $post_id, callable $transition ): void {
+	public function restore( int $post_id, callable $transition, bool $any_collection_marker = false ): void {
 		if ( Document::POST_TYPE !== get_post_type( $post_id ) ) {
 			return;
 		}
@@ -122,7 +144,10 @@ final class DocumentCascade {
 		}
 
 		if ( Document::is_collection( $post_id ) ) {
-			foreach ( $this->rows_marked_by( $post_id ) as $row_id ) {
+			$row_ids = $any_collection_marker
+				? $this->rows_moved_by_any_collection( $post_id )
+				: $this->rows_marked_by( $post_id );
+			foreach ( $row_ids as $row_id ) {
 				$transition( $row_id );
 				delete_post_meta( $row_id, $this->collection_marker_meta );
 			}
@@ -132,10 +157,14 @@ final class DocumentCascade {
 	/**
 	 * Finds all marked descendants below a document.
 	 *
-	 * @param int $root_id Root document ID.
+	 * @param int           $root_id               Root document ID.
+	 * @param callable|null $skip_row              Returns true for a row to leave
+	 *                                             out, given the row and collection IDs.
+	 * @param bool          $any_collection_marker Walk rows any collection's
+	 *                                             cascade moved, as `restore()` does.
 	 * @return int[] Descendant IDs, excluding the root.
 	 */
-	public function descendants_for_root( int $root_id ): array {
+	public function descendants_for_root( int $root_id, ?callable $skip_row = null, bool $any_collection_marker = false ): array {
 		if ( Document::POST_TYPE !== get_post_type( $root_id ) ) {
 			return array();
 		}
@@ -156,8 +185,14 @@ final class DocumentCascade {
 					$next[]            = $child_id;
 				}
 				if ( Document::is_collection( $current ) ) {
-					foreach ( $this->rows_marked_by( $current ) as $row_id ) {
+					$row_ids = $any_collection_marker
+						? $this->rows_moved_by_any_collection( $current )
+						: $this->rows_marked_by( $current );
+					foreach ( $row_ids as $row_id ) {
 						if ( isset( $seen[ $row_id ] ) ) {
+							continue;
+						}
+						if ( null !== $skip_row && $skip_row( $row_id, $current ) ) {
 							continue;
 						}
 						$seen[ $row_id ] = true;
@@ -203,6 +238,61 @@ final class DocumentCascade {
 		);
 
 		return array_map( 'intval', $ids );
+	}
+
+	/**
+	 * Valid collections a row belongs to other than `$collection_id`, in any
+	 * status. Retired collections count because their membership is kept for
+	 * restore; stale terms whose collection no longer exists do not.
+	 *
+	 * @param int $row_id        Row document ID.
+	 * @param int $collection_id Collection being retired or deleted.
+	 * @return int[]
+	 */
+	public static function other_memberships( int $row_id, int $collection_id ): array {
+		$terms = wp_get_object_terms(
+			$row_id,
+			TraitTaxonomy::TAXONOMY,
+			array( 'fields' => 'all' )
+		);
+		if ( ! is_array( $terms ) ) {
+			return array();
+		}
+
+		$collection_ids = array();
+		foreach ( $terms as $term ) {
+			$other_id = TraitTaxonomy::trait_id_from_slug( (string) $term->slug );
+			if ( $other_id < 1 || $other_id === $collection_id ) {
+				continue;
+			}
+			$other = get_post( $other_id );
+			if (
+				$other instanceof WP_Post
+				&& Document::POST_TYPE === $other->post_type
+				&& Document::is_collection( $other_id )
+			) {
+				$collection_ids[ $other_id ] = true;
+			}
+		}
+
+		return array_keys( $collection_ids );
+	}
+
+	/**
+	 * Whether a row still lives in a collection other than `$collection_id`,
+	 * one that is neither archived nor in the trash. Such a row stays where it
+	 * is when `$collection_id` is archived, trashed, or deleted.
+	 *
+	 * @param int $row_id        Row document ID.
+	 * @param int $collection_id Collection being retired or deleted.
+	 */
+	public static function has_other_live_membership( int $row_id, int $collection_id ): bool {
+		foreach ( self::other_memberships( $row_id, $collection_id ) as $other_id ) {
+			if ( Documents::is_live_status( (string) get_post_status( $other_id ) ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -258,6 +348,23 @@ final class DocumentCascade {
 	 */
 	private function active_row_ids( int $collection_id ): array {
 		return $this->row_ids_for_collection( $collection_id, $this->active_statuses );
+	}
+
+	/**
+	 * Finds rows of this collection in the target status that any collection's
+	 * cascade moved there. The marker can name another collection when a row
+	 * belongs to several and they moved one after another.
+	 *
+	 * @param int $collection_id Collection document ID.
+	 * @return int[]
+	 */
+	public function rows_moved_by_any_collection( int $collection_id ): array {
+		return array_values(
+			array_filter(
+				$this->row_ids_for_collection( $collection_id, array( $this->target_status ) ),
+				fn( int $row_id ): bool => (int) get_post_meta( $row_id, $this->collection_marker_meta, true ) > 0
+			)
+		);
 	}
 
 	/**
