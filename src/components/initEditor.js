@@ -116,9 +116,19 @@ export const ALLOWED_BLOCK_TYPES = [
 	'cortext/document-properties',
 ];
 
+// EditorProvider treats a new settings object as a settings change and
+// re-renders every block. The page sets `cortextEditorSettings` once, so
+// build the object once and hand out the same one until the source changes.
+let cachedSettings = null;
+let cachedSource;
 export function getEditorSettings() {
-	return {
-		...( window.cortextEditorSettings ?? {} ),
-		allowedBlockTypes: ALLOWED_BLOCK_TYPES,
-	};
+	const source = window.cortextEditorSettings;
+	if ( ! cachedSettings || source !== cachedSource ) {
+		cachedSource = source;
+		cachedSettings = {
+			...( source ?? {} ),
+			allowedBlockTypes: ALLOWED_BLOCK_TYPES,
+		};
+	}
+	return cachedSettings;
 }

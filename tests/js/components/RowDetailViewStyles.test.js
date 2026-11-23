@@ -19,6 +19,32 @@ function keyframeBody( stylesheet, name ) {
 }
 
 describe( 'RowDetailView styles', () => {
+	it( 'lets a peek that opened as center slide out as a side peek', () => {
+		const stylesheet = readFileSync(
+			join( process.cwd(), 'src/components/RowDetailView.scss' ),
+			'utf8'
+		);
+
+		// Both rules carry one class, so the later one wins the animation.
+		expect( stylesheet.indexOf( '\t&--closing {' ) ).toBeGreaterThan(
+			stylesheet.indexOf( '\t&--opened-center {' )
+		);
+	} );
+
+	it( 'skips the resize transition while dragging the side peek edge', () => {
+		const stylesheet = readFileSync(
+			join( process.cwd(), 'src/components/RowDetailView.scss' ),
+			'utf8'
+		);
+		const rule = stylesheet.slice(
+			stylesheet.indexOf(
+				'body.cortext-row-detail-sidebar-resizing .cortext-row-detail-sidebar-shell {'
+			)
+		);
+
+		expect( rule ).toMatch( /^[^}]*transition: none;/ );
+	} );
+
 	it( 'slides the side peek without squeezing the editor', () => {
 		const stylesheet = readFileSync(
 			join( process.cwd(), 'src/components/RowDetailView.scss' ),

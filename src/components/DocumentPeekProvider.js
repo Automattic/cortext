@@ -13,10 +13,15 @@ import { __ } from '@wordpress/i18n';
 import {
 	DEFAULT_ROW_DETAIL_MODE,
 	normalizeRowDetailMode,
+	setPeekToFullStage,
 } from './rowDetailUtils';
 import { rowRoute } from './relations/relationUtils';
 import { useActiveEditor } from './ActiveEditorContext';
 import { rowSourceCollectionSearch } from '../router/rowSourceCollection';
+import {
+	joinNextViewTransition,
+	whenViewTransitionsSettled,
+} from '../hooks/viewTransition';
 
 // Split the contexts so callers don't rerender on state they do not use:
 // chips need actions, tables need peek state, and the host needs save and
@@ -36,6 +41,7 @@ const NO_PEEK_STATE = { peek: null, isPinned: false };
 
 const PeekActionsContext = createContext( NO_PEEK_ACTIONS );
 const PeekStateContext = createContext( NO_PEEK_STATE );
+const PeekOpenIdContext = createContext( null );
 const PeekSurfaceContext = createContext( null );
 
 export function useDocumentPeekActions() {
@@ -44,6 +50,12 @@ export function useDocumentPeekActions() {
 
 export function useDocumentPeekState() {
 	return useContext( PeekStateContext );
+}
+
+// Tables only need to know which row is open. Reading the whole peek state
+// would re-render every cell on each mode switch.
+export function useOpenDocumentId() {
+	return useContext( PeekOpenIdContext );
 }
 
 export function useDocumentPeekSurface() {
@@ -56,17 +68,11 @@ export function useDocumentPeekSurface() {
 	return value;
 }
 
-const ROW_DETAIL_SIDE_SURFACE_EXIT_MS = 300;
-const ROW_DETAIL_MODAL_ENTER_MS = 200;
-const ROW_DETAIL_SIDE_TO_MODAL_HANDOFF_MS =
-	ROW_DETAIL_SIDE_SURFACE_EXIT_MS - ROW_DETAIL_MODAL_ENTER_MS;
-
-function prefersReducedMotion() {
-	return (
-		typeof window !== 'undefined' &&
-		window.matchMedia?.( '(prefers-reduced-motion: reduce)' ).matches
-	);
-}
+// If the route never starts a view transition for the full-screen swap, close
+// the peek anyway after this long.
+const PEEK_TO_FULL_FALLBACK_MS = 2000;
+// Matches the shell's resize transition in RowDetailView.scss.
+const PEEK_RESIZE_MS = 280;
 
 // Keep peek state at app scope. A row opened from one collection can stay open
 // while the route changes. DocumentPeekHost renders the heavy RowDetailView
@@ -93,28 +99,42 @@ export function DocumentPeekProvider( { children } ) {
 	const [ pendingTransition, setPendingTransition ] = useState( null );
 	const [ saveError, setSaveError ] = useState( null );
 
-	// Side-to-modal animation: keep the old panel mounted briefly so it can
-	// slide out instead of disappearing.
-	const [ modeSurfaceTransition, setModeSurfaceTransition ] =
-		useState( null );
-	const modeSurfaceTransitionTimeoutRef = useRef( null );
-
-	const clearModeSurfaceTransition = useCallback( () => {
-		if ( modeSurfaceTransitionTimeoutRef.current ) {
-			clearTimeout( modeSurfaceTransitionTimeoutRef.current );
-			modeSurfaceTransitionTimeoutRef.current = null;
+	// Full screen keeps the peek on screen until the route swaps the page in,
+	// then closes it inside that view transition so the panel grows into it.
+	const pendingFullExitRef = useRef( null );
+	const cancelPendingFullExit = useCallback( () => {
+		const pending = pendingFullExitRef.current;
+		if ( ! pending ) {
+			return;
 		}
-		setModeSurfaceTransition( null );
+		pending.leave();
+		clearTimeout( pending.timeout );
+		pendingFullExitRef.current = null;
+		setPeekToFullStage( null );
 	}, [] );
-
-	useEffect(
-		() => () => {
-			if ( modeSurfaceTransitionTimeoutRef.current ) {
-				clearTimeout( modeSurfaceTransitionTimeoutRef.current );
-			}
-		},
-		[]
-	);
+	useEffect( () => cancelPendingFullExit, [ cancelPendingFullExit ] );
+	const exitToFull = useCallback( () => {
+		const finish = () => {
+			clearTimeout( pendingFullExitRef.current?.timeout );
+			pendingFullExitRef.current = null;
+			setPeekToFullStage( 'entering' );
+			setPeek( null );
+			whenViewTransitionsSettled( 0 ).then( () =>
+				setPeekToFullStage( null )
+			);
+		};
+		setPeekToFullStage( 'leaving' );
+		setPeek( ( current ) =>
+			current ? { ...current, isExiting: true } : current
+		);
+		pendingFullExitRef.current = {
+			leave: joinNextViewTransition( finish ),
+			timeout: setTimeout( () => {
+				pendingFullExitRef.current?.leave();
+				finish();
+			}, PEEK_TO_FULL_FALLBACK_MS ),
+		};
+	}, [] );
 
 	const setDetailApi = useCallback(
 		( api ) => {
@@ -124,17 +144,44 @@ export function DocumentPeekProvider( { children } ) {
 		[ registerPeekEditor ]
 	);
 
+	// Saving the peek mode re-renders the whole collection view, so it waits
+	// until the resize is over and the main thread is free. Any other
+	// transition saves it right away, while the collection is still mounted.
+	const pendingModeSaveRef = useRef( null );
+	const saveModeNow = useCallback( () => {
+		const save = pendingModeSaveRef.current;
+		pendingModeSaveRef.current = null;
+		save?.();
+	}, [] );
+	const saveModeLater = useCallback(
+		( save ) => {
+			pendingModeSaveRef.current = save;
+			setTimeout( () => {
+				if ( typeof window.requestIdleCallback === 'function' ) {
+					window.requestIdleCallback( saveModeNow, {
+						timeout: 1000,
+					} );
+				} else {
+					saveModeNow();
+				}
+			}, PEEK_RESIZE_MS );
+		},
+		[ saveModeNow ]
+	);
+
 	const applyTransition = useCallback(
 		( transition ) => {
 			setSaveError( null );
 			setPendingTransition( null );
+			cancelPendingFullExit();
+			if ( transition.type !== 'mode' ) {
+				saveModeNow();
+			}
 
 			if ( transition.type === 'close' ) {
-				clearModeSurfaceTransition();
 				setPeek( null );
 				setIsPinned( false );
 			} else if ( transition.type === 'peek' ) {
-				clearModeSurfaceTransition();
 				setPeek( transition.peek );
 				setIsPinned( ( current ) =>
 					transition.preservePin ? current : false
@@ -144,9 +191,10 @@ export function DocumentPeekProvider( { children } ) {
 					current ? { ...current, mode: transition.mode } : current
 				);
 			} else if ( transition.type === 'full' ) {
-				clearModeSurfaceTransition();
-				setPeek( null );
 				setIsPinned( false );
+				if ( peekRef.current ) {
+					exitToFull();
+				}
 				navigate( {
 					to: '/$',
 					params: { _splat: transition.uri },
@@ -157,7 +205,7 @@ export function DocumentPeekProvider( { children } ) {
 				} );
 			}
 		},
-		[ clearModeSurfaceTransition, navigate ]
+		[ cancelPendingFullExit, exitToFull, navigate, saveModeNow ]
 	);
 
 	const runTransition = useCallback(
@@ -260,7 +308,7 @@ export function DocumentPeekProvider( { children } ) {
 	);
 
 	const requestMode = useCallback(
-		async ( mode ) => {
+		( mode ) => {
 			const current = peekRef.current;
 			if ( ! current ) {
 				return;
@@ -283,34 +331,12 @@ export function DocumentPeekProvider( { children } ) {
 			if ( mode === current.mode ) {
 				return;
 			}
-			current.source?.onModeChange?.( mode );
-
-			if (
-				current.mode === 'side' &&
-				mode === 'modal' &&
-				! prefersReducedMotion()
-			) {
-				setModeSurfaceTransition( { surfaceMode: 'side' } );
-				const didSwitch = await runTransition( {
-					type: 'mode',
-					mode,
-				} );
-				if ( ! didSwitch ) {
-					clearModeSurfaceTransition();
-					return;
-				}
-				setModeSurfaceTransition( { surfaceMode: null } );
-				modeSurfaceTransitionTimeoutRef.current = setTimeout( () => {
-					modeSurfaceTransitionTimeoutRef.current = null;
-					setModeSurfaceTransition( null );
-				}, ROW_DETAIL_SIDE_TO_MODAL_HANDOFF_MS );
-				return;
-			}
-
-			clearModeSurfaceTransition();
-			runTransition( { type: 'mode', mode } );
+			// The editor stays mounted across modes, so there are no edits to
+			// flush first. Switch right away so the resize starts on the click.
+			applyTransition( { type: 'mode', mode } );
+			saveModeLater( () => current.source?.onModeChange?.( mode ) );
 		},
-		[ clearModeSurfaceTransition, runTransition ]
+		[ applyTransition, runTransition, saveModeLater ]
 	);
 
 	const goToAdjacentDocument = useCallback(
@@ -367,7 +393,6 @@ export function DocumentPeekProvider( { children } ) {
 	const state = useMemo( () => ( { peek, isPinned } ), [ peek, isPinned ] );
 	const surface = useMemo(
 		() => ( {
-			modeSurfaceTransition,
 			saveError,
 			setDetailApi,
 			goToAdjacentDocument,
@@ -376,7 +401,6 @@ export function DocumentPeekProvider( { children } ) {
 			togglePin,
 		} ),
 		[
-			modeSurfaceTransition,
 			saveError,
 			setDetailApi,
 			goToAdjacentDocument,
@@ -389,9 +413,11 @@ export function DocumentPeekProvider( { children } ) {
 	return (
 		<PeekActionsContext.Provider value={ actions }>
 			<PeekStateContext.Provider value={ state }>
-				<PeekSurfaceContext.Provider value={ surface }>
-					{ children }
-				</PeekSurfaceContext.Provider>
+				<PeekOpenIdContext.Provider value={ peek?.docId ?? null }>
+					<PeekSurfaceContext.Provider value={ surface }>
+						{ children }
+					</PeekSurfaceContext.Provider>
+				</PeekOpenIdContext.Provider>
 			</PeekStateContext.Provider>
 		</PeekActionsContext.Provider>
 	);

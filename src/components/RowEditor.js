@@ -6,7 +6,13 @@
 // renders synchronously; only this inner stack suspends on first row open.
 import { useDispatch } from '@wordpress/data';
 import { EditorProvider, store as editorStore } from '@wordpress/editor';
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import {
+	memo,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { SlotFillProvider } from '@wordpress/components';
 
 import useAutosave from '../hooks/useAutosave';
@@ -233,7 +239,7 @@ function DetailPaneContent( {
 	);
 }
 
-export default function RowEditor( {
+function RowEditor( {
 	collectionId,
 	detailKey,
 	fields,
@@ -299,3 +305,7 @@ export default function RowEditor( {
 		</EditorProvider>
 	);
 }
+
+// The peek re-renders when it switches modes. Skip the editor unless its own
+// props changed, so only the panel's chrome updates.
+export default memo( RowEditor );

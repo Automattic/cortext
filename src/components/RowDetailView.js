@@ -1,4 +1,4 @@
-import { Button, Modal, Notice, Spinner } from '@wordpress/components';
+import { Button, Notice, Spinner } from '@wordpress/components';
 import { useEntityRecord } from '@wordpress/core-data';
 import {
 	lazy,
@@ -60,16 +60,9 @@ const pinFilled = (
 	</svg>
 );
 
-const ROW_DETAIL_MODAL_CLOSE_MS = 240;
 const ROW_DETAIL_SWITCH_MS = 180;
 const ROW_DETAIL_SWITCH_FALLBACK_MS = ROW_DETAIL_SWITCH_MS + 100;
 const HIDE_PARENT_BLOCK_TOOLBAR_CLASS = 'cortext-hide-parent-block-toolbar';
-
-function delay( duration ) {
-	return new Promise( ( resolve ) => {
-		setTimeout( resolve, duration );
-	} );
-}
 
 function detailKeyFor( detail ) {
 	if ( ! detail ) {
@@ -83,6 +76,24 @@ function prefersReducedMotion() {
 		typeof window !== 'undefined' &&
 		window.matchMedia?.( '(prefers-reduced-motion: reduce)' ).matches
 	);
+}
+
+// The row a pane's editor shows: the entity record, with the table row's
+// meta layered on top.
+function paneRowFor( detail ) {
+	return {
+		...( detail.row ?? {} ),
+		...detail.record,
+		title: detail.record.title ?? detail.row?.title,
+		meta: {
+			...( detail.record.meta ?? {} ),
+			...( detail.row?.meta ?? {} ),
+		},
+		cortext_hydrated_meta: {
+			...( detail.record.cortext_hydrated_meta ?? {} ),
+			...( detail.row?.cortext_hydrated_meta ?? {} ),
+		},
+	};
 }
 
 function settleDetailPanes( panes ) {
@@ -313,7 +324,6 @@ export default function RowDetailView( {
 		enabled: Boolean( postType && rowId ),
 	} );
 	const normalizedMode = getRowDetailMode( { rowDetailMode: mode } );
-	const [ isModalClosing, setIsModalClosing ] = useState( false );
 	const targetDetail = useMemo( () => {
 		if (
 			! record ||
@@ -332,12 +342,6 @@ export default function RowDetailView( {
 			setResolvedDetail( targetDetail );
 		}
 	}, [ targetDetail ] );
-
-	useEffect( () => {
-		if ( normalizedMode !== 'modal' ) {
-			setIsModalClosing( false );
-		}
-	}, [ normalizedMode ] );
 
 	useLayoutEffect( () => {
 		if ( normalizedMode !== 'side' && normalizedMode !== 'modal' ) {
@@ -492,29 +496,6 @@ export default function RowDetailView( {
 		return () => clearTimeout( timeout );
 	}, [ detailPanes ] );
 
-	const requestClose = useCallback( async () => {
-		if ( normalizedMode !== 'modal' ) {
-			return onClose?.();
-		}
-		if ( isModalClosing ) {
-			return false;
-		}
-		if ( prefersReducedMotion() ) {
-			return onClose?.();
-		}
-
-		setIsModalClosing( true );
-		await delay( ROW_DETAIL_MODAL_CLOSE_MS );
-		const didClose = await onClose?.();
-		if ( didClose === false ) {
-			setIsModalClosing( false );
-		}
-		return didClose;
-	}, [ isModalClosing, normalizedMode, onClose ] );
-	const requestNativeModalClose = useCallback(
-		() => onClose?.(),
-		[ onClose ]
-	);
 	const activePane = detailPanes.find(
 		( pane ) => pane.key === activeDetailKey
 	);
@@ -525,13 +506,25 @@ export default function RowDetailView( {
 			activePane.state !== 'covered' &&
 			String( activeDetail.rowId ) === String( rowId )
 	);
+	// Build each pane's row only when the panes change. A new object on every
+	// render would re-render the whole editor, for example on a mode switch.
+	const paneRows = useMemo(
+		() =>
+			new Map(
+				detailPanes.map( ( pane ) => [
+					pane.key,
+					paneRowFor( pane.detail ),
+				] )
+			),
+		[ detailPanes ]
+	);
 	const isWaitingForFirstPane =
 		detailPanes.length > 0 &&
 		! detailPanes.some( ( pane ) => pane.state !== 'preparing' );
 
 	const content =
 		! activeDetail && detailPanes.length === 0 ? (
-			<LoadingDetail onClose={ requestClose } />
+			<LoadingDetail onClose={ onClose } />
 		) : (
 			<DetailShell
 				arePropertiesVisible={ arePropertiesVisible }
@@ -543,7 +536,7 @@ export default function RowDetailView( {
 				isPinned={ isPinned }
 				isPropertiesLayoutEditing={ isPropertiesLayoutEditing }
 				mode={ normalizedMode }
-				onClose={ requestClose }
+				onClose={ onClose }
 				onDiscardPending={ onDiscardPending }
 				onModeChange={ onModeChange }
 				onNext={ onNext }
@@ -578,25 +571,7 @@ export default function RowDetailView( {
 								pane.state === 'preparing' ||
 								pane.state === 'covered';
 							const isApiActive = isCurrentPane && ! isHiddenPane;
-							const paneRowMeta = {
-								...( pane.detail.record.meta ?? {} ),
-								...( pane.detail.row?.meta ?? {} ),
-							};
-							const paneRowHydratedMeta = {
-								...( pane.detail.record.cortext_hydrated_meta ??
-									{} ),
-								...( pane.detail.row?.cortext_hydrated_meta ??
-									{} ),
-							};
-							const paneRow = {
-								...( pane.detail.row ?? {} ),
-								...pane.detail.record,
-								title:
-									pane.detail.record.title ??
-									pane.detail.row?.title,
-								meta: paneRowMeta,
-								cortext_hydrated_meta: paneRowHydratedMeta,
-							};
+							const paneRow = paneRows.get( pane.key );
 							const shouldAcquirePostLock =
 								pane.state === 'preparing' || isApiActive;
 
@@ -672,34 +647,12 @@ export default function RowDetailView( {
 			</DetailShell>
 		);
 
-	if ( normalizedMode === 'modal' ) {
-		return (
-			<Modal
-				className={
-					'cortext-row-detail-modal' +
-					( isModalClosing
-						? ' cortext-row-detail-modal--closing'
-						: '' )
-				}
-				title={ __( 'Detail', 'cortext' ) }
-				overlayClassName={
-					isModalClosing ? 'is-animating-out' : undefined
-				}
-				onRequestClose={ requestNativeModalClose }
-				__experimentalHideHeader
-			>
-				<div className="cortext-row-detail cortext-row-detail--modal">
-					{ content }
-				</div>
-			</Modal>
-		);
-	}
-
 	return (
 		<div
 			className={ `cortext-row-detail cortext-row-detail--${ normalizedMode }` }
 			role="dialog"
 			aria-label={ __( 'Detail', 'cortext' ) }
+			aria-modal={ normalizedMode === 'modal' ? true : undefined }
 		>
 			{ content }
 		</div>

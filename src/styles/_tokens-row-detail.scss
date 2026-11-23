@@ -5,8 +5,7 @@
 // canvas-adjacent surface and the canvas itself is light-only today.
 // If the canvas ever gets a real dark variant, mirror these under the
 // dark selector at the same time.
-.cortext-row-detail,
-.cortext-row-detail-modal {
+.cortext-row-detail {
 	--cortext-row-detail-text: #37352f;
 	--cortext-row-detail-muted: #787774;
 	--cortext-row-detail-border: #e9e9e7;

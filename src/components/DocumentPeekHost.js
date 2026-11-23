@@ -9,7 +9,7 @@ import {
 import { useParams } from '@tanstack/react-router';
 
 import RowDetailView from './RowDetailView';
-import { RowDetailSidebar } from './RowDetailSidebarSlot';
+import { DocumentPeekSlot } from './DocumentPeekLayer';
 import { CurrentViewModeProvider } from './CurrentViewModeContext';
 import {
 	useDocumentPeekActions,
@@ -37,14 +37,13 @@ function withTitleField( fields ) {
 	];
 }
 
-// Render the active peek: side panel through SlotFill, modal inline at app
-// root. Keeping this separate stops relation chips and collection cells from
-// importing RowDetailView and the editor stack.
+// Render the active peek into the peek layer's slot, in either mode. Keeping
+// this separate stops relation chips and collection cells from importing
+// RowDetailView and the editor stack.
 export default function DocumentPeekHost() {
 	const { peek, isPinned } = useDocumentPeekState();
 	const { closeDocument, requestMode } = useDocumentPeekActions();
 	const {
-		modeSurfaceTransition,
 		saveError,
 		setDetailApi,
 		goToAdjacentDocument,
@@ -122,7 +121,8 @@ export default function DocumentPeekHost() {
 		if ( ! current.peek || current.peek.mode !== 'side' ) {
 			return;
 		}
-		if ( current.isPinned ) {
+		// Opening full screen closes the peek itself once the page swaps in.
+		if ( current.isPinned || current.peek.isExiting ) {
 			return;
 		}
 		closeDocument();
@@ -133,22 +133,21 @@ export default function DocumentPeekHost() {
 		allDetailFields: collectionAllDetailFields,
 		detailLayoutEntries,
 	} = useCollectionFields( peek?.collectionId ?? null );
+	// Depend on whether a peek is open, not on the peek object, so a mode
+	// switch doesn't hand the editor new field lists.
+	const hasPeek = Boolean( peek );
 	const peekFields = useMemo( () => {
-		if ( ! peek || ! collectionDetailFields ) {
+		if ( ! hasPeek || ! collectionDetailFields ) {
 			return undefined;
 		}
 		return withTitleField( collectionDetailFields );
-	}, [ peek, collectionDetailFields ] );
+	}, [ hasPeek, collectionDetailFields ] );
 	const peekAllFields = useMemo( () => {
-		if ( ! peek || ! collectionAllDetailFields ) {
+		if ( ! hasPeek || ! collectionAllDetailFields ) {
 			return undefined;
 		}
 		return withTitleField( collectionAllDetailFields );
-	}, [ peek, collectionAllDetailFields ] );
-
-	const renderedMode = modeSurfaceTransition
-		? modeSurfaceTransition.surfaceMode
-		: peek?.mode;
+	}, [ hasPeek, collectionAllDetailFields ] );
 
 	useEffect( () => {
 		return peek?.source?.subscribeToRowList?.( () => {
@@ -158,9 +157,11 @@ export default function DocumentPeekHost() {
 
 	// Opening the doc that is already the background route would mount a second
 	// editor for the same post and loop. Treat it as "go back": close the
-	// redundant peek instead of rendering it.
+	// redundant peek instead of rendering it. A peek leaving for full screen
+	// points the route at itself on purpose and closes in the route's swap.
 	const isCircular =
 		!! peek &&
+		! peek.isExiting &&
 		routeDocId !== null &&
 		String( peek.docId ) === String( routeDocId );
 	useEffect( () => {
@@ -169,7 +170,7 @@ export default function DocumentPeekHost() {
 		}
 	}, [ isCircular, closeDocument ] );
 
-	if ( ! peek || ! peekFields || ! renderedMode || isCircular ) {
+	if ( ! peek || ! peekFields || isCircular ) {
 		return null;
 	}
 
@@ -185,8 +186,6 @@ export default function DocumentPeekHost() {
 	const tentativeRow = rowList.find(
 		( candidate ) => String( candidate?.id ) === String( peek.docId )
 	);
-	const handleSaved = () => peek.source?.refresh?.();
-	const handleRestored = () => peek.source?.refresh?.();
 
 	const detailView = (
 		<CurrentViewModeProvider value={ peek.mode }>
@@ -198,7 +197,7 @@ export default function DocumentPeekHost() {
 				detailLayoutEntries={ detailLayoutEntries }
 				fields={ peekFields }
 				isPinned={ isPinned }
-				mode={ renderedMode }
+				mode={ peek.mode }
 				mutationContext={ mutationContext }
 				onApi={ setDetailApi }
 				onClose={ closeDocument }
@@ -206,9 +205,9 @@ export default function DocumentPeekHost() {
 				onModeChange={ requestMode }
 				onNext={ () => goToAdjacentDocument( 1 ) }
 				onPrevious={ () => goToAdjacentDocument( -1 ) }
-				onRestored={ handleRestored }
+				onRestored={ refreshRows }
 				onRetryPending={ retryPendingTransition }
-				onSaved={ handleSaved }
+				onSaved={ refreshRows }
 				onTogglePin={ togglePin }
 				postType={ peek.postType }
 				row={ tentativeRow }
@@ -218,9 +217,7 @@ export default function DocumentPeekHost() {
 		</CurrentViewModeProvider>
 	);
 
-	return renderedMode === 'side' ? (
-		<RowDetailSidebar.Fill>{ detailView }</RowDetailSidebar.Fill>
-	) : (
-		detailView
-	);
+	// Side and center peeks share one surface, so switching modes keeps the
+	// editor mounted and the shell resizes around it.
+	return <DocumentPeekSlot.Fill>{ detailView }</DocumentPeekSlot.Fill>;
 }
