@@ -25,15 +25,16 @@ import { store as editorStore } from '@wordpress/editor';
 import { pencil, seen, unseen } from '@wordpress/icons';
 
 import DocumentPropertiesActions from '../../components/DocumentPropertiesActions';
-import RowProperties from '../../components/RowProperties';
 import AdditionalCollectionProperties, {
-	CollectionGroupHeader,
+	SystemProperties,
+	TraitPropertyGroup,
 } from '../../components/AdditionalCollectionProperties';
-import TraitControl from '../../components/AddTraitControl';
-import { CollectionFieldsSnapshotProvider } from '../../components/CollectionFieldsContext';
+import AddTraitControl from '../../components/AddTraitControl';
 import { useDocumentPropertiesContext } from '../../components/DocumentPropertiesContext';
 import { visibleTraits } from '../../documents/traits';
 import useDocumentTraits from '../../hooks/useDocumentTraits';
+import useCollapsedTraitGroups from '../../hooks/useCollapsedTraitGroups';
+import useTraitMemberships from '../../hooks/useTraitMemberships';
 import useDetailLayoutEditing from '../../hooks/useDetailLayoutEditing';
 
 // Row documents show collection properties between the title and body. Canvas
@@ -118,7 +119,6 @@ export default function Edit( { clientId, isSelected } ) {
 			) ?? null,
 		[ visibleMemberships, collectionId ]
 	);
-	const isMultiMembership = visibleMemberships.length > 1;
 	// Once memberships have loaded, if the source collection is no longer one of
 	// the visible ones (the user just removed the collection they opened the row
 	// from, or that collection was archived or trashed), drop the now-stale source
@@ -144,10 +144,6 @@ export default function Edit( { clientId, isSelected } ) {
 	const [ isEditingLayout, setIsEditingLayout ] = useState( false );
 	const [ layoutEditorMinHeight, setLayoutEditorMinHeight ] =
 		useState( null );
-	// Visible-field counts reported by each additional collection group, so the
-	// collapse summary totals every collection rather than just the source. They
-	// persist while collapsed (the groups unmount), keyed by collection id.
-	const [ additionalCounts, setAdditionalCounts ] = useState( {} );
 	const [ lockedCollectionIds, setLockedCollectionIds ] = useState(
 		() => new Set()
 	);
@@ -331,10 +327,12 @@ export default function Edit( { clientId, isSelected } ) {
 		[ flushPendingCollectionSaves ]
 	);
 
+	// The row-detail tokens stay on while collapsed: the trait headers still
+	// show, and they take their inset from those tokens.
 	const blockProps = useBlockProps( {
 		className: isVisible
 			? 'cortext-document-properties cortext-row-detail'
-			: 'cortext-document-properties cortext-document-properties--collapsed',
+			: 'cortext-document-properties cortext-row-detail cortext-document-properties--collapsed',
 	} );
 
 	// The source collection's detail-layout editing. Additional collections own
@@ -424,16 +422,6 @@ export default function Edit( { clientId, isSelected } ) {
 		startEditingLayout,
 		stopEditingLayout,
 	] );
-	const reportAdditionalCount = useCallback(
-		( collectionRecordId, count ) => {
-			setAdditionalCounts( ( current ) =>
-				current[ collectionRecordId ] === count
-					? current
-					: { ...current, [ collectionRecordId ]: count }
-			);
-		},
-		[]
-	);
 	useLayoutEffect( () => {
 		if ( ! isEditingLayout ) {
 			rememberPropertiesHeight();
@@ -444,14 +432,27 @@ export default function Edit( { clientId, isSelected } ) {
 		source.propertyFieldsForDisplay,
 	] );
 
-	// The traits row keeps its place during the first load, without chips or
-	// controls, so the properties below do not move when the traits arrive.
-	const showTraitControl =
+	// Every property group of a row carries its trait header. During the first
+	// load the source header keeps its place without a title or controls, so
+	// the properties below do not move when the traits arrive.
+	const showTraits =
 		Boolean( rowId ) &&
 		( membershipsFirstLoad ||
 			( membershipsAreActionable && memberships.length > 0 ) );
-	const canRenderTraitShell =
-		showTraitControl || ( rowId && membershipsError );
+	const canRenderTraitShell = showTraits || ( rowId && membershipsError );
+	const traitWrites = useTraitMemberships( {
+		documentId: rowId,
+		collections: memberships,
+		beforeRemoveCollection: prepareCollectionRemoval,
+		isReadOnly: isRowRetired || ! membershipsAreActionable,
+		onChange: refreshTraits,
+	} );
+	const { isCollapsed: isTraitGroupCollapsed, toggleCollapsed } =
+		useCollapsedTraitGroups();
+	const membershipIds = useMemo(
+		() => new Set( memberships.map( ( collection ) => collection.id ) ),
+		[ memberships ]
+	);
 
 	// tech-debt.md#td-gutenberg-header-boundary: every document carries this
 	// block, and with nothing to show it has no element to focus. Gutenberg
@@ -517,14 +518,45 @@ export default function Edit( { clientId, isSelected } ) {
 		</InspectorControls>
 	);
 
-	const additionalVisibleTotal = additionalCollections.reduce(
-		( sum, collection ) => sum + ( additionalCounts[ collection.id ] ?? 0 ),
-		0
-	);
-	const totalVisibleCount =
-		( showSourceGroup ? source.visiblePropertyCount : 0 ) +
-		additionalVisibleTotal;
-	const additionalPropertyGroups = additionalCollections.map(
+	// A folded block shows each trait header with its count. Opening a header
+	// from there shows the properties again, with that group unfolded.
+	const toggleTraitGroup = ( targetCollectionId ) => {
+		if ( isVisible ) {
+			toggleCollapsed( targetCollectionId );
+			return;
+		}
+		if ( isTraitGroupCollapsed( targetCollectionId ) ) {
+			toggleCollapsed( targetCollectionId );
+		}
+		onToggleVisible?.();
+	};
+	const removeTrait = traitWrites.canRemove
+		? traitWrites.removeCollection
+		: undefined;
+
+	// The group that owns the system properties renders them after itself, so
+	// it goes last when it is not the source group.
+	const orderedAdditionalCollections = systemFieldsOwnerId
+		? [
+				...additionalCollections.filter(
+					( collection ) => collection.id !== systemFieldsOwnerId
+				),
+				...additionalCollections.filter(
+					( collection ) => collection.id === systemFieldsOwnerId
+				),
+		  ]
+		: additionalCollections;
+	// "Add trait" closes the trait groups, before the system properties.
+	const addTrait =
+		showTraits && traitWrites.canAdd && ! isEditingLayout ? (
+			<AddTraitControl
+				currentIds={ membershipIds }
+				error={ traitWrites.error }
+				isSaving={ traitWrites.isSaving }
+				onAdd={ traitWrites.addCollection }
+			/>
+		) : null;
+	const additionalPropertyGroups = orderedAdditionalCollections.map(
 		( collection ) => (
 			<AdditionalCollectionProperties
 				key={ collection.id }
@@ -532,30 +564,36 @@ export default function Edit( { clientId, isSelected } ) {
 				rowId={ rowId }
 				row={ fallbackRecord }
 				isLayoutEditing={ isEditingLayout }
-				onVisibleCount={ reportAdditionalCount }
-				renderProperties={ isVisible && membershipsAreActionable }
+				showGroup={ membershipsAreActionable }
+				isBlockCollapsed={ ! isVisible }
+				isCollapsed={ isTraitGroupCollapsed( collection.id ) }
+				onToggleCollapsed={ toggleTraitGroup }
+				onRemove={ removeTrait }
+				isRemoveDisabled={ traitWrites.isSaving }
 				includeSystemFields={ collection.id === systemFieldsOwnerId }
 				isCollectionSaveLocked={ isCollectionSaveLocked }
 				isSaveLocked={ lockedCollectionIds.has(
 					Number( collection.id )
 				) }
 				registerPendingSaveFlusher={ registerPendingSaveFlusher }
-			/>
+			>
+				{ collection.id === systemFieldsOwnerId ? addTrait : null }
+			</AdditionalCollectionProperties>
 		)
 	);
 
-	if ( ! isVisible ) {
+	if ( ! isVisible && ! showTraits ) {
 		// Keep the hidden block selectable and give users a quick way to show
-		// properties again. The count totals every collection the row belongs to.
+		// properties again.
 		const label = sprintf(
 			/* translators: %d: number of collapsed fields. */
 			_n(
 				'%d property collapsed',
 				'%d properties collapsed',
-				totalVisibleCount,
+				source.visiblePropertyCount,
 				'cortext'
 			),
-			totalVisibleCount
+			source.visiblePropertyCount
 		);
 		return (
 			<>
@@ -570,56 +608,53 @@ export default function Edit( { clientId, isSelected } ) {
 					>
 						{ label }
 					</Button>
-					{ additionalPropertyGroups }
 				</div>
 			</>
 		);
 	}
 
-	const sourceProperties = collectionId ? (
-		<CollectionFieldsSnapshotProvider fields={ sourceSnapshotFields }>
-			<RowProperties
-				collectionId={ collectionId }
-				fields={ source.propertyFieldsForDisplay }
-				isLayoutEditing={ source.isLayoutEditingEnabled }
-				isCollectionSaveLocked={ isCollectionSaveLocked }
-				isSaveLocked={ lockedCollectionIds.has(
-					Number( collectionId )
-				) }
-				onLayoutReorder={ source.layoutReorderHandler }
-				onLayoutVisibilityToggle={ source.layoutVisibilityHandler }
-				rowId={ rowId }
-				row={ fallbackRecord }
-				registerPendingSaveFlusher={ registerPendingSaveFlusher }
-			/>
-		</CollectionFieldsSnapshotProvider>
-	) : (
-		<RowProperties
-			fields={ source.propertyFieldsForDisplay }
-			isLayoutEditing={ source.isLayoutEditingEnabled }
-			isCollectionSaveLocked={ isCollectionSaveLocked }
-			onLayoutReorder={ source.layoutReorderHandler }
-			onLayoutVisibilityToggle={ source.layoutVisibilityHandler }
+	// A row's source group carries its trait header like every other group,
+	// including while editing the layout, so each group reads as the trait that
+	// brings it. The fold reads the source id from the context, not the
+	// collection summary, so a folded group stays folded while the traits load.
+	const sourceGroup = showSourceGroup ? (
+		<TraitPropertyGroup
+			className="cortext-property-group--source"
+			collection={ sourceCollection }
+			collectionId={ collectionId }
+			layout={ source }
+			snapshotFields={ sourceSnapshotFields }
 			rowId={ rowId }
 			row={ fallbackRecord }
+			isLayoutEditing={ isEditingLayout }
+			isBlockCollapsed={ ! isVisible }
+			isCollapsed={ isTraitGroupCollapsed( collectionId ) }
+			onToggleCollapsed={ toggleTraitGroup }
+			onRemove={ removeTrait }
+			isRemoveDisabled={ traitWrites.isSaving }
+			isCollectionSaveLocked={ isCollectionSaveLocked }
+			isSaveLocked={ lockedCollectionIds.has( Number( collectionId ) ) }
 			registerPendingSaveFlusher={ registerPendingSaveFlusher }
+			showSaveError={ false }
 		/>
-	);
+	) : null;
+	const sourceSystemProperties = showSourceGroup ? (
+		<SystemProperties
+			collectionId={ collectionId }
+			layout={ source }
+			snapshotFields={ sourceSnapshotFields }
+			rowId={ rowId }
+			row={ fallbackRecord }
+			isBlockCollapsed={ ! isVisible }
+			isCollectionSaveLocked={ isCollectionSaveLocked }
+			isSaveLocked={ lockedCollectionIds.has( Number( collectionId ) ) }
+		/>
+	) : null;
 
-	// When the row belongs to several collections, label the source group with a
-	// header too (including while editing), so every editable group reads as its
-	// own collection.
-	let sourceGroup = null;
-	if ( showSourceGroup ) {
-		sourceGroup = isMultiMembership ? (
-			<div className="cortext-property-group cortext-property-group--source">
-				<CollectionGroupHeader collection={ sourceCollection } />
-				{ sourceProperties }
-			</div>
-		) : (
-			sourceProperties
-		);
-	}
+	// The layout editor keeps the height the properties had when customizing
+	// started, so the body below does not jump while fields move. A collapsed
+	// block shows only headers and drops that height.
+	const isEditingOpenLayout = isEditingLayout && isVisible;
 
 	return (
 		<>
@@ -643,7 +678,7 @@ export default function Edit( { clientId, isSelected } ) {
 						) }
 					</Notice>
 				) : null }
-				{ showSourceGroup && source.saveError ? (
+				{ isVisible && showSourceGroup && source.saveError ? (
 					<Notice status="error" isDismissible={ false }>
 						{ source.saveError }
 					</Notice>
@@ -651,32 +686,20 @@ export default function Edit( { clientId, isSelected } ) {
 				<div
 					ref={ propertiesContentRef }
 					className={
-						isEditingLayout
+						isEditingOpenLayout
 							? 'cortext-document-properties__layout-editor-wrap'
 							: undefined
 					}
 					style={
-						isEditingLayout && layoutEditorMinHeight
+						isEditingOpenLayout && layoutEditorMinHeight
 							? { minHeight: layoutEditorMinHeight }
 							: undefined
 					}
 				>
-					{ showTraitControl && ! isEditingLayout ? (
-						<TraitControl
-							beforeRemoveCollection={ prepareCollectionRemoval }
-							documentId={ rowId }
-							collections={ memberships }
-							isReadOnly={ isRowRetired || membershipsFirstLoad }
-							onChange={ refreshTraits }
-						/>
-					) : null }
 					{ sourceGroup }
-					{ showSourceGroup && source.showEmptyProperties ? (
-						<p className="cortext-document-properties__empty">
-							{ __( 'No properties are visible.', 'cortext' ) }
-						</p>
-					) : null }
 					{ additionalPropertyGroups }
+					{ systemFieldsOwnerId ? null : addTrait }
+					{ sourceSystemProperties }
 				</div>
 			</div>
 		</>

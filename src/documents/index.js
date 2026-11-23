@@ -11,7 +11,7 @@ export {
 } from './hooks';
 export { useCreateDocument, useCreateCollectionDocument } from './actions';
 export { collectionHint, documentTitle } from './title';
-export { listIconForRecord } from './icons';
+export { COLLECTION_ICON, listIconForRecord } from './icons';
 export { documentUri } from './uri';
 export {
 	favoriteKey,

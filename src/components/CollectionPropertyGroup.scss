@@ -1,28 +1,118 @@
+@use "@wordpress/base-styles/variables" as *;
+
 .cortext-property-group {
 
 	& + & {
-		margin-top: 20px;
+		margin-top: $grid-unit-10;
+	}
+
+	// The header already opens the group, so its properties start close to it.
+	> .cortext-row-detail__properties,
+	> .cortext-detail-layout-editor {
+		padding-top: 2px;
 	}
 }
 
+// The document's own properties, after every trait group. A thin line on the
+// property inset sets them apart, since no header names them.
+.cortext-property-group--system {
+	margin-top: $grid-unit-10;
+
+	&::before {
+		content: "";
+		display: block;
+		margin-inline: var(--cortext-row-detail-field-inset);
+		border-top: 1px solid var(--cortext-row-detail-border, #e9e9e7);
+	}
+
+	> .cortext-row-detail__properties,
+	> .cortext-detail-layout-editor {
+		padding-top: $grid-unit-10;
+	}
+}
+
+// The trait a group belongs to. It lines up with the property rows below and
+// reads as a title, not as one more property: no label column, the
+// collection's own icon and a heavier weight.
 .cortext-property-group__header {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	margin: 4px 0 8px;
-	font-size: 11px;
+	gap: $grid-unit-05;
+	min-height: 28px;
+	padding-inline: var(--cortext-row-detail-field-inset);
+	color: var(--cortext-row-detail-text, #1e1e1e);
+	font-size: 13px;
 	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.4px;
-	color: var(--wp--preset--color--contrast-2, #757575);
+}
+
+.cortext-property-group__label,
+.cortext-property-group__toggle.components-button {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	height: 28px;
+	padding: 0 $grid-unit-05;
+	color: inherit;
+	font-size: inherit;
+	font-weight: inherit;
+}
+
+.cortext-property-group__toggle.components-button {
+	border-radius: 4px;
+
+	// The chevron leads the label; keep it muted so the collection reads first.
+	> svg {
+		flex: 0 0 auto;
+		margin-inline: -4px -2px;
+		fill: var(--cortext-row-detail-muted, #757575);
+	}
+
+	&:is(:hover:not(:disabled), :focus-visible) {
+		background: var(--cortext-row-detail-hover-surface, #f7f6f3);
+		color: inherit;
+	}
 }
 
 .cortext-property-group__title {
-	white-space: nowrap;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
-.cortext-property-group--source .cortext-property-group__header {
-	color: var(--wp--preset--color--contrast, #1e1e1e);
+.cortext-property-group__count {
+	padding: 1px 6px;
+	border-radius: 8px;
+	background: var(--cortext-row-detail-pressed-surface, #ebeae6);
+	color: var(--cortext-row-detail-muted, #757575);
+	font-size: 11px;
+	font-weight: 400;
+}
+
+// The actions button only shows on hover or focus, so a quiet list of traits
+// does not grow a column of dots.
+.cortext-property-group__actions {
+	margin-inline-start: auto;
+}
+
+.cortext-property-group__menu.components-button.has-icon.is-small {
+	color: var(--cortext-row-detail-muted, #757575);
+	opacity: 0;
+
+	&[aria-expanded="true"],
+	&:focus-visible {
+		opacity: 1;
+	}
+}
+
+.cortext-property-group__header:hover .cortext-property-group__menu.components-button {
+	opacity: 1;
+}
+
+@media (hover: none) {
+
+	.cortext-property-group__menu.components-button.has-icon.is-small {
+		opacity: 1;
+	}
 }

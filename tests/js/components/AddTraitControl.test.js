@@ -1,25 +1,14 @@
 /**
- * Tests for `src/components/AddTraitControl.js`: the membership chips in the
- * item detail. Adding/removing writes the new set through the traits endpoint
- * and the last membership cannot be removed.
+ * Tests for `src/components/AddTraitControl.js`: the "Add trait" picker after a
+ * row's property groups. It searches collections on the server and hands the
+ * pick to its caller, which owns the write.
  */
 
-import {
-	act,
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-} from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 let mockAllCollections;
 let mockCollectionQuery;
 let mockTotalPages;
-
-jest.mock( '@wordpress/api-fetch', () => ( {
-	__esModule: true,
-	default: jest.fn(),
-} ) );
 
 jest.mock( '@wordpress/core-data', () => ( {
 	__esModule: true,
@@ -35,12 +24,6 @@ jest.mock( '@wordpress/core-data', () => ( {
 			totalPages: mockTotalPages,
 		};
 	},
-} ) );
-
-const mockInvalidate = jest.fn();
-jest.mock( '@wordpress/data', () => ( {
-	__esModule: true,
-	useDispatch: () => ( { invalidateResolution: mockInvalidate } ),
 } ) );
 
 jest.mock( '@wordpress/components', () => {
@@ -72,323 +55,60 @@ jest.mock( '@wordpress/components', () => {
 
 jest.mock( '../../../src/components/DocumentIcon', () => ( {
 	__esModule: true,
-	default: () => null,
+	default: ( { icon } ) => <span data-testid="icon" data-icon={ icon } />,
 } ) );
 
-const mockNotify = jest.fn();
-jest.mock( '../../../src/hooks/rowInvalidation', () => ( {
-	__esModule: true,
-	notifyCollectionRowsChanged: ( ...args ) => mockNotify( ...args ),
-} ) );
-
-const mockNotifyLocatorChanged = jest.fn();
-jest.mock( '../../../src/hooks/documentLocatorInvalidation', () => ( {
-	__esModule: true,
-	notifyDocumentLocatorChanged: ( ...args ) =>
-		mockNotifyLocatorChanged( ...args ),
-} ) );
-
-import apiFetch from '@wordpress/api-fetch';
-import TraitControl from '../../../src/components/AddTraitControl';
-
-function membership( id, title ) {
-	return { id, title, path: `${ title }-${ id }`, icon: '' };
-}
+import AddTraitControl from '../../../src/components/AddTraitControl';
 
 beforeEach( () => {
-	apiFetch.mockReset();
-	apiFetch.mockResolvedValue( { collections: [] } );
-	mockNotify.mockReset();
-	mockNotifyLocatorChanged.mockReset();
-	mockInvalidate.mockReset();
 	mockAllCollections = [];
 	mockCollectionQuery = undefined;
 	mockTotalPages = 1;
 } );
 
-describe( 'TraitControl', () => {
-	it( 'hides remove on the last membership', () => {
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [ membership( 1, 'Projects' ) ] }
-				onChange={ () => {} }
-			/>
-		);
+function renderControl( props = {} ) {
+	const onAdd = jest.fn();
+	render(
+		<AddTraitControl
+			currentIds={ new Set( [ 1 ] ) }
+			onAdd={ onAdd }
+			{ ...props }
+		/>
+	);
+	return onAdd;
+}
 
-		expect( screen.queryByLabelText( 'Remove trait' ) ).toBeNull();
-	} );
-
-	it( 'hides retired traits but keeps them in the written set', async () => {
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [
-					{ ...membership( 1, 'Projects' ), active: true },
-					{ ...membership( 2, 'People' ), active: true },
-					{ ...membership( 3, 'Archived' ), active: false },
-				] }
-				onChange={ () => {} }
-			/>
-		);
-
-		expect( screen.queryByText( 'Archived' ) ).toBeNull();
-		const removeButtons = screen.getAllByLabelText( 'Remove trait' );
-		expect( removeButtons ).toHaveLength( 2 );
-		fireEvent.click( removeButtons[ 1 ] );
-
-		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledWith(
-				expect.objectContaining( {
-					data: { collection_ids: [ 1, 3 ] },
-				} )
-			)
-		);
-	} );
-
-	it( 'keeps a trait the user cannot read in the written set without a chip', async () => {
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [
-					{ ...membership( 1, 'Projects' ), active: true },
-					{ id: 2, active: true, readable: false },
-				] }
-				onChange={ () => {} }
-			/>
-		);
-
-		// The only trait the user can see is the last one for them.
-		expect( screen.queryByLabelText( 'Remove trait' ) ).toBeNull();
-		expect( screen.getAllByRole( 'button' ) ).toHaveLength( 1 );
-
-		mockAllCollections = [ { id: 3, title: { raw: 'People' } } ];
-		fireEvent.click( screen.getByLabelText( 'Add trait' ) );
-		fireEvent.click( await screen.findByText( 'People' ) );
-
-		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledWith(
-				expect.objectContaining( {
-					data: { collection_ids: [ 1, 2, 3 ] },
-				} )
-			)
-		);
-	} );
-
-	it( 'lists traits without add or remove controls when read-only', () => {
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [
-					{ ...membership( 1, 'Projects' ), active: false },
-					{ ...membership( 2, 'People' ), active: false },
-				] }
-				isReadOnly
-				onChange={ () => {} }
-			/>
-		);
-
-		expect( screen.getByText( 'Projects' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'People' ) ).toBeInTheDocument();
-		expect( screen.queryByLabelText( 'Remove trait' ) ).toBeNull();
-		expect( screen.queryByLabelText( 'Add trait' ) ).toBeNull();
-	} );
-
-	it( 'never offers to remove the last live trait', () => {
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [
-					{ ...membership( 1, 'Projects' ), active: true },
-					{ ...membership( 2, 'Archived' ), active: false },
-				] }
-				onChange={ () => {} }
-			/>
-		);
-
-		expect( screen.queryByLabelText( 'Remove trait' ) ).toBeNull();
-	} );
-
-	it( 'removes a membership and writes the reduced set', async () => {
-		apiFetch.mockResolvedValueOnce( {
-			collections: [ { id: 1, active: true } ],
-		} );
-		const onChange = jest.fn();
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [
-					membership( 1, 'Projects' ),
-					membership( 2, 'People' ),
-				] }
-				onChange={ onChange }
-			/>
-		);
-
-		const removeButtons = screen.getAllByLabelText( 'Remove trait' );
-		fireEvent.click( removeButtons[ 1 ] );
-
-		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledWith(
-				expect.objectContaining( {
-					path: '/cortext/v1/documents/5/traits',
-					method: 'PUT',
-					data: { collection_ids: [ 1 ] },
-				} )
-			)
-		);
-		expect( mockNotify ).toHaveBeenCalledWith();
-		expect( mockNotifyLocatorChanged ).toHaveBeenCalledWith( 5, [ 1 ] );
-		await waitFor( () => expect( onChange ).toHaveBeenCalled() );
-	} );
-
-	it( 'holds the collection lock from flush through the membership PUT', async () => {
-		let finishFlush;
-		let finishPut;
-		const release = jest.fn();
-		const beforeRemoveCollection = jest.fn(
-			() =>
-				new Promise( ( resolve ) => {
-					finishFlush = resolve;
-				} )
-		);
-		apiFetch.mockImplementation(
-			() =>
-				new Promise( ( resolve ) => {
-					finishPut = resolve;
-				} )
-		);
-		render(
-			<TraitControl
-				beforeRemoveCollection={ beforeRemoveCollection }
-				documentId={ 5 }
-				collections={ [
-					membership( 1, 'Projects' ),
-					membership( 2, 'People' ),
-				] }
-			/>
-		);
-
-		fireEvent.click( screen.getAllByLabelText( 'Remove trait' )[ 1 ] );
-
-		expect( beforeRemoveCollection ).toHaveBeenCalledWith( 2 );
-		expect( apiFetch ).not.toHaveBeenCalled();
-
-		await act( async () => finishFlush( release ) );
-		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
-		expect( release ).not.toHaveBeenCalled();
-
-		await act( async () =>
-			finishPut( { collections: [ { id: 1, active: true } ] } )
-		);
-		await waitFor( () => expect( release ).toHaveBeenCalledTimes( 1 ) );
-	} );
-
-	it( 'releases the collection lock when the membership PUT fails', async () => {
-		const release = jest.fn();
-		apiFetch.mockRejectedValueOnce( new Error( 'Membership failed.' ) );
-		render(
-			<TraitControl
-				beforeRemoveCollection={ jest
-					.fn()
-					.mockResolvedValue( release ) }
-				documentId={ 5 }
-				collections={ [
-					membership( 1, 'Projects' ),
-					membership( 2, 'People' ),
-				] }
-			/>
-		);
-
-		fireEvent.click( screen.getAllByLabelText( 'Remove trait' )[ 1 ] );
-
-		expect( await screen.findByRole( 'alert' ) ).toHaveTextContent(
-			'Membership failed.'
-		);
-		expect( release ).toHaveBeenCalledTimes( 1 );
-	} );
-
-	it( 'keeps the membership and surfaces an error when pending properties fail to save', async () => {
-		const beforeRemoveCollection = jest
-			.fn()
-			.mockRejectedValue( new Error( 'Could not save Status.' ) );
-		render(
-			<TraitControl
-				beforeRemoveCollection={ beforeRemoveCollection }
-				documentId={ 5 }
-				collections={ [
-					membership( 1, 'Projects' ),
-					membership( 2, 'People' ),
-				] }
-			/>
-		);
-
-		fireEvent.click( screen.getAllByLabelText( 'Remove trait' )[ 1 ] );
-
-		expect( await screen.findByRole( 'alert' ) ).toHaveTextContent(
-			'Could not save Status.'
-		);
-		expect( apiFetch ).not.toHaveBeenCalled();
-		expect( screen.getByText( 'People' ) ).toBeInTheDocument();
-	} );
-
-	it( 'adds a collection and writes the augmented set', async () => {
+describe( 'AddTraitControl', () => {
+	it( 'hands the picked collection to the caller and closes', () => {
 		mockAllCollections = [ { id: 3, title: { raw: 'Goals' }, meta: {} } ];
-		apiFetch.mockResolvedValueOnce( {
-			collections: [
-				{ id: 1, active: true },
-				{ id: 2, active: false },
-				{ id: 3, active: true },
-			],
-		} );
-		const onChange = jest.fn();
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [ membership( 1, 'Projects' ) ] }
-				onChange={ onChange }
-			/>
-		);
+		const onAdd = renderControl();
 
-		fireEvent.click( screen.getByLabelText( 'Add trait' ) );
+		fireEvent.click( screen.getByText( 'Add trait' ) );
 		fireEvent.click( screen.getByText( 'Goals' ) );
 
-		await waitFor( () =>
-			expect( apiFetch ).toHaveBeenCalledWith(
-				expect.objectContaining( {
-					path: '/cortext/v1/documents/5/traits',
-					method: 'PUT',
-					data: { collection_ids: [ 1, 3 ] },
-				} )
-			)
-		);
-		expect( mockNotify ).toHaveBeenCalledWith();
-		expect( mockNotifyLocatorChanged ).toHaveBeenCalledWith( 5, [ 1, 3 ] );
-		// The breadcrumb reads memberships off the core-data record, so the
-		// write must invalidate it, not only the local traits hook.
-		expect( mockInvalidate ).toHaveBeenCalledWith( 'getEntityRecord', [
-			'postType',
-			'crtxt_document',
-			5,
-		] );
+		expect( onAdd ).toHaveBeenCalledWith( mockAllCollections[ 0 ] );
+		expect( screen.queryByLabelText( 'Search traits' ) ).toBeNull();
 	} );
 
-	it( 'does not write when the current memberships have not loaded', () => {
-		mockAllCollections = [ { id: 3, title: { raw: 'Goals' }, meta: {} } ];
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [] }
-				onChange={ () => {} }
-			/>
+	it( 'shows the collection glyph for a collection without an icon', () => {
+		mockAllCollections = [
+			{ id: 3, title: { raw: 'Goals' }, meta: {} },
+			{
+				id: 4,
+				title: { raw: 'Ideas' },
+				meta: { cortext_document_icon: '💡' },
+			},
+		];
+		renderControl();
+
+		fireEvent.click( screen.getByText( 'Add trait' ) );
+
+		const icons = screen.getAllByTestId( 'icon' );
+		expect( icons[ 0 ] ).toHaveAttribute(
+			'data-icon',
+			JSON.stringify( { type: 'wp', name: 'collection' } )
 		);
-
-		fireEvent.click( screen.getByLabelText( 'Add trait' ) );
-		fireEvent.click( screen.getByText( 'Goals' ) );
-
-		// An empty set would otherwise replace memberships with just the added
-		// id, dropping the row's existing collections.
-		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( icons[ 1 ] ).toHaveAttribute( 'data-icon', '💡' );
 	} );
 
 	it( 'omits collections the row already belongs to from suggestions', () => {
@@ -396,19 +116,27 @@ describe( 'TraitControl', () => {
 			{ id: 1, title: { raw: 'Projects' }, meta: {} },
 			{ id: 3, title: { raw: 'Goals' }, meta: {} },
 		];
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [ membership( 1, 'Projects' ) ] }
-				onChange={ () => {} }
-			/>
-		);
+		renderControl();
 
-		fireEvent.click( screen.getByLabelText( 'Add trait' ) );
+		fireEvent.click( screen.getByText( 'Add trait' ) );
 
 		expect( screen.getByText( 'Goals' ) ).toBeInTheDocument();
-		// 'Projects' appears once as the existing chip, never as a suggestion.
-		expect( screen.getAllByText( 'Projects' ) ).toHaveLength( 1 );
+		expect( screen.queryByText( 'Projects' ) ).toBeNull();
+	} );
+
+	it( 'disables the button while a write is in flight', () => {
+		renderControl( { isSaving: true } );
+
+		expect( screen.getByText( 'Add trait' ) ).toBeDisabled();
+		expect( screen.getByText( 'loading' ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows the last write error', () => {
+		renderControl( { error: 'Membership failed.' } );
+
+		expect( screen.getByRole( 'alert' ) ).toHaveTextContent(
+			'Membership failed.'
+		);
 	} );
 
 	it( 'searches collections on the server instead of a local first page', async () => {
@@ -418,16 +146,9 @@ describe( 'TraitControl', () => {
 		];
 		mockAllCollections = ( query ) =>
 			query.search === 'Remote' ? searchResults : emptyResults;
+		renderControl();
 
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [ membership( 1, 'Projects' ) ] }
-				onChange={ () => {} }
-			/>
-		);
-
-		fireEvent.click( screen.getByLabelText( 'Add trait' ) );
+		fireEvent.click( screen.getByText( 'Add trait' ) );
 		fireEvent.change( screen.getByLabelText( 'Search traits' ), {
 			target: { value: 'Remote' },
 		} );
@@ -455,16 +176,9 @@ describe( 'TraitControl', () => {
 		mockTotalPages = 2;
 		mockAllCollections = ( query ) =>
 			query.page === 2 ? secondPage : firstPage;
+		renderControl();
 
-		render(
-			<TraitControl
-				documentId={ 5 }
-				collections={ [ membership( 1, 'Projects' ) ] }
-				onChange={ () => {} }
-			/>
-		);
-
-		fireEvent.click( screen.getByLabelText( 'Add trait' ) );
+		fireEvent.click( screen.getByText( 'Add trait' ) );
 		expect( await screen.findByText( 'First page' ) ).toBeInTheDocument();
 		fireEvent.click(
 			screen.getByRole( 'button', { name: 'Load more traits' } )
