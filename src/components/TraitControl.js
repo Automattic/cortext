@@ -9,6 +9,7 @@ import { Icon, closeSmall, plus } from '@wordpress/icons';
 import DocumentIcon from './DocumentIcon';
 import { collectionIcon } from './cortextIcons';
 import { COLLECTION_QUERY, DOCUMENT_POST_TYPE } from '../collections';
+import { visibleTraits } from '../documents/traits';
 import { notifyDocumentLocatorChanged } from '../hooks/documentLocatorInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 
@@ -182,15 +183,13 @@ export default function TraitControl( {
 		] );
 	};
 
-	// Archived and trashed traits stay in every write so restore can bring the
-	// row back to them, but they are not places the row lives, so no chip. A
-	// row retired together with all of its collections still lists them.
-	const liveCollections = collections.filter(
-		( collection ) => collection.active !== false
-	);
-	const shownCollections =
-		liveCollections.length > 0 ? liveCollections : collections;
-	const canRemoveLiveCollection = ! isReadOnly && liveCollections.length > 1;
+	// Every trait stays in the writes, but only the visible ones get a chip.
+	// The last live one of those cannot be removed.
+	const shownCollections = visibleTraits( collections );
+	const canRemoveLiveCollection =
+		! isReadOnly &&
+		shownCollections.filter( ( collection ) => collection.active !== false )
+			.length > 1;
 
 	const removeCollection = ( collection ) => {
 		if ( ! canRemoveLiveCollection ) {

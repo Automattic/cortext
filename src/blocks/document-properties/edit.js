@@ -32,6 +32,7 @@ import AdditionalCollectionProperties, {
 import TraitControl from '../../components/TraitControl';
 import { CollectionFieldsSnapshotProvider } from '../../components/CollectionFieldsContext';
 import { useDocumentPropertiesContext } from '../../components/DocumentPropertiesContext';
+import { visibleTraits } from '../../documents/traits';
 import useDocumentTraits from '../../hooks/useDocumentTraits';
 import useDetailLayoutEditing from '../../hooks/useDetailLayoutEditing';
 
@@ -68,10 +69,6 @@ export default function Edit( { clientId, isSelected } ) {
 	} = useDocumentTraits( rowId );
 	const membershipsAreActionable =
 		! membershipsResolving && ! membershipsUnknown;
-	// Archived and trashed memberships stay in `memberships` so a PUT keeps them
-	// for restore. A row that lives in another collection does not show or
-	// write their fields, so only live memberships render property groups. A
-	// row retired together with all of its collections still shows them.
 	// Archived and trashed rows are read-only, their traits included.
 	const isRowRetired = useSelect(
 		( select ) =>
@@ -80,12 +77,12 @@ export default function Edit( { clientId, isSelected } ) {
 			),
 		[]
 	);
-	const visibleMemberships = useMemo( () => {
-		const live = memberships.filter(
-			( collection ) => collection.active !== false
-		);
-		return live.length > 0 ? live : memberships;
-	}, [ memberships ] );
+	// Only the visible memberships render property groups. `memberships` keeps
+	// the rest so a PUT does not drop them.
+	const visibleMemberships = useMemo(
+		() => visibleTraits( memberships ),
+		[ memberships ]
+	);
 	const currentMembershipIds = useMemo(
 		() =>
 			visibleMemberships

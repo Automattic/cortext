@@ -146,6 +146,35 @@ describe( 'TraitControl', () => {
 		);
 	} );
 
+	it( 'keeps a trait the user cannot read in the written set without a chip', async () => {
+		render(
+			<TraitControl
+				documentId={ 5 }
+				collections={ [
+					{ ...membership( 1, 'Projects' ), active: true },
+					{ id: 2, active: true, readable: false },
+				] }
+				onChange={ () => {} }
+			/>
+		);
+
+		// The only trait the user can see is the last one for them.
+		expect( screen.queryByLabelText( 'Remove trait' ) ).toBeNull();
+		expect( screen.getAllByRole( 'button' ) ).toHaveLength( 1 );
+
+		mockAllCollections = [ { id: 3, title: { raw: 'People' } } ];
+		fireEvent.click( screen.getByLabelText( 'Add trait' ) );
+		fireEvent.click( await screen.findByText( 'People' ) );
+
+		await waitFor( () =>
+			expect( apiFetch ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					data: { collection_ids: [ 1, 2, 3 ] },
+				} )
+			)
+		);
+	} );
+
 	it( 'lists traits without add or remove controls when read-only', () => {
 		render(
 			<TraitControl

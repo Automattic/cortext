@@ -1294,6 +1294,24 @@ describe( 'document-properties Customize properties mode', () => {
 		expect( screen.getByTestId( 'trait-control' ) ).toBeInTheDocument();
 	} );
 
+	it( 'does not render a property group for a collection the user cannot read', () => {
+		mockTraits = {
+			collections: [
+				{ id: 77, title: 'Projects', icon: '', active: true },
+				{ id: 88, active: true, readable: false },
+			],
+			isResolving: false,
+			isUnknown: false,
+			refresh: jest.fn(),
+		};
+		mockAdditionalCounts = { 88: 3 };
+
+		render( <Edit /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect( mockAdditionalProps[ 88 ] ).toBeUndefined();
+	} );
+
 	it( 'hides the source group when the source membership is trashed', () => {
 		mockTraits = {
 			collections: [

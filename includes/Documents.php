@@ -735,11 +735,14 @@ final class Documents {
 	}
 
 	/**
-	 * Formatted `{id,title,path,icon,active}` summaries for every collection a
-	 * document belongs to. The traits REST endpoint and the membership chips
-	 * render this. `active` is false for memberships whose collection is
-	 * archived or in the trash: those stay in the set so restore keeps working,
-	 * but a row that lives elsewhere does not show or write their fields.
+	 * Formatted `{id,title,path,icon,active,readable}` summaries for every
+	 * collection a document belongs to. The traits REST endpoint and the
+	 * membership chips render this. `active` is false for memberships whose
+	 * collection is archived or in the trash: those stay in the set so restore
+	 * keeps working, but a row that lives elsewhere does not show or write
+	 * their fields. A collection the current user cannot read is listed with
+	 * its id and flags only (`readable` false), so a write can keep the
+	 * membership without learning what the collection is.
 	 *
 	 * @param int $document_id Document id.
 	 * @return array<int,array<string,mixed>>
@@ -751,8 +754,13 @@ final class Documents {
 		}
 		return array_map(
 			function ( WP_Post $collection ): array {
-				$summary           = $this->format_collection_summary( $collection );
-				$summary['active'] = self::is_live_status( $collection->post_status );
+				$readable = current_user_can( 'read_post', $collection->ID );
+				$summary  = $readable
+					? $this->format_collection_summary( $collection )
+					: array( 'id' => (int) $collection->ID );
+
+				$summary['active']   = self::is_live_status( $collection->post_status );
+				$summary['readable'] = $readable;
 				return $summary;
 			},
 			$this->find_traits_for_document( $post )

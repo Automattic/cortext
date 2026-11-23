@@ -528,6 +528,33 @@ final class Test_Rest_Documents_Controller extends BaseTestCase {
 		$this->assertFalse( $active_by_id[ $trashed_collection ] );
 	}
 
+	public function test_get_traits_hides_the_details_of_a_collection_the_user_cannot_read(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$private_collection = $this->create_collection( 'private-traits', 'Secret plans' );
+
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$own_collection = $this->create_collection( 'own-traits', 'Mine' );
+		$row_id         = $this->create_row( $own_collection, 'Ada' );
+		$this->add_membership( $row_id, $private_collection );
+
+		$response = rest_do_request(
+			new WP_REST_Request( 'GET', '/cortext/v1/documents/' . $row_id . '/traits' )
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$by_id = array_column( $response->get_data()['collections'], null, 'id' );
+		$this->assertSame( 'Mine', $by_id[ $own_collection ]['title'] );
+		$this->assertTrue( $by_id[ $own_collection ]['readable'] );
+		$this->assertSame(
+			array(
+				'id'       => $private_collection,
+				'active'   => true,
+				'readable' => false,
+			),
+			$by_id[ $private_collection ]
+		);
+	}
+
 	public function test_put_traits_requires_permission_to_add_collection_membership(): void {
 		$owner_id = $this->create_user( 'author' );
 		wp_set_current_user( $owner_id );
