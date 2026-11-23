@@ -148,7 +148,11 @@ and store the private key as the `RELEASE_DEPLOY_KEY` secret in the protected
 ruleset.
 
 Once the draft exists, "Prepare release" pushes the version tag at the release
-commit. Buildkite builds the macOS desktop app from that tag while the Release
+commit. The tag job uses the same deploy key and `GitHub Releases` environment
+as the version bump, so the run asks for a second approval before tagging.
+Until someone approves it, there is no tag and no desktop build.
+
+Buildkite builds the macOS desktop app from that tag while the Release
 is still a draft: it signs, notarizes, and staples the app, then attaches the
 DMG and the auto-update feed (see [Desktop app](#desktop-app)). That takes about
 an hour. Publishing the Release later reuses the tag, so it doesn't start a
@@ -255,9 +259,8 @@ anything: if it's missing, can't push, or there is no Release for the tag yet,
 the build fails in seconds with a message saying which.
 
 If a tag build fails after the app was built, retry the upload without
-rebuilding. Download the four files from the build's Artifacts tab (or with
-`buildkite-agent artifact download "apps/desktop/dist/*" .`), then upload them
-in this order:
+rebuilding. Download the four files from the build's Artifacts tab, then upload
+them in this order:
 
 ```bash
 gh release upload <version> Cortext-<version>-arm64.dmg \
