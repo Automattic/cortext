@@ -482,15 +482,15 @@ Relations and list-style rollups now keep sorting disabled. Scalar rollups can s
 
 ### Public document rendering
 
-<a id="td-public-title-double-render"></a>
+<a id="td-document-header-in-content"></a>
 
-**Public pages render the title twice.**
+**The document header lives in `post_content`.**
 
-**What.** `DocumentIdentity::prepend_header_blocks` slips a locked `core/post-title` block into `post_content` on insert, so the editor canvas can show the title inline as part of the BlockList. The public template still calls `the_title()` immediately before `the_content()`, and `core/post-title` resolves to the same `post_title` again, so every page created after this filter landed renders its title twice publicly. Older pages (no title block in their content) are fine until the editor next persists them.
+**What.** The title, properties, icon, and cover are stored as locked blocks in `post_content`, but their data lives elsewhere: `post_title`, the collection's fields, the `cortext_document_icon` meta, and `_thumbnail_id`. Every writer has to place the blocks that match that data. `DocumentIdentity::prepend_header_blocks` adds the title and properties on insert, the seeder builds the icon and cover with `DocumentIdentity::with_identity_blocks`, and the editor adds whatever is missing when it opens an editable document. A document whose icon or cover meta is set some other way, for example over REST, shows neither in a read-only view or on the public page until someone opens it in the editor and it saves.
 
-**Where.** `prepend_header_blocks` in `includes/PostType/DocumentIdentity.php`, paired with `the_title()` in `templates/single-crtxt_document.php`.
+**Where.** `includes/PostType/DocumentIdentity.php`, the header repair in `src/components/EditorBody.js`, and each writer that sets the icon or cover meta.
 
-**Solution.** Stop baking `core/post-title` into `post_content` and mount the editor's title input as canvas chrome above `BlockCanvas`, the way Gutenberg itself does it. The template keeps `the_title()` as the single source of truth; the editor keeps an inline-editable title; pages already saved with the block get a small migration that strips it.
+**Solution.** Render the header from the document's data instead of from stored blocks: canvas chrome above `BlockCanvas` in the editor, and the template on the public page. Then strip the header blocks from stored content. Until then, any new writer of the icon or cover meta has to write the matching block too.
 
 <a id="td-frontend-cover-icon-styles"></a>
 

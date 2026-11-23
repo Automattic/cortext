@@ -13,6 +13,7 @@ use Cortext\CLI\SeedDummyCollections;
 use Cortext\Documents;
 use Cortext\PostType\ArchiveCascade;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentIdentity;
 use Cortext\Taxonomy\TraitTaxonomy;
 use ReflectionMethod;
 use WorDBless\BaseTestCase;
@@ -109,6 +110,111 @@ final class Test_CLI_Seed_Dummy_Collections extends BaseTestCase {
 		);
 		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $collection_id ) );
 		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $row_id ) );
+	}
+
+	public function test_seed_page_tree_writes_icon_and_cover_blocks_with_their_meta(): void {
+		$page_id = $this->invoke_seeder_method(
+			'seed_page_tree',
+			array(
+				'title'   => 'Page with identity',
+				'icon'    => '📚',
+				'cover'   => CORTEXT_PATH . 'seed-assets/covers/library-interior.jpg',
+				'content' => '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->',
+			),
+			0
+		);
+
+		$content = (string) get_post_field( 'post_content', $page_id );
+		$this->assertSame(
+			array( 'cortext/document-cover', 'cortext/document-icon', 'core/post-title', 'cortext/document-properties', 'core/paragraph' ),
+			$this->block_names( $content )
+		);
+		$this->assertNotSame( '', get_post_meta( $page_id, DocumentIdentity::META_KEY, true ) );
+		$this->assertGreaterThan( 0, (int) get_post_meta( $page_id, '_thumbnail_id', true ) );
+	}
+
+	public function test_seed_page_tree_leaves_out_blocks_without_meta(): void {
+		$page_id = $this->invoke_seeder_method(
+			'seed_page_tree',
+			array(
+				'title' => 'Plain page',
+				'cover' => CORTEXT_PATH . 'seed-assets/covers/missing.jpg',
+			),
+			0
+		);
+
+		$content = (string) get_post_field( 'post_content', $page_id );
+		$this->assertFalse( has_block( 'cortext/document-icon', $content ) );
+		$this->assertFalse( has_block( 'cortext/document-cover', $content ) );
+		$this->assertSame( '', get_post_meta( $page_id, '_thumbnail_id', true ) );
+	}
+
+	public function test_seed_page_tree_twice_keeps_the_content(): void {
+		$node    = array(
+			'title'   => 'Reseeded page',
+			'icon'    => '🧭',
+			'content' => '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->',
+		);
+		$page_id = $this->invoke_seeder_method( 'seed_page_tree', $node, 0 );
+		$content = (string) get_post_field( 'post_content', $page_id );
+		$updates = did_action( 'post_updated' );
+
+		$this->assertSame( $page_id, $this->invoke_seeder_method( 'seed_page_tree', $node, 0 ) );
+
+		$this->assertSame( $updates, did_action( 'post_updated' ) );
+		$this->assertSame( $content, (string) get_post_field( 'post_content', $page_id ) );
+		$this->assertSame( 1, substr_count( $content, 'wp:cortext/document-icon' ) );
+	}
+
+	public function test_seed_page_tree_adds_the_icon_block_an_existing_page_lacks(): void {
+		$node    = array(
+			'title'   => 'Existing page',
+			'content' => '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->',
+		);
+		$page_id = $this->invoke_seeder_method( 'seed_page_tree', $node, 0 );
+
+		$node['icon'] = '🧩';
+		$this->invoke_seeder_method( 'seed_page_tree', $node, 0 );
+
+		$this->assertSame(
+			array( 'cortext/document-icon', 'core/post-title', 'cortext/document-properties', 'core/paragraph' ),
+			$this->block_names( (string) get_post_field( 'post_content', $page_id ) )
+		);
+	}
+
+	public function test_seed_collection_writes_icon_block_only_for_rows_with_a_bundled_icon(): void {
+		$collection_id = wp_insert_post(
+			array(
+				'post_type'   => Document::POST_TYPE,
+				'post_status' => 'private',
+				'post_title'  => 'Authors',
+				'meta_input'  => array( 'cortext_seed_slug' => 'authors' ),
+			)
+		);
+		$this->memo_insert_term( 'Authors', (string) $collection_id, TraitTaxonomy::TAXONOMY );
+
+		$this->invoke_seeder_method(
+			'seed_collection',
+			array(
+				'slug'    => 'authors',
+				'title'   => 'Authors',
+				'fields'  => array(),
+				'entries' => array(
+					array( 'title' => 'Chinua Achebe' ),
+					array( 'title' => 'Nobody In The Bundle' ),
+				),
+			)
+		);
+		$bundled = $this->invoke_seeder_method( 'entry_id_by_title', 'authors', 'Chinua Achebe' );
+		$missing = $this->invoke_seeder_method( 'entry_id_by_title', 'authors', 'Nobody In The Bundle' );
+
+		$bundled_content = (string) get_post_field( 'post_content', $bundled );
+		$this->assertNotSame( '', get_post_meta( $bundled, DocumentIdentity::META_KEY, true ) );
+		$this->assertSame( 'cortext/document-icon', $this->block_names( $bundled_content )[0] );
+		$this->assertSame( 1, substr_count( $bundled_content, 'wp:post-title' ) );
+
+		$this->assertSame( '', get_post_meta( $missing, DocumentIdentity::META_KEY, true ) );
+		$this->assertFalse( has_block( 'cortext/document-icon', (string) get_post_field( 'post_content', $missing ) ) );
 	}
 
 	public function test_seed_page_tree_archives_new_child_with_archived_parent(): void {
@@ -224,6 +330,23 @@ final class Test_CLI_Seed_Dummy_Collections extends BaseTestCase {
 		$method->setAccessible( true );
 
 		return $method->invoke( $this->seeder, ...$arguments );
+	}
+
+	/**
+	 * Top-level block names, skipping the whitespace between blocks.
+	 *
+	 * @param string $content Serialized content.
+	 * @return string[]
+	 */
+	private function block_names( string $content ): array {
+		return array_values(
+			array_filter(
+				array_map(
+					static fn( array $block ) => $block['blockName'],
+					parse_blocks( $content )
+				)
+			)
+		);
 	}
 
 	private function create_page( string $title ): int {

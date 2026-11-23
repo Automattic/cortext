@@ -18,6 +18,8 @@ namespace Cortext\PostType;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\Editor\DocumentCoverBlock;
+use Cortext\Editor\DocumentIconBlock;
 use Cortext\Editor\DocumentPropertiesBlock;
 
 final class DocumentIdentity {
@@ -79,13 +81,10 @@ final class DocumentIdentity {
 
 	/**
 	 * Returns the canonical locked title block markup that should sit
-	 * at the top of every cortext document. Used by the seeder for direct
-	 * inserts and by the wp_insert_post_data filter below.
-	 *
-	 * Note: prepending `core/post-title` to `post_content` makes the
-	 * public template render the title twice (the_title + the block's
-	 * own resolution of `post_title`). See tech-debt.md#td-public-title-double-render for the
-	 * architectural fix that drops the block from content entirely.
+	 * at the top of every cortext document. `with_identity_blocks` and
+	 * `with_properties_block` add it to content that has no title. The
+	 * public template prints no title of its own, so this block is the one
+	 * that renders it there.
 	 */
 	public static function header_blocks_markup(): string {
 		$attrs = array(
@@ -112,15 +111,63 @@ final class DocumentIdentity {
 	 * right after the title on rows.
 	 */
 	public static function properties_block_markup(): string {
+		return self::locked_block_markup( DocumentPropertiesBlock::BLOCK_NAME );
+	}
+
+	/**
+	 * Returns the locked `cortext/document-icon` block markup that sits right
+	 * before the title, as the editor saves it.
+	 */
+	public static function icon_block_markup(): string {
+		return self::locked_block_markup( DocumentIconBlock::BLOCK_NAME );
+	}
+
+	/**
+	 * Returns the locked `cortext/document-cover` block markup that opens the
+	 * content, as the editor saves it. `align` stays out because `full` is
+	 * its default.
+	 */
+	public static function cover_block_markup(): string {
+		return self::locked_block_markup( DocumentCoverBlock::BLOCK_NAME );
+	}
+
+	private static function locked_block_markup( string $block_name ): string {
 		return serialize_block(
 			array(
-				'blockName'    => DocumentPropertiesBlock::BLOCK_NAME,
+				'blockName'    => $block_name,
 				'attrs'        => array( 'lock' => self::HEADER_LOCK ),
 				'innerBlocks'  => array(),
 				'innerHTML'    => '',
 				'innerContent' => array(),
 			)
 		);
+	}
+
+	/**
+	 * Adds the icon and cover blocks a document with that meta needs, in the
+	 * editor's order: cover, icon, title, properties. Also adds the title and
+	 * properties blocks when missing. Blocks already present stay where they
+	 * are and the rest of the content keeps every byte. Writers that set the
+	 * icon or cover meta without the editor open build content with this, so
+	 * read-only and public views show them.
+	 *
+	 * @param string $content Unslashed post content.
+	 * @param bool   $icon    Whether the document has an icon.
+	 * @param bool   $cover   Whether the document has a cover.
+	 */
+	public static function with_identity_blocks( string $content, bool $icon, bool $cover ): string {
+		$content = self::with_properties_block( $content );
+		if ( null === self::title_block_bounds( $content ) ) {
+			$content = self::header_blocks_markup() . $content;
+		}
+		if ( $icon && ! has_block( DocumentIconBlock::BLOCK_NAME, $content ) ) {
+			$title_start = self::title_block_bounds( $content )[0];
+			$content     = substr( $content, 0, $title_start ) . self::icon_block_markup() . substr( $content, $title_start );
+		}
+		if ( $cover && ! has_block( DocumentCoverBlock::BLOCK_NAME, $content ) ) {
+			$content = self::cover_block_markup() . $content;
+		}
+		return $content;
 	}
 
 	/**
@@ -134,35 +181,38 @@ final class DocumentIdentity {
 		if ( has_block( DocumentPropertiesBlock::BLOCK_NAME, $content ) ) {
 			return $content;
 		}
-		$title_end = self::title_block_end( $content );
-		if ( null === $title_end ) {
+		$title = self::title_block_bounds( $content );
+		if ( null === $title ) {
 			return self::header_blocks_markup() . self::properties_block_markup() . $content;
 		}
+		$title_end = $title[1];
 		return substr( $content, 0, $title_end ) . self::properties_block_markup() . substr( $content, $title_end );
 	}
 
 	/**
-	 * Byte offset right after the first `core/post-title` block in serialized
-	 * content, or null when there is none. Splicing at this offset leaves the
-	 * rest of the content byte for byte as stored.
+	 * Byte offsets where the first `core/post-title` block in serialized
+	 * content starts and ends, or null when there is none. Splicing at these
+	 * offsets leaves the rest of the content byte for byte as stored.
 	 *
 	 * The serializer escapes `--` inside block attributes, so the first `-->`
 	 * after the opener always closes the block comment.
 	 *
 	 * @param string $content Unslashed post content.
+	 * @return array{0:int,1:int}|null Start and end offsets.
 	 */
-	private static function title_block_end( string $content ): ?int {
+	private static function title_block_bounds( string $content ): ?array {
 		if ( ! preg_match( '#<!--\s+wp:(?:core/)?post-title(?=[\s/]).*?(/)?-->#s', $content, $opener, PREG_OFFSET_CAPTURE ) ) {
 			return null;
 		}
-		$opener_end = $opener[0][1] + strlen( $opener[0][0] );
+		$opener_start = $opener[0][1];
+		$opener_end   = $opener_start + strlen( $opener[0][0] );
 		if ( ! empty( $opener[1][0] ) ) {
-			return $opener_end;
+			return array( $opener_start, $opener_end );
 		}
 		if ( ! preg_match( '#<!--\s+/wp:(?:core/)?post-title\s+-->#', $content, $closer, PREG_OFFSET_CAPTURE, $opener_end ) ) {
 			return null;
 		}
-		return $closer[0][1] + strlen( $closer[0][0] );
+		return array( $opener_start, $closer[0][1] + strlen( $closer[0][0] ) );
 	}
 
 	/**
@@ -185,10 +235,7 @@ final class DocumentIdentity {
 		}
 
 		$content = wp_unslash( (string) ( $data['post_content'] ?? '' ) );
-		$next    = self::with_properties_block( $content );
-		if ( null === self::title_block_end( $next ) ) {
-			$next = self::header_blocks_markup() . $next;
-		}
+		$next    = self::with_identity_blocks( $content, false, false );
 		if ( $next !== $content ) {
 			$data['post_content'] = wp_slash( $next );
 		}
