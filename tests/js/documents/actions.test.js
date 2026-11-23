@@ -374,10 +374,12 @@ describe( 'document archive lifecycle', () => {
 		const ctx = makeCtx();
 		const post = { id: 9, status: 'publish' };
 		const onArchiveChanged = jest.fn();
+		const onTrashChanged = jest.fn();
 		window.addEventListener(
 			DOCUMENT_ARCHIVE_CHANGED_EVENT,
 			onArchiveChanged
 		);
+		window.addEventListener( DOCUMENT_TRASH_CHANGED_EVENT, onTrashChanged );
 		apiFetch.mockResolvedValue( {
 			restored: [ 9 ],
 			published: [ 9 ],
@@ -391,6 +393,10 @@ describe( 'document archive lifecycle', () => {
 				DOCUMENT_ARCHIVE_CHANGED_EVENT,
 				onArchiveChanged
 			);
+			window.removeEventListener(
+				DOCUMENT_TRASH_CHANGED_EVENT,
+				onTrashChanged
+			);
 		}
 
 		expect( apiFetch ).toHaveBeenCalledWith( {
@@ -399,6 +405,7 @@ describe( 'document archive lifecycle', () => {
 		} );
 		expectLifecycleInvalidations( ctx );
 		expect( onArchiveChanged ).toHaveBeenCalledTimes( 1 );
+		expect( onTrashChanged ).toHaveBeenCalledTimes( 1 );
 		expect( ctx.createSuccessNotice ).toHaveBeenCalledWith(
 			'Document restored as published and is public again.',
 			expect.objectContaining( {

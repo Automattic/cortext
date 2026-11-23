@@ -203,20 +203,59 @@ final class ArchiveCascade {
 			delete_post_meta( (int) $post->ID, self::TIME_META );
 			delete_post_meta( (int) $post->ID, self::ARCHIVED_BY_USER_META );
 
+			// Rows trashed with their last live collection have a live one
+			// again. They go first, because a row archived before it was
+			// trashed comes back as archived and the restore below picks it up.
+			foreach ( ( new TrashCascade() )->rows_trashed_with_collection( (int) $post->ID ) as $row_id ) {
+				wp_untrash_post( $row_id );
+			}
+
 			$this->cascade->restore(
 				(int) $post->ID,
 				function ( int $child_id ): void {
-					wp_update_post(
-						array(
-							'ID'          => $child_id,
-							'post_status' => $this->restore_status_for( $child_id ),
-						),
-						true
-					);
+					$this->restore_previous_status( $child_id );
 				},
 				true
 			);
 		}
+	}
+
+	/**
+	 * Rows of a collection that a collection's archive cascade archived.
+	 *
+	 * @param int $collection_id Collection document ID.
+	 * @return int[]
+	 */
+	public function rows_archived_with_collection( int $collection_id ): array {
+		return $this->cascade->rows_moved_by_any_collection( $collection_id );
+	}
+
+	/**
+	 * Unarchives the rows a collection cascade archived. A collection that
+	 * returns from Trash calls this, because those rows have a live collection
+	 * again.
+	 *
+	 * @param int $collection_id Collection document ID.
+	 */
+	public function unarchive_collection_rows( int $collection_id ): void {
+		foreach ( $this->rows_archived_with_collection( $collection_id ) as $row_id ) {
+			$this->restore_previous_status( $row_id );
+		}
+	}
+
+	/**
+	 * Returns an archived document to the status it held before Archive.
+	 *
+	 * @param int $post_id Archived document ID.
+	 */
+	private function restore_previous_status( int $post_id ): void {
+		wp_update_post(
+			array(
+				'ID'          => $post_id,
+				'post_status' => $this->restore_status_for( $post_id ),
+			),
+			true
+		);
 	}
 
 	/**
@@ -581,15 +620,22 @@ final class ArchiveCascade {
 	}
 
 	/**
-	 * Returns archived descendants an Unarchive request would restore. Rows
-	 * that belong to several collections come back when any of them is
-	 * restored, even when another collection's cascade archived them.
+	 * Returns the descendants an Unarchive request would restore. Rows that
+	 * belong to several collections come back when any of them is restored,
+	 * even when another collection's cascade archived them or moved them to
+	 * Trash.
 	 *
 	 * @param int $root_id Root document ID.
-	 * @return int[] Archived descendant IDs, excluding the root.
+	 * @return int[] Descendant IDs, excluding the root.
 	 */
 	public function restore_candidates_for_root( int $root_id ): array {
-		return $this->cascade->descendants_for_root( $root_id, null, true );
+		$candidates = $this->cascade->descendants_for_root( $root_id, null, true );
+		$trash      = new TrashCascade();
+		foreach ( array_merge( array( $root_id ), $candidates ) as $document_id ) {
+			$candidates = array_merge( $candidates, $trash->rows_trashed_with_collection( $document_id ) );
+		}
+
+		return array_values( array_unique( $candidates ) );
 	}
 
 	/**

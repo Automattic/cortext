@@ -358,7 +358,7 @@ final class DocumentCascade {
 	 * @param int $collection_id Collection document ID.
 	 * @return int[]
 	 */
-	private function rows_moved_by_any_collection( int $collection_id ): array {
+	public function rows_moved_by_any_collection( int $collection_id ): array {
 		return array_values(
 			array_filter(
 				$this->row_ids_for_collection( $collection_id, array( $this->target_status ) ),

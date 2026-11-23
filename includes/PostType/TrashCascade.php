@@ -189,6 +189,23 @@ final class TrashCascade {
 			},
 			true
 		);
+
+		// Rows archived with their last live collection have a live one again.
+		// They go after the rows above, because a row archived before it was
+		// trashed has just come back as archived.
+		if ( Document::is_collection( $post_id ) && Documents::is_live_status( (string) get_post_status( $post_id ) ) ) {
+			( new ArchiveCascade() )->unarchive_collection_rows( $post_id );
+		}
+	}
+
+	/**
+	 * Rows of a collection that a collection's trash cascade moved to Trash.
+	 *
+	 * @param int $collection_id Collection document id.
+	 * @return int[]
+	 */
+	public function rows_trashed_with_collection( int $collection_id ): array {
+		return $this->cascade->rows_moved_by_any_collection( $collection_id );
 	}
 
 	/**
@@ -307,13 +324,24 @@ final class TrashCascade {
 	 * Walks the subtree that restoring a document will revive. Unlike the
 	 * permanent-delete walk, this includes shared rows marked by any collection
 	 * cascade: restoring one of their memberships makes them live again even
-	 * when a different collection caused the original trash transition.
+	 * when a different collection caused the original trash transition. Rows
+	 * archived with a collection that becomes live again come back too.
 	 *
 	 * @param int $root_id Root document id to walk from.
-	 * @return int[] Trashed candidate ids (root excluded), no guaranteed order.
+	 * @return int[] Candidate ids (root excluded), no guaranteed order.
 	 */
 	public function restore_candidates_for_root( int $root_id ): array {
-		return $this->cascade->descendants_for_root( $root_id, null, true );
+		$candidates = $this->cascade->descendants_for_root( $root_id, null, true );
+		$archive    = new ArchiveCascade();
+		foreach ( array_merge( array( $root_id ), $candidates ) as $document_id ) {
+			// A collection that returns to Archive leaves its archived rows there.
+			if ( Documents::STATUS_ARCHIVED === (string) get_post_meta( $document_id, '_wp_trash_meta_status', true ) ) {
+				continue;
+			}
+			$candidates = array_merge( $candidates, $archive->rows_archived_with_collection( $document_id ) );
+		}
+
+		return array_values( array_unique( $candidates ) );
 	}
 
 	/**

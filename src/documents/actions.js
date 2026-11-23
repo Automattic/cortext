@@ -561,6 +561,8 @@ export async function unarchiveDocument( record, ctx ) {
 	} );
 	syncLifecycleEntityRecords( response, ctx, 'restored' );
 	invalidateDocumentLifecycle( ctx );
+	// Unarchiving a collection also brings back rows trashed with another one.
+	notifyDocumentTrashChanged();
 	notifyDocumentArchiveChanged( { action: 'unarchive' } );
 	notifyRestored(
 		response,

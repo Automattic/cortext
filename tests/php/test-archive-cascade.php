@@ -220,6 +220,78 @@ final class Test_Archive_Cascade extends BaseTestCase {
 		);
 	}
 
+	public function test_unarchiving_a_collection_revives_a_shared_row_trashed_with_another(): void {
+		$collection_a = $this->create_collection();
+		$collection_b = $this->create_collection();
+		$shared_row   = $this->create_row( $collection_a, 'private' );
+		$this->add_membership( $shared_row, $collection_b );
+
+		$this->archive_cascade->archive( $collection_b );
+		wp_trash_post( $collection_a );
+		$this->assertSame( 'trash', get_post_status( $shared_row ) );
+
+		$restored = $this->archive_cascade->unarchive( $collection_b );
+
+		$this->assertContains( $shared_row, $restored );
+		$this->assertSame( 'private', get_post_status( $shared_row ) );
+		$this->assertSame( '', (string) get_post_meta( $shared_row, TrashCascade::COLLECTION_MARKER_META, true ) );
+		$this->assertSame( 'trash', get_post_status( $collection_a ) );
+	}
+
+	public function test_restoring_a_trashed_collection_revives_a_shared_row_archived_with_another(): void {
+		$collection_a = $this->create_collection();
+		$collection_b = $this->create_collection();
+		$shared_row   = $this->create_row( $collection_a, 'publish' );
+		$this->add_membership( $shared_row, $collection_b );
+
+		wp_trash_post( $collection_a );
+		$this->archive_cascade->archive( $collection_b );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $shared_row ) );
+		$this->assertContains( $shared_row, ( new TrashCascade() )->restore_candidates_for_root( $collection_a ) );
+
+		wp_untrash_post( $collection_a );
+
+		$this->assertSame( 'publish', get_post_status( $shared_row ) );
+		$this->assertSame( '', (string) get_post_meta( $shared_row, ArchiveCascade::COLLECTION_MARKER_META, true ) );
+		$this->assertSame( '', (string) get_post_meta( $shared_row, ArchiveCascade::STATUS_META, true ) );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $collection_b ) );
+	}
+
+	public function test_unarchiving_a_collection_revives_a_shared_row_archived_and_then_trashed(): void {
+		$collection_a = $this->create_collection();
+		$collection_b = $this->create_collection();
+		$shared_row   = $this->create_row( $collection_a, 'private' );
+		$this->add_membership( $shared_row, $collection_b );
+
+		$this->archive_cascade->archive( $collection_b );
+		$this->archive_cascade->archive( $collection_a );
+		wp_trash_post( $collection_a );
+		$this->assertSame( 'trash', get_post_status( $shared_row ) );
+
+		$this->archive_cascade->unarchive( $collection_b );
+
+		$this->assertSame( 'private', get_post_status( $shared_row ) );
+	}
+
+	public function test_restoring_a_collection_leaves_rows_retired_on_their_own(): void {
+		$collection_a = $this->create_collection();
+		$collection_b = $this->create_collection();
+		$trashed_row  = $this->create_row( $collection_a, 'private' );
+		$archived_row = $this->create_row( $collection_a, 'private' );
+		$this->add_membership( $trashed_row, $collection_b );
+		$this->add_membership( $archived_row, $collection_b );
+		wp_trash_post( $trashed_row );
+		$this->archive_cascade->archive( $archived_row );
+
+		$this->archive_cascade->archive( $collection_b );
+		wp_trash_post( $collection_a );
+		$this->archive_cascade->unarchive( $collection_b );
+		wp_untrash_post( $collection_a );
+
+		$this->assertSame( 'trash', get_post_status( $trashed_row ) );
+		$this->assertSame( Documents::STATUS_ARCHIVED, get_post_status( $archived_row ) );
+	}
+
 	public function test_pre_archived_row_is_not_restored_with_collection(): void {
 		$collection_id = $this->create_collection();
 		$pre_archived  = $this->create_row( $collection_id, 'private' );
