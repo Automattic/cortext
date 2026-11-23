@@ -254,9 +254,9 @@ last, so apps never see a feed that points at files that aren't there yet.
 Uploading needs a GitHub token that can write to `Automattic/cortext`. The mac
 agent gets `GITHUB_TOKEN` from the pipeline's secrets, which Apps Infra manages
 in `mobile-secrets` (`CI/secrets/cortext/env`). Never pass it through a build's
-environment variables form. Tag builds check the token before installing
-anything: if it's missing, can't push, or there is no Release for the tag yet,
-the build fails in seconds with a message saying which.
+environment variables form. Tag builds check before installing anything: if
+there's no token, or no Release for the tag yet, the build fails in seconds with
+a message saying which.
 
 If a tag build fails after the app was built, retry the upload without
 rebuilding. Download the four files from the build's Artifacts tab, then upload

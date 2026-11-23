@@ -22,12 +22,6 @@ if "$publish"; then
     echo "No GitHub token on this agent (GH_TOKEN or GITHUB_TOKEN). See docs/release.md."
     exit 1
   }
-  # The repo is public, so a 200 alone proves nothing; ask whether the token can
-  # push. `gh auth status` is no use here: installation tokens can't call /user.
-  [[ "$(gh api repos/Automattic/cortext --jq .permissions.push)" == "true" ]] || {
-    echo "The GitHub token on this agent can't write to Automattic/cortext."
-    exit 1
-  }
   # "Prepare release" creates the draft before it pushes the tag.
   gh release view "$version" --repo Automattic/cortext >/dev/null || {
     echo "No GitHub Release for $version. Run \"Prepare release\" first."
