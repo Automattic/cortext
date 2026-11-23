@@ -13,7 +13,7 @@ import { visibleTraits } from '../documents/traits';
 import { notifyDocumentLocatorChanged } from '../hooks/documentLocatorInvalidation';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 
-import './TraitControl.scss';
+import './AddTraitControl.scss';
 
 const COLLECTIONS_PER_PAGE = 20;
 

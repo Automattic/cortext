@@ -130,9 +130,9 @@ jest.mock( '../../../src/hooks/useDocumentTraits', () => ( {
 	},
 } ) );
 
-jest.mock( '../../../src/components/TraitControl', () => {
+jest.mock( '../../../src/components/AddTraitControl', () => {
 	const ActualTraitControl = jest.requireActual(
-		'../../../src/components/TraitControl'
+		'../../../src/components/AddTraitControl'
 	).default;
 	return {
 		__esModule: true,

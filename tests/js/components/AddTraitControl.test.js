@@ -1,5 +1,5 @@
 /**
- * Tests for `src/components/TraitControl.js`: the membership chips in the
+ * Tests for `src/components/AddTraitControl.js`: the membership chips in the
  * item detail. Adding/removing writes the new set through the traits endpoint
  * and the last membership cannot be removed.
  */
@@ -89,7 +89,7 @@ jest.mock( '../../../src/hooks/documentLocatorInvalidation', () => ( {
 } ) );
 
 import apiFetch from '@wordpress/api-fetch';
-import TraitControl from '../../../src/components/TraitControl';
+import TraitControl from '../../../src/components/AddTraitControl';
 
 function membership( id, title ) {
 	return { id, title, path: `${ title }-${ id }`, icon: '' };

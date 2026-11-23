@@ -29,7 +29,7 @@ import RowProperties from '../../components/RowProperties';
 import AdditionalCollectionProperties, {
 	CollectionGroupHeader,
 } from '../../components/AdditionalCollectionProperties';
-import TraitControl from '../../components/TraitControl';
+import TraitControl from '../../components/AddTraitControl';
 import { CollectionFieldsSnapshotProvider } from '../../components/CollectionFieldsContext';
 import { useDocumentPropertiesContext } from '../../components/DocumentPropertiesContext';
 import { visibleTraits } from '../../documents/traits';
