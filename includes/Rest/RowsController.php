@@ -1303,7 +1303,9 @@ final class RowsController {
 			'related_collection_id' => $target_collection_id,
 			// Chips and rollups show the target collection's rows, so they
 			// follow the same read rule as listing that collection.
-			'readable'              => current_user_can( 'read_post', $target_collection_id ),
+			// Logged-out visitors fail `read_post` even on published posts.
+			'readable'              => is_post_publicly_viewable( $target_collection_id )
+				|| current_user_can( 'read_post', $target_collection_id ),
 		);
 		if ( null !== $ctx ) {
 			$ctx->relation_field_meta[ $field_id ] = $entry;
