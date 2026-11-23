@@ -3755,6 +3755,13 @@ final class SeedDummyCollections {
 		);
 		$page_id          = $this->find_seed_page_tree_candidate( $candidate_titles, $parent_id );
 
+		// Resolve the icon and cover first so the content can carry their
+		// blocks from the first write.
+		$icon_meta = empty( $node['icon'] ) ? '' : $this->serialize_icon_meta( $node['icon'] );
+		$cover_id  = empty( $node['cover'] ) ? 0 : $this->ensure_attachment_from_path( $node['cover'] );
+		$has_icon  = '' !== $icon_meta;
+		$has_cover = $cover_id > 0;
+
 		if ( $page_id > 0 ) {
 			$this->log( "Page '{$node['title']}' already exists (ID {$page_id})." );
 
@@ -3765,17 +3772,22 @@ final class SeedDummyCollections {
 				(int) $page->post_parent !== $parent_id ||
 				( isset( $node['content'] ) && self::PAGE_CONTENT_VERSION !== $content_version )
 			);
+
+			$rewrites_content = $needs_update && isset( $node['content'] );
 			if ( $needs_update ) {
 				$update = array(
 					'ID'          => $page_id,
 					'post_title'  => $node['title'],
 					'post_parent' => $parent_id,
 				);
-				if ( isset( $node['content'] ) ) {
-					$update['post_content'] = DocumentIdentity::with_properties_block( (string) $node['content'] );
+				if ( $rewrites_content ) {
+					$update['post_content'] = DocumentIdentity::with_identity_blocks( (string) $node['content'], $has_icon, $has_cover );
 				}
 				wp_update_post( $update );
 				$this->log( "Updated page '{$node['title']}' with current sample content." );
+			}
+			if ( ! $rewrites_content ) {
+				$this->add_missing_identity_blocks( (int) $page_id, $has_icon, $has_cover );
 			}
 		} else {
 			$page_id = wp_insert_post(
@@ -3784,7 +3796,7 @@ final class SeedDummyCollections {
 					'post_status'  => 'private',
 					'post_title'   => $node['title'],
 					'post_parent'  => $parent_id,
-					'post_content' => $node['content'] ?? '',
+					'post_content' => DocumentIdentity::with_identity_blocks( (string) ( $node['content'] ?? '' ), $has_icon, $has_cover ),
 				),
 				true
 			);
@@ -3796,19 +3808,13 @@ final class SeedDummyCollections {
 			$this->log( "Created page '{$node['title']}' (ID {$page_id})." );
 		}
 
-		if ( ! empty( $node['icon'] ) ) {
-			$icon_meta = $this->serialize_icon_meta( $node['icon'] );
-			if ( '' !== $icon_meta ) {
-				update_post_meta( $page_id, DocumentIdentity::META_KEY, $icon_meta );
-			}
+		if ( $has_icon ) {
+			update_post_meta( $page_id, DocumentIdentity::META_KEY, $icon_meta );
 		}
 
-		if ( ! empty( $node['cover'] ) ) {
-			$cover_id = $this->ensure_attachment_from_path( $node['cover'] );
-			if ( $cover_id > 0 ) {
-				update_post_meta( $page_id, '_thumbnail_id', $cover_id );
-			}
-		} else {
+		if ( $has_cover ) {
+			update_post_meta( $page_id, '_thumbnail_id', $cover_id );
+		} elseif ( empty( $node['cover'] ) ) {
 			delete_post_meta( $page_id, '_thumbnail_id' );
 			$this->remove_page_cover_block( (int) $page_id );
 		}
@@ -4240,60 +4246,83 @@ final class SeedDummyCollections {
 	}
 
 	/**
-	 * Resolves the row's seeded icon (if any), downloads the image, and
-	 * writes the document-icon meta. Short-circuits before any HTTP work in
-	 * three places: rows that already have an icon, collections that don't
-	 * grant icons, and rows whose icon is bundled in `seed-assets/icons/`
-	 * (the common case in fresh worktrees). Only rows missing from the
-	 * bundle pay the Wikidata + image-download cost.
+	 * Gives an existing row the icon and cover its collection grants when it
+	 * has none yet, and reports which of the two it ends up with. Meta the
+	 * row already carries wins, so a manually-set icon or cover survives a
+	 * reseed.
 	 *
 	 * @param int    $entry_id        Row post ID.
 	 * @param string $collection_slug Source collection slug.
 	 * @param string $title           Row title.
+	 * @return array{0:bool,1:bool} Whether the row has an icon, and a cover.
 	 */
-	private function maybe_apply_row_icon( int $entry_id, string $collection_slug, string $title ): void {
-		if ( $entry_id <= 0 ) {
-			return;
-		}
-		if ( '' !== (string) get_post_meta( $entry_id, DocumentIdentity::META_KEY, true ) ) {
-			return;
+	private function apply_missing_row_identity( int $entry_id, string $collection_slug, string $title ): array {
+		$has_icon = '' !== (string) get_post_meta( $entry_id, DocumentIdentity::META_KEY, true );
+		if ( ! $has_icon ) {
+			$icon_meta = $this->resolve_row_icon_meta( $collection_slug, $title );
+			$has_icon  = '' !== $icon_meta;
+			if ( $has_icon ) {
+				update_post_meta( $entry_id, DocumentIdentity::META_KEY, $icon_meta );
+			}
 		}
 
+		$has_cover = (int) get_post_meta( $entry_id, '_thumbnail_id', true ) > 0;
+		if ( ! $has_cover ) {
+			$cover_id  = $this->resolve_row_cover_id( $collection_slug, $title );
+			$has_cover = $cover_id > 0;
+			if ( $has_cover ) {
+				update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
+			}
+		}
+
+		return array( $has_icon, $has_cover );
+	}
+
+	/**
+	 * Resolves the row's seeded icon (if any), downloads the image, and
+	 * returns the document-icon meta, or an empty string when there is none.
+	 * Needs no post, so it runs before the row exists and its block can go in
+	 * the first write. Skips HTTP work for collections that don't grant icons
+	 * and for rows whose icon is bundled in `seed-assets/icons/` (the common
+	 * case in fresh worktrees). Only rows missing from the bundle pay the
+	 * Wikidata + image-download cost.
+	 *
+	 * @param string $collection_slug Source collection slug.
+	 * @param string $title           Row title.
+	 */
+	private function resolve_row_icon_meta( string $collection_slug, string $title ): string {
 		// `--with-real-images` is the real-images mode: skip the CC0 bundle for
 		// every collection and fetch live instead (Commons portraits for
 		// authors/musicians, Open Library / Cover Art Archive covers for
 		// books/albums). Without the flag, every row uses the committed CC0
 		// bundle.
-		$skip_bundle = $this->fetch_real_images;
-
-		if ( ! $skip_bundle ) {
+		if ( ! $this->fetch_real_images ) {
 			$bundle_path = $this->bundled_icon_path( $collection_slug, $title );
-			if ( null !== $bundle_path ) {
-				$icon_meta = $this->serialize_icon_meta(
-					array(
-						'type'   => 'image',
-						'source' => $bundle_path,
-					)
-				);
-				if ( '' !== $icon_meta ) {
-					update_post_meta( $entry_id, DocumentIdentity::META_KEY, $icon_meta );
-					$this->log( sprintf( '  Icon (bundle) attached to entry %d.', $entry_id ) );
-				}
-				return;
+			if ( null === $bundle_path ) {
+				// Default seed is fully offline: if the bundle didn't have a
+				// match, don't reach for Wikidata or Picsum. The user opts in
+				// to network lookups with `--with-real-images`, or runs
+				// `--prefetch-icons` to extend the bundle once.
+				return '';
 			}
+			$icon_meta = $this->serialize_icon_meta(
+				array(
+					'type'   => 'image',
+					'source' => $bundle_path,
+				)
+			);
+			if ( '' !== $icon_meta ) {
+				$this->log( sprintf( '  Icon (bundle) resolved for %s.', $title ) );
+			}
+			return $icon_meta;
 		}
 
-		// Default seed is fully offline: if the bundle didn't have a match,
-		// don't reach for Wikidata or Picsum. The user opts in to network
-		// lookups with `--with-real-images`, or runs `--prefetch-icons` to
-		// extend the bundle once.
-		if ( ! $this->fetch_real_images || null === $this->image_fetcher ) {
-			return;
+		if ( null === $this->image_fetcher ) {
+			return '';
 		}
-
 		$icon_url = $this->image_fetcher->row_icon_url( $collection_slug, $title );
 		if ( null === $icon_url ) {
-			return;
+			return '';
 		}
 		$icon_meta = $this->serialize_icon_meta(
 			array(
@@ -4302,10 +4331,10 @@ final class SeedDummyCollections {
 			)
 		);
 		if ( '' !== $icon_meta ) {
-			update_post_meta( $entry_id, DocumentIdentity::META_KEY, $icon_meta );
 			$source = $this->image_fetcher->row_icon_source_label( $icon_url );
-			$this->log( sprintf( '  Icon (%s) attached to entry %d.', $source, $entry_id ) );
+			$this->log( sprintf( '  Icon (%s) resolved for %s.', $source, $title ) );
 		}
+		return $icon_meta;
 	}
 
 	/**
@@ -4333,59 +4362,44 @@ final class SeedDummyCollections {
 	}
 
 	/**
-	 * Attaches a bundled cover image to a row when one is provided in
-	 * `seed-assets/covers/<slug>-<title-slug>.jpg`. A few album rows also use
-	 * their bundled album-art icon when there is no separate cover asset or
-	 * requested live cover. That gives the seeded grid a mix of covered and
-	 * uncovered cards while still working offline. Skips rows that already
-	 * have `_thumbnail_id`, so a manually-set cover survives a reseed.
+	 * Resolves the cover attachment for a row, or 0 when it gets none. Uses
+	 * the bundled `seed-assets/covers/<slug>-<title-slug>.jpg` when present.
+	 * A few album rows also use their bundled album-art icon when there is no
+	 * separate cover asset or requested live cover. That gives the seeded
+	 * grid a mix of covered and uncovered cards while still working offline.
+	 * Needs no post, so it runs before the row exists.
 	 *
-	 * @param int    $entry_id        Row post ID.
 	 * @param string $collection_slug Source collection slug.
 	 * @param string $title           Row title.
 	 */
-	private function maybe_apply_row_cover( int $entry_id, string $collection_slug, string $title ): void {
-		if ( $entry_id <= 0 ) {
-			return;
-		}
-		if ( (int) get_post_meta( $entry_id, '_thumbnail_id', true ) > 0 ) {
-			return;
-		}
+	private function resolve_row_cover_id( string $collection_slug, string $title ): int {
 		$slug = sanitize_title( $collection_slug );
 		$key  = sanitize_title( $title );
 		$path = CORTEXT_PATH . 'seed-assets/covers/' . $slug . '-' . $key . '.jpg';
 		if ( file_exists( $path ) ) {
 			$cover_id = $this->ensure_attachment_from_path( $path );
 			if ( $cover_id > 0 ) {
-				update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
-				$this->log( sprintf( '  Cover (bundle) attached to entry %d.', $entry_id ) );
+				$this->log( sprintf( '  Cover (bundle) resolved for %s.', $title ) );
 			}
-			return;
+			return $cover_id;
 		}
 
-		if ( ! $this->fetch_real_images || null === $this->image_fetcher ) {
-			$this->maybe_apply_album_icon_as_row_cover( $entry_id, $collection_slug, $title );
-			return;
-		}
-		$url = $this->image_fetcher->real_cover_url( $collection_slug, $title );
-		if ( null === $url ) {
-			$this->maybe_apply_album_icon_as_row_cover( $entry_id, $collection_slug, $title );
-			return;
-		}
-		$cover_id = $this->image_fetcher->ensure_attachment_from_url( $url );
-		if ( $cover_id > 0 ) {
-			update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
-			$source = $this->image_fetcher->row_icon_source_label( $url );
-			$this->log( sprintf( '  Cover (%s) attached to entry %d.', $source, $entry_id ) );
-			return;
+		if ( $this->fetch_real_images && null !== $this->image_fetcher ) {
+			$url      = $this->image_fetcher->real_cover_url( $collection_slug, $title );
+			$cover_id = null === $url ? 0 : $this->image_fetcher->ensure_attachment_from_url( $url );
+			if ( $cover_id > 0 ) {
+				$source = $this->image_fetcher->row_icon_source_label( $url );
+				$this->log( sprintf( '  Cover (%s) resolved for %s.', $source, $title ) );
+				return $cover_id;
+			}
 		}
 
-		$this->maybe_apply_album_icon_as_row_cover( $entry_id, $collection_slug, $title );
+		return $this->resolve_album_icon_cover_id( $collection_slug, $title );
 	}
 
-	private function maybe_apply_album_icon_as_row_cover( int $entry_id, string $collection_slug, string $title ): void {
+	private function resolve_album_icon_cover_id( string $collection_slug, string $title ): int {
 		if ( 'albums' !== sanitize_title( $collection_slug ) ) {
-			return;
+			return 0;
 		}
 
 		$covered_album_keys = array(
@@ -4395,19 +4409,47 @@ final class SeedDummyCollections {
 			'save-rock-and-roll',
 		);
 		if ( ! in_array( sanitize_title( $title ), $covered_album_keys, true ) ) {
-			return;
+			return 0;
 		}
 
 		$path = $this->bundle_icon_path( $collection_slug, $title );
 		if ( ! file_exists( $path ) ) {
-			return;
+			return 0;
 		}
 
 		$cover_id = $this->ensure_attachment_from_path( $path );
 		if ( $cover_id > 0 ) {
-			update_post_meta( $entry_id, '_thumbnail_id', $cover_id );
-			$this->log( sprintf( '  Cover (album icon bundle) attached to entry %d.', $entry_id ) );
+			$this->log( sprintf( '  Cover (album icon bundle) resolved for %s.', $title ) );
 		}
+		return $cover_id;
+	}
+
+	/**
+	 * Adds the icon and cover blocks an existing document is missing, saving
+	 * only when the content changes. Keeps any edits made to the document.
+	 *
+	 * @param int  $post_id   Document post ID.
+	 * @param bool $has_icon  Whether the document has an icon.
+	 * @param bool $has_cover Whether the document has a cover.
+	 */
+	private function add_missing_identity_blocks( int $post_id, bool $has_icon, bool $has_cover ): void {
+		if ( ! $has_icon && ! $has_cover ) {
+			return;
+		}
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return;
+		}
+		$content = DocumentIdentity::with_identity_blocks( $post->post_content, $has_icon, $has_cover );
+		if ( $content === $post->post_content ) {
+			return;
+		}
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => wp_slash( $content ),
+			)
+		);
 	}
 
 	private function heading( string $text, int $level = 2 ): string {
@@ -4959,7 +5001,7 @@ final class SeedDummyCollections {
 				}
 			}
 
-			$entry_content = DocumentIdentity::with_properties_block( $this->entry_content( $spec, $entry ) );
+			$entry_content = $this->entry_content( $spec, $entry );
 			if ( $existing_entry_id > 0 ) {
 				$existing_entry = get_post( $existing_entry_id );
 				if ( $existing_entry && $entry_title !== (string) $existing_entry->post_title ) {
@@ -4970,9 +5012,8 @@ final class SeedDummyCollections {
 						)
 					);
 				}
-				$this->update_entry_content( $existing_entry_id, $entry_content );
-				$this->maybe_apply_row_icon( $existing_entry_id, $spec['slug'], $entry_title );
-				$this->maybe_apply_row_cover( $existing_entry_id, $spec['slug'], $entry_title );
+				list( $has_icon, $has_cover ) = $this->apply_missing_row_identity( $existing_entry_id, $spec['slug'], $entry_title );
+				$this->update_entry_content( $existing_entry_id, $entry_content, $has_icon, $has_cover );
 				$this->archive_seeded_descendant_if_needed(
 					$existing_entry_id,
 					(int) $collection_id,
@@ -4982,12 +5023,16 @@ final class SeedDummyCollections {
 				continue;
 			}
 
-			$entry_id = wp_insert_post(
+			// Resolve the icon and cover before the row exists so its content
+			// carries their blocks from the first write.
+			$icon_meta = $this->resolve_row_icon_meta( $spec['slug'], $entry_title );
+			$cover_id  = $this->resolve_row_cover_id( $spec['slug'], $entry_title );
+			$entry_id  = wp_insert_post(
 				array(
 					'post_type'    => Document::POST_TYPE,
 					'post_title'   => $entry_title,
 					'post_status'  => 'private',
-					'post_content' => $entry_content,
+					'post_content' => DocumentIdentity::with_identity_blocks( $entry_content, '' !== $icon_meta, $cover_id > 0 ),
 				),
 				true
 			);
@@ -5002,8 +5047,12 @@ final class SeedDummyCollections {
 			}
 
 			update_post_meta( (int) $entry_id, '_cortext_seed_entry_content_version', self::ENTRY_CONTENT_VERSION );
-			$this->maybe_apply_row_icon( (int) $entry_id, $spec['slug'], $entry_title );
-			$this->maybe_apply_row_cover( (int) $entry_id, $spec['slug'], $entry_title );
+			if ( '' !== $icon_meta ) {
+				update_post_meta( (int) $entry_id, DocumentIdentity::META_KEY, $icon_meta );
+			}
+			if ( $cover_id > 0 ) {
+				update_post_meta( (int) $entry_id, '_thumbnail_id', $cover_id );
+			}
 
 			foreach ( $field_ids as $field_name => $field_id ) {
 				if ( array_key_exists( $field_name, $entry ) ) {
@@ -5101,16 +5150,27 @@ final class SeedDummyCollections {
 		return get_post_meta( $collection_id, 'cortext_fields', false );
 	}
 
-	private function update_entry_content( int $entry_id, string $content ): void {
+	/**
+	 * Rewrites a seeded row's content when its sample content version is
+	 * stale. Rows already on the current version keep their content and only
+	 * gain the icon or cover blocks they are missing.
+	 *
+	 * @param int    $entry_id  Row post ID.
+	 * @param string $content   Current sample content, without header blocks.
+	 * @param bool   $has_icon  Whether the row has an icon.
+	 * @param bool   $has_cover Whether the row has a cover.
+	 */
+	private function update_entry_content( int $entry_id, string $content, bool $has_icon, bool $has_cover ): void {
 		$content_version = (string) get_post_meta( $entry_id, '_cortext_seed_entry_content_version', true );
 		if ( self::ENTRY_CONTENT_VERSION === $content_version ) {
+			$this->add_missing_identity_blocks( $entry_id, $has_icon, $has_cover );
 			return;
 		}
 
 		wp_update_post(
 			array(
 				'ID'           => $entry_id,
-				'post_content' => $content,
+				'post_content' => DocumentIdentity::with_identity_blocks( $content, $has_icon, $has_cover ),
 			)
 		);
 		update_post_meta( $entry_id, '_cortext_seed_entry_content_version', self::ENTRY_CONTENT_VERSION );
