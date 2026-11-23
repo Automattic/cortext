@@ -141,6 +141,25 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( 1, $response->get_data()['total'] );
 	}
 
+	public function test_edit_context_lets_an_author_read_a_published_collection_they_cannot_edit(): void {
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$fixture = $this->create_collection_fixture( 'author-published', 'text', 'publish' );
+		$this->create_row_fixture( $fixture['collection_id'], 'Published row', 'publish' );
+
+		wp_set_current_user( $this->create_user( 'author' ) );
+		$this->assertFalse( current_user_can( 'edit_post', $fixture['collection_id'] ) );
+
+		$response = $this->query_rows(
+			array(
+				'trait'   => $fixture['collection_id'],
+				'context' => 'edit',
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $response->get_data()['total'] );
+	}
+
 	public function test_view_context_allows_anonymous_for_published_collection(): void {
 		wp_set_current_user( 0 );
 

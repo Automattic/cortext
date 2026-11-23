@@ -194,18 +194,23 @@ final class RowsController {
 		}
 
 		if ( 'edit' === $request['context'] ) {
-			if (
-				current_user_can( 'edit_posts' )
-				&& current_user_can( 'edit_post', $collection_id )
-			) {
-				return true;
+			if ( ! current_user_can( 'edit_posts' ) ) {
+				return new WP_Error(
+					'rest_forbidden_context',
+					__( 'Sorry, you are not allowed to edit posts in this post type.', 'cortext' ),
+					array( 'status' => rest_authorization_required_code() )
+				);
 			}
 
-			return new WP_Error(
-				'rest_forbidden_context',
-				__( 'Sorry, you are not allowed to edit posts in this post type.', 'cortext' ),
-				array( 'status' => rest_authorization_required_code() )
-			);
+			if ( ! current_user_can( 'read_post', $collection_id ) ) {
+				return new WP_Error(
+					'rest_forbidden',
+					__( 'Sorry, you are not allowed to read this collection.', 'cortext' ),
+					array( 'status' => rest_authorization_required_code() )
+				);
+			}
+
+			return true;
 		}
 
 		// context=view: published collections are public; unpublished collections
