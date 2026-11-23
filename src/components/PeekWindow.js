@@ -208,25 +208,21 @@ export default function PeekWindow( {
 	);
 	// Give focus back to whatever opened the peek. Closing first removes the
 	// content, which drops focus to the page, so return it as soon as the
-	// window starts closing instead of when it unmounts.
+	// window starts closing instead of when it unmounts. A window reopened
+	// before its exit animation ends picks up its new opener.
 	const openerRef = useRef( null );
-	const captureOpenerRef = useCallback( ( node ) => {
-		if ( node && ! openerRef.current ) {
-			openerRef.current = focusedElementIn( node.ownerDocument );
-		}
-	}, [] );
-	const ref = useMergeRefs( [
-		windowRef,
-		captureOpenerRef,
-		focusOnMountRef,
-	] );
+	const ref = useMergeRefs( [ windowRef, focusOnMountRef ] );
 	useLayoutEffect( () => {
-		const opener = openerRef.current;
-		if ( ! isClosing || ! opener?.isConnected ) {
+		const ownerDocument = windowRef.current.ownerDocument;
+		if ( ! isClosing ) {
+			openerRef.current = focusedElementIn( ownerDocument );
 			return;
 		}
-		const ownerDocument = windowRef.current?.ownerDocument;
-		const active = ownerDocument?.activeElement;
+		const opener = openerRef.current;
+		if ( ! opener?.isConnected ) {
+			return;
+		}
+		const active = ownerDocument.activeElement;
 		if (
 			! active ||
 			active === ownerDocument.body ||

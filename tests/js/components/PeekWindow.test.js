@@ -178,6 +178,48 @@ describe( 'PeekWindow', () => {
 		opener.remove();
 	} );
 
+	it( 'returns focus to the new opener when it reopens while closing', () => {
+		const first = document.createElement( 'button' );
+		const second = document.createElement( 'button' );
+		document.body.append( first, second );
+		act( () => first.focus() );
+		const props = {
+			mode: 'side',
+			openedAsCenter: false,
+			onRequestClose: jest.fn(),
+			onExited: jest.fn(),
+		};
+		const content = <button type="button">Inside</button>;
+		const { rerender } = render(
+			<PeekWindow { ...props } isClosing={ false }>
+				{ content }
+			</PeekWindow>
+		);
+		rerender(
+			<PeekWindow { ...props } isClosing>
+				{ content }
+			</PeekWindow>
+		);
+
+		// Another row opens the peek before the exit animation ends.
+		act( () => second.focus() );
+		rerender(
+			<PeekWindow { ...props } isClosing={ false }>
+				{ content }
+			</PeekWindow>
+		);
+		act( () => screen.getByRole( 'button', { name: 'Inside' } ).focus() );
+		rerender(
+			<PeekWindow { ...props } isClosing>
+				{ content }
+			</PeekWindow>
+		);
+
+		expect( second ).toHaveFocus();
+		first.remove();
+		second.remove();
+	} );
+
 	it( 'reports the end of its exit animation', () => {
 		const { peekWindow, onExited } = renderWindow( { isClosing: true } );
 
