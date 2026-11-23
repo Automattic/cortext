@@ -1259,6 +1259,26 @@ describe( 'document-properties Customize properties mode', () => {
 		);
 	} );
 
+	it( 'shows the source properties and a bare traits row during the first load', () => {
+		mockTraits = {
+			collections: [],
+			isResolving: true,
+			isInitialLoad: true,
+			isUnknown: true,
+			refresh: jest.fn(),
+		};
+
+		render( <Edit /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect( screen.getByTestId( 'trait-control' ) ).toBeInTheDocument();
+		expect( mockTraitControlProps.collections ).toEqual( [] );
+		expect( mockTraitControlProps.isReadOnly ).toBe( true );
+		expect(
+			screen.queryByRole( 'button', { name: 'Customize properties' } )
+		).toBeNull();
+	} );
+
 	it( 'hides the stale source when a resolved row has no memberships', () => {
 		mockTraits = {
 			collections: [],

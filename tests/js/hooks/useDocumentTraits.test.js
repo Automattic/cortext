@@ -26,6 +26,7 @@ describe( 'useDocumentTraits', () => {
 		expect( result.current.isResolving ).toBe( false );
 		expect( result.current.hasResolved ).toBe( true );
 		expect( result.current.isUnknown ).toBe( false );
+		expect( result.current.isInitialLoad ).toBe( false );
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 
@@ -119,6 +120,49 @@ describe( 'useDocumentTraits', () => {
 
 		expect( result.current.collections ).toEqual( [] );
 		expect( result.current.isResolving ).toBe( true );
+	} );
+
+	it( 'tells the first load of a document from a later refresh', async () => {
+		let resolveFirst;
+		apiFetch.mockReturnValueOnce(
+			new Promise( ( resolve ) => {
+				resolveFirst = resolve;
+			} )
+		);
+		const { result, rerender } = renderHook(
+			( { documentId } ) => useDocumentTraits( documentId ),
+			{ initialProps: { documentId: 7 } }
+		);
+		expect( result.current.isInitialLoad ).toBe( true );
+
+		resolveFirst( { collections: [ { id: 1, title: 'Projects' } ] } );
+		await waitFor( () =>
+			expect( result.current.collections ).toHaveLength( 1 )
+		);
+		expect( result.current.isInitialLoad ).toBe( false );
+
+		apiFetch.mockReturnValueOnce( new Promise( () => {} ) );
+		act( () => result.current.refresh() );
+		expect( result.current.isResolving ).toBe( true );
+		expect( result.current.isInitialLoad ).toBe( false );
+
+		apiFetch.mockReturnValueOnce( new Promise( () => {} ) );
+		rerender( { documentId: 8 } );
+		expect( result.current.isInitialLoad ).toBe( true );
+	} );
+
+	it( 'does not treat a retry after a failed first load as a first load', async () => {
+		apiFetch.mockRejectedValueOnce( new Error( 'nope' ) );
+		const { result } = renderHook( () => useDocumentTraits( 7 ) );
+		await waitFor( () =>
+			expect( result.current.isResolving ).toBe( false )
+		);
+		expect( result.current.isInitialLoad ).toBe( false );
+
+		apiFetch.mockReturnValueOnce( new Promise( () => {} ) );
+		act( () => result.current.refresh() );
+		expect( result.current.isResolving ).toBe( true );
+		expect( result.current.isInitialLoad ).toBe( false );
 	} );
 
 	it( 'exposes an unknown state on a failed request', async () => {

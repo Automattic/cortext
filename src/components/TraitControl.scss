@@ -8,11 +8,13 @@
 	padding-inline: var(--cortext-row-detail-field-inset);
 }
 
+// The row is as tall as a chip even before the chips load.
 .cortext-traits__chips {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
+	min-height: $grid-unit-30;
 	padding: 3px 0;
 }
 

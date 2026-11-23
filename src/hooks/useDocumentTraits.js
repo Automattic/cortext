@@ -14,10 +14,14 @@ export default function useDocumentTraits( documentId ) {
 		documentId: documentId ?? null,
 		collections: [],
 		isResolving: Boolean( documentId ),
+		isInitialLoad: Boolean( documentId ),
 		hasResolved: ! documentId,
 		error: null,
 	} );
 	const requestIdRef = useRef( 0 );
+	// The document whose memberships have already loaded or failed once. Until
+	// then a request is the first load, not a refresh.
+	const settledDocumentIdRef = useRef( null );
 
 	const load = useCallback( () => {
 		if ( ! documentId ) {
@@ -26,6 +30,7 @@ export default function useDocumentTraits( documentId ) {
 				documentId: null,
 				collections: [],
 				isResolving: false,
+				isInitialLoad: false,
 				hasResolved: true,
 				error: null,
 			} );
@@ -39,6 +44,7 @@ export default function useDocumentTraits( documentId ) {
 			documentId,
 			collections: [],
 			isResolving: true,
+			isInitialLoad: settledDocumentIdRef.current !== documentId,
 			hasResolved: false,
 			error: null,
 		} );
@@ -49,12 +55,14 @@ export default function useDocumentTraits( documentId ) {
 				if ( requestId !== requestIdRef.current ) {
 					return;
 				}
+				settledDocumentIdRef.current = documentId;
 				setState( {
 					documentId,
 					collections: Array.isArray( data?.collections )
 						? data.collections
 						: [],
 					isResolving: false,
+					isInitialLoad: false,
 					hasResolved: true,
 					error: null,
 				} );
@@ -63,10 +71,12 @@ export default function useDocumentTraits( documentId ) {
 				if ( requestId !== requestIdRef.current ) {
 					return;
 				}
+				settledDocumentIdRef.current = documentId;
 				setState( {
 					documentId,
 					collections: [],
 					isResolving: false,
+					isInitialLoad: false,
 					hasResolved: false,
 					error,
 				} );
@@ -85,6 +95,11 @@ export default function useDocumentTraits( documentId ) {
 	return {
 		collections: isCurrentDocument ? state.collections : [],
 		isResolving,
+		// A request for a document that has not answered yet. A refresh after a
+		// membership change is not one.
+		isInitialLoad: isCurrentDocument
+			? state.isInitialLoad
+			: Boolean( documentId ),
 		hasResolved,
 		isUnknown: Boolean( documentId ) && ! hasResolved,
 		error: isCurrentDocument ? state.error : null,

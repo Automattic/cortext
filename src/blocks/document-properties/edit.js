@@ -63,6 +63,7 @@ export default function Edit( { clientId, isSelected } ) {
 	const {
 		collections: memberships,
 		isResolving: membershipsResolving,
+		isInitialLoad: membershipsFirstLoad = false,
 		isUnknown: membershipsUnknown = false,
 		error: membershipsError = null,
 		refresh: refreshTraits,
@@ -122,13 +123,17 @@ export default function Edit( { clientId, isSelected } ) {
 	// the visible ones (the user just removed the collection they opened the row
 	// from, or that collection was archived or trashed), drop the now-stale source
 	// group. Also hide it while refreshing: those fields and layout handlers
-	// target a membership whose continued existence is not yet known.
+	// target a membership whose continued existence is not yet known. The first
+	// load has nothing stale to hide, because the row was just opened from the
+	// source collection, so its group shows while the memberships arrive.
 	const sourceInactive =
 		membershipsAreActionable &&
 		! visibleMemberships.some(
 			( collection ) => collection.id === collectionId
 		);
-	const showSourceGroup = membershipsAreActionable && ! sourceInactive;
+	const showSourceGroup =
+		membershipsFirstLoad ||
+		( membershipsAreActionable && ! sourceInactive );
 	// System properties describe the row rather than a collection. The source
 	// group normally owns them; when it does not render, exactly one surviving
 	// group takes ownership so they neither disappear nor repeat.
@@ -439,10 +444,14 @@ export default function Edit( { clientId, isSelected } ) {
 		source.propertyFieldsForDisplay,
 	] );
 
+	// The traits row keeps its place during the first load, without chips or
+	// controls, so the properties below do not move when the traits arrive.
+	const showTraitControl =
+		Boolean( rowId ) &&
+		( membershipsFirstLoad ||
+			( membershipsAreActionable && memberships.length > 0 ) );
 	const canRenderTraitShell =
-		rowId &&
-		( ( membershipsAreActionable && memberships.length > 0 ) ||
-			membershipsError );
+		showTraitControl || ( rowId && membershipsError );
 
 	// tech-debt.md#td-gutenberg-header-boundary: every document carries this
 	// block, and with nothing to show it has no element to focus. Gutenberg
@@ -652,15 +661,12 @@ export default function Edit( { clientId, isSelected } ) {
 							: undefined
 					}
 				>
-					{ rowId &&
-					! isEditingLayout &&
-					membershipsAreActionable &&
-					memberships.length > 0 ? (
+					{ showTraitControl && ! isEditingLayout ? (
 						<TraitControl
 							beforeRemoveCollection={ prepareCollectionRemoval }
 							documentId={ rowId }
 							collections={ memberships }
-							isReadOnly={ isRowRetired }
+							isReadOnly={ isRowRetired || membershipsFirstLoad }
 							onChange={ refreshTraits }
 						/>
 					) : null }
