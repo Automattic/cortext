@@ -203,25 +203,31 @@ export default function PeekWindow( {
 	const isCenter = mode === 'modal';
 	const { width, handleProps } = useSideWidth();
 	const windowRef = useRef( null );
-	const focusOnMountRef = useFocusOnMount(
-		openedAsCenter ? 'firstElement' : false
-	);
-	// Give focus back to whatever opened the peek. Closing first removes the
-	// content, which drops focus to the page, so return it as soon as the
-	// window starts closing instead of when it unmounts. A window reopened
-	// before its exit animation ends picks up its new opener.
+	// Give focus back to whatever opened the peek. Read the opener as the
+	// window attaches, before a center peek moves focus onto itself.
 	const openerRef = useRef( null );
-	const ref = useMergeRefs( [ windowRef, focusOnMountRef ] );
+	const captureOpenerRef = useCallback( ( node ) => {
+		if ( node && ! openerRef.current ) {
+			openerRef.current = focusedElementIn( node.ownerDocument );
+		}
+	}, [] );
+	// A center peek takes focus on the window itself, like a modal frame. Its
+	// first control can be a loading placeholder that unmounts a moment later.
+	const focusOnMountRef = useFocusOnMount( openedAsCenter );
+	const ref = useMergeRefs( [
+		windowRef,
+		captureOpenerRef,
+		focusOnMountRef,
+	] );
+	// Closing first removes the content, which drops focus to the page, so
+	// return it as soon as the window starts closing instead of when it
+	// unmounts.
 	useLayoutEffect( () => {
-		const ownerDocument = windowRef.current.ownerDocument;
-		if ( ! isClosing ) {
-			openerRef.current = focusedElementIn( ownerDocument );
-			return;
-		}
 		const opener = openerRef.current;
-		if ( ! opener?.isConnected ) {
+		if ( ! isClosing || ! opener?.isConnected ) {
 			return;
 		}
+		const ownerDocument = windowRef.current.ownerDocument;
 		const active = ownerDocument.activeElement;
 		if (
 			! active ||
@@ -259,9 +265,25 @@ export default function PeekWindow( {
 			return undefined;
 		}
 		const onKeyDown = ( event ) => {
+			// Escape that ends an IME composition belongs to the text field.
+			if ( event.isComposing || event.keyCode === 229 ) {
+				return;
+			}
 			if ( event.key === 'Escape' && ! event.defaultPrevented ) {
 				event.preventDefault();
 				onRequestCloseRef.current();
+				return;
+			}
+			// The window itself sits before the first sentinel, so Shift+Tab
+			// from it would leave the peek. Wrap to the last control instead.
+			if (
+				event.key === 'Tab' &&
+				event.shiftKey &&
+				event.target === element
+			) {
+				event.preventDefault();
+				const tabbables = tabbablesIn( element );
+				tabbables[ tabbables.length - 1 ]?.focus();
 			}
 		};
 		element.addEventListener( 'keydown', onKeyDown );

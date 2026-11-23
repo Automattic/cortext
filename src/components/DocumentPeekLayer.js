@@ -40,10 +40,19 @@ export function DocumentPeekLayer() {
 	const [ openedAsCenter, setOpenedAsCenter ] = useState(
 		peek?.mode === 'modal'
 	);
+	// Each open gets a fresh window, even one that starts while the previous
+	// window is still playing its exit animation, so its enter animation and
+	// focus match how this open started.
+	const [ openCount, setOpenCount ] = useState( 0 );
+	const [ wasOpen, setWasOpen ] = useState( hasPeek );
 	// Show the window in the same render the fill arrives in.
-	if ( hasPeek && ! isRendered ) {
-		setIsRendered( true );
-		setOpenedAsCenter( peek?.mode === 'modal' );
+	if ( hasPeek !== wasOpen ) {
+		setWasOpen( hasPeek );
+		if ( hasPeek ) {
+			setIsRendered( true );
+			setOpenedAsCenter( peek?.mode === 'modal' );
+			setOpenCount( ( count ) => count + 1 );
+		}
 	}
 	// Keep the last mode while the window closes, so a center peek fades out
 	// where it is.
@@ -86,6 +95,7 @@ export function DocumentPeekLayer() {
 				onClick={ closeDocument }
 			/>
 			<PeekWindow
+				key={ openCount }
 				mode={ mode }
 				openedAsCenter={ openedAsCenter }
 				isClosing={ isClosing }

@@ -37,9 +37,9 @@ function withTitleField( fields ) {
 	];
 }
 
-// Render the active peek: side panel through SlotFill, modal inline at app
-// root. Keeping this separate stops relation chips and collection cells from
-// importing RowDetailView and the editor stack.
+// Render the active peek into the peek layer's slot, in either mode. Keeping
+// this separate stops relation chips and collection cells from importing
+// RowDetailView and the editor stack.
 export default function DocumentPeekHost() {
 	const { peek, isPinned } = useDocumentPeekState();
 	const { closeDocument, requestMode } = useDocumentPeekActions();

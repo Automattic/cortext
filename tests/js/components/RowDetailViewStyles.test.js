@@ -31,6 +31,20 @@ describe( 'RowDetailView styles', () => {
 		);
 	} );
 
+	it( 'skips the resize transition while dragging the side peek edge', () => {
+		const stylesheet = readFileSync(
+			join( process.cwd(), 'src/components/RowDetailView.scss' ),
+			'utf8'
+		);
+		const rule = stylesheet.slice(
+			stylesheet.indexOf(
+				'body.cortext-row-detail-sidebar-resizing .cortext-row-detail-sidebar-shell {'
+			)
+		);
+
+		expect( rule ).toMatch( /^[^}]*transition: none;/ );
+	} );
+
 	it( 'slides the side peek without squeezing the editor', () => {
 		const stylesheet = readFileSync(
 			join( process.cwd(), 'src/components/RowDetailView.scss' ),

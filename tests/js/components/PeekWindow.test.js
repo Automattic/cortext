@@ -178,46 +178,83 @@ describe( 'PeekWindow', () => {
 		opener.remove();
 	} );
 
-	it( 'returns focus to the new opener when it reopens while closing', () => {
-		const first = document.createElement( 'button' );
-		const second = document.createElement( 'button' );
-		document.body.append( first, second );
-		act( () => first.focus() );
+	it( 'returns focus to the opener of a peek that opened as center', () => {
+		const opener = document.createElement( 'button' );
+		document.body.appendChild( opener );
+		act( () => opener.focus() );
 		const props = {
-			mode: 'side',
-			openedAsCenter: false,
+			mode: 'modal',
+			openedAsCenter: true,
 			onRequestClose: jest.fn(),
 			onExited: jest.fn(),
 		};
-		const content = <button type="button">Inside</button>;
 		const { rerender } = render(
 			<PeekWindow { ...props } isClosing={ false }>
-				{ content }
-			</PeekWindow>
-		);
-		rerender(
-			<PeekWindow { ...props } isClosing>
-				{ content }
+				<button type="button">Inside</button>
 			</PeekWindow>
 		);
 
-		// Another row opens the peek before the exit animation ends.
-		act( () => second.focus() );
-		rerender(
-			<PeekWindow { ...props } isClosing={ false }>
-				{ content }
-			</PeekWindow>
-		);
-		act( () => screen.getByRole( 'button', { name: 'Inside' } ).focus() );
 		rerender(
 			<PeekWindow { ...props } isClosing>
-				{ content }
+				<button type="button">Inside</button>
 			</PeekWindow>
 		);
 
-		expect( second ).toHaveFocus();
-		first.remove();
-		second.remove();
+		expect( opener ).toHaveFocus();
+		opener.remove();
+	} );
+
+	it( 'focuses the window itself when it opens as a center peek', () => {
+		jest.useFakeTimers();
+		try {
+			const { peekWindow } = renderWindow( {
+				mode: 'modal',
+				openedAsCenter: true,
+			} );
+			act( () => jest.runAllTimers() );
+
+			expect( peekWindow ).toHaveFocus();
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	it( 'sends Shift+Tab from the window to its last control', () => {
+		// jsdom has no layout, so report every element as visible.
+		const getClientRects = jest
+			.spyOn( window.Element.prototype, 'getClientRects' )
+			.mockReturnValue( [ {} ] );
+		const { container } = render(
+			<PeekWindow
+				mode="modal"
+				openedAsCenter={ false }
+				isClosing={ false }
+				onRequestClose={ jest.fn() }
+				onExited={ jest.fn() }
+			>
+				<button type="button">First</button>
+				<button type="button">Last</button>
+			</PeekWindow>
+		);
+		const peekWindow = container.firstChild;
+		act( () => peekWindow.focus() );
+
+		fireEvent.keyDown( peekWindow, { key: 'Tab', shiftKey: true } );
+
+		expect( screen.getByRole( 'button', { name: 'Last' } ) ).toHaveFocus();
+		getClientRects.mockRestore();
+	} );
+
+	it( 'ignores Escape while an IME composition is active', () => {
+		const { onRequestClose } = renderWindow( { mode: 'modal' } );
+
+		fireEvent.keyDown( screen.getByRole( 'button', { name: 'Inside' } ), {
+			key: 'Escape',
+			isComposing: true,
+			keyCode: 229,
+		} );
+
+		expect( onRequestClose ).not.toHaveBeenCalled();
 	} );
 
 	it( 'reports the end of its exit animation', () => {

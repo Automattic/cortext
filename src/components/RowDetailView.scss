@@ -1589,6 +1589,12 @@ body.cortext-row-detail-sidebar-resizing {
 	user-select: none;
 }
 
+// Follow the pointer while dragging the side peek's edge; the width
+// transition is for mode switches.
+body.cortext-row-detail-sidebar-resizing .cortext-row-detail-sidebar-shell {
+	transition: none;
+}
+
 @keyframes cortext-row-detail-sidebar-open {
 
 	from {
