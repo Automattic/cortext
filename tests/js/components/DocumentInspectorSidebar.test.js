@@ -166,6 +166,7 @@ jest.mock( '../../../src/components/ActiveEditorContext', () => ( {
 } ) );
 
 import apiFetch from '@wordpress/api-fetch';
+import { runAbility } from '../../../src/abilities/runAbility';
 import {
 	DOCUMENT_INSPECTOR,
 	InspectorComplementaryArea,
@@ -191,11 +192,8 @@ describe( 'PageActionsPanel', () => {
 	} );
 
 	it( 'removes the trashed page and its cascade from Favorites', async () => {
-		apiFetch.mockResolvedValueOnce( {
-			id: 7,
-			status: 'trash',
-			cascade_deleted: [ 8 ],
-		} );
+		runAbility.mockResolvedValueOnce( { trashed: [ 7, 8 ] } );
+		apiFetch.mockResolvedValueOnce( { id: 7, status: 'trash' } );
 		mockSetFavorites.mockResolvedValue( [] );
 		render( <PageActionsPanel postId={ 7 } /> );
 
@@ -217,6 +215,7 @@ describe( 'PageActionsPanel', () => {
 
 	it( 'saves the open editors before moving the page to Trash', async () => {
 		mockFlushActiveEditor.mockResolvedValue( true );
+		runAbility.mockResolvedValueOnce( { trashed: [ 7 ] } );
 		apiFetch.mockResolvedValueOnce( { id: 7, status: 'trash' } );
 		render( <PageActionsPanel postId={ 7 } /> );
 
@@ -224,10 +223,10 @@ describe( 'PageActionsPanel', () => {
 			screen.getByRole( 'button', { name: 'Move to Trash' } )
 		);
 
-		await waitFor( () => expect( apiFetch ).toHaveBeenCalled() );
+		await waitFor( () => expect( runAbility ).toHaveBeenCalled() );
 		expect(
 			mockFlushActiveEditor.mock.invocationCallOrder[ 0 ]
-		).toBeLessThan( apiFetch.mock.invocationCallOrder[ 0 ] );
+		).toBeLessThan( runAbility.mock.invocationCallOrder[ 0 ] );
 		expect( mockLockEditors ).toHaveBeenCalledTimes( 1 );
 		await waitFor( () =>
 			expect( mockUnlockEditors ).toHaveBeenCalledTimes( 1 )

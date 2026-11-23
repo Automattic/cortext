@@ -145,6 +145,36 @@ final class Test_Write_Abilities extends BaseTestCase {
 		$this->assertSame( 0, $result['parent'] );
 	}
 
+	public function test_move_document_puts_it_last_only_when_the_parent_changes(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$parent_id   = $this->create_document( 'Parent' );
+		$document_id = $this->create_document( 'Child' );
+		wp_update_post(
+			array(
+				'ID'         => $document_id,
+				'menu_order' => 7,
+			)
+		);
+
+		$this->run_ability(
+			'cortext/move-document',
+			array(
+				'id'     => $document_id,
+				'parent' => 0,
+			)
+		);
+		$this->assertSame( 7, (int) get_post_field( 'menu_order', $document_id ) );
+
+		$this->run_ability(
+			'cortext/move-document',
+			array(
+				'id'     => $document_id,
+				'parent' => $parent_id,
+			)
+		);
+		$this->assertNotSame( 7, (int) get_post_field( 'menu_order', $document_id ) );
+	}
+
 	public function test_create_page_and_move_refuse_a_parent_that_is_not_a_live_document(): void {
 		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$document_id = $this->create_document( 'Child' );
@@ -543,6 +573,17 @@ final class Test_Write_Abilities extends BaseTestCase {
 		$this->assertEqualsCanonicalizing( array( $parent_id, $child_id ), $result['restored'] );
 		$this->assertSame( 'private', get_post_status( $parent_id ) );
 		$this->assertSame( 'private', get_post_status( $child_id ) );
+	}
+
+	public function test_unarchive_reports_the_status_and_the_documents_public_again(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
+		$document_id = $this->create_document( 'Published', 0, 'publish' );
+		$this->run_ability( 'cortext/archive-document', array( 'id' => $document_id ) );
+
+		$result = $this->run_ability( 'cortext/unarchive-document', array( 'id' => $document_id ) );
+
+		$this->assertSame( 'publish', $result['status'] );
+		$this->assertSame( array( $document_id ), $result['published'] );
 	}
 
 	public function test_trash_document_moves_it_to_trash_without_deleting_it(): void {

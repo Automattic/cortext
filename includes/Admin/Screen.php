@@ -112,12 +112,26 @@ final class Screen {
 		 */
 		$asset = require $asset_path;
 
+		// Document actions run through abilities. Core ships the abilities
+		// client only as script modules, which the bundle imports on demand.
 		wp_enqueue_script(
 			self::SCRIPT_HANDLE,
 			CORTEXT_URL . 'build/index.js',
 			$asset['dependencies'],
 			$asset['version'],
-			true
+			array(
+				'in_footer'           => true,
+				'module_dependencies' => array(
+					array(
+						'id'     => '@wordpress/abilities',
+						'import' => 'dynamic',
+					),
+					array(
+						'id'     => '@wordpress/core-abilities',
+						'import' => 'dynamic',
+					),
+				),
+			)
 		);
 
 		wp_add_inline_script(

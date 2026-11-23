@@ -160,6 +160,7 @@ jest.mock( '../../../../src/components/TypeToConfirmDialog', () => {
 import { useDispatch, useSelect } from '@wordpress/data';
 import { useEntityRecords } from '@wordpress/core-data';
 import apiFetch from '@wordpress/api-fetch';
+import { runAbility } from '../../../../src/abilities/runAbility';
 import { useNavigate } from '@tanstack/react-router';
 
 import LifecycleSidebar from '../../../../src/components/lifecycle/LifecycleSidebar';
@@ -540,31 +541,34 @@ describe( 'LifecycleSidebar as Archived', () => {
 
 	it( 'unarchives with Enter and moves to Trash with Backspace after confirming', async () => {
 		setTrash( [ archivedPage( 1, 'Notes' ), archivedPage( 2, 'Ideas' ) ] );
-		apiFetch.mockResolvedValue( {
+		runAbility.mockResolvedValueOnce( {
 			restored: [ 1 ],
-			post: { id: 1, status: 'draft' },
+			published: [],
+			status: 'draft',
 		} );
+		apiFetch.mockResolvedValue( { id: 1, status: 'draft' } );
 		renderView( ARCHIVED, 1 );
 		const listbox = screen.getByRole( 'listbox' );
 
 		await act( async () => {
 			fireEvent.keyDown( listbox, { key: 'Enter' } );
 		} );
-		expect( apiFetch ).toHaveBeenCalledWith( {
-			path: '/cortext/v1/documents/1/unarchive',
-			method: 'POST',
-		} );
+		expect( runAbility ).toHaveBeenCalledWith(
+			'cortext/unarchive-document',
+			{ id: 1 }
+		);
 
 		fireEvent.keyDown( listbox, { key: 'Backspace' } );
 		expect( screen.getByRole( 'dialog' ) ).toHaveTextContent( '30 days' );
-		apiFetch.mockResolvedValue( { cascade_deleted: [] } );
+		runAbility.mockResolvedValueOnce( { trashed: [ 1 ] } );
+		apiFetch.mockResolvedValue( { id: 1, status: 'trash' } );
 		await act( async () => {
 			fireEvent.click( screen.getByTestId( 'confirm-dialog-confirm' ) );
 		} );
-		expect( apiFetch ).toHaveBeenLastCalledWith( {
-			path: '/wp/v2/crtxt_documents/1',
-			method: 'DELETE',
-		} );
+		expect( runAbility ).toHaveBeenLastCalledWith(
+			'cortext/trash-document',
+			{ id: 1 }
+		);
 	} );
 
 	it( 'drops the selection from the URL once nothing is archived', () => {

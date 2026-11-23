@@ -197,7 +197,24 @@ final class WriteAbilities {
 			__( 'Unarchive document', 'cortext' ),
 			__( 'Brings an archived document and the documents inside it back.', 'cortext' ),
 			$by_id(),
-			$ids_output( 'restored' ),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'restored'  => array(
+						'type'  => 'array',
+						'items' => array( 'type' => 'integer' ),
+					),
+					'published' => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'integer' ),
+						'description' => __( 'Documents that are public again.', 'cortext' ),
+					),
+					'status'    => array(
+						'type'        => 'string',
+						'description' => __( 'Status the document went back to.', 'cortext' ),
+					),
+				),
+			),
 			'unarchive_document',
 			'can_unarchive',
 			self::CHANGES
@@ -355,7 +372,8 @@ final class WriteAbilities {
 	}
 
 	/**
-	 * Sends only the parent, so a locked document can still be moved.
+	 * Sends only the parent and order, so a locked document can still be
+	 * moved. A document moved to another branch goes last in it.
 	 *
 	 * @param array<string,mixed> $input Ability input.
 	 * @return array<string,mixed>|WP_Error
@@ -381,7 +399,31 @@ final class WriteAbilities {
 			);
 		}
 
-		return $this->save( $this->document_route( $input ), array( 'parent' => $parent_id ) );
+		$params = array( 'parent' => $parent_id );
+		if ( (int) get_post_field( 'post_parent', $id ) !== $parent_id ) {
+			$params['menu_order'] = $this->last_menu_order( $parent_id ) + 1;
+		}
+
+		return $this->save( $this->document_route( $input ), $params );
+	}
+
+	/**
+	 * Highest sort order among the documents under a parent.
+	 *
+	 * @param int $parent_id Parent ID, 0 for the top level.
+	 */
+	private function last_menu_order( int $parent_id ): int {
+		global $wpdb;
+
+		// A single MAX() instead of loading every document at the top level.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT MAX(menu_order) FROM {$wpdb->posts} WHERE post_parent = %d AND post_type = %s",
+				$parent_id,
+				Document::POST_TYPE
+			)
+		);
 	}
 
 	/**
@@ -405,7 +447,15 @@ final class WriteAbilities {
 	public function unarchive_document( array $input ) {
 		$result = Abilities::dispatch( 'POST', "/cortext/v1/documents/{$input['id']}/unarchive" );
 
-		return is_wp_error( $result ) ? $result : array( 'restored' => $result['restored'] );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return array(
+			'restored'  => $result['restored'],
+			'published' => $result['published'],
+			'status'    => (string) get_post_status( (int) $input['id'] ),
+		);
 	}
 
 	/**

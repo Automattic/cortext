@@ -26,6 +26,18 @@ export function receiveCanonicalDocumentRecord( record, receiveEntityRecords ) {
 }
 
 /**
+ * Fetches a document's full record, in the shape core-data keeps it.
+ *
+ * @param {number} id Document ID.
+ * @return {Promise<Object>} REST record in edit context.
+ */
+export function fetchDocumentRecord( id ) {
+	return apiFetch( {
+		path: `/wp/v2/crtxt_documents/${ id }?context=edit`,
+	} );
+}
+
+/**
  * Duplicates a document and caches the canonical record from the response.
  *
  * @param {Object}   record               Document to duplicate.

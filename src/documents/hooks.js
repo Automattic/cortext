@@ -25,6 +25,7 @@ import {
 } from './labels';
 import {
 	renameDocument,
+	moveDocument,
 	duplicateDocument,
 	trashDocument,
 	restoreDocument,
@@ -156,6 +157,11 @@ export function useDocumentActions() {
 		[ ctx ]
 	);
 
+	const move = useCallback(
+		async ( record, parentId ) => moveDocument( record, parentId, ctx ),
+		[ ctx ]
+	);
+
 	const duplicate = useCallback(
 		async ( record ) => duplicateDocument( record, ctx ),
 		[ ctx ]
@@ -204,6 +210,7 @@ export function useDocumentActions() {
 	return useMemo(
 		() => ( {
 			rename,
+			move,
 			duplicate,
 			trash,
 			restore,
@@ -216,6 +223,7 @@ export function useDocumentActions() {
 		} ),
 		[
 			rename,
+			move,
 			duplicate,
 			trash,
 			restore,

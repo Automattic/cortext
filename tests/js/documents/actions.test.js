@@ -21,10 +21,13 @@ jest.mock( '@wordpress/data', () => {
 
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { runAbility } from '../../../src/abilities/runAbility';
 import {
 	archiveDocument,
 	createDocument,
 	emptyTrash,
+	moveDocument,
+	renameDocument,
 	restoreDocument,
 	restoreDocuments,
 	trashDocument,
@@ -54,6 +57,23 @@ function makeCtx( overrides = {} ) {
 	};
 }
 
+// The ability answers with `output`; the full record fetched afterwards is
+// `post`. Restore from Trash still goes through its route on `apiFetch`.
+function mockAbility( output, post ) {
+	runAbility.mockResolvedValueOnce( output );
+	apiFetch.mockResolvedValueOnce( post );
+}
+
+function expectRecordFetched( id ) {
+	expect( apiFetch ).toHaveBeenCalledWith( {
+		path: `/wp/v2/crtxt_documents/${ id }?context=edit`,
+	} );
+}
+
+beforeEach( () => {
+	apiFetch.mockReset();
+} );
+
 function expectLifecycleInvalidations( ctx ) {
 	const lifecycleCalls = ctx.invalidateResolution.mock.calls.filter(
 		( [ selector ] ) => selector !== 'getEntityRecord'
@@ -65,44 +85,34 @@ function expectLifecycleInvalidations( ctx ) {
 }
 
 describe( 'createDocument', () => {
-	it( 'persists with `status: draft` by default and returns the created record', async () => {
+	it( 'creates through the ability and returns the full record', async () => {
 		const ctx = makeCtx();
-		ctx.saveEntityRecord.mockResolvedValue( {
-			id: 42,
-			slug: 'untitled',
-		} );
+		const record = { id: 42, slug: 'untitled', parent: 3 };
+		mockAbility( { id: 42, parent: 3 }, record );
 
-		const result = await createDocument( {}, ctx );
-
-		expect( ctx.saveEntityRecord ).toHaveBeenCalledWith(
-			'postType',
-			DOCUMENT_POST_TYPE,
-			{ status: 'draft' },
-			{ throwOnError: true }
-		);
-		expect( result ).toEqual( { id: 42, slug: 'untitled' } );
-	} );
-
-	it( 'merges the caller payload over the default status', async () => {
-		const ctx = makeCtx();
-		ctx.saveEntityRecord.mockResolvedValue( { id: 7 } );
-
-		await createDocument(
-			{ title: 'Untitled', status: 'private', parent: 3 },
+		const result = await createDocument(
+			{ title: 'Notes', parent: 3 },
 			ctx
 		);
 
-		expect( ctx.saveEntityRecord ).toHaveBeenCalledWith(
+		expect( runAbility ).toHaveBeenCalledWith( 'cortext/create-page', {
+			title: 'Notes',
+			parent: 3,
+		} );
+		expectRecordFetched( 42 );
+		expect( ctx.receiveEntityRecords ).toHaveBeenCalledWith(
 			'postType',
 			DOCUMENT_POST_TYPE,
-			{ title: 'Untitled', status: 'private', parent: 3 },
-			{ throwOnError: true }
+			[ record ],
+			undefined,
+			false
 		);
+		expect( result ).toEqual( record );
 	} );
 
 	it( 'invalidates the same lists as trash/duplicate', async () => {
 		const ctx = makeCtx();
-		ctx.saveEntityRecord.mockResolvedValue( { id: 9 } );
+		mockAbility( { id: 9, parent: 0 }, { id: 9 } );
 
 		await createDocument( {}, ctx );
 
@@ -118,23 +128,14 @@ describe( 'createDocument', () => {
 		} );
 	} );
 
-	it( 'skips invalidation when no id comes back', async () => {
+	it( 'rejects without invalidating caches when the ability fails', async () => {
+		const error = new Error( 'create failed' );
 		const ctx = makeCtx();
-		ctx.saveEntityRecord.mockResolvedValue( null );
-
-		const result = await createDocument( {}, ctx );
-
-		expect( result ).toBeNull();
-		expect( ctx.invalidateResolution ).not.toHaveBeenCalled();
-	} );
-
-	it( 'rejects without invalidating caches when saving fails', async () => {
-		const error = new Error( 'save failed' );
-		const ctx = makeCtx();
-		ctx.saveEntityRecord.mockRejectedValue( error );
+		runAbility.mockRejectedValue( error );
 
 		await expect( createDocument( {}, ctx ) ).rejects.toBe( error );
 
+		expect( apiFetch ).not.toHaveBeenCalled();
 		expect( ctx.invalidateResolution ).not.toHaveBeenCalled();
 	} );
 } );
@@ -144,15 +145,14 @@ describe( 'useCreateDocument', () => {
 		useDispatch.mockReset();
 	} );
 
-	it( 'binds core-data dispatchers and calls saveEntityRecord on invocation', async () => {
-		const saveEntityRecord = jest
-			.fn()
-			.mockResolvedValue( { id: 11, slug: 'about' } );
+	it( 'binds core-data dispatchers and creates through the ability', async () => {
+		const receiveEntityRecords = jest.fn();
 		const invalidateResolution = jest.fn();
 		useDispatch.mockReturnValue( {
-			saveEntityRecord,
+			receiveEntityRecords,
 			invalidateResolution,
 		} );
+		mockAbility( { id: 11, parent: 0 }, { id: 11, slug: 'about' } );
 
 		const { result } = renderHook( () => useCreateDocument() );
 
@@ -162,12 +162,9 @@ describe( 'useCreateDocument', () => {
 		} );
 
 		expect( useDispatch ).toHaveBeenCalledWith( 'core' );
-		expect( saveEntityRecord ).toHaveBeenCalledWith(
-			'postType',
-			DOCUMENT_POST_TYPE,
-			{ status: 'draft', title: 'About' },
-			{ throwOnError: true }
-		);
+		expect( runAbility ).toHaveBeenCalledWith( 'cortext/create-page', {
+			title: 'About',
+		} );
 		expect( invalidateResolution ).toHaveBeenCalledTimes(
 			afterDocumentTrash.length
 		);
@@ -175,12 +172,11 @@ describe( 'useCreateDocument', () => {
 	} );
 
 	it( 'defaults input to an empty object', async () => {
-		const saveEntityRecord = jest.fn().mockResolvedValue( { id: 5 } );
-		const invalidateResolution = jest.fn();
 		useDispatch.mockReturnValue( {
-			saveEntityRecord,
-			invalidateResolution,
+			receiveEntityRecords: jest.fn(),
+			invalidateResolution: jest.fn(),
 		} );
+		mockAbility( { id: 5, parent: 0 }, { id: 5 } );
 
 		const { result } = renderHook( () => useCreateDocument() );
 
@@ -188,11 +184,49 @@ describe( 'useCreateDocument', () => {
 			await result.current();
 		} );
 
-		expect( saveEntityRecord ).toHaveBeenCalledWith(
+		expect( runAbility ).toHaveBeenCalledWith( 'cortext/create-page', {} );
+	} );
+} );
+
+describe( 'renameDocument and moveDocument', () => {
+	it( 'renames through the ability and caches the renamed record', async () => {
+		const ctx = makeCtx( { touchRecent: jest.fn() } );
+		const record = { id: 9, title: 'Roadmap', parent: 2 };
+		mockAbility( { id: 9, title: 'Roadmap', parent: 2 }, record );
+
+		await renameDocument( { id: 9, parent: 2 }, 'Roadmap', ctx );
+
+		expect( runAbility ).toHaveBeenCalledWith( 'cortext/rename-document', {
+			id: 9,
+			title: 'Roadmap',
+		} );
+		expect( ctx.receiveEntityRecords ).toHaveBeenCalledWith(
 			'postType',
 			DOCUMENT_POST_TYPE,
-			{ status: 'draft' },
-			{ throwOnError: true }
+			[ record ],
+			undefined,
+			false
+		);
+		expect( ctx.touchRecent ).toHaveBeenCalledWith( { id: 9 } );
+	} );
+
+	it( 'moves through the ability, refreshes the lists and says so', async () => {
+		const ctx = makeCtx();
+		const record = { id: 9, parent: 4 };
+		mockAbility( { id: 9, parent: 4 }, record );
+
+		const moved = await moveDocument( { id: 9, parent: 0 }, 4, ctx );
+
+		expect( runAbility ).toHaveBeenCalledWith( 'cortext/move-document', {
+			id: 9,
+			parent: 4,
+		} );
+		expectRecordFetched( 9 );
+		expect( moved ).toEqual( record );
+		expectLifecycleInvalidations( ctx );
+		expect( ctx.createSuccessNotice ).toHaveBeenCalledWith(
+			'Document moved.',
+			{ id: 'cortext-document-move-success', type: 'snackbar' }
 		);
 	} );
 } );
@@ -257,7 +291,7 @@ describe( 'document archive lifecycle', () => {
 		apiFetch.mockReset();
 	} );
 
-	it( 'archives through the dedicated endpoint without filtering favorites', async () => {
+	it( 'archives through the ability without filtering favorites', async () => {
 		const lifecycleFocusIntent = { token: 1 };
 		const ctx = makeCtx( {
 			captureLifecycleFocusIntent: jest
@@ -268,18 +302,18 @@ describe( 'document archive lifecycle', () => {
 		} );
 		const record = { id: 9 };
 		const post = { id: 9, status: 'crtxt_archived' };
-		apiFetch.mockResolvedValue( { archived: [ 9 ], post } );
+		mockAbility( { archived: [ 9 ] }, post );
 
 		const response = await archiveDocument( record, ctx );
 
-		expect( apiFetch ).toHaveBeenCalledWith( {
-			path: '/cortext/v1/documents/9/archive',
-			method: 'POST',
+		expect( runAbility ).toHaveBeenCalledWith( 'cortext/archive-document', {
+			id: 9,
 		} );
+		expectRecordFetched( 9 );
 		expect( ctx.flushActiveEditor ).toHaveBeenCalledTimes( 1 );
 		expect(
 			ctx.flushActiveEditor.mock.invocationCallOrder[ 0 ]
-		).toBeLessThan( apiFetch.mock.invocationCallOrder[ 0 ] );
+		).toBeLessThan( runAbility.mock.invocationCallOrder[ 0 ] );
 		expect( ctx.receiveEntityRecords ).toHaveBeenCalledWith(
 			'postType',
 			'crtxt_document',
@@ -315,7 +349,7 @@ describe( 'document archive lifecycle', () => {
 
 		await expect( archiveDocument( { id: 9 }, ctx ) ).resolves.toBeNull();
 
-		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( runAbility ).not.toHaveBeenCalled();
 		expect( ctx.invalidateResolution ).not.toHaveBeenCalled();
 		expect( ctx.receiveEntityRecords ).not.toHaveBeenCalled();
 		expect( ctx.cancelLifecycleFocusIntent ).toHaveBeenCalledWith(
@@ -341,7 +375,7 @@ describe( 'document archive lifecycle', () => {
 			cancelLifecycleFocusIntent: jest.fn(),
 			onAfterArchive: jest.fn(),
 		} );
-		apiFetch.mockRejectedValue( error );
+		runAbility.mockRejectedValue( error );
 
 		await expect( archiveDocument( { id: 9 }, ctx ) ).rejects.toBe( error );
 
@@ -353,10 +387,10 @@ describe( 'document archive lifecycle', () => {
 
 	it( 'invalidates individually cached descendants after a cascade archive', async () => {
 		const ctx = makeCtx();
-		apiFetch.mockResolvedValue( {
-			archived: [ 9, 10, 11 ],
-			post: { id: 9, status: 'crtxt_archived' },
-		} );
+		mockAbility(
+			{ archived: [ 9, 10, 11 ] },
+			{ id: 9, status: 'crtxt_archived' }
+		);
 
 		await archiveDocument( { id: 9 }, ctx );
 
@@ -378,11 +412,10 @@ describe( 'document archive lifecycle', () => {
 			DOCUMENT_ARCHIVE_CHANGED_EVENT,
 			onArchiveChanged
 		);
-		apiFetch.mockResolvedValue( {
-			restored: [ 9 ],
-			published: [ 9 ],
-			post,
-		} );
+		mockAbility(
+			{ restored: [ 9 ], published: [ 9 ], status: 'publish' },
+			post
+		);
 
 		try {
 			await unarchiveDocument( { id: 9 }, ctx );
@@ -393,10 +426,10 @@ describe( 'document archive lifecycle', () => {
 			);
 		}
 
-		expect( apiFetch ).toHaveBeenCalledWith( {
-			path: '/cortext/v1/documents/9/unarchive',
-			method: 'POST',
-		} );
+		expect( runAbility ).toHaveBeenCalledWith(
+			'cortext/unarchive-document',
+			{ id: 9 }
+		);
 		expectLifecycleInvalidations( ctx );
 		expect( onArchiveChanged ).toHaveBeenCalledTimes( 1 );
 		expect( ctx.createSuccessNotice ).toHaveBeenCalledWith(
@@ -448,9 +481,9 @@ describe( 'document archive lifecycle', () => {
 		],
 	] )(
 		'says which restored documents are public again for %s',
-		async ( _label, response, message ) => {
+		async ( _label, { restored, published, post }, message ) => {
 			const ctx = makeCtx();
-			apiFetch.mockResolvedValue( response );
+			mockAbility( { restored, published, status: post.status }, post );
 
 			await unarchiveDocument( { id: 9 }, ctx );
 
@@ -472,9 +505,7 @@ describe( 'document archive lifecycle', () => {
 			DOCUMENT_ARCHIVE_CHANGED_EVENT,
 			onArchiveChanged
 		);
-		apiFetch.mockResolvedValue( {
-			previous,
-		} );
+		mockAbility( { trashed: [ 9 ] }, previous );
 
 		try {
 			await trashDocument( { id: 9, status: 'crtxt_archived' }, ctx );
@@ -489,11 +520,11 @@ describe( 'document archive lifecycle', () => {
 		expect( ctx.receiveEntityRecords ).toHaveBeenCalledWith(
 			'postType',
 			'crtxt_document',
-			[ previous ]
+			[ { ...previous, cascade_deleted: [] } ]
 		);
 	} );
 
-	it( 'syncs a real top-level soft DELETE response and invalidates descendants', async () => {
+	it( 'caches the trashed record and invalidates descendants', async () => {
 		const lifecycleFocusIntent = { token: 2 };
 		const ctx = makeCtx( {
 			captureLifecycleFocusIntent: jest
@@ -502,19 +533,17 @@ describe( 'document archive lifecycle', () => {
 			onAfterTrash: jest.fn(),
 		} );
 		const record = { id: 9 };
-		const deleted = {
-			id: 9,
-			status: 'trash',
-			cascade_deleted: [ 10 ],
-		};
-		apiFetch.mockResolvedValue( deleted );
+		mockAbility( { trashed: [ 9, 10 ] }, { id: 9, status: 'trash' } );
 
 		await trashDocument( record, ctx );
 
+		expect( runAbility ).toHaveBeenCalledWith( 'cortext/trash-document', {
+			id: 9,
+		} );
 		expect( ctx.receiveEntityRecords ).toHaveBeenCalledWith(
 			'postType',
 			'crtxt_document',
-			[ deleted ]
+			[ { id: 9, status: 'trash', cascade_deleted: [ 10 ] } ]
 		);
 		expect( ctx.invalidateResolution ).toHaveBeenCalledWith(
 			'getEntityRecord',
@@ -536,16 +565,17 @@ describe( 'document archive lifecycle', () => {
 			lockEditors: jest.fn().mockReturnValue( unlock ),
 			flushActiveEditor: jest.fn().mockResolvedValue( true ),
 		} );
-		const deleted = { id: 9, status: 'trash' };
-		apiFetch.mockResolvedValue( deleted );
+		mockAbility( { trashed: [ 9 ] }, { id: 9, status: 'trash' } );
 
-		await expect( trashDocument( { id: 9 }, ctx ) ).resolves.toBe(
-			deleted
-		);
+		await expect( trashDocument( { id: 9 }, ctx ) ).resolves.toEqual( {
+			id: 9,
+			status: 'trash',
+			cascade_deleted: [],
+		} );
 
 		const lockOrder = ctx.lockEditors.mock.invocationCallOrder[ 0 ];
 		const flushOrder = ctx.flushActiveEditor.mock.invocationCallOrder[ 0 ];
-		const requestOrder = apiFetch.mock.invocationCallOrder[ 0 ];
+		const requestOrder = runAbility.mock.invocationCallOrder[ 0 ];
 		const syncOrder =
 			ctx.receiveEntityRecords.mock.invocationCallOrder[ 0 ];
 		expect( lockOrder ).toBeLessThan( flushOrder );
@@ -559,7 +589,7 @@ describe( 'document archive lifecycle', () => {
 
 	it.each( [
 		[ 'archive', archiveDocument, { archived: [ 9, 10 ] } ],
-		[ 'trash', trashDocument, { id: 9, cascade_deleted: [ 10 ] } ],
+		[ 'trash', trashDocument, { trashed: [ 9, 10 ] } ],
 	] )(
 		'keeps the editors locked during the %s until open cascaded documents reload',
 		async ( _name, action, response ) => {
@@ -575,7 +605,7 @@ describe( 'document archive lifecycle', () => {
 						} )
 				),
 			} );
-			apiFetch.mockResolvedValue( response );
+			mockAbility( response, { id: 9 } );
 
 			const result = action( { id: 9 }, ctx );
 			await new Promise( ( resolve ) => setTimeout( resolve, 0 ) );
@@ -606,7 +636,7 @@ describe( 'document archive lifecycle', () => {
 
 		await expect( trashDocument( { id: 9 }, ctx ) ).resolves.toBeNull();
 
-		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( runAbility ).not.toHaveBeenCalled();
 		expect( ctx.setFavorites ).not.toHaveBeenCalled();
 		expect( ctx.onAfterTrash ).not.toHaveBeenCalled();
 		expect( ctx.cancelLifecycleFocusIntent ).toHaveBeenCalledWith(
@@ -634,7 +664,7 @@ describe( 'document archive lifecycle', () => {
 				flushActiveEditor: jest.fn().mockResolvedValue( true ),
 			} );
 			let rejectRequest;
-			apiFetch.mockReturnValue(
+			runAbility.mockReturnValue(
 				new Promise( ( resolve, reject ) => {
 					rejectRequest = reject;
 				} )
@@ -643,7 +673,7 @@ describe( 'document archive lifecycle', () => {
 			const result = action( { id: 9 }, ctx );
 			await Promise.resolve();
 			await Promise.resolve();
-			expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+			expect( runAbility ).toHaveBeenCalledTimes( 1 );
 			expect( unlock ).not.toHaveBeenCalled();
 
 			const error = new Error( 'offline' );
@@ -773,11 +803,7 @@ describe( 'Trash snackbars', () => {
 
 	it( 'says what moved to Trash and restores it on Undo', async () => {
 		const ctx = makeCtx();
-		apiFetch.mockResolvedValueOnce( {
-			id: 9,
-			status: 'trash',
-			cascade_deleted: [ 10, 11 ],
-		} );
+		mockAbility( { trashed: [ 9, 10, 11 ] }, { id: 9, status: 'trash' } );
 
 		await trashDocument( { id: 9 }, ctx );
 
@@ -810,13 +836,15 @@ describe( 'Trash snackbars', () => {
 
 		await restoreDocument( { id: 9 }, ctx );
 
-		apiFetch.mockResolvedValueOnce( { id: 9, status: 'trash' } );
+		mockAbility( { trashed: [ 9 ] }, { id: 9, status: 'trash' } );
 		await act( () => undoFrom( ctx.createSuccessNotice ).onClick() );
 
-		expect( apiFetch ).toHaveBeenLastCalledWith( {
-			path: '/wp/v2/crtxt_documents/9',
-			method: 'DELETE',
-		} );
+		expect( runAbility ).toHaveBeenLastCalledWith(
+			'cortext/trash-document',
+			{
+				id: 9,
+			}
+		);
 	} );
 
 	it( 'reports a failed Undo in the same snackbar slot', async () => {
@@ -827,7 +855,7 @@ describe( 'Trash snackbars', () => {
 		} );
 		await restoreDocument( { id: 9 }, ctx );
 
-		apiFetch.mockRejectedValueOnce( new Error( 'Nope' ) );
+		runAbility.mockRejectedValueOnce( new Error( 'Nope' ) );
 		await act( () => undoFrom( ctx.createSuccessNotice ).onClick() );
 
 		expect( ctx.createErrorNotice ).toHaveBeenCalledWith( 'Nope', {
@@ -940,10 +968,10 @@ describe( 'Archive snackbars', () => {
 
 	it( 'says what was archived and unarchives it on Undo', async () => {
 		const ctx = makeCtx();
-		apiFetch.mockResolvedValueOnce( {
-			archived: [ 9, 10, 11 ],
-			post: { id: 9, status: 'crtxt_archived' },
-		} );
+		mockAbility(
+			{ archived: [ 9, 10, 11 ] },
+			{ id: 9, status: 'crtxt_archived' }
+		);
 
 		await archiveDocument( { id: 9 }, ctx );
 
@@ -955,37 +983,34 @@ describe( 'Archive snackbars', () => {
 			} )
 		);
 
-		apiFetch.mockResolvedValueOnce( {
-			restored: [ 9, 10, 11 ],
-			post: { id: 9, status: 'draft' },
-		} );
+		mockAbility(
+			{ restored: [ 9, 10, 11 ], published: [], status: 'draft' },
+			{ id: 9, status: 'draft' }
+		);
 		await act( () => undoFrom( ctx.createSuccessNotice ).onClick() );
 
-		expect( apiFetch ).toHaveBeenLastCalledWith( {
-			path: '/cortext/v1/documents/9/unarchive',
-			method: 'POST',
-		} );
+		expect( runAbility ).toHaveBeenLastCalledWith(
+			'cortext/unarchive-document',
+			{ id: 9 }
+		);
 	} );
 
 	it( 'archives an unarchived document again on Undo', async () => {
 		const ctx = makeCtx();
-		apiFetch.mockResolvedValueOnce( {
-			restored: [ 9 ],
-			post: { id: 9, status: 'draft' },
-		} );
+		mockAbility(
+			{ restored: [ 9 ], published: [], status: 'draft' },
+			{ id: 9, status: 'draft' }
+		);
 
 		await unarchiveDocument( { id: 9 }, ctx );
 
-		apiFetch.mockResolvedValueOnce( {
-			archived: [ 9 ],
-			post: { id: 9, status: 'crtxt_archived' },
-		} );
+		mockAbility( { archived: [ 9 ] }, { id: 9, status: 'crtxt_archived' } );
 		await act( () => undoFrom( ctx.createSuccessNotice ).onClick() );
 
-		expect( apiFetch ).toHaveBeenLastCalledWith( {
-			path: '/cortext/v1/documents/9/archive',
-			method: 'POST',
-		} );
+		expect( runAbility ).toHaveBeenLastCalledWith(
+			'cortext/archive-document',
+			{ id: 9 }
+		);
 		expect( ctx.createSuccessNotice ).toHaveBeenLastCalledWith(
 			'Document archived.',
 			expect.objectContaining( {

@@ -3,6 +3,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { useCallback } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 
+import { runAbility } from '../abilities/runAbility';
 import { DOCUMENT_POST_TYPE } from '../collections';
 import allSettledWithConcurrency from '../components/allSettledWithConcurrency';
 import { computeDocumentUri } from '../router/useResolveEntity';
@@ -12,7 +13,11 @@ import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import { notifySidebarTreeChanged } from '../hooks/sidebarTreeInvalidation';
 import { cascadeFavorites } from './favorites';
 import { afterDocumentTrash, applyInvalidationPack } from './invalidation';
-import { duplicateDocumentRecord } from './mutations';
+import {
+	duplicateDocumentRecord,
+	fetchDocumentRecord,
+	receiveCanonicalDocumentRecord,
+} from './mutations';
 
 function collectCascadeIds( record, cascade ) {
 	const ids = new Set( [ Number( record.id ) ] );
@@ -320,38 +325,47 @@ export async function runWithEditorsLocked( ctx, request ) {
 	}
 }
 
+// Fetches the full record of a document an ability changed and puts it in
+// the core-data cache, since abilities answer with a short summary.
+async function receiveChangedDocument( id, ctx ) {
+	const record = await fetchDocumentRecord( id );
+	return receiveCanonicalDocumentRecord( record, ctx.receiveEntityRecords );
+}
+
+function refreshDocumentLists( ctx, parentId ) {
+	applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
+	notifySidebarTreeChanged(
+		parentId === undefined ? undefined : { parentId: Number( parentId ) }
+	);
+}
+
 // Pure create: saves the new document and refreshes the lists. Post-create
 // UX (navigation, auto-rename, selection in a block picker) belongs to the
 // caller; this function only owns the persistence and cache invalidation.
+// Resolves the full record of the new document.
 //
-// `input` is a partial post-data object (`{title, parent, status, ...}`).
-// Defaults to `status: 'draft'`.
+// `input` takes `title`, `content` and `parent`. A document without a title
+// starts as a draft.
 export async function createDocument( input, ctx ) {
-	const payload = { status: 'draft', ...input };
-	const created = await ctx.saveEntityRecord(
-		'postType',
-		DOCUMENT_POST_TYPE,
-		payload,
-		{ throwOnError: true }
-	);
-	if ( created?.id ) {
-		applyInvalidationPack( ctx.invalidateResolution, afterDocumentTrash );
-		notifySidebarTreeChanged( {
-			parentId: Number( created.parent ?? payload.parent ?? 0 ),
-		} );
-	}
-	return created;
+	const created = await runAbility( 'cortext/create-page', input );
+	const record = await receiveChangedDocument( created.id, ctx );
+	refreshDocumentLists( ctx, created.parent );
+	return record;
 }
 
 // Standalone hook for `createDocument`. Any component (sidebar, blocks, etc.)
 // can call this without going through `DocumentsProvider`; the hook wires
 // the core-data dispatchers itself.
 export function useCreateDocument() {
-	const { saveEntityRecord, invalidateResolution } = useDispatch( 'core' );
+	const { receiveEntityRecords, invalidateResolution } =
+		useDispatch( 'core' );
 	return useCallback(
 		( input = {} ) =>
-			createDocument( input, { saveEntityRecord, invalidateResolution } ),
-		[ saveEntityRecord, invalidateResolution ]
+			createDocument( input, {
+				receiveEntityRecords,
+				invalidateResolution,
+			} ),
+		[ receiveEntityRecords, invalidateResolution ]
 	);
 }
 
@@ -359,29 +373,55 @@ export function useCreateDocument() {
 // saving, mirrors the trait term, and creates the owner data view. The flag is
 // not stored on the post.
 export function useCreateCollectionDocument() {
-	const create = useCreateDocument();
+	const { saveEntityRecord, invalidateResolution } = useDispatch( 'core' );
 	return useCallback(
-		( input = {} ) => create( { ...input, cortext_collection: true } ),
-		[ create ]
+		async ( input = {} ) => {
+			const created = await saveEntityRecord(
+				'postType',
+				DOCUMENT_POST_TYPE,
+				{ status: 'draft', ...input, cortext_collection: true },
+				{ throwOnError: true }
+			);
+			if ( created?.id ) {
+				refreshDocumentLists(
+					{ invalidateResolution },
+					created.parent ?? input.parent ?? 0
+				);
+			}
+			return created;
+		},
+		[ saveEntityRecord, invalidateResolution ]
 	);
 }
 
-// First rename of a draft promotes status to private so core regenerates
-// `post_name` from the new title via `wp_unique_post_slug(sanitize_title())`.
+// Naming a draft makes it private on the server, so its address follows the
+// new title.
 export async function renameDocument( record, title, ctx ) {
-	const payload = { id: record.id, title };
-	if ( record.status === 'draft' ) {
-		payload.status = 'private';
-	}
-	const updated = await ctx.saveEntityRecord(
-		'postType',
-		DOCUMENT_POST_TYPE,
-		payload
-	);
+	const updated = await runAbility( 'cortext/rename-document', {
+		id: record.id,
+		title,
+	} );
+	await receiveChangedDocument( record.id, ctx );
 	notifySidebarTreeChanged( {
 		parentId: Number( updated?.parent ?? record.parent ?? 0 ),
 	} );
-	await ctx.touchRecent( { id: record.id } );
+	await ctx.touchRecent?.( { id: record.id } );
+}
+
+// Moves a document under another one, or to the top level with parent 0. It
+// goes last in its new branch.
+export async function moveDocument( record, parentId, ctx ) {
+	await runAbility( 'cortext/move-document', {
+		id: record.id,
+		parent: parentId,
+	} );
+	const moved = await receiveChangedDocument( record.id, ctx );
+	refreshDocumentLists( ctx );
+	ctx.createSuccessNotice?.( __( 'Document moved.', 'cortext' ), {
+		id: 'cortext-document-move-success',
+		type: 'snackbar',
+	} );
+	return moved;
 }
 
 export async function duplicateDocument( record, ctx ) {
@@ -457,11 +497,14 @@ async function runDocumentLifecycle(
 // block selection writes.
 export async function trashDocument( record, ctx ) {
 	const result = await runDocumentLifecycle( record, ctx, {
-		request: () =>
-			apiFetch( {
-				path: `/wp/v2/crtxt_documents/${ record.id }`,
-				method: 'DELETE',
-			} ),
+		// The ability lists the document first, then what went with it.
+		request: async () => {
+			const { trashed } = await runAbility( 'cortext/trash-document', {
+				id: record.id,
+			} );
+			const post = await fetchDocumentRecord( record.id );
+			return { ...post, cascade_deleted: trashed.slice( 1 ) };
+		},
 		cascadeKey: 'cascade_deleted',
 		saveFailureMessage: trashSaveFailureMessage(),
 		noticeId: 'cortext-document-trash-save-error',
@@ -524,11 +567,13 @@ export async function restoreDocument( record, ctx ) {
 
 export async function archiveDocument( record, ctx ) {
 	const result = await runDocumentLifecycle( record, ctx, {
-		request: () =>
-			apiFetch( {
-				path: `/cortext/v1/documents/${ record.id }/archive`,
-				method: 'POST',
-			} ),
+		request: async () => {
+			const { archived } = await runAbility( 'cortext/archive-document', {
+				id: record.id,
+			} );
+			const post = await fetchDocumentRecord( record.id );
+			return { archived, post };
+		},
 		cascadeKey: 'archived',
 		saveFailureMessage: archiveSaveFailureMessage(),
 		noticeId: 'cortext-document-archive-save-error',
@@ -555,10 +600,12 @@ export async function archiveDocument( record, ctx ) {
 }
 
 export async function unarchiveDocument( record, ctx ) {
-	const response = await apiFetch( {
-		path: `/cortext/v1/documents/${ record.id }/unarchive`,
-		method: 'POST',
-	} );
+	const { restored, published } = await runAbility(
+		'cortext/unarchive-document',
+		{ id: record.id }
+	);
+	const post = await fetchDocumentRecord( record.id );
+	const response = { restored, published, post };
 	syncLifecycleEntityRecords( response, ctx, 'restored' );
 	invalidateDocumentLifecycle( ctx );
 	notifyDocumentArchiveChanged( { action: 'unarchive' } );
