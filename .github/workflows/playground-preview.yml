@@ -1,0 +1,90 @@
+name: Playground Preview
+
+# Builds the plugin ZIP for each PR and uploads it with the gallery blueprint as
+# a Playground blueprint bundle. Playground's plugin proxy serves the latest
+# artifact of this workflow for a PR, so the link in the PR comment always opens
+# the newest build. The proxy looks the workflow up by name: renaming it, or the
+# artifact, breaks every preview link already posted.
+
+on:
+    pull_request:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+
+jobs:
+    build:
+        name: Build preview bundle
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7.0.1
+
+            - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+              with:
+                  version: 11.0.8
+                  standalone: true
+
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: '24.15'
+                  cache: 'pnpm'
+
+            - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+              with:
+                  php-version: '8.1'
+                  tools: composer:v2
+                  coverage: none
+
+            - name: Build the plugin
+              run: ./scripts/build-zip.sh
+
+            # A bundle is a ZIP with blueprint.json at its root. The gallery
+            # blueprint already installs ./cortext.zip from the bundle.
+            - name: Stage the blueprint bundle
+              run: |
+                  mkdir -p "$RUNNER_TEMP/bundle"
+                  cp playground/gallery/blueprint.json dist/cortext.zip "$RUNNER_TEMP/bundle/"
+
+            - uses: actions/upload-artifact@v7
+              with:
+                  name: cortext-playground
+                  path: ${{ runner.temp }}/bundle/
+                  retention-days: 14
+
+    comment:
+        name: Post preview link
+        needs: build
+        # Fork PRs get a read-only token and cannot comment.
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
+        steps:
+            - name: Create or update the preview comment
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  REPO: ${{ github.repository }}
+                  PR: ${{ github.event.pull_request.number }}
+              run: |
+                  set -euo pipefail
+
+                  marker='<!-- cortext-playground-preview -->'
+                  proxy="https://playground.wordpress.net/plugin-proxy.php?org=Automattic&repo=cortext&workflow=Playground%20Preview&artifact=cortext-playground&pr=${PR}"
+                  url="https://playground.wordpress.net/?blueprint-url=$(jq -rn --arg u "$proxy" '$u|@uri')"
+                  body="${marker}
+                  [![Preview in WordPress Playground](https://img.shields.io/badge/Preview-WordPress%20Playground-3858e9?logo=wordpress)](${url})
+
+                  Opens the latest build of this PR with seeded content. The build expires 14 days after the last push."
+
+                  comment_id="$(gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
+                    --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"${marker}\"))) | .id" | head -n1)"
+
+                  if [ -n "$comment_id" ]; then
+                    gh api --method PATCH "repos/${REPO}/issues/comments/${comment_id}" -f body="$body" >/dev/null
+                  else
+                    gh api --method POST "repos/${REPO}/issues/${PR}/comments" -f body="$body" >/dev/null
+                  fi

@@ -15,6 +15,7 @@ use Cortext\FieldValues\FieldValueIndex;
 use Cortext\FieldValues\FieldValueReadQuery;
 use Cortext\FieldValues\FieldValueStore;
 use Cortext\PostType\Document;
+use Cortext\PostType\DocumentIdentity;
 use Cortext\PostType\Field;
 use Cortext\Relations;
 use Cortext\Rest\RowsFilterQuery;
@@ -1951,7 +1952,7 @@ final class PerfBench {
 				'post_author'           => $author_id,
 				'post_date'             => $now,
 				'post_date_gmt'         => $now_gmt,
-				'post_content'          => '',
+				'post_content'          => DocumentIdentity::with_properties_block( '' ),
 				'post_title'            => $title,
 				'post_excerpt'          => '',
 				'post_status'           => 'private',

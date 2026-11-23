@@ -2,6 +2,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import {
 	BlockControls,
 	InspectorControls,
+	store as blockEditorStore,
 	useBlockProps,
 } from '@wordpress/block-editor';
 import {
@@ -19,7 +20,7 @@ import {
 	useState,
 } from '@wordpress/element';
 import { store as coreStore } from '@wordpress/core-data';
-import { useSelect } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { pencil, seen, unseen } from '@wordpress/icons';
 
@@ -39,7 +40,7 @@ import { isExperimentEnabled, TRAITS_EXPERIMENT_ID } from '../../settings';
 // and RowEditor provide the source collection's fields and the fallback row
 // record; a row's other collections resolve their own fields. Pages
 // and rows without fields return null.
-export default function Edit() {
+export default function Edit( { clientId, isSelected } ) {
 	const ctx = useDocumentPropertiesContext();
 	const {
 		collectionId = null,
@@ -458,11 +459,29 @@ export default function Edit() {
 		rowId &&
 		( ( membershipsAreActionable && memberships.length > 0 ) ||
 			membershipsError );
-	if (
+
+	// tech-debt.md#td-gutenberg-header-boundary: every document carries this
+	// block, and with nothing to show it has no element to focus. Gutenberg
+	// still selects it as the block before the first body block, for example
+	// after removing that block or on Backspace at its start, so hand the
+	// selection to the block before it, the title.
+	const rendersNothing =
 		! ctx ||
 		isResolving ||
-		( ! source.hasLayoutProperties && ! canRenderTraitShell )
-	) {
+		( ! source.hasLayoutProperties && ! canRenderTraitShell );
+	const previousClientId = useSelect(
+		( select ) =>
+			select( blockEditorStore ).getPreviousBlockClientId( clientId ),
+		[ clientId ]
+	);
+	const { selectBlock } = useDispatch( blockEditorStore );
+	useLayoutEffect( () => {
+		if ( isSelected && rendersNothing && previousClientId ) {
+			selectBlock( previousClientId, -1 );
+		}
+	}, [ isSelected, previousClientId, rendersNothing, selectBlock ] );
+
+	if ( rendersNothing ) {
 		return null;
 	}
 

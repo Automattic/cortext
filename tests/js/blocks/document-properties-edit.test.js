@@ -20,6 +20,8 @@ let mockTraits;
 let mockTraitsDocumentId;
 let mockAdditionalCounts;
 let mockAdditionalProps;
+let mockPreviousClientId;
+let mockSelectBlock;
 
 jest.mock( '@wordpress/api-fetch', () => ( {
 	__esModule: true,
@@ -95,6 +97,7 @@ jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( {
 		invalidateResolution: jest.fn(),
 		saveEntityRecord: mockSaveEntityRecord,
+		selectBlock: mockSelectBlock,
 	} ),
 	useSelect: ( callback ) =>
 		callback( () => ( {
@@ -103,6 +106,7 @@ jest.mock( '@wordpress/data', () => ( {
 			isSavingEntityRecord: () => mockIsSaving,
 			getCurrentPostAttribute: ( key ) =>
 				key === 'status' ? mockPostStatus : undefined,
+			getPreviousBlockClientId: () => mockPreviousClientId,
 		} ) ),
 } ) );
 
@@ -302,6 +306,8 @@ beforeEach( () => {
 	mockTraitsDocumentId = null;
 	mockAdditionalCounts = {};
 	mockAdditionalProps = {};
+	mockPreviousClientId = 'title-block';
+	mockSelectBlock = jest.fn();
 	mockContext = {
 		collectionId: 77,
 		rowId: 123,
@@ -1366,5 +1372,44 @@ describe( 'document-properties Customize properties mode', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
 
 		expect( refresh ).toHaveBeenCalled();
+	} );
+} );
+
+describe( 'document-properties selection', () => {
+	it( 'hands the selection to the previous block when it shows nothing', () => {
+		delete window.cortextSettings;
+		mockContext = { ...mockContext, fields: [], allFields: [] };
+
+		const { container } = render(
+			<Edit clientId="properties-block" isSelected />
+		);
+
+		expect( container ).toBeEmptyDOMElement();
+		expect( mockSelectBlock ).toHaveBeenCalledWith( 'title-block', -1 );
+	} );
+
+	it( 'keeps the selection when it shows properties', () => {
+		render( <Edit clientId="properties-block" isSelected /> );
+
+		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect( mockSelectBlock ).not.toHaveBeenCalled();
+	} );
+
+	it( 'keeps the selection when it only shows the traits row', () => {
+		mockContext = { ...mockContext, fields: [], allFields: [] };
+
+		render( <Edit clientId="properties-block" isSelected /> );
+
+		expect( screen.getByTestId( 'trait-control' ) ).toBeInTheDocument();
+		expect( mockSelectBlock ).not.toHaveBeenCalled();
+	} );
+
+	it( 'leaves the selection alone while another block is selected', () => {
+		delete window.cortextSettings;
+		mockContext = { ...mockContext, fields: [], allFields: [] };
+
+		render( <Edit clientId="properties-block" isSelected={ false } /> );
+
+		expect( mockSelectBlock ).not.toHaveBeenCalled();
 	} );
 } );

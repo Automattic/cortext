@@ -177,7 +177,9 @@ final class RowsController {
 	/**
 	 * Permission gate for the rows endpoint.
 	 *
-	 * `context=edit` is the default editor path and requires `edit_posts`.
+	 * `context=edit` is the default editor path and requires `edit_posts`
+	 * plus read access to the collection. A collection's rows are readable by
+	 * whoever can read the collection.
 	 * `context=view` is the public opt-in: anyone may read rows from a
 	 * published collection.
 	 *
@@ -1244,7 +1246,10 @@ final class RowsController {
 	 * @return array<int,array{id:int,slug:string,title:array{raw:string,rendered:string},collectionId:int,status:string}>
 	 */
 	private function format_relation_value( int $row_id, int $field_id, ?RowFormatContext $ctx = null ): array {
-		$relation_meta        = $this->relation_field_meta_for( $field_id, $ctx );
+		$relation_meta = $this->relation_field_meta_for( $field_id, $ctx );
+		if ( ! $relation_meta['readable'] ) {
+			return array();
+		}
 		$target_collection_id = $relation_meta['related_collection_id'];
 
 		// Prime raw targets before filtering; the filter calls `get_post`.
@@ -1279,7 +1284,7 @@ final class RowsController {
 	 *
 	 * @param int                   $field_id Relation field post ID.
 	 * @param RowFormatContext|null $ctx      Optional formatting context.
-	 * @return array{related_collection_id: int}
+	 * @return array{related_collection_id: int, readable: bool}
 	 */
 	private function relation_field_meta_for( int $field_id, ?RowFormatContext $ctx ): array {
 		if ( null !== $ctx && isset( $ctx->relation_field_meta[ $field_id ] ) ) {
@@ -1288,6 +1293,9 @@ final class RowsController {
 		$target_collection_id = (int) get_post_meta( $field_id, 'related_collection_id', true );
 		$entry                = array(
 			'related_collection_id' => $target_collection_id,
+			// Chips and rollups show the target collection's rows, so they
+			// follow the same read rule as listing that collection.
+			'readable'              => current_user_can( 'read_post', $target_collection_id ),
 		);
 		if ( null !== $ctx ) {
 			$ctx->relation_field_meta[ $field_id ] = $entry;
@@ -1385,7 +1393,9 @@ final class RowsController {
 		$aggregator        = $rollup_meta['aggregator'];
 
 		// Prime raw targets before filtering or reading rollup values.
-		$raw_ids = Relations::relation_values( $row_id, $relation_field_id );
+		$raw_ids = $this->relation_field_meta_for( $relation_field_id, $ctx )['readable']
+			? Relations::relation_values( $row_id, $relation_field_id )
+			: array();
 		if ( count( $raw_ids ) > 0 ) {
 			_prime_post_caches( $raw_ids, false, true );
 		}

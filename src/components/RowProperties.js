@@ -10,6 +10,7 @@
  * autosave.
  */
 
+import apiFetch from '@wordpress/api-fetch';
 import { Button, CheckboxControl } from '@wordpress/components';
 import { store as coreStore } from '@wordpress/core-data';
 import { useDispatch, useSelect } from '@wordpress/data';
@@ -52,12 +53,12 @@ import {
 } from './EditableCell';
 import { TITLE_FIELD_ID } from './dataViewColumns';
 import FieldActionsMenu from './fields/FieldActionsMenu';
+import RollupInvalidHint from './fields/RollupInvalidHint';
 import { FieldTypeIcon, SystemFieldIcon } from './fields/fieldTypes';
 import { hasSystemFieldIcon } from './fields/systemFieldIconIds';
 import Infotip from './Infotip';
 import MultiselectEdit from './MultiselectEdit';
 import { toRecordId } from '../hooks/fieldIds';
-import { rollupInvalidLabel } from '../hooks/fieldMapping';
 import { elementsFromOptions } from '../hooks/optionElements';
 import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
 import useRelationTargetStatuses from '../hooks/useRelationTargetStatuses';
@@ -96,13 +97,26 @@ function emptyLabel() {
 	);
 }
 
-function ReadOnlyProperty( { value, type, elements, format, rollupInvalid } ) {
-	if ( rollupInvalid ) {
+function ReadOnlyProperty( {
+	value,
+	type,
+	elements,
+	format,
+	field,
+	collectionId,
+	isStatic = false,
+	onSaved,
+} ) {
+	if ( field?.cortextRollupInvalid ) {
 		return (
 			<div className="cortext-row-detail__readonly">
-				<span className="cortext-row-detail__empty-value">
-					{ rollupInvalidLabel() }
-				</span>
+				<RollupInvalidHint
+					recordId={ field.cortextRecordId }
+					reason={ field.cortextRollupInvalid }
+					collectionId={ collectionId }
+					isStatic={ isStatic }
+					onSaved={ onSaved }
+				/>
 			</div>
 		);
 	}
@@ -216,7 +230,8 @@ function RowPropertyDragOverlay( {
 						type={ displayType }
 						elements={ elements }
 						format={ format }
-						rollupInvalid={ field.cortextRollupInvalid }
+						field={ field }
+						isStatic
 					/>
 				</div>
 			</div>
@@ -819,6 +834,7 @@ function RowProperty( {
 	localOptionOverrides,
 	onLayoutVisibilityToggle,
 	optionOverrides,
+	refreshComputedValue,
 	refreshRows,
 	reorderAttributes,
 	reorderListeners,
@@ -837,6 +853,15 @@ function RowProperty( {
 	const type = fieldType( field );
 	const displayType = displayFieldType( field );
 	const isVisibleInLayout = field.cortextDetailVisible !== false;
+	// A rollup's value comes from the server, so changing its settings also
+	// refetches this row's value for it.
+	const onFieldChanged =
+		type === 'rollup'
+			? () => {
+					refreshComputedValue?.( field.id );
+					refreshRows?.();
+			  }
+			: refreshRows;
 	const elements =
 		localOptionOverrides?.[ field.id ] ??
 		optionOverrides?.[ field.id ] ??
@@ -880,7 +905,9 @@ function RowProperty( {
 			type={ displayType }
 			elements={ elements }
 			format={ format }
-			rollupInvalid={ field.cortextRollupInvalid }
+			field={ field }
+			collectionId={ collectionId }
+			onSaved={ onFieldChanged }
 		/>
 	);
 	if ( isEditable ) {
@@ -945,7 +972,7 @@ function RowProperty( {
 					field={ displayField }
 					onFieldOptionsSaved={ handleFieldOptionsSaved }
 					onFieldFormatSaved={ handleFieldFormatSaved }
-					onRowsChanged={ refreshRows }
+					onRowsChanged={ onFieldChanged }
 				/>
 			</div>
 			<div className="cortext-row-detail__property-value">
@@ -1117,6 +1144,28 @@ export default function RowProperties( {
 	const sourceRowId = providedRowId ?? row?.id;
 	const rowId = sourceRowId;
 	const relationTargetStatuses = useRelationTargetStatuses( rowId );
+	// Rollups are computed when the row is read, so after one changes its
+	// settings the panel asks the row for the new value.
+	const refreshComputedValue = useCallback(
+		async ( fieldId ) => {
+			if ( ! rowId ) {
+				return;
+			}
+			try {
+				const fresh = await apiFetch( {
+					path: `/wp/v2/crtxt_documents/${ rowId }?context=edit&_fields=cortext_hydrated_meta`,
+				} );
+				setCommittedHydratedMeta( ( current ) => ( {
+					...current,
+					[ fieldId ]:
+						fresh?.cortext_hydrated_meta?.[ fieldId ] ?? null,
+				} ) );
+			} catch {
+				// The value catches up the next time the row loads.
+			}
+		},
+		[ rowId ]
+	);
 	const sensors = useSensors(
 		useSensor( PointerSensor, { activationConstraint: { distance: 4 } } ),
 		useSensor( KeyboardSensor, {
@@ -1771,6 +1820,7 @@ export default function RowProperties( {
 				localOptionOverrides={ localOptionOverrides }
 				onLayoutVisibilityToggle={ onLayoutVisibilityToggle }
 				optionOverrides={ optionOverrides }
+				refreshComputedValue={ refreshComputedValue }
 				refreshRows={ refreshRows }
 				rowId={ rowId }
 				saveError={ fieldErrors[ field.id ] }
@@ -1797,6 +1847,7 @@ export default function RowProperties( {
 				localOptionOverrides={ localOptionOverrides }
 				onLayoutVisibilityToggle={ onLayoutVisibilityToggle }
 				optionOverrides={ optionOverrides }
+				refreshComputedValue={ refreshComputedValue }
 				refreshRows={ refreshRows }
 				rowId={ rowId }
 				saveError={ fieldErrors[ field.id ] }

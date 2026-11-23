@@ -4,7 +4,7 @@ Tags: knowledge-base, collections, custom-post-types, block-editor, publishing
 Requires at least: 7.1
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.3.0
+Stable tag: 0.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -74,6 +74,67 @@ Notion's Terms of Service (https://www.notion.so/28ffdd083dc3473e9c2da6ec011b58a
 1. The Cortext workspace showing a seeded Library page with a catalog table and detail panel.
 
 == Changelog ==
+
+= 0.4.0 =
+Enhancements:
+
+**Collections**
+
+* Mute relation chips that point to archived documents. ([#481](https://github.com/Automattic/cortext/pull/481))
+* Edit a rollup's relation, target and calculation after creating it. ([#510](https://github.com/Automattic/cortext/pull/510))
+
+**Shell**
+
+* Archive and restore documents from the workspace. ([#468](https://github.com/Automattic/cortext/pull/468))
+* Preview the highlighted document in the command palette. ([#472](https://github.com/Automattic/cortext/pull/472))
+* Record who trashed each document and add an Empty trash endpoint. ([#488](https://github.com/Automattic/cortext/pull/488))
+* Give Trash its own view. ([#493](https://github.com/Automattic/cortext/pull/493))
+* Give Archived its own view. ([#498](https://github.com/Automattic/cortext/pull/498))
+* Open document actions on right-click in the sidebar. ([#512](https://github.com/Automattic/cortext/pull/512))
+
+**Performance**
+
+* Only load the Published list while its pane is open. ([#469](https://github.com/Automattic/cortext/pull/469))
+* Fetch only the fields the shell's document lists use. ([#470](https://github.com/Automattic/cortext/pull/470))
+* Look up default post meta by key instead of scanning every registered key. ([#475](https://github.com/Automattic/cortext/pull/475))
+* Make the collection flag free in document lists. ([#477](https://github.com/Automattic/cortext/pull/477))
+* Read each document's meta from its own fields only. ([#485](https://github.com/Automattic/cortext/pull/485))
+* Show edited cell values as soon as the save returns. ([#491](https://github.com/Automattic/cortext/pull/491))
+
+**Other**
+
+* Record who archived each document and show archived rows in archived collections. ([#494](https://github.com/Automattic/cortext/pull/494))
+* Skip rewriting formula values that didn't change. ([#502](https://github.com/Automattic/cortext/pull/502))
+* Use one vocabulary across the interface. ([#509](https://github.com/Automattic/cortext/pull/509))
+
+Bug fixes:
+
+**Canvas**
+
+* Keep collection pages intact when the editor loads after the page. ([#490](https://github.com/Automattic/cortext/pull/490))
+
+**Collections**
+
+* Show properties on rows archived or trashed before anyone opened them. ([#473](https://github.com/Automattic/cortext/pull/473))
+* Reach collections past the first 100 in pickers and breadcrumbs. ([#478](https://github.com/Automattic/cortext/pull/478))
+* Update rollups when the field they read changes. ([#500](https://github.com/Automattic/cortext/pull/500))
+* Stop the posts endpoint from changing a field's structure. ([#508](https://github.com/Automattic/cortext/pull/508))
+* Show the lock on locked rows and keep their height. ([#511](https://github.com/Automattic/cortext/pull/511))
+* Create every document with the properties block. ([#524](https://github.com/Automattic/cortext/pull/524))
+
+**Shell**
+
+* Say when restoring makes nested documents public again. ([#476](https://github.com/Automattic/cortext/pull/476))
+
+**Other**
+
+* Stop Notion imports and row reordering from writing into hidden collections. ([#479](https://github.com/Automattic/cortext/pull/479))
+* Keep edits made right before archiving or trashing a document. ([#480](https://github.com/Automattic/cortext/pull/480))
+* Prevent documents that open blank from overwriting their content. ([#486](https://github.com/Automattic/cortext/pull/486))
+* Reject REST edits to trashed documents. ([#496](https://github.com/Automattic/cortext/pull/496))
+* Keep inspector labels readable in dark mode. ([#504](https://github.com/Automattic/cortext/pull/504))
+* Show document actions in the collection and row inspectors. ([#505](https://github.com/Automattic/cortext/pull/505))
+* Check read access to a collection before listing its rows. ([#549](https://github.com/Automattic/cortext/pull/549))
 
 = 0.3.0 =
 Enhancements:

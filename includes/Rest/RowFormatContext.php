@@ -27,7 +27,7 @@ final class RowFormatContext {
 	/**
 	 * Relation field ID => relation config.
 	 *
-	 * @var array<int, array{related_collection_id: int, target_slug: string}>
+	 * @var array<int, array{related_collection_id: int, readable: bool}>
 	 */
 	public array $relation_field_meta = array();
 

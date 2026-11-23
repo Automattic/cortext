@@ -38,6 +38,26 @@ WordPress.org assets.
 After the file is live, enable the public Preview button from the plugin's
 Advanced view.
 
+## PR previews
+
+The `Playground Preview` workflow builds the plugin ZIP for every pull request
+and uploads it with `playground/gallery/blueprint.json` as the
+`cortext-playground` artifact. Together they form a blueprint bundle. A bot
+comment on the PR links to:
+
+```text
+https://playground.wordpress.net/?blueprint-url=https://playground.wordpress.net/plugin-proxy.php?org=Automattic&repo=cortext&workflow=Playground%20Preview&artifact=cortext-playground&pr=<number>
+```
+
+(The comment URL-encodes the `blueprint-url` value.) Playground's plugin proxy
+serves the latest artifact from the PR's branch, so the link always opens the
+newest build. The proxy looks up the workflow and artifact by name, so renaming
+either one breaks the links on open PRs. Artifacts expire after 14 days; push
+again to get a fresh one.
+
+PRs from forks still get the artifact, but no comment, because their token can't
+write to the PR.
+
 ## Gallery submission
 
 Build the plugin ZIP:
