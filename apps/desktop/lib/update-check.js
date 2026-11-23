@@ -47,7 +47,9 @@ function fetchReleases() {
 
 function latestRelease( releases ) {
 	return releases
-		.filter( ( release ) => release && ! release.draft )
+		.filter(
+			( release ) => release && ! release.draft && ! release.prerelease
+		)
 		.map( ( release ) => ( {
 			tag: release.tag_name,
 			version: parseVersion( release.tag_name ),

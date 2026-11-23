@@ -14,6 +14,21 @@ else
   publish=false
 fi
 
+# A tag build compiles, signs and notarizes the app before it uploads anything,
+# so check up front that the upload can work.
+if "$publish"; then
+  echo "--- :closed_lock_with_key: check GitHub Release access"
+  [[ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]] || {
+    echo "No GitHub token on this agent (GH_TOKEN or GITHUB_TOKEN). See docs/release.md."
+    exit 1
+  }
+  # "Prepare release" creates the draft before it pushes the tag.
+  gh release view "$version" --repo Automattic/cortext >/dev/null || {
+    echo "No GitHub Release for $version. Run \"Prepare release\" first."
+    exit 1
+  }
+fi
+
 echo "--- :package: install JS + PHP dependencies"
 corepack enable
 corepack prepare "pnpm@$(node -p "require('./package.json').packageManager.split('@')[1]")" --activate
@@ -72,9 +87,6 @@ export APPLE_API_ISSUER="$APP_STORE_CONNECT_API_KEY_ISSUER_ID"
 npm --prefix apps/desktop run dist -- -c.extraMetadata.version="$version" --publish never
 
 echo "--- :white_check_mark: verify signature + notarization"
-dmg=(apps/desktop/dist/*.dmg)
-[[ ${#dmg[@]} -eq 1 ]] || { echo "Expected exactly one DMG, found ${#dmg[@]}"; exit 1; }
-dmg="${dmg[0]}"
 # electron-builder signs, notarizes and staples the .app, then wraps it in an
 # unsigned .dmg — so the notarized artifact to verify is the app, not the dmg.
 app="$PWD/apps/desktop/dist/mac-arm64/Cortext.app"
@@ -88,34 +100,28 @@ npm --prefix apps/desktop run verify:app -- --app "$app"
 echo "--- :test_tube: smoke-test packaged app"
 node apps/desktop/scripts/packaged-app-smoke.mjs --app "$app"
 
+echo "--- :scroll: check auto-update files"
+# Name each file instead of globbing, so a missing one fails the build rather
+# than dropping out of the upload.
+dist=apps/desktop/dist
+binaries=(
+  "$dist/Cortext-$version-arm64.dmg"
+  "$dist/Cortext-$version-arm64-mac.zip"
+  "$dist/Cortext-$version-arm64-mac.zip.blockmap"
+)
+feed="$dist/latest-mac.yml"
+for file in "${binaries[@]}" "$feed"; do
+  [[ -f "$file" ]] || { echo "Missing $file; did the mac zip target run?"; exit 1; }
+done
+
 if ! "$publish"; then
-  echo "--- :information_source: no release tag; signed DMG stashed as a Buildkite artifact"
+  echo "--- :information_source: no release tag; DMG and update feed stashed as Buildkite artifacts"
   exit 0
 fi
 
-echo "--- :rocket: attach DMG and auto-update feed to draft GitHub Release"
-if ! gh release view "$version" --repo Automattic/cortext >/dev/null 2>&1; then
-  gh release create "$version" \
-    --repo Automattic/cortext \
-    --draft \
-    --title "Cortext $version" \
-    --notes "Cortext $version"
-fi
-
+echo "--- :rocket: attach DMG and auto-update feed to the GitHub Release"
 # electron-updater reads latest-mac.yml from the Release, then downloads the
 # signed zip. Squirrel.Mac installs the zip; the DMG stays for first installs.
-# Keep the Release as a draft until a human publishes it, so shipped apps do not
-# see these assets early.
-[[ -f apps/desktop/dist/latest-mac.yml ]] || {
-  echo "latest-mac.yml missing; did the mac zip target run?"; exit 1;
-}
-shopt -s nullglob
-update_assets=(
-  apps/desktop/dist/*-mac.zip
-  apps/desktop/dist/*-mac.zip.blockmap
-  apps/desktop/dist/latest-mac.yml
-)
-shopt -u nullglob
-
-gh release upload "$version" "$dmg" "${update_assets[@]}" \
-  --repo Automattic/cortext --clobber
+# Upload the feed last so apps never see it pointing at files not there yet.
+gh release upload "$version" "${binaries[@]}" --repo Automattic/cortext --clobber
+gh release upload "$version" "$feed" --repo Automattic/cortext --clobber

@@ -9,7 +9,7 @@ on:
             prerelease:
                 description: 'Prerelease'
                 required: true
-                default: true
+                default: false
                 type: boolean
             dry_run:
                 description: 'Dry run (uploads files only; no tag or release)'
@@ -26,8 +26,8 @@ concurrency:
     group: cortext-release-${{ inputs.milestone }}
     cancel-in-progress: true
 
-# GitHub Actions prepares the plugin ZIP and draft Release. Buildkite owns the
-# signed desktop DMG and attaches it from the release tag build.
+# GitHub Actions prepares the plugin ZIP and draft Release, then pushes the tag.
+# Buildkite owns the signed desktop app and attaches it from the tag build.
 jobs:
     bump-version:
         name: Bump release version
@@ -166,6 +166,44 @@ jobs:
             dry_run: ${{ inputs.dry_run }}
             ref: ${{ needs.bump-version.outputs.ref }}
         secrets: inherit
+
+    # Buildkite builds the desktop app from the tag. Pushing it here, once the
+    # draft exists, lets that build attach the app while the Release is still a
+    # draft, instead of starting only when someone publishes it.
+    tag-release:
+        name: Tag release
+        needs: [bump-version, plugin]
+        if: ${{ ! inputs.dry_run }}
+        runs-on: ubuntu-latest
+        environment: GitHub Releases
+        steps:
+            - uses: actions/checkout@v7.0.1
+              with:
+                  ref: ${{ needs.bump-version.outputs.ref }}
+                  ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+
+            - name: Push release tag
+              env:
+                  REF: ${{ needs.bump-version.outputs.ref }}
+                  VERSION: ${{ needs.bump-version.outputs.version }}
+              run: |
+                  tagged="$(git ls-remote origin "refs/tags/$VERSION" | cut -f1)"
+                  if [ "$tagged" = "$REF" ]; then
+                    echo "Tag $VERSION already points at $REF."
+                  elif [ -n "$tagged" ]; then
+                    echo "::error::Tag $VERSION points at $tagged, not the release commit $REF. Delete the tag or the draft before preparing again."
+                    exit 1
+                  else
+                    git tag "$VERSION" "$REF"
+                    git push origin "refs/tags/$VERSION"
+                  fi
+
+                  {
+                    echo "## Desktop app"
+                    echo ""
+                    echo "Tagged \`$VERSION\` at \`$REF\`. Buildkite is building the desktop app from it."
+                    echo "Wait until the draft has the DMG, the mac zip, its blockmap and \`latest-mac.yml\` before publishing."
+                  } >> "$GITHUB_STEP_SUMMARY"
 
     finalize-milestone:
         name: Finalize release milestone
