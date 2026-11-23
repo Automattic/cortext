@@ -1030,6 +1030,34 @@ final class Test_Rest_Rows_Controller extends BaseTestCase {
 		$this->assertSame( array( 0, 0 ), $this->rollup_values_for_source_row( $fixture ) );
 	}
 
+	public function test_relation_refs_and_rollups_show_a_published_target_to_logged_out_visitors(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$fixture = $this->create_relation_rollup_fixture( 'relpublic' );
+		$target  = (int) get_post_meta( $fixture['relation_field_id'], 'related_collection_id', true );
+		foreach ( array( $fixture['source_collection_id'], $target ) as $collection_id ) {
+			wp_update_post(
+				array(
+					'ID'          => $collection_id,
+					'post_status' => 'publish',
+				)
+			);
+		}
+
+		wp_set_current_user( 0 );
+		$response = $this->query_rows(
+			array(
+				'trait'   => $fixture['source_collection_id'],
+				'context' => 'view',
+			)
+		);
+		$this->assertSame( 200, $response->get_status() );
+		$rows = array_column( $response->get_data()['rows'], null, 'id' );
+		$meta = $rows[ $fixture['source_row_id'] ]['meta'];
+
+		$this->assertCount( 3, $meta[ "field-{$fixture['relation_field_id']}" ] );
+		$this->assertSame( 3, $meta[ "field-{$fixture['count_field_id']}" ] );
+	}
+
 	/**
 	 * Builds a source collection whose row relates to three target rows, plus
 	 * count and sum rollups over that relation.
