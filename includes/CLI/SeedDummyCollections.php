@@ -3772,7 +3772,7 @@ final class SeedDummyCollections {
 					'post_parent' => $parent_id,
 				);
 				if ( isset( $node['content'] ) ) {
-					$update['post_content'] = $node['content'];
+					$update['post_content'] = DocumentIdentity::with_properties_block( (string) $node['content'] );
 				}
 				wp_update_post( $update );
 				$this->log( "Updated page '{$node['title']}' with current sample content." );
@@ -4959,7 +4959,7 @@ final class SeedDummyCollections {
 				}
 			}
 
-			$entry_content = $this->entry_content( $spec, $entry );
+			$entry_content = DocumentIdentity::with_properties_block( $this->entry_content( $spec, $entry ) );
 			if ( $existing_entry_id > 0 ) {
 				$existing_entry = get_post( $existing_entry_id );
 				if ( $existing_entry && $entry_title !== (string) $existing_entry->post_title ) {
