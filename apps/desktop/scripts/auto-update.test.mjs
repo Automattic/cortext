@@ -92,6 +92,7 @@ function loadUpdater( version ) {
 	// the mocks have to stay installed past the initial require.
 	return {
 		calls,
+		autoUpdater: mocks[ 'electron-updater' ].autoUpdater,
 		scheduleUpdateCheck: () =>
 			withMocks( mocks, updater.scheduleUpdateCheck ),
 		checkForUpdatesInteractive: () =>
@@ -117,6 +118,31 @@ test( 'a release build starts electron-updater', () => {
 
 	assert.equal( calls.legacy, 0 );
 	assert.equal( calls.checks, 1 );
+} );
+
+// With allowPrerelease on, electron-updater follows the newest tag, and a
+// release tag exists before its Release is published. Left at its default, a
+// stable build only sees the latest published stable Release.
+test( 'a release build does not opt in to prereleases', () => {
+	const { scheduleUpdateCheck, autoUpdater } = loadUpdater( '0.2.0' );
+
+	scheduleUpdateCheck();
+
+	assert.equal( autoUpdater.allowPrerelease, undefined );
+} );
+
+test( 'the notify-only checker skips drafts and prereleases', () => {
+	const { latestRelease } = requireWithMocks( '../lib/update-check', {
+		electron: { app: {}, dialog: {}, shell: {} },
+	} );
+
+	const latest = latestRelease( [
+		{ tag_name: '0.4.0', draft: true, prerelease: false },
+		{ tag_name: '0.3.0', draft: false, prerelease: true },
+		{ tag_name: '0.2.0', draft: false, prerelease: false },
+	] );
+
+	assert.equal( latest.tag, '0.2.0' );
 } );
 
 test( 'a branch build says so instead of offering to check', () => {

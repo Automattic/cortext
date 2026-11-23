@@ -209,7 +209,10 @@ function initAutoUpdates( {
 	// Keep install-on-quit tied to the same preference. With the setting off,
 	// a manually downloaded update should not install during the next quit.
 	autoUpdater.autoInstallOnAppQuit = autoDownload;
-	autoUpdater.allowPrerelease = true;
+	// allowPrerelease keeps electron-updater's default, which is off for a
+	// stable version: the updater asks GitHub for the latest published stable
+	// Release. Turned on, it follows the newest tag instead, and a release tag
+	// exists before its Release is published.
 	autoUpdater.logger = null;
 	wireEvents();
 	return true;

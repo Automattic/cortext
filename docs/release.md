@@ -125,6 +125,10 @@ without closing the milestone or creating a next milestone. Turn `dry_run` off
 to commit the version bump, push it to the selected branch, and publish a draft
 Release.
 
+Leave `prerelease` off for a normal release. A Release marked as a prerelease
+isn't deployed to WordPress.org and isn't offered to installed desktop apps;
+people only get it by downloading it.
+
 "Prepare release" first updates the plugin header, `CORTEXT_VERSION`,
 `readme.txt` stable tag, root package version, and desktop package versions to
 the requested milestone version. It also converts the public GitHub release
@@ -159,7 +163,10 @@ desktop files. The GitHub Actions run owns the title, notes, and plugin ZIP.
 
 Wait until the draft has all the desktop files, then publish it. Publishing
 earlier means installed apps find a Release without its update feed and can't
-update. Publishing a stable Release starts the WordPress.org deploy.
+update. Don't leave the draft waiting either: Cortext 0.4.0 and earlier treat
+the new tag as the latest version, so their update checks fail until the
+Release is published. Publishing a stable Release starts the WordPress.org
+deploy.
 
 ## Deploying to WordPress.org
 
@@ -261,6 +268,7 @@ gh release upload <version> latest-mac.yml --repo Automattic/cortext --clobber
 
 The installed app checks the latest published GitHub Release on launch and every
 few hours after that. When a newer version is available, it downloads it in the
-background and asks the user to restart. Draft Releases are ignored. After an app
+background and asks the user to restart. Drafts and prereleases are ignored, and
+so is a tag whose Release isn't published yet. After an app
 update, Cortext refreshes the bundled WordPress and plugin code in the user's
 extracted site while keeping the database and uploads.

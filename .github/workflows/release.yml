@@ -9,7 +9,7 @@ on:
             prerelease:
                 description: 'Prerelease'
                 required: true
-                default: true
+                default: false
                 type: boolean
             dry_run:
                 description: 'Dry run (uploads files only; no tag or release)'
