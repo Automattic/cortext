@@ -143,17 +143,23 @@ and store the private key as the `RELEASE_DEPLOY_KEY` secret in the protected
 `GitHub Releases` environment. The default `GITHUB_TOKEN` cannot bypass the
 ruleset.
 
-Buildkite owns the macOS desktop DMG. The release tag build signs, notarizes,
-and staples the app, then uploads the DMG to the same draft Release.
+Once the draft exists, "Prepare release" pushes the version tag at the release
+commit. Buildkite builds the macOS desktop app from that tag while the Release
+is still a draft: it signs, notarizes, and staples the app, then attaches the
+DMG and the auto-update feed (see [Desktop app](#desktop-app)). That takes about
+an hour. Publishing the Release later reuses the tag, so it doesn't start a
+second build. If you throw a draft away, delete its tag too; preparing the same
+version again fails if the tag points at a different commit.
 
-If the DMG needs to be rebuilt, rerun the Buildkite release tag build rather
-than starting a GitHub Actions workflow.
+If the desktop app needs to be rebuilt, rerun the Buildkite release tag build
+rather than starting a GitHub Actions workflow.
 
 Both systems write to the same Release by tag, but only Buildkite uploads the
-desktop artifact. The GitHub Actions run owns the title, notes, and plugin ZIP.
+desktop files. The GitHub Actions run owns the title, notes, and plugin ZIP.
 
-Once the draft looks right, publish it. Publishing a stable Release starts the
-WordPress.org deploy.
+Wait until the draft has all the desktop files, then publish it. Publishing
+earlier means installed apps find a Release without its update feed and can't
+update. Publishing a stable Release starts the WordPress.org deploy.
 
 ## Deploying to WordPress.org
 
@@ -218,10 +224,40 @@ its own workflow on the same release event.
 ## Desktop app
 
 The desktop release builds a signed, notarized arm64 macOS app with
-electron-builder. Buildkite attaches the DMG to the same Release as the plugin
-ZIP, along with `latest-mac.yml` and the signed `*-mac.zip` that Squirrel.Mac
-installs. Release notes should tell people to move Cortext to Applications;
-in-place updates depend on that.
+electron-builder. Buildkite attaches these files to the same Release as the
+plugin ZIP:
+
+-   `Cortext-<version>-arm64.dmg`, for first installs
+-   `Cortext-<version>-arm64-mac.zip` and its `.blockmap`, which Squirrel.Mac
+    installs on update
+-   `latest-mac.yml`, the update feed that points apps at the zip
+
+Release notes should tell people to move Cortext to Applications; in-place
+updates depend on that.
+
+Before uploading, every build checks that all four files exist. Branch and PR
+builds run the same check and keep the files as Buildkite artifacts, but
+upload nothing. On a tag build, the binaries go up first and `latest-mac.yml`
+last, so apps never see a feed that points at files that aren't there yet.
+
+Uploading needs a GitHub token that can write to `Automattic/cortext`. The mac
+agent gets `GITHUB_TOKEN` from the pipeline's secrets, which Apps Infra manages
+in `mobile-secrets` (`CI/secrets/cortext/env`). Never pass it through a build's
+environment variables form. Tag builds check the token before installing
+anything: if it's missing, can't push, or there is no Release for the tag yet,
+the build fails in seconds with a message saying which.
+
+If a tag build fails after the app was built, retry the upload without
+rebuilding. Download the four files from the build's Artifacts tab (or with
+`buildkite-agent artifact download "apps/desktop/dist/*" .`), then upload them
+in this order:
+
+```bash
+gh release upload <version> Cortext-<version>-arm64.dmg \
+  Cortext-<version>-arm64-mac.zip Cortext-<version>-arm64-mac.zip.blockmap \
+  --repo Automattic/cortext --clobber
+gh release upload <version> latest-mac.yml --repo Automattic/cortext --clobber
+```
 
 The installed app checks the latest published GitHub Release on launch and every
 few hours after that. When a newer version is available, it downloads it in the
