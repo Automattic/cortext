@@ -1,14 +1,37 @@
-import { Button, Notice } from '@wordpress/components';
-import { useCallback, useMemo, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
-import { plus } from '@wordpress/icons';
+import {
+	Button,
+	Dropdown,
+	MenuGroup,
+	MenuItem,
+	Notice,
+} from '@wordpress/components';
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useMemo,
+	useState,
+} from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
+import { chevronDown, page, plus } from '@wordpress/icons';
 
+import {
+	createTemplate,
+	instantiateTemplate,
+	notifyTemplatesChanged,
+	TEMPLATE_KIND_ROW,
+	TEMPLATES_EXPERIMENT_ID,
+	useTemplates,
+} from '../templates';
+import { isExperimentEnabled } from '../settings';
 import { useCreateRowDocument } from './rowDocumentCreation';
 
-// Pull a simple `is` prefill from the active filters. Multi-value operators
-// are ignored for now; this path only handles one scalar value per field.
-// Filters already run on GET /cortext/v1/rows, so prefill is only a convenience
-// for new rows, not the reason filtering works.
+const TemplateEditorModal = lazy( () =>
+	import( /* webpackChunkName: "editor" */ './TemplateEditorModal' )
+);
+
+// Only scalar `is` filters can be copied without changing their meaning.
+// Filtering itself remains server-side.
 function prefillFromFilters( filters, fieldIds ) {
 	const prefill = {};
 	if ( ! Array.isArray( filters ) ) {
@@ -45,14 +68,22 @@ export default function DataViewNewRowButton( {
 	disabled,
 	presentation = 'footer',
 } ) {
+	const templatesEnabled = isExperimentEnabled( TEMPLATES_EXPERIMENT_ID );
 	const [ isCreating, setIsCreating ] = useState( false );
+	const [ isCreatingTemplate, setIsCreatingTemplate ] = useState( false );
+	const [ editingTemplateId, setEditingTemplateId ] = useState( null );
 	const [ error, setError ] = useState( null );
+	const { templates, isResolving: areTemplatesResolving } = useTemplates( {
+		kind: TEMPLATE_KIND_ROW,
+		collectionId,
+		enabled: templatesEnabled,
+	} );
 	const createRowDocument = useCreateRowDocument();
 
 	const prefillableFieldIds = useMemo(
 		() =>
 			new Set(
-				fields
+				( fields ?? [] )
 					.filter(
 						( f ) =>
 							f.editable !== false && f.cortextType !== 'rollup'
@@ -62,50 +93,166 @@ export default function DataViewNewRowButton( {
 		[ fields ]
 	);
 
-	const onClick = useCallback( async () => {
-		setIsCreating( true );
+	const createRow = useCallback(
+		async ( template = null ) => {
+			setIsCreating( true );
+			setError( null );
+			const meta = prefillFromFilters(
+				view?.filters,
+				prefillableFieldIds
+			);
+			try {
+				const created = template?.id
+					? await instantiateTemplate( template.id, {
+							field_values: meta,
+					  } )
+					: await createRowDocument( { collectionId, meta } );
+				onCreated( created );
+			} catch ( err ) {
+				setError(
+					err?.message ??
+						__( "Couldn't create a document.", 'cortext' )
+				);
+			} finally {
+				setIsCreating( false );
+			}
+		},
+		[
+			collectionId,
+			view,
+			prefillableFieldIds,
+			onCreated,
+			createRowDocument,
+		]
+	);
+
+	const createRowTemplate = useCallback( async () => {
+		if ( ! collectionId ) {
+			return;
+		}
+		setIsCreatingTemplate( true );
 		setError( null );
-		const meta = prefillFromFilters( view?.filters, prefillableFieldIds );
 		try {
-			const created = await createRowDocument( {
-				collectionId,
-				meta,
+			const template = await createTemplate( {
+				kind: TEMPLATE_KIND_ROW,
+				collection_id: collectionId,
+				title: __( 'Untitled template', 'cortext' ),
 			} );
-			onCreated( created );
+			notifyTemplatesChanged( {
+				kind: TEMPLATE_KIND_ROW,
+				collectionId,
+			} );
+			if ( template?.id ) {
+				setEditingTemplateId( template.id );
+			}
 		} catch ( err ) {
 			setError(
-				err?.message ?? __( "Couldn't create a document.", 'cortext' )
+				err?.message ?? __( "Couldn't create the template.", 'cortext' )
 			);
 		} finally {
-			setIsCreating( false );
+			setIsCreatingTemplate( false );
 		}
-	}, [
-		collectionId,
-		view,
-		prefillableFieldIds,
-		onCreated,
-		createRowDocument,
-	] );
+	}, [ collectionId ] );
 
-	const button = (
+	const primaryClassName =
+		'cortext-data-view__new-row' +
+		( presentation === 'grid-card'
+			? ' cortext-data-view__new-row-card'
+			: '' ) +
+		( presentation === 'list-row'
+			? ' cortext-data-view__new-row-list'
+			: '' );
+
+	const primaryButton = (
 		<Button
-			className={
-				'cortext-data-view__new-row' +
-				( presentation === 'grid-card'
-					? ' cortext-data-view__new-row-card'
-					: '' ) +
-				( presentation === 'list-row'
-					? ' cortext-data-view__new-row-list'
-					: '' )
-			}
+			className={ primaryClassName }
 			variant="tertiary"
 			icon={ plus }
-			onClick={ onClick }
+			onClick={ () => createRow() }
 			isBusy={ isCreating }
 			disabled={ disabled || isCreating || ! collectionId }
 		>
 			{ __( 'New', 'cortext' ) }
 		</Button>
+	);
+	const optionsMenu = templatesEnabled ? (
+		<Dropdown
+			popoverProps={ { placement: 'bottom-start' } }
+			renderToggle={ ( { isOpen, onToggle } ) => (
+				<Button
+					className="cortext-data-view__new-row-template-menu"
+					variant="tertiary"
+					icon={ chevronDown }
+					onClick={ onToggle }
+					label={ __( 'Choose how to create a document', 'cortext' ) }
+					disabled={
+						disabled ||
+						isCreating ||
+						isCreatingTemplate ||
+						areTemplatesResolving ||
+						! collectionId
+					}
+					isPressed={ isOpen }
+					aria-expanded={ isOpen }
+				/>
+			) }
+			renderContent={ ( { onClose } ) => (
+				<>
+					<MenuGroup>
+						<MenuItem
+							icon={ plus }
+							onClick={ () => {
+								createRow();
+								onClose();
+							} }
+						>
+							{ __( 'Blank document', 'cortext' ) }
+						</MenuItem>
+						{ templates.map( ( template ) => (
+							<MenuItem
+								key={ template.id }
+								icon={ page }
+								onClick={ () => {
+									createRow( template );
+									onClose();
+								} }
+							>
+								{ sprintf(
+									/* translators: %s: template title. */
+									__( 'Create from “%s”', 'cortext' ),
+									template.title ||
+										__( 'Untitled template', 'cortext' )
+								) }
+							</MenuItem>
+						) ) }
+					</MenuGroup>
+					<MenuGroup>
+						<MenuItem
+							icon={ page }
+							onClick={ () => {
+								createRowTemplate();
+								onClose();
+							} }
+						>
+							{ __( 'New template', 'cortext' ) }
+						</MenuItem>
+					</MenuGroup>
+				</>
+			) }
+		/>
+	) : null;
+	const controlsClassName =
+		'cortext-data-view__new-row-controls' +
+		( presentation === 'footer'
+			? ' cortext-data-view__new-row-controls--footer'
+			: '' );
+	const controls = templatesEnabled ? (
+		<div className={ controlsClassName }>
+			{ primaryButton }
+			{ optionsMenu }
+		</div>
+	) : (
+		primaryButton
 	);
 	const notice = error ? (
 		<Notice
@@ -116,20 +263,34 @@ export default function DataViewNewRowButton( {
 			{ error }
 		</Notice>
 	) : null;
+	const templateEditor =
+		templatesEnabled && editingTemplateId ? (
+			<Suspense fallback={ null }>
+				<TemplateEditorModal
+					collectionId={ collectionId }
+					fields={ fields ?? [] }
+					kind={ TEMPLATE_KIND_ROW }
+					templateId={ editingTemplateId }
+					onClose={ () => setEditingTemplateId( null ) }
+				/>
+			</Suspense>
+		) : null;
 
 	if ( presentation === 'grid-card' ) {
 		return (
 			<div className="cortext-data-view__new-row-card-wrapper">
-				{ button }
+				{ controls }
 				{ notice }
+				{ templateEditor }
 			</div>
 		);
 	}
 
 	return (
 		<>
-			{ button }
+			{ controls }
 			{ notice }
+			{ templateEditor }
 		</>
 	);
 }

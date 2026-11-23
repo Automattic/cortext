@@ -7,7 +7,7 @@ import {
 } from '@testing-library/react';
 
 const mockCreateErrorNotice = jest.fn();
-const mockCreateSuccessNotice = jest.fn();
+const mockReload = jest.fn();
 
 jest.mock( '@wordpress/api-fetch', () => ( {
 	__esModule: true,
@@ -45,12 +45,16 @@ jest.mock( '@wordpress/components', () => ( {
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( {
 		createErrorNotice: mockCreateErrorNotice,
-		createSuccessNotice: mockCreateSuccessNotice,
 	} ),
 } ) );
 
 jest.mock( '@wordpress/i18n', () => ( {
 	__: ( text ) => text,
+} ) );
+
+jest.mock( '../../../src/utils/reloadPage', () => ( {
+	__esModule: true,
+	default: () => mockReload(),
 } ) );
 
 jest.mock( '@wordpress/notices', () => ( {
@@ -59,7 +63,6 @@ jest.mock( '@wordpress/notices', () => ( {
 
 import apiFetch from '@wordpress/api-fetch';
 import ExperimentsPane from '../../../src/components/ExperimentsPane';
-import { isExperimentEnabled } from '../../../src/settings';
 
 function experimentsResponse( enabledById = {}, { canManage = true } = {} ) {
 	return {
@@ -90,12 +93,7 @@ function deferred() {
 beforeEach( () => {
 	apiFetch.mockReset();
 	mockCreateErrorNotice.mockReset();
-	mockCreateSuccessNotice.mockReset();
-	window.cortextSettings = { experiments: {} };
-} );
-
-afterEach( () => {
-	delete window.cortextSettings;
+	mockReload.mockReset();
 } );
 
 describe( 'ExperimentsPane', () => {
@@ -127,8 +125,7 @@ describe( 'ExperimentsPane', () => {
 		).not.toBeInTheDocument();
 	} );
 
-	it( 'renders grouped toggles and saves changes', async () => {
-		window.cortextSettings.experiments.sample = false;
+	it( 'renders grouped toggles, saves changes and reloads', async () => {
 		apiFetch
 			.mockResolvedValueOnce( experimentsResponse( { sample: false } ) )
 			.mockResolvedValueOnce( experimentsResponse( { sample: true } ) );
@@ -148,14 +145,27 @@ describe( 'ExperimentsPane', () => {
 				data: { enabled: { sample: true } },
 			} )
 		);
-		expect( mockCreateSuccessNotice ).toHaveBeenCalledWith(
-			'Change saved.',
-			expect.objectContaining( {
-				id: 'cortext-experiments-updated',
-				type: 'snackbar',
-			} )
+		await waitFor( () => expect( mockReload ).toHaveBeenCalledTimes( 1 ) );
+	} );
+
+	it( 'does not reload when the save fails', async () => {
+		apiFetch
+			.mockResolvedValueOnce( experimentsResponse( { sample: false } ) )
+			.mockRejectedValueOnce( new Error( 'Nope' ) );
+
+		render( <ExperimentsPane /> );
+
+		fireEvent.click(
+			await screen.findByRole( 'checkbox', { name: /Sample/ } )
 		);
-		expect( isExperimentEnabled( 'sample' ) ).toBe( true );
+
+		await waitFor( () =>
+			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+				"Couldn't save that change.",
+				expect.anything()
+			)
+		);
+		expect( mockReload ).not.toHaveBeenCalled();
 	} );
 
 	it( 'keeps toggles interactive and queues their saves', async () => {
@@ -196,6 +206,7 @@ describe( 'ExperimentsPane', () => {
 			method: 'PUT',
 			data: { enabled: { second: true } },
 		} );
+		expect( mockReload ).not.toHaveBeenCalled();
 		expect( first ).not.toBeDisabled();
 		expect( first ).toBeChecked();
 		expect( second ).not.toBeDisabled();
@@ -213,6 +224,7 @@ describe( 'ExperimentsPane', () => {
 		} );
 		expect( first ).toBeChecked();
 		expect( second ).toBeChecked();
+		expect( mockReload ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'keeps the latest value when the same toggle changes again', async () => {

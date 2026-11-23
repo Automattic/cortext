@@ -1072,6 +1072,7 @@ export default function RowProperties( {
 	rowId: providedRowId,
 } ) {
 	const {
+		saveRowField,
 		optionOverrides,
 		updateFieldOptions,
 		formatOverrides,
@@ -1245,6 +1246,18 @@ export default function RowProperties( {
 		},
 		[]
 	);
+	const persistFieldValue = useCallback(
+		( nextRowId, fieldId, value ) =>
+			saveRowField
+				? saveRowField( nextRowId, fieldId, value )
+				: saveRowDocumentField(
+						saveEntityRecord,
+						nextRowId,
+						fieldId,
+						value
+				  ),
+		[ saveEntityRecord, saveRowField ]
+	);
 
 	const trackFieldSave = useCallback( ( save ) => {
 		inFlightSavesRef.current.add( save );
@@ -1265,12 +1278,7 @@ export default function RowProperties( {
 
 			try {
 				const updated = await trackFieldSave(
-					saveRowDocumentField(
-						saveEntityRecord,
-						entry.rowId,
-						fieldId,
-						entry.value
-					)
+					persistFieldValue( entry.rowId, fieldId, entry.value )
 				);
 				if ( ! isMountedRef.current ) {
 					return updated;
@@ -1312,8 +1320,8 @@ export default function RowProperties( {
 			clearLocalFieldValue,
 			clearSaveTimer,
 			collectionId,
+			persistFieldValue,
 			refreshRows,
-			saveEntityRecord,
 			trackFieldSave,
 		]
 	);
@@ -1368,12 +1376,7 @@ export default function RowProperties( {
 			for ( const [ fieldId, entry ] of entries ) {
 				try {
 					const updated = await trackFieldSave(
-						saveRowDocumentField(
-							saveEntityRecord,
-							entry.rowId,
-							fieldId,
-							entry.value
-						)
+						persistFieldValue( entry.rowId, fieldId, entry.value )
 					);
 					if ( preserveState && isMountedRef.current ) {
 						const isLatestSave =
@@ -1412,8 +1415,8 @@ export default function RowProperties( {
 			applyCommittedFieldValue,
 			clearLocalFieldValue,
 			collectionId,
+			persistFieldValue,
 			refreshRows,
-			saveEntityRecord,
 			trackFieldSave,
 		]
 	);

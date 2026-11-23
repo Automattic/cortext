@@ -21,7 +21,7 @@ import {
 import { __ } from '@wordpress/i18n';
 import { store as noticesStore } from '@wordpress/notices';
 
-import { syncCortextExperiments } from '../settings';
+import reloadPage from '../utils/reloadPage';
 
 import './ExperimentsPane.scss';
 
@@ -72,8 +72,7 @@ export default function ExperimentsPane() {
 	const saveQueueRef = useRef( [] );
 	const isProcessingQueueRef = useRef( false );
 	const nextChangeVersionRef = useRef( 0 );
-	const { createErrorNotice, createSuccessNotice } =
-		useDispatch( noticesStore );
+	const { createErrorNotice } = useDispatch( noticesStore );
 
 	useEffect( () => {
 		let cancelled = false;
@@ -120,6 +119,7 @@ export default function ExperimentsPane() {
 		}
 
 		isProcessingQueueRef.current = true;
+		let didSave = false;
 		try {
 			while ( saveQueueRef.current.length > 0 ) {
 				const { id, enabled, version } = saveQueueRef.current.shift();
@@ -135,7 +135,6 @@ export default function ExperimentsPane() {
 					if ( experiments ) {
 						confirmedEnabledRef.current =
 							getEnabledValues( experiments );
-						syncCortextExperiments( experiments );
 					} else {
 						confirmedEnabledRef.current.set( id, enabled );
 					}
@@ -156,10 +155,7 @@ export default function ExperimentsPane() {
 						experiments: visibleExperiments ?? current.experiments,
 						error: null,
 					} ) );
-					createSuccessNotice( __( 'Change saved.', 'cortext' ), {
-						id: 'cortext-experiments-updated',
-						type: 'snackbar',
-					} );
+					didSave = true;
 				} catch {
 					if (
 						pendingChangesRef.current.get( id )?.version === version
@@ -193,7 +189,12 @@ export default function ExperimentsPane() {
 		} finally {
 			isProcessingQueueRef.current = false;
 		}
-	}, [ createErrorNotice, createSuccessNotice ] );
+		// Experiments decide what the server registers (post types, routes,
+		// meta), and the editor only reads those at boot.
+		if ( didSave ) {
+			reloadPage();
+		}
+	}, [ createErrorNotice ] );
 
 	const updateExperiment = useCallback(
 		( id, enabled ) => {

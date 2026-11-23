@@ -36,26 +36,6 @@ export function getCortextExperiments() {
 	return experiments && typeof experiments === 'object' ? experiments : {};
 }
 
-export function syncCortextExperiments( experiments ) {
-	if ( typeof window === 'undefined' || ! Array.isArray( experiments ) ) {
-		return;
-	}
-
-	const settings = getSettings();
-	if ( ! settings || typeof settings !== 'object' ) {
-		window.cortextSettings = {};
-	}
-
-	window.cortextSettings.experiments = Object.fromEntries(
-		experiments
-			.filter( ( experiment ) => typeof experiment?.id === 'string' )
-			.map( ( experiment ) => [
-				experiment.id,
-				experiment.enabled === true,
-			] )
-	);
-}
-
 export function isExperimentEnabled( id ) {
 	return getCortextExperiments()?.[ id ] === true;
 }
