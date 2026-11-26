@@ -3298,14 +3298,6 @@ test.describe( 'Collection view block', () => {
 			} );
 			fixture.fieldADeleted = true;
 
-			await requestUtils.rest( {
-				method: 'POST',
-				path: `/wp/v2/crtxt_documents/${ fixture.collection.id }`,
-				data: {
-					meta: { cortext_fields: [ String( fixture.fieldB.id ) ] },
-				},
-			} );
-
 			await admin.visitAdminPage(
 				'admin.php',
 				`page=cortext&p=/${ fixture.page.id }`

@@ -82,8 +82,8 @@ final class Test_Abilities extends BaseTestCase {
 		}
 	}
 
-	public function test_subscriber_cannot_run_any_ability(): void {
-		wp_set_current_user( $this->create_user( 'subscriber' ) );
+	public function test_roles_that_cannot_publish_cannot_run_any_ability(): void {
+		wp_set_current_user( $this->create_user( 'administrator' ) );
 		$collection_id = $this->create_collection( 'Projects' );
 
 		$inputs = array(
@@ -92,10 +92,13 @@ final class Test_Abilities extends BaseTestCase {
 			'cortext/query-rows'       => array( 'collection' => $collection_id ),
 		);
 
-		foreach ( $inputs as $name => $input ) {
-			$result = wp_get_ability( $name )->execute( $input );
-			$this->assertInstanceOf( WP_Error::class, $result, $name );
-			$this->assertSame( 'ability_invalid_permissions', $result->get_error_code(), $name );
+		foreach ( array( 'subscriber', 'contributor' ) as $role ) {
+			wp_set_current_user( $this->create_user( $role ) );
+			foreach ( $inputs as $name => $input ) {
+				$result = wp_get_ability( $name )->execute( $input );
+				$this->assertInstanceOf( WP_Error::class, $result, "{$role} {$name}" );
+				$this->assertSame( 'ability_invalid_permissions', $result->get_error_code(), "{$role} {$name}" );
+			}
 		}
 	}
 

@@ -219,7 +219,7 @@ final class WriteAbilities {
 	 * Same gate as creating a document through REST.
 	 */
 	public function can_create(): bool {
-		return current_user_can( 'edit_posts' );
+		return current_user_can( Document::CAPABILITY );
 	}
 
 	/**

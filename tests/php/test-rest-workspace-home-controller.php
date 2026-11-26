@@ -162,7 +162,7 @@ final class Test_Rest_Workspace_Home_Controller extends BaseTestCase {
 			)
 		);
 
-		wp_set_current_user( $this->create_user( 'contributor' ) );
+		wp_set_current_user( $this->create_user( 'author' ) );
 		$response = $this->set_home( $page_id );
 
 		$this->assertSame( 403, $response->get_status() );

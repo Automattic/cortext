@@ -12,6 +12,7 @@ namespace Cortext\Rest;
 defined( 'ABSPATH' ) || exit;
 
 use Cortext\Documents;
+use Cortext\PostType\Document;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -58,7 +59,7 @@ final class WorkspaceHomeController {
 	}
 
 	public function can_read(): bool {
-		return current_user_can( 'edit_posts' );
+		return current_user_can( Document::CAPABILITY );
 	}
 
 	public function get_home(): WP_REST_Response {

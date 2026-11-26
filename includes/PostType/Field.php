@@ -89,6 +89,7 @@ final class Field {
 	 *   - id          (int)             Update when present; create otherwise.
 	 *   - title       (string)          post_title.
 	 *   - status      (string)          post_status. Default 'private' on create.
+	 *   - collection_id (int)           Owning collection, stored as post_parent on create.
 	 *   - type        (string)          Cortext field type.
 	 *   - options     (array|string)    Option list. Arrays are JSON-encoded.
 	 *   - default     (string)          Default value (stored as `default_value`).
@@ -122,6 +123,7 @@ final class Field {
 			$postarr['post_status'] = isset( $payload['status'] )
 				? (string) $payload['status']
 				: 'private';
+			$postarr['post_parent'] = (int) ( $payload['collection_id'] ?? 0 );
 		}
 
 		if ( array_key_exists( 'title', $payload ) ) {
@@ -169,6 +171,119 @@ final class Field {
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'before_delete_post', array( $this, 'cleanup_after_delete' ), 10, 2 );
+		add_filter( 'map_meta_cap', array( $this, 'map_field_caps_to_collection' ), 10, 4 );
+		add_filter( 'add_post_metadata', array( $this, 'guard_collection_field_list' ), 5, 4 );
+		add_filter( 'update_post_metadata', array( $this, 'guard_collection_field_list' ), 5, 4 );
+		add_filter( 'update_post_metadata_by_mid', array( $this, 'guard_collection_field_list_by_mid' ), 5, 4 );
+	}
+
+	/**
+	 * A property belongs to its collection, whoever added it. Reading it
+	 * follows reading the collection; editing or deleting it follows editing
+	 * the collection. The collection comes from the field's `post_parent`,
+	 * set when the field is created; fields without one, or whose collection
+	 * no longer exists, keep core's rules.
+	 *
+	 * @param string[] $caps    Primitive caps core mapped so far.
+	 * @param string   $cap     Meta capability being checked.
+	 * @param int      $user_id User being checked.
+	 * @param mixed[]  $args    Extra arguments; the first is the post ID.
+	 * @return string[]
+	 */
+	public function map_field_caps_to_collection( array $caps, string $cap, int $user_id, array $args ): array {
+		$collection_cap = match ( $cap ) {
+			'read_post' => 'read_post',
+			'edit_post', 'delete_post' => 'edit_post',
+			default => null,
+		};
+		if ( null === $collection_cap || ! isset( $args[0] ) ) {
+			return $caps;
+		}
+
+		$field = get_post( (int) $args[0] );
+		if ( ! $field instanceof WP_Post || self::POST_TYPE !== $field->post_type ) {
+			return $caps;
+		}
+
+		$collection_id = self::existing_collection_id( $field );
+		// A field whose collection was deleted keeps core's rules, so someone
+		// can still clean it up.
+		if ( $collection_id < 1 ) {
+			return $caps;
+		}
+
+		$caps = map_meta_cap( $collection_cap, $user_id, $collection_id );
+
+		// Deleting one side of a relation deletes its pair too, so it needs
+		// edit access to the collection on the other side as well.
+		if ( 'delete_post' === $cap ) {
+			$reverse_id    = (int) get_post_meta( $field->ID, 'relation_reverse_field_id', true );
+			$reverse       = $reverse_id > 0 ? get_post( $reverse_id ) : null;
+			$reverse_owner = $reverse instanceof WP_Post && self::POST_TYPE === $reverse->post_type
+				? self::existing_collection_id( $reverse )
+				: 0;
+			if ( $reverse_owner > 0 && $reverse_owner !== $collection_id ) {
+				$caps = array_merge( $caps, map_meta_cap( 'edit_post', $user_id, $reverse_owner ) );
+			}
+		}
+
+		return array_values( array_unique( $caps ) );
+	}
+
+	/**
+	 * Returns the field's collection when it still exists, or 0.
+	 *
+	 * @param WP_Post $field Field post.
+	 */
+	private static function existing_collection_id( WP_Post $field ): int {
+		$collection_id = (int) $field->post_parent;
+		return $collection_id > 0 && get_post( $collection_id ) instanceof WP_Post ? $collection_id : 0;
+	}
+
+	/**
+	 * Keeps a collection's `cortext_fields` list to its own fields. A field
+	 * records its collection in `post_parent` when it's created; any meta
+	 * write (XML-RPC custom fields, PHP) that lists a missing field, or one
+	 * that belongs to another collection, is refused. REST writes never get
+	 * here: `Document::prepare_meta_updates` drops the list from them.
+	 *
+	 * @param null|bool $check     Short-circuit value from earlier filters.
+	 * @param int       $object_id Document the meta is written to.
+	 * @param string    $meta_key  Meta key.
+	 * @param mixed     $meta_value Meta value.
+	 * @return null|bool
+	 */
+	public function guard_collection_field_list( $check, int $object_id, string $meta_key, $meta_value ) {
+		if ( 'cortext_fields' !== $meta_key || null !== $check ) {
+			return $check;
+		}
+
+		$field = get_post( (int) $meta_value );
+		if ( ! $field instanceof WP_Post || self::POST_TYPE !== $field->post_type ) {
+			return false;
+		}
+
+		$collection_id = (int) $field->post_parent;
+		return ( 0 === $collection_id || $object_id === $collection_id ) ? $check : false;
+	}
+
+	/**
+	 * Same guard for writes that address a meta row by its ID, such as
+	 * XML-RPC custom fields sent with an `id`.
+	 *
+	 * @param null|bool $check      Short-circuit value from earlier filters.
+	 * @param int       $meta_id    Meta row ID.
+	 * @param mixed     $meta_value New meta value.
+	 * @param string    $meta_key   New meta key, or empty to keep the current one.
+	 * @return null|bool
+	 */
+	public function guard_collection_field_list_by_mid( $check, int $meta_id, $meta_value, $meta_key ) {
+		$meta = get_metadata_by_mid( 'post', $meta_id );
+		if ( ! $meta ) {
+			return $check;
+		}
+		$key = is_string( $meta_key ) && '' !== $meta_key ? $meta_key : (string) $meta->meta_key;
+		return $this->guard_collection_field_list( $check, (int) $meta->post_id, $key, $meta_value );
 	}
 
 	/**
@@ -462,6 +577,7 @@ final class Field {
 				'hierarchical'       => false,
 				'supports'           => array( 'title', 'custom-fields' ),
 				'capability_type'    => 'post',
+				'capabilities'       => Document::CAPABILITIES,
 				'map_meta_cap'       => true,
 				'can_export'         => true,
 				'delete_with_user'   => false,

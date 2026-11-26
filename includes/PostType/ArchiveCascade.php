@@ -138,7 +138,7 @@ final class ArchiveCascade {
 				'single'        => true,
 				'show_in_rest'  => true,
 				'auth_callback' => static function () {
-					return current_user_can( 'edit_posts' );
+					return current_user_can( Document::CAPABILITY );
 				},
 			)
 		);

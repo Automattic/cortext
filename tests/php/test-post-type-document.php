@@ -63,6 +63,37 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertFalse( $object->show_in_menu, 'show_in_menu stays false because navigation lives in the Cortext shell.' );
 	}
 
+	public function test_only_roles_that_can_publish_work_with_documents_and_fields(): void {
+		$expected = array(
+			'subscriber'    => false,
+			'contributor'   => false,
+			'author'        => true,
+			'editor'        => true,
+			'administrator' => true,
+		);
+
+		foreach ( $expected as $role => $allowed ) {
+			$user_id = $this->create_user( $role );
+			wp_set_current_user( $user_id );
+			$own_draft = (int) wp_insert_post(
+				array(
+					'post_type'   => Document::POST_TYPE,
+					'post_status' => 'draft',
+					'post_author' => $user_id,
+				)
+			);
+
+			foreach ( array( Document::POST_TYPE, Field::POST_TYPE ) as $post_type ) {
+				$this->assertSame(
+					$allowed,
+					current_user_can( get_post_type_object( $post_type )->cap->create_posts ),
+					"{$role} creating {$post_type}"
+				);
+			}
+			$this->assertSame( $allowed, current_user_can( 'edit_post', $own_draft ), "{$role} editing their own draft" );
+		}
+	}
+
 	public function test_registered_post_type_supports_cortext_document_capability(): void {
 		$this->assertTrue( post_type_supports( Document::POST_TYPE, 'cortext-document' ) );
 	}
@@ -682,6 +713,48 @@ final class Test_Post_Type_Document extends BaseTestCase {
 		$this->assertSame( wp_slash( $content ), $data['post_content'] );
 	}
 
+	public function test_guard_placement_needs_edit_access_to_a_new_parent(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$others_page = $this->create_document();
+
+		$author_id = $this->create_user( 'author' );
+		wp_set_current_user( $author_id );
+		$own_page = $this->create_document();
+
+		$result = $this->guard_new_document( $others_page );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cortext_parent_forbidden', $result->get_error_code() );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $this->guard_new_document( $own_page ) );
+
+		// Saving a document that already sits there isn't a move.
+		$child                 = $this->create_document(
+			array(
+				'post_parent' => $others_page,
+				'post_author' => $author_id,
+			)
+		);
+		$prepared              = new \stdClass();
+		$prepared->ID          = $child;
+		$prepared->post_parent = $others_page;
+		$this->assertNotInstanceOf(
+			\WP_Error::class,
+			( new Document() )->guard_placement( $prepared )
+		);
+	}
+
+	/**
+	 * Runs the placement guard for a new document under a parent.
+	 *
+	 * @param int $parent_id Requested parent.
+	 * @return \stdClass|\WP_Error
+	 */
+	private function guard_new_document( int $parent_id ) {
+		$prepared              = new \stdClass();
+		$prepared->post_parent = $parent_id;
+		return ( new Document() )->guard_placement( $prepared );
+	}
+
 	public function test_assign_trait_from_request_attaches_existing_term(): void {
 		$collection_id = $this->create_collection();
 		$row_id        = (int) wp_insert_post(
@@ -894,6 +967,25 @@ final class Test_Post_Type_Document extends BaseTestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'cortext_field_not_in_collection', $result->get_error_code() );
+	}
+
+	public function test_prepare_meta_updates_ignores_the_property_list(): void {
+		$collection_id = $this->create_collection();
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/crtxt_documents/' . $collection_id );
+		$request->set_param( 'id', $collection_id );
+		$request->set_param(
+			'meta',
+			array(
+				'cortext_fields'        => array( '999999' ),
+				'cortext_detail_layout' => array(),
+			)
+		);
+
+		( new Document() )->prepare_meta_updates( new \stdClass(), $request );
+
+		$this->assertArrayNotHasKey( 'cortext_fields', $request->get_param( 'meta' ) );
+		$this->assertArrayHasKey( 'cortext_detail_layout', $request->get_param( 'meta' ) );
 	}
 
 	public function test_prepare_meta_updates_accepts_field_from_the_rows_own_collection(): void {

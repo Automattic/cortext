@@ -177,9 +177,9 @@ final class RowsController {
 	/**
 	 * Permission gate for the rows endpoint.
 	 *
-	 * `context=edit` is the default editor path and requires `edit_posts`
-	 * plus read access to the collection. A collection's rows are readable by
-	 * whoever can read the collection.
+	 * `context=edit` is the default editor path and requires
+	 * `Document::CAPABILITY` plus read access to the collection. A
+	 * collection's rows are readable by whoever can read the collection.
 	 * `context=view` is the public opt-in: anyone may read rows from a
 	 * published collection.
 	 *
@@ -194,7 +194,7 @@ final class RowsController {
 		}
 
 		if ( 'edit' === $request['context'] ) {
-			if ( ! current_user_can( 'edit_posts' ) ) {
+			if ( ! current_user_can( Document::CAPABILITY ) ) {
 				return new WP_Error(
 					'rest_forbidden_context',
 					__( 'Sorry, you are not allowed to edit posts in this post type.', 'cortext' ),

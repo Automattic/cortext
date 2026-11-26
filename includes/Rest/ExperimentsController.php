@@ -11,6 +11,7 @@ namespace Cortext\Rest;
 
 defined( 'ABSPATH' ) || exit;
 
+use Cortext\PostType\Document;
 use Cortext\Runtime\Experiments;
 use WP_Error;
 use WP_REST_Request;
@@ -59,7 +60,7 @@ final class ExperimentsController {
 	}
 
 	public function can_read(): bool {
-		return current_user_can( 'edit_posts' );
+		return current_user_can( Document::CAPABILITY );
 	}
 
 	public function can_manage(): bool {

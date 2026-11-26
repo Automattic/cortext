@@ -82,6 +82,19 @@ final class Test_Rest_Notion_Import extends BaseTestCase {
 		$this->assertCount( 2, $this->imported_row_ids() );
 	}
 
+	public function test_another_user_cannot_tick_or_finish_a_job(): void {
+		$started = $this->start_import();
+
+		wp_set_current_user( $this->create_admin() );
+		foreach ( array( 'tick', 'finish' ) as $step ) {
+			$request = new WP_REST_Request( 'POST', "/cortext/v1/notion/import/{$started['job_id']}/{$step}" );
+			$request->set_header( 'X-Notion-Key', 'secret' );
+			$request->set_param( 'job_id', $started['job_id'] );
+			$this->assertSame( 404, rest_do_request( $request )->get_status(), $step );
+		}
+		$this->assertCount( 0, $this->imported_row_ids() );
+	}
+
 	/**
 	 * @dataProvider hidden_statuses
 	 *

@@ -57,7 +57,7 @@ final class SidebarTreePreferencesController {
 	}
 
 	public function can_read(): bool {
-		return current_user_can( 'edit_posts' );
+		return current_user_can( Document::CAPABILITY );
 	}
 
 	public function get_preferences(): WP_REST_Response {

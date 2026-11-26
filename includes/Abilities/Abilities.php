@@ -195,7 +195,7 @@ final class Abilities {
 	 * reads. Each document is still checked on its own when listed.
 	 */
 	public function can_read(): bool {
-		return current_user_can( 'edit_posts' );
+		return current_user_can( Document::CAPABILITY );
 	}
 
 	/**

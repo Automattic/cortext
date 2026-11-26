@@ -204,7 +204,7 @@ final class Test_Rest_Recents_Controller extends BaseTestCase {
 			)
 		);
 
-		wp_set_current_user( $this->create_user( 'contributor' ) );
+		wp_set_current_user( $this->create_user( 'author' ) );
 		$forbidden = $this->touch_recent( $private_page );
 
 		$this->assertSame( 404, $invalid_type->get_status() );

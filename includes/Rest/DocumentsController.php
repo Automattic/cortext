@@ -269,7 +269,7 @@ final class DocumentsController {
 	}
 
 	public function can_read(): bool {
-		return current_user_can( 'edit_posts' );
+		return current_user_can( Document::CAPABILITY );
 	}
 
 	public function get_documents( WP_REST_Request $request ): WP_REST_Response {
@@ -1016,7 +1016,13 @@ final class DocumentsController {
 			);
 		}
 
-		if ( ! current_user_can( 'edit_posts' ) || ! current_user_can( 'edit_post', $id ) ) {
+		if ( ! current_user_can( Document::CAPABILITY ) || ! current_user_can( 'edit_post', $id ) ) {
+			return false;
+		}
+
+		// The copy lands under the same parent, so it needs edit access there.
+		$parent_id = (int) $post->post_parent;
+		if ( $parent_id > 0 && ! current_user_can( 'edit_post', $parent_id ) ) {
 			return false;
 		}
 
@@ -1220,7 +1226,7 @@ final class DocumentsController {
 			);
 		}
 
-		return current_user_can( 'edit_posts' );
+		return current_user_can( Document::CAPABILITY );
 	}
 
 	/**

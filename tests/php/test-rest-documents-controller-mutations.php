@@ -611,8 +611,8 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 	}
 
 	public function test_core_rest_archive_checks_every_page_in_the_cascade(): void {
-		$author_id = $this->create_user( 'contributor' );
-		$other_id  = $this->create_user( 'contributor' );
+		$author_id = $this->create_user( 'author' );
+		$other_id  = $this->create_user( 'author' );
 		$parent_id = $this->create_page(
 			array(
 				'post_author' => $author_id,
@@ -690,8 +690,8 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 	}
 
 	public function test_archive_checks_every_page_in_the_cascade(): void {
-		$author_id = $this->create_user( 'contributor' );
-		$other_id  = $this->create_user( 'contributor' );
+		$author_id = $this->create_user( 'author' );
+		$other_id  = $this->create_user( 'author' );
 		$parent_id = $this->create_page(
 			array(
 				'post_author' => $author_id,
@@ -716,8 +716,8 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 	}
 
 	public function test_archive_checks_every_row_in_the_cascade(): void {
-		$author_id = $this->create_user( 'contributor' );
-		$other_id  = $this->create_user( 'contributor' );
+		$author_id = $this->create_user( 'author' );
+		$other_id  = $this->create_user( 'author' );
 		wp_set_current_user( $author_id );
 		$collection_id = $this->create_full_page_collection( 'mixed-owners' );
 		$row_id        = $this->create_row( $collection_id );
@@ -738,8 +738,8 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 
 	public function test_unarchive_checks_every_page_in_the_cascade(): void {
 		$admin_id  = $this->create_user( 'administrator' );
-		$author_id = $this->create_user( 'contributor' );
-		$other_id  = $this->create_user( 'contributor' );
+		$author_id = $this->create_user( 'author' );
+		$other_id  = $this->create_user( 'author' );
 		$parent_id = $this->create_page(
 			array(
 				'post_author' => $author_id,
@@ -1575,6 +1575,36 @@ final class Test_Rest_Documents_Controller_Mutations extends BaseTestCase {
 		$copy_id = (int) $response->get_data()['id'];
 		$this->assertGreaterThan( 0, $copy_id );
 		$this->assertFalse( DocumentFreeze::is_frozen( $copy_id ) );
+	}
+
+	public function test_duplicate_needs_edit_access_to_where_the_copy_lands(): void {
+		wp_set_current_user( $this->create_user( 'editor' ) );
+		$others_page       = $this->create_page( array( 'post_status' => 'private' ) );
+		$others_collection = $this->create_full_page_collection( 'others-dup' );
+
+		$author_id = $this->create_user( 'author' );
+		wp_set_current_user( $author_id );
+		$own_child = $this->create_page(
+			array(
+				'post_parent' => $others_page,
+				'post_author' => $author_id,
+			)
+		);
+		$own_row   = $this->create_row( $others_collection );
+		wp_update_post(
+			array(
+				'ID'          => $own_row,
+				'post_author' => $author_id,
+			)
+		);
+		$own_page = $this->create_page( array( 'post_author' => $author_id ) );
+
+		foreach ( array( $own_child, $own_row ) as $source_id ) {
+			$response = rest_do_request( new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $source_id . '/duplicate' ) );
+			$this->assertSame( 403, $response->get_status() );
+		}
+		$response = rest_do_request( new WP_REST_Request( 'POST', '/cortext/v1/documents/' . $own_page . '/duplicate' ) );
+		$this->assertSame( 201, $response->get_status() );
 	}
 
 	private function freeze( int $id ) {
