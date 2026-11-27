@@ -7,7 +7,10 @@ import { definesTrait, hasTrait } from './capabilities';
 // DocumentIcon (as a named glyph) so it inherits the same 1.4x glyph scale and
 // box as a page's document glyph; the glyph is drawn to the page glyph's extent
 // so a collection row lines up with a page row instead of reading heavier.
-const COLLECTION_ICON = JSON.stringify( { type: 'wp', name: 'collection' } );
+export const COLLECTION_ICON = JSON.stringify( {
+	type: 'wp',
+	name: 'collection',
+} );
 // Same idea for a row's list glyph in the compact lists (Recents, Favorites,
 // Command Palette), so collection and row icons line up with page icons there.
 const ROW_ICON = JSON.stringify( { type: 'wp', name: 'listItem' } );

@@ -3,8 +3,8 @@ import apiFetch from '@wordpress/api-fetch';
 
 // Loads the collections a document belongs to from
 // `GET /cortext/v1/documents/<id>/traits`. Returns the formatted
-// `{ id, title, path, icon }` summaries the grouped properties and the
-// membership chips render, plus `refresh` to re-pull after a membership change.
+// `{ id, title, path, icon }` summaries the trait headers and their property
+// groups render, plus `refresh` to re-pull after a membership change.
 //
 // Reads go through this one endpoint rather than the row's `crtxt_trait` term
 // ids so callers get collection ids and labels in a single round trip, and so a

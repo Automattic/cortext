@@ -1,11 +1,11 @@
 /**
  * Tests for `src/components/AdditionalCollectionProperties.js`: a non-source
- * collection's property group for a multi-collection row. It is
- * editable (shares the layout-editing toggle) and reports its visible field
- * count so the block's collapse summary can total every collection.
+ * collection's property group for a multi-collection row. It is editable
+ * (shares the layout-editing toggle), folds under its trait header, and offers
+ * to remove the trait.
  */
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 let mockFields;
 let mockLayout;
@@ -35,7 +35,7 @@ jest.mock( '../../../src/components/RowProperties', () => ( {
 
 jest.mock( '../../../src/components/DocumentIcon', () => ( {
 	__esModule: true,
-	default: () => null,
+	default: ( { icon } ) => <span data-testid="icon" data-icon={ icon } />,
 } ) );
 
 jest.mock( '../../../src/components/CollectionFieldsContext', () => ( {
@@ -45,6 +45,33 @@ jest.mock( '../../../src/components/CollectionFieldsContext', () => ( {
 
 jest.mock( '@wordpress/components', () => ( {
 	__esModule: true,
+	Button: ( { children, label, onClick, 'aria-expanded': expanded } ) => (
+		<button
+			type="button"
+			aria-label={ label }
+			aria-expanded={ expanded }
+			onClick={ onClick }
+		>
+			{ children }
+		</button>
+	),
+	Dropdown: ( { renderContent, renderToggle } ) => (
+		<div>
+			{ renderToggle( { isOpen: true, onToggle: () => {} } ) }
+			{ renderContent( { onClose: () => {} } ) }
+		</div>
+	),
+	MenuGroup: ( { children } ) => <div>{ children }</div>,
+	MenuItem: ( { children, disabled, onClick } ) => (
+		<button
+			type="button"
+			role="menuitem"
+			disabled={ disabled }
+			onClick={ onClick }
+		>
+			{ children }
+		</button>
+	),
 	Notice: ( { children } ) => <div role="alert">{ children }</div>,
 } ) );
 
@@ -82,7 +109,6 @@ describe( 'AdditionalCollectionProperties', () => {
 				rowId={ 5 }
 				row={ {} }
 				isLayoutEditing={ true }
-				onVisibleCount={ () => {} }
 			/>
 		);
 
@@ -102,50 +128,162 @@ describe( 'AdditionalCollectionProperties', () => {
 		);
 	} );
 
-	it( 'reports its visible property count', () => {
-		const onVisibleCount = jest.fn();
+	it( 'folds under its header and shows the count while folded', () => {
+		const onToggleCollapsed = jest.fn();
 		render(
 			<AdditionalCollectionProperties
 				collection={ { id: 7, title: 'People', icon: '' } }
 				rowId={ 5 }
 				row={ {} }
-				onVisibleCount={ onVisibleCount }
+				isCollapsed
+				onToggleCollapsed={ onToggleCollapsed }
 			/>
 		);
 
-		expect( onVisibleCount ).toHaveBeenCalledWith( 7, 1 );
+		expect( screen.queryByTestId( 'row-properties' ) ).toBeNull();
+		const toggle = screen.getByRole( 'button', { name: /^People/ } );
+		expect( toggle ).toHaveAttribute( 'aria-expanded', 'false' );
+		expect( screen.getByLabelText( '1 property' ) ).toBeInTheDocument();
+
+		fireEvent.click( toggle );
+		expect( onToggleCollapsed ).toHaveBeenCalledWith( 7 );
 	} );
 
-	it( 'resolves counts without rendering a collapsed group', () => {
-		const onVisibleCount = jest.fn();
+	it( 'stays open while customizing the layout', () => {
+		render(
+			<AdditionalCollectionProperties
+				collection={ { id: 7, title: 'People', icon: '' } }
+				rowId={ 5 }
+				row={ {} }
+				isCollapsed
+				isLayoutEditing
+				onRemove={ jest.fn() }
+				onToggleCollapsed={ jest.fn() }
+			/>
+		);
+
+		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: /^People/ } )
+		).toBeNull();
+		expect( screen.queryByRole( 'menuitem' ) ).toBeNull();
+	} );
+
+	it( 'folds with the block even while customizing the layout', () => {
+		const onToggleCollapsed = jest.fn();
+		render(
+			<AdditionalCollectionProperties
+				collection={ { id: 7, title: 'People', icon: '' } }
+				rowId={ 5 }
+				row={ {} }
+				isBlockCollapsed
+				isLayoutEditing
+				onToggleCollapsed={ onToggleCollapsed }
+			/>
+		);
+
+		expect( screen.queryByTestId( 'row-properties' ) ).toBeNull();
+		fireEvent.click( screen.getByRole( 'button', { name: /^People/ } ) );
+		expect( onToggleCollapsed ).toHaveBeenCalledWith( 7 );
+	} );
+
+	it( 'shows the collection glyph when the collection has no icon', () => {
+		const { rerender } = render(
+			<AdditionalCollectionProperties
+				collection={ { id: 7, title: 'People', icon: '' } }
+				rowId={ 5 }
+				row={ {} }
+			/>
+		);
+
+		expect( screen.getByTestId( 'icon' ) ).toHaveAttribute(
+			'data-icon',
+			JSON.stringify( { type: 'wp', name: 'collection' } )
+		);
+
+		rerender(
+			<AdditionalCollectionProperties
+				collection={ { id: 7, title: 'People', icon: '🎭' } }
+				rowId={ 5 }
+				row={ {} }
+			/>
+		);
+
+		expect( screen.getByTestId( 'icon' ) ).toHaveAttribute(
+			'data-icon',
+			'🎭'
+		);
+	} );
+
+	it( 'renders the system properties after itself when it owns them', () => {
+		mockLayout = {
+			...mockLayout,
+			propertyFieldsForDisplay: [
+				{ id: 'field-1', label: 'A' },
+				{ id: 'created_at', label: 'Created' },
+			],
+		};
 		const { container } = render(
 			<AdditionalCollectionProperties
 				collection={ { id: 7, title: 'People', icon: '' } }
 				rowId={ 5 }
 				row={ {} }
-				onVisibleCount={ onVisibleCount }
-				renderProperties={ false }
+				includeSystemFields
+			/>
+		);
+
+		const lists = screen.getAllByTestId( 'row-properties' );
+		expect( lists ).toHaveLength( 2 );
+		expect(
+			container.querySelector( '.cortext-property-group--system' )
+		).toContainElement( lists[ 1 ] );
+		expect(
+			mockRowPropertiesProps.fields.map( ( field ) => field.id )
+		).toEqual( [ 'created_at' ] );
+	} );
+
+	it( 'removes its trait from the header menu', () => {
+		const onRemove = jest.fn();
+		const collection = { id: 7, title: 'People', icon: '' };
+		render(
+			<AdditionalCollectionProperties
+				collection={ collection }
+				rowId={ 5 }
+				row={ {} }
+				onRemove={ onRemove }
+			/>
+		);
+
+		fireEvent.click(
+			screen.getByRole( 'menuitem', { name: 'Remove trait' } )
+		);
+		expect( onRemove ).toHaveBeenCalledWith( collection );
+	} );
+
+	it( 'renders nothing while hidden for a membership refresh', () => {
+		const { container } = render(
+			<AdditionalCollectionProperties
+				collection={ { id: 7, title: 'People', icon: '' } }
+				rowId={ 5 }
+				row={ {} }
+				showGroup={ false }
 			/>
 		);
 
 		expect( container ).toBeEmptyDOMElement();
-		expect( onVisibleCount ).toHaveBeenCalledWith( 7, 1 );
 	} );
 
-	it( 'does not render or report a count until fields resolve', () => {
+	it( 'renders nothing until fields resolve', () => {
 		mockFields = { ...mockFields, isResolving: true };
-		const onVisibleCount = jest.fn();
 		const { container, rerender } = render(
 			<AdditionalCollectionProperties
 				collection={ { id: 7, title: 'People', icon: '' } }
 				rowId={ 5 }
 				row={ {} }
-				onVisibleCount={ onVisibleCount }
 			/>
 		);
 
 		expect( container ).toBeEmptyDOMElement();
-		expect( onVisibleCount ).not.toHaveBeenCalled();
 
 		mockFields = { ...mockFields, isResolving: false };
 		rerender(
@@ -153,12 +291,10 @@ describe( 'AdditionalCollectionProperties', () => {
 				collection={ { id: 7, title: 'People', icon: '' } }
 				rowId={ 5 }
 				row={ {} }
-				onVisibleCount={ onVisibleCount }
 			/>
 		);
 
 		expect( screen.getByTestId( 'row-properties' ) ).toBeInTheDocument();
-		expect( onVisibleCount ).toHaveBeenCalledWith( 7, 1 );
 	} );
 
 	it( 'excludes document-level system fields from secondary groups', () => {
@@ -196,17 +332,31 @@ describe( 'AdditionalCollectionProperties', () => {
 		expect( mockLayoutArgs.excludedFieldIds ).toBeUndefined();
 	} );
 
-	it( 'renders nothing when the collection has no layout properties', () => {
-		mockLayout = { ...mockLayout, hasLayoutProperties: false };
-		const { container } = render(
+	it( 'keeps only its header when the collection has no properties of its own', () => {
+		mockFields = {
+			...mockFields,
+			detailFields: [],
+			allDetailFields: [ { id: 'title', label: 'Title' } ],
+		};
+		mockLayout = {
+			...mockLayout,
+			propertyFieldsForDisplay: [],
+			hasLayoutProperties: false,
+		};
+		render(
 			<AdditionalCollectionProperties
 				collection={ { id: 7, title: 'People', icon: '' } }
 				rowId={ 5 }
 				row={ {} }
-				onVisibleCount={ () => {} }
+				onToggleCollapsed={ jest.fn() }
 			/>
 		);
 
-		expect( container ).toBeEmptyDOMElement();
+		expect( screen.getByText( 'People' ) ).toBeInTheDocument();
+		expect( screen.queryByTestId( 'row-properties' ) ).toBeNull();
+		// Nothing to fold.
+		expect(
+			screen.queryByRole( 'button', { name: /^People/ } )
+		).toBeNull();
 	} );
 } );
