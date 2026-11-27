@@ -19,7 +19,9 @@ cd cortext
 ./scripts/setup.sh
 ```
 
-`setup.sh` installs PHP and JS dependencies, assigns a port for the current worktree (Conductor's `CONDUCTOR_PORT` when set, otherwise one derived from the worktree path), writes a git-ignored `.wp-env.override.json`, and drops two helper plugins under `.wp-env-plugins/`: one labels the admin bar with the branch name, the other auto-logs you in as admin on localhost so agents and parallel worktrees don't have to juggle credentials.
+`setup.sh` installs PHP and JS dependencies, assigns a port for the current worktree (Conductor's `CONDUCTOR_PORT` when set, otherwise one derived from the worktree path), writes a git-ignored `.wp-env.override.json`, and drops two helper plugins under `.wp-env-plugins/`: one labels the admin bar with the branch name, the other auto-logs you in as admin on local hosts so agents and parallel worktrees don't have to juggle credentials.
+
+Each worktree serves its site on its own host, `http://<workspace>.localhost:<port>`, where `<workspace>` is Conductor's workspace name or the worktree folder name. Browsers keep cookies per host but not per port, so this stops every worktree's login cookies from piling up on `localhost`. Opening the plain `localhost:<port>` URL redirects to the worktree's host.
 
 ## Running Cortext
 
