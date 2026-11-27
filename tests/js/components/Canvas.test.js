@@ -94,7 +94,7 @@ jest.mock( '../../../src/components/mention', () => ( {
 	CortextMentions: () => null,
 } ) );
 jest.mock( '../../../src/components/DocumentPropertiesContext', () => ( {
-	DocumentPropertiesProvider: ( { children } ) => children,
+	DocumentPropertiesProvider: jest.fn( ( { children } ) => children ),
 } ) );
 jest.mock( '../../../src/components/DocumentPublishToggle', () =>
 	jest.fn( () => null )
@@ -138,6 +138,7 @@ import DocumentPublishToggle from '../../../src/components/DocumentPublishToggle
 import EditorBody from '../../../src/components/EditorBody';
 import DocumentInspectorSidebar from '../../../src/components/DocumentInspectorSidebar';
 import CortextInserterSidebar from '../../../src/components/CortextInserterSidebar';
+import { DocumentPropertiesProvider } from '../../../src/components/DocumentPropertiesContext';
 import {
 	ActiveEditorProvider,
 	useActiveEditor,
@@ -286,7 +287,7 @@ describe( 'Canvas secondary sidebar', () => {
 	} );
 } );
 
-describe( 'Canvas archived lifecycle lock', () => {
+describe( 'CanvasEditor', () => {
 	const unlockedPostLock = {
 		error: null,
 		isAcquiring: false,
@@ -328,6 +329,77 @@ describe( 'Canvas archived lifecycle lock', () => {
 		EditorBody.mockClear();
 		DocumentInspectorSidebar.mockClear();
 		CortextInserterSidebar.mockClear();
+		DocumentPropertiesProvider.mockClear();
+	} );
+
+	it( 'passes no row id to the properties block on a collection', () => {
+		definesTrait.mockReturnValue( true );
+		render(
+			<CanvasEditor
+				{ ...editorProps }
+				post={ {
+					id: 7,
+					status: 'publish',
+					type: 'crtxt_document',
+					crtxt_trait: [ 3 ],
+				} }
+			/>
+		);
+
+		expect(
+			DocumentPropertiesProvider.mock.calls.at( -1 )[ 0 ].rowId
+		).toBe( null );
+	} );
+
+	it( 'passes no row id to the properties block on a page', () => {
+		render(
+			<CanvasEditor
+				{ ...editorProps }
+				post={ { id: 7, status: 'publish', type: 'crtxt_document' } }
+			/>
+		);
+
+		expect(
+			DocumentPropertiesProvider.mock.calls.at( -1 )[ 0 ].rowId
+		).toBe( null );
+	} );
+
+	it( 'passes the row id to the properties block on a row', () => {
+		render(
+			<CanvasEditor
+				{ ...editorProps }
+				collectionId={ 77 }
+				row={ { id: 9 } }
+				post={ {
+					id: 9,
+					status: 'publish',
+					type: 'crtxt_document',
+					crtxt_trait: [ 77 ],
+				} }
+			/>
+		);
+
+		expect(
+			DocumentPropertiesProvider.mock.calls.at( -1 )[ 0 ].rowId
+		).toBe( 9 );
+	} );
+
+	it( 'passes the document id to the properties block on a row without a row record', () => {
+		render(
+			<CanvasEditor
+				{ ...editorProps }
+				post={ {
+					id: 9,
+					status: 'publish',
+					type: 'crtxt_document',
+					crtxt_trait: [ 77 ],
+				} }
+			/>
+		);
+
+		expect(
+			DocumentPropertiesProvider.mock.calls.at( -1 )[ 0 ].rowId
+		).toBe( 9 );
 	} );
 
 	it( 'skips locking while archived and reacquires after restore', () => {

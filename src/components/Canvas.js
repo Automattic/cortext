@@ -529,7 +529,7 @@ export function CanvasEditor( {
 	return (
 		<DocumentPropertiesProvider
 			collectionId={ collectionId }
-			rowId={ row?.id ?? post.id }
+			rowId={ hasTrait && ! isCollection ? row?.id ?? post.id : null }
 			fields={ fields }
 			allFields={ allFields }
 			detailLayoutEntries={ detailLayoutEntries }
