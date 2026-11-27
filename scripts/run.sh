@@ -14,5 +14,8 @@ echo "Cortext admin: ${cortext_url}"
 pnpm run env:start 2>&1 | sed "s#WordPress development site started at ${site_url}#Cortext admin: ${cortext_url}#"
 pnpm run env:seed
 echo "Cortext admin: ${cortext_url}"
+if command -v open >/dev/null; then
+	open "${cortext_url}"
+fi
 
 exec pnpm run dev
