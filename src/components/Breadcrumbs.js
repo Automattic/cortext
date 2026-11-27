@@ -1,11 +1,15 @@
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
+import { Dropdown, MenuGroup, MenuItem } from '@wordpress/components';
 import { Fragment } from '@wordpress/element';
+import { Icon, check, chevronDown } from '@wordpress/icons';
 
 import './Breadcrumbs.scss';
 
 import useBreadcrumbSegments from '../hooks/useBreadcrumbSegments';
 import { useFrozenDetails } from '../documents/readOnlyStore';
 import FrozenBadge from './FrozenBadge';
+import DocumentIcon from './DocumentIcon';
+import { collectionIcon } from './cortextIcons';
 
 // Truncate once the bar would carry more than this many segments. A
 // four-deep page hierarchy fits unchanged; anything beyond collapses the
@@ -32,6 +36,52 @@ function truncate( segments ) {
 		},
 		...tail,
 	];
+}
+
+// Lists every collection the row belongs to. Picking one reopens the row from
+// that collection, which moves it into the breadcrumb.
+function CollectionMenu( { collections, renderToggle } ) {
+	return (
+		<Dropdown
+			popoverProps={ { placement: 'bottom-start' } }
+			renderToggle={ renderToggle }
+			renderContent={ ( { onClose } ) => (
+				<MenuGroup label={ __( 'Open from', 'cortext' ) }>
+					{ collections.map( ( collection ) => (
+						<MenuItem
+							key={ collection.key }
+							icon={
+								collection.icon ? (
+									<DocumentIcon
+										icon={ collection.icon }
+										size={ 20 }
+									/>
+								) : (
+									collectionIcon
+								)
+							}
+							iconPosition="left"
+							role="menuitemradio"
+							isSelected={ collection.isCurrent }
+							suffix={
+								collection.isCurrent ? (
+									<Icon icon={ check } size={ 20 } />
+								) : null
+							}
+							onClick={ () => {
+								onClose();
+								if ( ! collection.isCurrent ) {
+									collection.onClick();
+								}
+							} }
+						>
+							{ collection.label }
+						</MenuItem>
+					) ) }
+				</MenuGroup>
+			) }
+		/>
+	);
 }
 
 function Segment( { segment } ) {
@@ -66,14 +116,17 @@ function Segment( { segment } ) {
 }
 
 export default function Breadcrumbs( { paintedDocumentId } ) {
-	const { segments: rawSegments, chips } =
+	const { segments: rawSegments, collections } =
 		useBreadcrumbSegments( paintedDocumentId );
 	const segments = truncate( rawSegments );
 	const frozen = useFrozenDetails( paintedDocumentId );
-
 	if ( segments.length === 0 ) {
 		return null;
 	}
+
+	const hasContextCollection = segments.some(
+		( segment ) => segment.isContextCollection
+	);
 
 	return (
 		<nav
@@ -93,32 +146,70 @@ export default function Breadcrumbs( { paintedDocumentId } ) {
 						) }
 						<li className="cortext-breadcrumbs__item">
 							<Segment segment={ segment } />
+							{ segment.isContextCollection ? (
+								<CollectionMenu
+									collections={ collections }
+									renderToggle={ ( { isOpen, onToggle } ) => (
+										<button
+											type="button"
+											className="cortext-breadcrumbs__switch"
+											onClick={ onToggle }
+											aria-expanded={ isOpen }
+											aria-label={ sprintf(
+												/* translators: %d: number of other collections. */
+												_n(
+													'Also in %d other collection',
+													'Also in %d other collections',
+													collections.length - 1,
+													'cortext'
+												),
+												collections.length - 1
+											) }
+										>
+											<span className="cortext-breadcrumbs__count">
+												{ `+${
+													collections.length - 1
+												}` }
+											</span>
+											<Icon
+												icon={ chevronDown }
+												size={ 16 }
+											/>
+										</button>
+									) }
+								/>
+							) : null }
 						</li>
 					</Fragment>
 				) ) }
 			</ol>
-			<FrozenBadge frozen={ frozen } showLabel />
-			{ chips.length > 0 ? (
-				<ul
-					className="cortext-breadcrumbs__chips"
-					aria-label={ __( 'Traits', 'cortext' ) }
-				>
-					{ chips.map( ( chip ) => (
-						<li
-							key={ chip.key }
-							className="cortext-breadcrumbs__chip-item"
+			{ collections.length > 1 && ! hasContextCollection ? (
+				<CollectionMenu
+					collections={ collections }
+					renderToggle={ ( { isOpen, onToggle } ) => (
+						<button
+							type="button"
+							className="cortext-breadcrumbs__locations"
+							onClick={ onToggle }
+							aria-expanded={ isOpen }
 						>
-							<button
-								type="button"
-								className="cortext-breadcrumbs__chip"
-								onClick={ chip.onClick }
-							>
-								{ chip.label }
-							</button>
-						</li>
-					) ) }
-				</ul>
+							<Icon icon={ collectionIcon } size={ 16 } />
+							{ sprintf(
+								/* translators: %d: number of collections. */
+								_n(
+									'In %d collection',
+									'In %d collections',
+									collections.length,
+									'cortext'
+								),
+								collections.length
+							) }
+							<Icon icon={ chevronDown } size={ 16 } />
+						</button>
+					) }
+				/>
 			) : null }
+			<FrozenBadge frozen={ frozen } showLabel />
 		</nav>
 	);
 }

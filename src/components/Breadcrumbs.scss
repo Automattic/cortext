@@ -82,45 +82,48 @@
 		}
 	}
 
-	&__chips {
-		list-style: none;
-		margin: 0 0 0 $grid-unit-10;
-		padding: 0;
-		display: flex;
-		align-items: center;
-		gap: $grid-unit-05;
-		min-width: 0;
-		flex-wrap: nowrap;
-	}
-
-	&__chip-item {
-		list-style: none;
-		display: flex;
-		min-width: 0;
-	}
-
-	&__chip {
+	// The "+N" toggle beside the collection the row was opened from, and the
+	// "In N collections" toggle when it was opened from none of them. Both
+	// read as part of the bar, not as buttons, until hovered.
+	&__switch,
+	&__locations {
 		appearance: none;
+		flex: 0 0 auto;
 		display: inline-flex;
 		align-items: center;
-		height: 18px;
-		padding: 0 $grid-unit-10;
+		gap: 2px;
+		height: 20px;
+		background: transparent;
 		border: 0;
-		border-radius: 9px;
-		background: var(--cortext-button-hover-surface);
-		color: var(--cortext-text-muted);
+		padding: 0 $grid-unit-05;
 		font: inherit;
-		font-size: 11px;
-		line-height: 18px;
+		line-height: inherit;
+		color: var(--cortext-text-muted);
 		cursor: pointer;
-		max-width: 18ch;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		border-radius: var(--cortext-shell-radius);
 		white-space: nowrap;
 
-		&:hover,
-		&:focus {
-			color: var(--cortext-text-strong);
+		svg {
+			fill: currentcolor;
 		}
+
+		&:hover,
+		&:focus-visible,
+		&[aria-expanded="true"] {
+			color: var(--cortext-text-strong);
+			background: var(--cortext-button-hover-surface);
+		}
+	}
+
+	&__count {
+		display: inline-flex;
+		align-items: center;
+		height: 16px;
+		padding: 0 5px;
+		border-radius: 8px;
+		background: var(--cortext-button-hover-surface);
+		font-size: 11px;
+		line-height: 16px;
+		font-variant-numeric: tabular-nums;
 	}
 }
