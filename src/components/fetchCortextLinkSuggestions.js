@@ -16,12 +16,13 @@ import { computeDocumentUri } from '../router/useResolveEntity';
 //
 // Same signature as `__experimentalFetchLinkSuggestions`. We ignore `type` and
 // `subtype` from `searchOptions` because the answer is always documents, and
-// link to each document's permalink.
+// link to each document's permalink. `collectionsOnly` narrows the answer to
+// collections whose title matches, for the `#` trait completer.
 export async function fetchCortextLinkSuggestions(
 	search,
 	searchOptions = {}
 ) {
-	const { isInitialSuggestions, page = 1 } = searchOptions;
+	const { isInitialSuggestions, page = 1, collectionsOnly } = searchOptions;
 	const perPage = searchOptions.perPage ?? ( isInitialSuggestions ? 3 : 20 );
 
 	// `crtxt_documents` is the REST base of the `crtxt_document` post type.
@@ -35,6 +36,12 @@ export async function fetchCortextLinkSuggestions(
 			status: [ 'draft', 'private', 'publish' ],
 			_fields:
 				'id,link,slug,title,meta,cortext_defines_trait,crtxt_trait',
+			...( collectionsOnly
+				? {
+						cortext_collections: 1,
+						search_columns: [ 'post_title' ],
+				  }
+				: {} ),
 		} ),
 	} ).catch( () => [] ); // Fail by returning no suggestions, like core.
 

@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 
+import { useDocumentLocatorInvalidation } from './documentLocatorInvalidation';
+
 // Loads the collections a document belongs to from
 // `GET /cortext/v1/documents/<id>/traits`. Returns the formatted
 // `{ id, title, path, icon }` summaries the grouped properties and the
-// membership chips render, plus `refresh` to re-pull after a membership change.
+// membership chips render, plus `refresh` to re-pull on demand. Trait writes
+// refresh it on their own.
 //
 // Reads go through this one endpoint rather than the row's `crtxt_trait` term
 // ids so callers get collection ids and labels in a single round trip, and so a
@@ -86,6 +89,9 @@ export default function useDocumentTraits( documentId ) {
 	useEffect( () => {
 		load();
 	}, [ load ] );
+	// Trait writes announce themselves through the locator event, wherever
+	// they come from: the traits control or the `#` completer.
+	useDocumentLocatorInvalidation( documentId, load );
 
 	const isCurrentDocument = state.documentId === ( documentId ?? null );
 	const isResolving = Boolean( documentId )

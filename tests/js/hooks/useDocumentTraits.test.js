@@ -13,6 +13,7 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 
 import apiFetch from '@wordpress/api-fetch';
 import useDocumentTraits from '../../../src/hooks/useDocumentTraits';
+import { notifyDocumentLocatorChanged } from '../../../src/hooks/documentLocatorInvalidation';
 
 beforeEach( () => {
 	apiFetch.mockReset();
@@ -48,6 +49,32 @@ describe( 'useDocumentTraits', () => {
 		] );
 		expect( result.current.hasResolved ).toBe( true );
 		expect( result.current.isUnknown ).toBe( false );
+	} );
+
+	it( 'reloads when a trait write announces this document', async () => {
+		apiFetch
+			.mockResolvedValueOnce( {
+				collections: [ { id: 1, title: 'Projects' } ],
+			} )
+			.mockResolvedValueOnce( {
+				collections: [
+					{ id: 1, title: 'Projects' },
+					{ id: 2, title: 'Books' },
+				],
+			} );
+
+		const { result } = renderHook( () => useDocumentTraits( 7 ) );
+		await waitFor( () =>
+			expect( result.current.collections ).toHaveLength( 1 )
+		);
+
+		act( () => notifyDocumentLocatorChanged( 8, [ 3 ] ) );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		act( () => notifyDocumentLocatorChanged( 7, [ 1, 2 ] ) );
+		await waitFor( () =>
+			expect( result.current.collections ).toHaveLength( 2 )
+		);
 	} );
 
 	it( 'refresh re-pulls the memberships', async () => {

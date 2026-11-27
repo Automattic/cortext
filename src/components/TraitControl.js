@@ -1,5 +1,4 @@
 import { __ } from '@wordpress/i18n';
-import apiFetch from '@wordpress/api-fetch';
 import { Button, Popover, SearchControl, Spinner } from '@wordpress/components';
 import { store as coreStore, useEntityRecords } from '@wordpress/core-data';
 import { useDispatch } from '@wordpress/data';
@@ -10,8 +9,7 @@ import DocumentIcon from './DocumentIcon';
 import { collectionIcon } from './cortextIcons';
 import { COLLECTION_QUERY, DOCUMENT_POST_TYPE } from '../collections';
 import { visibleTraits } from '../documents/traits';
-import { notifyDocumentLocatorChanged } from '../hooks/documentLocatorInvalidation';
-import { notifyCollectionRowsChanged } from '../hooks/rowInvalidation';
+import { writeDocumentTraits } from '../documents/writeTraits';
 
 import './TraitControl.scss';
 
@@ -52,7 +50,7 @@ function collectionTitle( record ) {
 
 // Lets the user add or remove a row's traits (one per collection it belongs
 // to) straight from the item detail. Changes write the new set through
-// `PUT /cortext/v1/documents/<id>/traits`; the last active trait cannot be
+// `writeDocumentTraits`; the last active trait cannot be
 // removed, so a row always belongs to at least one collection.
 export default function TraitControl( {
 	documentId,
@@ -134,31 +132,11 @@ export default function TraitControl( {
 			if ( typeof release === 'function' ) {
 				releaseWriteLock = release;
 			}
-			const response = await apiFetch( {
-				path: `/cortext/v1/documents/${ documentId }/traits`,
-				method: 'PUT',
-				data: { collection_ids: nextIds },
-			} );
-			const activeIds = Array.isArray( response?.collections )
-				? response.collections
-						.filter(
-							( collection ) => collection?.active !== false
-						)
-						.map( ( collection ) => collection?.id )
-				: null;
-			notifyDocumentLocatorChanged( documentId, activeIds );
-			// Membership changes can update reverse relations and rollups in
-			// collections beyond the one directly added or removed.
-			notifyCollectionRowsChanged();
-			// The breadcrumb chips read `crtxt_trait` off the core-data document
-			// record, which this custom-endpoint write does not touch. Invalidate
-			// it so the membership change shows there too, not just in the local
-			// traits hook this control refreshes via onChange.
-			invalidateResolution( 'getEntityRecord', [
-				'postType',
-				'crtxt_document',
+			await writeDocumentTraits(
 				documentId,
-			] );
+				nextIds,
+				invalidateResolution
+			);
 			onChange?.();
 		} catch ( saveError ) {
 			setError(

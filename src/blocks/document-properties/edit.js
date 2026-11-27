@@ -667,7 +667,6 @@ export default function Edit( { clientId, isSelected } ) {
 							documentId={ rowId }
 							collections={ memberships }
 							isReadOnly={ isRowRetired || membershipsFirstLoad }
-							onChange={ refreshTraits }
 						/>
 					) : null }
 					{ sourceGroup }
