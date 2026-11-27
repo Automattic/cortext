@@ -5,7 +5,7 @@ import {
 	useEntityRecords,
 } from '@wordpress/core-data';
 import { useSelect } from '@wordpress/data';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useMemo } from '@wordpress/element';
 
 import {
@@ -14,6 +14,10 @@ import {
 } from '../components/page-queries';
 import { COLLECTION_QUERY, DOCUMENT_POST_TYPE } from '../collections';
 import { computeDocumentUri } from '../router/useResolveEntity';
+import {
+	rowSourceCollectionHint,
+	rowSourceCollectionSearch,
+} from '../router/rowSourceCollection';
 
 const TRAIT_TAXONOMY = 'crtxt_trait';
 const TRAIT_TERMS_QUERY = { per_page: 100, context: 'view' };
@@ -111,7 +115,12 @@ function createLookup( select, documentsById, termsById ) {
 // breadcrumb updates in lockstep with the document-actions Fill.
 export default function useBreadcrumbSegments( paintedDocumentId ) {
 	const navigate = useNavigate();
+	const search = useSearch( { strict: false } );
 	const documentId = paintedDocumentId ?? null;
+	// The collection the row was opened from, as carried in the URL. It only
+	// counts while it is one of the row's live collections (checked below).
+	const hintedCollectionId =
+		Number( rowSourceCollectionHint( search, documentId ) ) || null;
 
 	const { record: document } = useEntityRecord(
 		'postType',
@@ -173,8 +182,8 @@ export default function useBreadcrumbSegments( paintedDocumentId ) {
 	// single-record fetches are not invalidated by document saves, unlike the
 	// lists, so they stay cached once loaded.
 	// Every live collection the current item belongs to. With more than one,
-	// the item has no single owning collection: they render as chips beside it
-	// instead of one of them heading the chain.
+	// the item has no single owning collection, so the chain climbs into the
+	// one it was opened from, if any, and the others are offered as a switch.
 	const itemCollections = useSelect(
 		( select ) => {
 			if ( ! documentId || ! document ) {
@@ -189,6 +198,10 @@ export default function useBreadcrumbSegments( paintedDocumentId ) {
 		[ documentId, document, documentsById, termsById ]
 	);
 	const isMultiCollection = itemCollections.length > 1;
+	const contextCollection =
+		itemCollections.find(
+			( collection ) => collection.id === hintedCollectionId
+		) ?? null;
 
 	const chain = useSelect(
 		( select ) => {
@@ -204,13 +217,18 @@ export default function useBreadcrumbSegments( paintedDocumentId ) {
 			while ( cursor && ! seen.has( cursor.id ) ) {
 				seen.add( cursor.id );
 				nodes.unshift( cursor );
-				// A multi-collection item does not climb into an arbitrary
-				// collection. Any page hierarchy above it (via `post_parent`)
+				// A multi-collection item only climbs into the collection it
+				// was opened from, never an arbitrary one. Without that
+				// context, any page hierarchy above it (via `post_parent`)
 				// still shows.
 				if ( isStart && isMultiCollection ) {
-					cursor = cursor?.parent
-						? lookup.document( cursor.parent )
-						: null;
+					if ( contextCollection ) {
+						cursor = contextCollection;
+					} else {
+						cursor = cursor?.parent
+							? lookup.document( cursor.parent )
+							: null;
+					}
 				} else {
 					cursor = parentOf( cursor, lookup );
 				}
@@ -218,7 +236,27 @@ export default function useBreadcrumbSegments( paintedDocumentId ) {
 			}
 			return nodes;
 		},
-		[ documentId, document, documentsById, termsById, isMultiCollection ]
+		[
+			documentId,
+			document,
+			documentsById,
+			termsById,
+			isMultiCollection,
+			contextCollection,
+		]
+	);
+
+	// Reopens the current row from another of its collections, so the
+	// breadcrumb and the properties panel both follow that collection.
+	const openFromCollection = useCallback(
+		( collectionId ) => {
+			navigate( {
+				to: '/$',
+				params: { _splat: computeDocumentUri( document ) },
+				search: rowSourceCollectionSearch( documentId, collectionId ),
+			} );
+		},
+		[ navigate, document, documentId ]
 	);
 
 	return useMemo( () => {
@@ -229,14 +267,25 @@ export default function useBreadcrumbSegments( paintedDocumentId ) {
 				label: titleOf( node ),
 				onClick: isCurrent ? null : () => goToDocument( node ),
 				isCurrent,
+				isContextCollection: node.id === contextCollection?.id,
 			};
 		} );
-		const chips = itemCollections.map( ( collection ) => ( {
-			key: `collection:${ collection.id }`,
-			id: collection.id,
-			label: titleOf( collection ),
-			onClick: () => goToDocument( collection ),
-		} ) );
-		return { segments, chips };
-	}, [ chain, goToDocument, itemCollections ] );
+		const collections = itemCollections
+			.map( ( collection ) => ( {
+				key: `collection:${ collection.id }`,
+				id: collection.id,
+				label: titleOf( collection ),
+				icon: collection.meta?.cortext_document_icon ?? '',
+				isCurrent: collection.id === contextCollection?.id,
+				onClick: () => openFromCollection( collection.id ),
+			} ) )
+			.sort( ( a, b ) => a.label.localeCompare( b.label ) );
+		return { segments, collections };
+	}, [
+		chain,
+		goToDocument,
+		itemCollections,
+		contextCollection,
+		openFromCollection,
+	] );
 }

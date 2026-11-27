@@ -1,7 +1,7 @@
 /**
  * Tests for `src/hooks/useBreadcrumbSegments.js`: the breadcrumb chain and the
- * collection chips for multi-collection items. core-data, data, and the
- * router are mocked so each case controls the records and navigation.
+ * collections offered for multi-collection items. core-data, data, and the
+ * router are mocked so each case controls the records, the URL and navigation.
  */
 
 import { renderHook } from '@testing-library/react';
@@ -16,8 +16,11 @@ jest.mock( '@wordpress/data', () => ( {
 	useSelect: jest.fn(),
 } ) );
 
+const mockNavigate = jest.fn();
+let mockSearch = {};
 jest.mock( '@tanstack/react-router', () => ( {
-	useNavigate: () => jest.fn(),
+	useNavigate: () => mockNavigate,
+	useSearch: () => mockSearch,
 } ) );
 
 import { useEntityRecord, useEntityRecords } from '@wordpress/core-data';
@@ -48,6 +51,7 @@ function labelsOf( items ) {
 
 beforeEach( () => {
 	jest.clearAllMocks();
+	mockSearch = {};
 	lists = { pages: [], collections: [], terms: [] };
 	byId = {
 		postType: { 4: page, 10: collection, 50: row },
@@ -122,7 +126,7 @@ describe( 'useBreadcrumbSegments', () => {
 			};
 		} );
 
-		it( 'returns the collection as the parent for a single-collection row, no chips', () => {
+		it( 'returns the collection as the parent for a single-collection row and offers no others', () => {
 			const result = render( {
 				id: 100,
 				title: { raw: 'Ada' },
@@ -134,7 +138,7 @@ describe( 'useBreadcrumbSegments', () => {
 				'Projects',
 				'Ada',
 			] );
-			expect( result.chips ).toEqual( [] );
+			expect( result.collections ).toEqual( [] );
 		} );
 
 		it( 'skips an unresolved membership when choosing the parent', () => {
@@ -154,7 +158,7 @@ describe( 'useBreadcrumbSegments', () => {
 				'People',
 				'Ada',
 			] );
-			expect( result.chips ).toEqual( [] );
+			expect( result.collections ).toEqual( [] );
 		} );
 
 		it( 'skips a trashed collection fetched by id', () => {
@@ -177,10 +181,10 @@ describe( 'useBreadcrumbSegments', () => {
 				'People',
 				'Ada',
 			] );
-			expect( result.chips ).toEqual( [] );
+			expect( result.collections ).toEqual( [] );
 		} );
 
-		it( 'skips an archived collection as parent and chip while another one is live', () => {
+		it( 'skips an archived collection while another one is live', () => {
 			lists.terms.push( { id: 55, slug: '5' } );
 			byId.postType[ 5 ] = {
 				id: 5,
@@ -197,9 +201,9 @@ describe( 'useBreadcrumbSegments', () => {
 			} );
 
 			expect( labelsOf( result.segments ) ).toEqual( [ 'Ada' ] );
-			expect( labelsOf( result.chips ) ).toEqual( [
-				'Projects',
+			expect( labelsOf( result.collections ) ).toEqual( [
 				'People',
+				'Projects',
 			] );
 		} );
 
@@ -223,30 +227,77 @@ describe( 'useBreadcrumbSegments', () => {
 				'Old tasks',
 				'Ada',
 			] );
-			expect( result.chips ).toEqual( [] );
+			expect( result.collections ).toEqual( [] );
 		} );
 
-		it( 'shows the item alone with its collections as chips when it belongs to several', () => {
-			const result = render( {
-				id: 100,
-				title: { raw: 'Ada' },
-				crtxt_trait: [ 11, 22 ],
-				parent: 0,
-			} );
+		const ada = {
+			id: 100,
+			title: { raw: 'Ada' },
+			crtxt_trait: [ 11, 22 ],
+			parent: 0,
+		};
+
+		it( 'shows the item alone and offers its collections when it was opened from none of them', () => {
+			const result = render( ada );
 
 			// No arbitrary collection is chosen as the parent.
 			expect( labelsOf( result.segments ) ).toEqual( [ 'Ada' ] );
-			expect( labelsOf( result.chips ) ).toEqual( [
-				'Projects',
+			expect( labelsOf( result.collections ) ).toEqual( [
 				'People',
+				'Projects',
 			] );
+			expect(
+				result.collections.some( ( item ) => item.isCurrent )
+			).toBe( false );
 		} );
 
-		it( 'returns empty segments and chips without a document', () => {
+		it( 'climbs into the collection the item was opened from', () => {
+			mockSearch = { collection: '2', collectionRow: '100' };
+
+			const result = render( ada );
+
+			expect( labelsOf( result.segments ) ).toEqual( [
+				'People',
+				'Ada',
+			] );
+			expect( result.segments[ 0 ].isContextCollection ).toBe( true );
+			expect(
+				result.collections.find( ( item ) => item.isCurrent )?.label
+			).toBe( 'People' );
+		} );
+
+		it( 'ignores a hint for a collection the item is not in', () => {
+			mockSearch = { collection: '999', collectionRow: '100' };
+
+			expect( labelsOf( render( ada ).segments ) ).toEqual( [ 'Ada' ] );
+		} );
+
+		it( 'ignores a hint left by another item', () => {
+			mockSearch = { collection: '2', collectionRow: '101' };
+
+			expect( labelsOf( render( ada ).segments ) ).toEqual( [ 'Ada' ] );
+		} );
+
+		it( 'reopens the item from the collection picked in the menu', () => {
+			const result = render( ada );
+
+			result.collections
+				.find( ( item ) => item.label === 'Projects' )
+				.onClick();
+
+			const { search } = mockNavigate.mock.calls[ 0 ][ 0 ];
+			expect( search( { view: 'x' } ) ).toEqual( {
+				view: 'x',
+				collection: 1,
+				collectionRow: 100,
+			} );
+		} );
+
+		it( 'returns no segments or collections without a document', () => {
 			const result = render( null );
 
 			expect( result.segments ).toEqual( [] );
-			expect( result.chips ).toEqual( [] );
+			expect( result.collections ).toEqual( [] );
 		} );
 	} );
 } );
